@@ -1,0 +1,125 @@
+#!/bin/sh
+
+# this script is based on git-new-workdir
+# it creates a workdir for a given branch suitable for serving with rsync
+
+# to set up rsync directories of perl branches:
+
+# git-setup-rsync-dir /path/to/perl.git /path/to/gits/perl-foo.git /path/to/trees/perl-foo perl-foo
+
+# perl.git can be a bare repository or a normal one
+
+# perl-foo.git contains a .git/HEAD that is separate from the main perl.git,
+# and has a copy of .git/config but everything else is a symlink
+
+# /path/to/trees/perl-foo is the actual rsync directory
+
+# To update:
+# for repo in /path/to/gits/*; do git-update-rsync-dir "$repo"; done
+
+# this will reset the working copy to the HEAD 
+
+# HEAD should be a symbolic ref, not a commit so that the state of the branch
+# in /path/to/perl.git is reflected in the new checkout
+
+
+usage () {
+	echo "usage:" $@
+	exit 127
+}
+
+die () {
+	echo $@
+	exit 128
+}
+
+if test $# -lt 3 || test $# -gt 4
+then
+	usage "$0 <repository> <new_git_dir> <new_workdir> [<branch>]"
+fi
+
+orig_git=$1
+new_git=$2
+new_workdir=$3
+branch=$4
+
+
+# The following code is based on git-new-workdir
+# it has been modified to copy config in order to work with bare repositories,
+# and to create separate worktree/gitdir directories for the new workdir
+
+# want to make sure that what is pointed to has a .git directory ...
+git_dir=$(cd "$orig_git" 2>/dev/null &&
+  git rev-parse --git-dir 2>/dev/null) ||
+  die "\"$orig_git\" is not a git repository!"
+
+case "$git_dir" in
+.git)
+	git_dir="$orig_git/.git"
+	;;
+.)
+	git_dir=$orig_git
+	;;
+esac
+
+## don't link to a configured bare repository
+#isbare=$(git --git-dir="$git_dir" config --bool --get core.bare)
+#if test ztrue = z$isbare
+#then
+#	die "\"$git_dir\" has core.bare set to true," \
+#		" remove from \"$git_dir/config\" to use $0"
+#fi
+
+# don't link to a workdir
+if test -L "$git_dir/config"
+then
+	die "\"$orig_git\" is a working directory only, please specify" \
+		"a complete repository."
+fi
+
+
+# don't recreate a workdir over an existing repository
+if test -e "$new_workdir"
+then
+	die "destination directory '$new_workdir' already exists."
+fi
+
+# make sure the the links use full paths
+git_dir=$(cd "$git_dir"; pwd)
+
+# create the workdir
+mkdir -p "$new_git" || die "unable to create \"$new_git\"!"
+mkdir -p "$new_workdir" || die "unable to create \"$new_workdir\"!"
+
+# create the links to the original repo.  explictly exclude index, HEAD and
+# logs/HEAD from the list since they are purely related to the current working
+# directory, and should not be shared.
+for x in refs logs/refs objects info hooks packed-refs remotes rr-cache svn
+do
+	case $x in
+	*/*)
+		mkdir -p "$(dirname "$new_git/$x")"
+		;;
+	esac
+	ln -s "$git_dir/$x" "$new_git/$x"
+done
+
+# copy the HEAD from the original repository as a default branch
+cp "$git_dir/HEAD" "$new_git/HEAD"
+
+# git-new_workdir symlinks, but we need to copy since the orig .git/config is
+# for a bare repo. FIXME should this only copy if the repo is bare?
+cp "$git_dir/config" "$new_git/config";
+
+# set core.worktree to the new_workdir but with an abs path
+abs_new_workdir=$(cd "$new_workdir"; pwd)
+git --git-dir="$new_git" config core.worktree "$abs_new_workdir"
+
+# unset bare
+git --git-dir="$new_git" config core.bare false
+
+# checkout the branch (either the same as HEAD from the original repository, or
+# the one that was asked for)
+git --git-dir="$new_git"  checkout -f $branch
+
+

@@ -1,0 +1,27 @@
+#!/bin/sh
+
+usage () {
+	echo "usage:" $@
+	exit 127
+}
+
+die () {
+	echo $@
+	exit 128
+}
+
+if test $# -ne 1
+then
+	usage "$0 <git_dir>"
+fi
+
+GIT_DIR=$1
+
+git --git-dir="$GIT_DIR" checkout -f
+
+# is this necessary?
+# git --git-dir="$GIT_DIR" clean -xfd
+
+# write the .patch file
+worktree=$( git --git-dir="$GIT_DIR" config --get core.worktree )
+git --git-dir="$GIT_DIR" describe > "$worktree/.patch"
