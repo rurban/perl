@@ -1,0 +1,4 @@
+#!/bin/sh
+
+git log -n 1 --pretty="format:%H%n" -F --grep='p4raw-id: //depot/perl@'"$1"
+
