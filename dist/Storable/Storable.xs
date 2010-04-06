@@ -2,7 +2,8 @@
  *  Store and retrieve mechanism.
  *
  *  Copyright (c) 1995-2000, Raphael Manfredi
- *  
+ *  Copyright (c) 2010, Reini Urban
+ *
  *  You may redistribute only under the same terms as Perl 5, as specified
  *  in the README file that comes with the distribution.
  *
@@ -206,8 +207,9 @@ typedef double NV;			/* Older perls lack the NV type */
 #define SX_FLAG_HASH	C(25)	/* Hash with flags forthcoming (size, flags, key/flags/value triplet list) */
 #define SX_CODE         C(26)   /* Code references as perl source code */
 #define SX_WEAKREF	C(27)	/* Weak reference to object forthcoming */
-#define SX_WEAKOVERLOAD	C(28)	/* Overloaded weak reference */
-#define SX_ERROR	C(29)	/* Error */
+#define SX_WEAKOVERLOAD	C(28) /* Overloaded weak reference */
+#define SX_REGEXP	C(29)	/* 5.12 first-class REGEXP */
+#define SX_ERROR	C(30)	/* Error */
 
 /*
  * Those are only used to retrieve "old" pre-0.6 binary images.
@@ -846,7 +848,7 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 #endif
 
 #define STORABLE_BIN_MAJOR	2		/* Binary major "version" */
-#define STORABLE_BIN_MINOR	7		/* Binary minor "version" */
+#define STORABLE_BIN_MINOR	8		/* Binary minor "version" */
 
 #if (PATCHLEVEL <= 5)
 #define STORABLE_BIN_WRITE_MINOR	4
@@ -854,7 +856,7 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 /*
  * Perl 5.6.0 onwards can do weak references.
 */
-#define STORABLE_BIN_WRITE_MINOR	7
+#define STORABLE_BIN_WRITE_MINOR	8
 #endif /* (PATCHLEVEL <= 5) */
 
 #if (PATCHLEVEL < 8 || (PATCHLEVEL == 8 && SUBVERSION < 1))
@@ -1173,6 +1175,7 @@ static const sv_retrieve_t sv_old_retrieve[] = {
 	(sv_retrieve_t)retrieve_other,	/* SX_CODE not supported */
 	(sv_retrieve_t)retrieve_other,	/* SX_WEAKREF not supported */
 	(sv_retrieve_t)retrieve_other,	/* SX_WEAKOVERLOAD not supported */
+	(sv_retrieve_t)retrieve_other,	/* SX_REGEXP */
 	(sv_retrieve_t)retrieve_other,	/* SX_ERROR */
 };
 
@@ -1191,6 +1194,7 @@ static SV *retrieve_flag_hash(pTHX_ stcxt_t *cxt, const char *cname);
 static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname);
 static SV *retrieve_weakref(pTHX_ stcxt_t *cxt, const char *cname);
 static SV *retrieve_weakoverloaded(pTHX_ stcxt_t *cxt, const char *cname);
+static SV *retrieve_regexp(pTHX_ stcxt_t *cxt, const char *cname);
 
 static const sv_retrieve_t sv_retrieve[] = {
 	0,			/* SX_OBJECT -- entry unused dynamically */
@@ -1203,7 +1207,7 @@ static const sv_retrieve_t sv_retrieve[] = {
 	(sv_retrieve_t)retrieve_double,		/* SX_DOUBLE */
 	(sv_retrieve_t)retrieve_byte,		/* SX_BYTE */
 	(sv_retrieve_t)retrieve_netint,		/* SX_NETINT */
-	(sv_retrieve_t)retrieve_scalar,		/* SX_SCALAR */
+	(sv_retrieve_t)retrieve_scalar,		/* SX_SCALAR 10 */
 	(sv_retrieve_t)retrieve_tied_array,	/* SX_ARRAY */
 	(sv_retrieve_t)retrieve_tied_hash,	/* SX_HASH */
 	(sv_retrieve_t)retrieve_tied_scalar,	/* SX_SCALAR */
@@ -1222,7 +1226,8 @@ static const sv_retrieve_t sv_retrieve[] = {
 	(sv_retrieve_t)retrieve_code,		/* SX_CODE */
 	(sv_retrieve_t)retrieve_weakref,	/* SX_WEAKREF */
 	(sv_retrieve_t)retrieve_weakoverloaded,	/* SX_WEAKOVERLOAD */
-	(sv_retrieve_t)retrieve_other,		/* SX_ERROR */
+	(sv_retrieve_t)retrieve_regexp,		/* SX_REGEXP 29 */
+	(sv_retrieve_t)retrieve_other,		/* SX_ERROR  30 */
 };
 
 #define RETRIEVE(c,x) (*(c)->retrieve_vtbl[(x) >= SX_ERROR ? SX_ERROR : (x)])
@@ -1978,7 +1983,10 @@ static int store_ref(pTHX_ stcxt_t *cxt, SV *sv)
  *
  * Store a scalar.
  *
- * Layout is SX_LSCALAR <length> <data>, SX_SCALAR <length> <data> or SX_UNDEF.
+ * Layout is SX_LSCALAR <length> <data>,
+ *           SX_SCALAR <length> <data>,
+ *           SX_REGEXP SX_SCALAR/SX_LSCALAR <pmflags> <extflags> or
+ *           SX_UNDEF.
  * The <data> section is omitted if <length> is 0.
  *
  * If integer or double, the layout is SX_INTEGER <data> or SX_DOUBLE <data>.
@@ -2158,6 +2166,7 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
 
 	} else if (flags & (SVp_POK | SVp_NOK | SVp_IOK)) {
             I32 wlen; /* For 64-bit machines */
+            REGEXP *rx;
 
           string_readlen:
             pv = SvPV(sv, len);
@@ -2169,12 +2178,30 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
           string:
 
             wlen = (I32) len; /* WLEN via STORE_SCALAR expects I32 */
+            if (SvRX(sv))
+                PUTMARK(SX_REGEXP);
             if (SvUTF8 (sv))
                 STORE_UTF8STR(pv, wlen);
             else
                 STORE_SCALAR(pv, wlen);
             TRACEME(("ok (scalar 0x%"UVxf" '%s', length = %"IVdf")",
                      PTR2UV(sv), SvPVX(sv), (IV)len));
+
+            /* REGEXP supported since perl-5.12, Storable-0.23
+			   before 5.12 REGEXP were simply attached as magic pointer to a string.
+			   Since 5.12 REGEXP are first-class SV types. We hide that.
+		     */
+            if (SvRX(sv)) {
+                I32 i32_flags = flags;
+                I32 extflags;
+            	WRITE_I32(i32_flags);
+                extflags = RX_EXTFLAGS(sv);
+                /* remove the compile-time flag. it is not attached to an op anymore. */
+                extflags |= (-1 & !PMf_COMPILETIME);
+            	WRITE_I32(extflags);
+            	TRACEME(("ok (regexp 0x%"UVxf" flags=0x%x, extflags=0x%x)",
+                     PTR2UV(sv), i32_flags, extflags));
+            }
 	} else
             CROAK(("Can't determine type of %s(0x%"UVxf")",
                    sv_reftype(sv, FALSE),
@@ -3439,6 +3466,9 @@ static int sv_type(pTHX_ SV *sv)
 	case SVt_IV:
 #endif
 	case SVt_NV:
+#if PERL_VERSION >= 11
+	case SVt_REGEXP:
+#endif
 		/*
 		 * No need to check for ROK, that can't be set here since there
 		 * is no field capable of hodling the xrv_rv reference.
@@ -5500,6 +5530,49 @@ static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname)
 
 	return sv;
 #endif
+}
+
+
+/*
+ * retrieve_regexp
+ *
+ * Retrieve defined regexp scalar.
+ *
+ * Layout is SX_REGEXP SX_?SCALAR <pvlen> <pv> <flags> <extflags>
+ * 
+ */
+static SV *retrieve_regexp(pTHX_ stcxt_t *cxt, const char *cname)
+{
+    int len;
+    SV *sv;
+    I32 flags, extflags;
+
+    TRACEME(("retrieve_regexp (#%d)", cxt->tagnum));
+    sv = retrieve(aTHX_ cxt, 0);
+
+    /* Now compile to a regexp and re-set the extflags */
+    READ_I32(flags);
+    TRACEME(("flags=0x%x", (IV)flags));
+    SvFLAGS(sv) = flags;
+#if PERL_VERSION >= 11
+    sv_upgrade(sv, SVt_REGEXP);
+#else
+    (void) SvPOK_only(sv);	   /* Validate string pointer. Now attach the magic. */
+#endif
+    READ_I32(extflags);
+    TRACEME(("extflags=0x%x", extflags));
+    CALLREGCOMP(sv, extflags);
+    RX_EXTFLAGS(sv) = extflags;
+    /* The magic table seems to be corrupted with this sequence. Try to sanify it again */
+#if PERL_VERSION >= 11
+    ;
+#endif
+
+    if (cxt->s_tainted)				/* Is input source tainted? */
+        SvTAINT(sv);				/* External data cannot be trusted */
+    TRACEME(("ok (retrieve_regexp at 0x%"UVxf", flags=0x%x, extflags=0x%x)", PTR2UV(sv), 
+             SvFLAGS(sv), RX_EXTFLAGS(sv)));
+    return sv;
 }
 
 /*

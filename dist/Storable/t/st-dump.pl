@@ -1,11 +1,11 @@
 #
 #  Copyright (c) 1995-2000, Raphael Manfredi
-#  
+#
 #  You may redistribute only under the same terms as Perl 5, as specified
 #  in the README file that comes with the distribution.
 #
 
-# NOTE THAT THIS FILE IS COPIED FROM ext/Storable/t/st-dump.pl
+# NOTE THAT THIS FILE IS COPIED FROM dist/Storable/t/st-dump.pl
 # TO t/lib/st-dump.pl.  One could also play games with
 # File::Spec->updir and catdir to get the st-dump.pl in
 # ext/Storable into @INC.
@@ -40,13 +40,14 @@ use Carp;
 %dump = (
 	'SCALAR'	=> 'dump_scalar',
 	'LVALUE'	=> 'dump_scalar',
+	'REGEXP'	=> 'dump_scalar',
 	'ARRAY'		=> 'dump_array',
 	'HASH'		=> 'dump_hash',
 	'REF'		=> 'dump_ref',
 );
 
 # Given an object, dump its transitive data closure
-sub main'dump {
+sub main::dump {
 	my ($object) = @_;
 	croak "Not a reference!" unless ref($object);
 	local %dumped;
@@ -72,6 +73,7 @@ sub recursive_dump {
 	my $what = "$object";		# Stringify
 	my ($bless, $ref, $addr) = $what =~ /^(\w+)=(\w+)\((0x.*)\)$/;
 	($ref, $addr) = $what =~ /^(\w+)\((0x.*)\)$/ unless $bless;
+	$ref = 'REGEXP' if $what =~ /^\(\?/ and !$ref;
 
 	# Special case for references to references. When stringified,
 	# they appear as being scalars. However, ref() correctly pinpoints

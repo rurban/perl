@@ -1,3 +1,11 @@
+2010-03-31 16:14:07 Reini Urban <rurban@cpan.org>
+
+    Version 2.23
+
+	Support 5.12 first-class REGEXP
+	
+	(Version 2.22 was released with 5.11.)
+	
 Thu Aug  6 10:55:50 IST 2009   Abhijit Menon-Sen <ams@toroid.org>
 
     Version 2.21
