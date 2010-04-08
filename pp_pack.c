@@ -30,6 +30,7 @@
 
 #include "EXTERN.h"
 #define PERL_IN_PP_PACK_C
+#define PERL_IN_PP
 #include "perl.h"
 
 /* Types used by pack/unpack */ 

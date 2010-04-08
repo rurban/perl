@@ -540,7 +540,7 @@
 #define PL_Inumeric_standard	PL_numeric_standard
 #define PL_Iofsgv		PL_ofsgv
 #define PL_Ioldname		PL_oldname
-#define PL_Iop			PL_op
+#define PL_Iop			op
 #define PL_Iop_mask		PL_op_mask
 #define PL_Iopfreehook		PL_opfreehook
 #define PL_Iopsave		PL_opsave

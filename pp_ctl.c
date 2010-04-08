@@ -32,6 +32,7 @@
 
 #include "EXTERN.h"
 #define PERL_IN_PP_CTL_C
+#define PERL_IN_PP
 #include "perl.h"
 
 #ifndef WORD_ALIGN
@@ -1882,7 +1883,7 @@ PP(pp_dbstate)
 	    /* don't do recursive DB::DB call */
 	    return NORMAL;
 
-	ENTER;
+	ENTER_with_name("sub");
 	SAVETMPS;
 
 	SAVEI32(PL_debug);
@@ -1897,7 +1898,7 @@ PP(pp_dbstate)
 	    (void)(*CvXSUB(cv))(aTHX_ cv);
 	    CvDEPTH(cv)--;
 	    FREETMPS;
-	    LEAVE;
+	    LEAVE_with_name("sub");
 	    return NORMAL;
 	}
 	else {
@@ -2560,7 +2561,7 @@ PP(pp_goto)
 		PUSHMARK(mark);
 		PUTBACK;
 		(void)(*CvXSUB(cv))(aTHX_ cv);
-		LEAVE;
+		LEAVE_with_name("sub");
 		return retop;
 	    }
 	    else {

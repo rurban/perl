@@ -28,6 +28,7 @@
 
 #include "EXTERN.h"
 #define PERL_IN_PP_SORT_C
+#define PERL_IN_PP
 #include "perl.h"
 
 #if defined(UNDER_CE)

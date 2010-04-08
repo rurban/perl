@@ -28,6 +28,7 @@
 
 #include "EXTERN.h"
 #define PERL_IN_PP_SYS_C
+#define PERL_IN_PP
 #include "perl.h"
 #include "time64.h"
 #include "time64.c"

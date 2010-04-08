@@ -8,7 +8,17 @@
  *
  */
 
+#if defined(MULTIPLICITY)
+/* With MULTIPLICITY PL_op is already local at offset 4 from my_perl */
 #define PP(s) OP * Perl_##s(pTHX)
+#else
+/* At compile-time use the global PL_op, at run-time the local op */
+#ifdef PERL_IN_PP
+#define PL_op_save PL_op
+#define PL_op op
+#endif
+#define PP(s) OP * Perl_##s(pTHX_ OP* op)
+#endif
 
 /*
 =head1 Stack Manipulation Macros

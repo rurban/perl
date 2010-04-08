@@ -2019,6 +2019,14 @@ int
 Perl_runops_debug(pTHX)
 {
     dVAR;
+#if !defined(USE_ITHREADS)
+    OP *op = PL_op;
+#endif
+#if !defined(USE_ITHREADS)
+#define PL_op_save PL_op
+#define PL_op op
+#endif
+
     if (!PL_op) {
 	Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING), "NULL OP IN RUN");
 	return 0;
@@ -2046,8 +2054,16 @@ Perl_runops_debug(pTHX)
 	    if (DEBUG_t_TEST_) debop(PL_op);
 	    if (DEBUG_P_TEST_) debprof(PL_op);
 	}
+#if defined(USE_ITHREADS)
     } while ((PL_op = CALL_FPTR(PL_op->op_ppaddr)(aTHX)));
+#else
+    } while ((op = CALL_FPTR(PL_op->op_ppaddr)(op)));
+#endif
     DEBUG_l(Perl_deb(aTHX_ "leaving RUNOPS level\n"));
+
+#if !defined(USE_ITHREADS)
+#define PL_op PL_op_save 
+#endif
 
     TAINT_NOT;
     return 0;
