@@ -323,7 +323,7 @@ dynamic_ext_re = $dynamic_ext_re
 static_ext = $static_list
 nonxs_ext = $nonxs_list
 ext = \$(dynamic_ext) \$(static_ext) \$(nonxs_ext)
-DYNALOADER = DynaLoader\$(OBJ_EXT)
+DYNALOADER = DynaLoader\$(OBJ_EXT) ext/Win32CORE/Win32CORE\$(OBJ_EXT)
 
 libs = $perllibs $cryptlib
 
@@ -621,7 +621,7 @@ miniperlmain$(OBJ_EXT): miniperlmain.c patchlevel.h
 	$(CCCMD) $(PLDLFLAGS) $*.c
 
 perlmain.c: miniperlmain.c config.sh $(FIRSTMAKEFILE)
-	sh writemain $(DYNALOADER) $(static_ext) > perlmain.c
+	sh writemain $(DYNALOADER) > perlmain.c
 
 perlmain$(OBJ_EXT): perlmain.c
 	$(CCCMD) $(PLDLFLAGS) $*.c
@@ -700,6 +700,7 @@ perl5.def: $(MINIPERLEXP) makedef.pl config.sh $(SYM) $(SYMH) miniperl.map
 	;;
 cygwin)
 	$spitshell >>$Makefile <<'!NO!SUBS!'
+
 cygwin.c: cygwin/cygwin.c
 	$(LNS) cygwin/cygwin.c
 
@@ -1163,7 +1164,7 @@ manicheck:	FORCE
 #
 # DynaLoader may be needed for extensions that use Makefile.PL.
 
-$(DYNALOADER):	$(MINIPERL_EXE) preplibrary FORCE $(nonxs_ext)
+$(DYNALOADER):	$(MINIPERL_EXE) preplibrary FORCE $(nonxs_ext) $(static_ext)
 	$(MINIPERL) make_ext.pl $@ MAKE=$(MAKE) LIBPERL_A=$(LIBPERL) LINKTYPE=static $(STATIC_LDFLAGS)
 
 d_dummy $(dynamic_ext):	$(MINIPERL_EXE) preplibrary makeppport $(DYNALOADER) FORCE $(PERLEXPORT)
