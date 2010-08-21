@@ -39,7 +39,7 @@ INST_TOP	*= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	*= \5.13.3
+#INST_VER	*= \5.13.4
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -1051,9 +1051,6 @@ all : CHECKDMAKE .\config.h ..\git_version.h $(GLOBEXE) $(MINIPERL) $(MK2)	\
 	$(RIGHTMAKE) $(MINIMOD) $(CONFIGPM) $(UNIDATAFILES) MakePPPort		\
 	$(PERLEXE) $(X2P) Extensions Extensions_nonxs $(PERLSTATIC)
 
-..\regcharclass.h : ..\Porting\regcharclass.pl
-	cd .. && miniperl Porting\regcharclass.pl && cd win32
-
 regnodes : ..\regnodes.h
 
 ..\regcomp$(o) : ..\regnodes.h ..\regcharclass.h	
@@ -1466,7 +1463,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perl5134delta.pod ..\pod\perldelta.pod
+	copy ..\pod\perl5135delta.pod ..\pod\perldelta.pod
 	cd ..\pod && $(MAKE) -f ..\win32\pod.mak converters
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..

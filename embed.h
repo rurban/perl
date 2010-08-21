@@ -1614,7 +1614,6 @@
 #  endif
 #ifdef PERL_CORE
 #define more_sv			S_more_sv
-#define more_bodies		S_more_bodies
 #define sv_2iuv_common		S_sv_2iuv_common
 #define glob_assign_glob	S_glob_assign_glob
 #define glob_assign_ref		S_glob_assign_ref
@@ -3150,7 +3149,7 @@
 #endif
 #ifdef PERL_CORE
 #define pad_swipe(a,b)		Perl_pad_swipe(aTHX_ a,b)
-#define peep(a,b)		Perl_peep(aTHX_ a,b)
+#define peep(a)			Perl_peep(aTHX_ a)
 #endif
 #if defined(USE_REENTRANT_API)
 #define reentrant_size()	Perl_reentrant_size(aTHX)
@@ -3684,8 +3683,6 @@
 #define require_tie_mod(a,b,c,d,e)	S_require_tie_mod(aTHX_ a,b,c,d,e)
 #endif
 #endif
-#ifdef PERL_CORE
-#endif
 #if defined(PERL_IN_HV_C)
 #ifdef PERL_CORE
 #define hsplit(a)		S_hsplit(aTHX_ a)
@@ -4068,13 +4065,14 @@
 #  endif
 #ifdef PERL_CORE
 #define more_sv()		S_more_sv(aTHX)
-#define more_bodies(a)		S_more_bodies(aTHX_ a)
 #define sv_2iuv_common(a)	S_sv_2iuv_common(aTHX_ a)
 #define glob_assign_glob(a,b,c)	S_glob_assign_glob(aTHX_ a,b,c)
 #define glob_assign_ref(a,b)	S_glob_assign_ref(aTHX_ a,b)
 #define ptr_table_find		S_ptr_table_find
 #define anonymise_cv_maybe(a,b)	S_anonymise_cv_maybe(aTHX_ a,b)
 #endif
+#endif
+#ifdef PERL_CORE
 #endif
 #if defined(PERL_IN_TOKE_C)
 #ifdef PERL_CORE

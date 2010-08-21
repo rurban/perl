@@ -18,6 +18,7 @@ INCLUDE: const-xs.inc
 SV*
 langinfo(code)
 	int	code
+  PROTOTYPE: _
   CODE:
 #ifdef HAS_NL_LANGINFO
 	{

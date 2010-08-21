@@ -306,6 +306,13 @@ this line in README.vms needs special handling:
 
     rename perl-5^.10^.1.dir perl-5_10_1.dir
 
+When doing a blead release, also make sure the C<PERL_API_*> constants in
+F<patchlevel.h> are in sync with the with the version you're releasing, unless
+you're absolutely sure the release you're about to make is 100% binary
+compatible to an earlier release. When releasing a stable perl version, the
+C<PERL_API_*> constants C<MUST NOT> be changed as we aim to guarantee binary
+compatibility in maint branches.
+
 Commit your changes:
 
     $ git st
@@ -324,6 +331,11 @@ I<You MUST SKIP this step for SNAPSHOT>
 
 Review and update INSTALL to account for the change in version number;
 in particular, the "Coexistence with earlier versions of perl 5" section.
+
+Be particularly careful with the section "Upgrading from 5.X.Y or earlier". For
+stable releases, this needs to refer to the last release in the previous
+development cycle. For blead releases, it needs to refer to the previous blead
+release.
 
 =item *
 
@@ -433,11 +445,11 @@ re-make perl to check that it's okay, then commit the updated versions:
 
 I<You MUST SKIP this step for SNAPSHOT>
 
-Update C<Module::Corelist> with module version data for the new release.
+Update C<Module::CoreList> with module version data for the new release.
 
 Note that if this is a maint release, you should run the following actions
-from the maint directory, but commit the C<Corelist.pm> changes in
-I<blead> and subsequently cherry-pick it.
+from the maint branch, but commit the C<CoreList.pm> changes in
+I<blead> and subsequently cherry-pick it.  XXX need a better example
 
 F<corelist.pl> uses ftp.funet.fi to verify information about dual-lived
 modules on CPAN. It can use a full, local CPAN mirror or fall back
@@ -450,7 +462,7 @@ http://www.cpan.org/misc/cpan-faq.html#How_mirror_CPAN)
 
 Then change to your perl checkout, and if necessary,
 
-    $ make perl
+    $ make
 
 If this not the first update for this version (e.g. if it was updated
 when the version number was originally bumped), first edit
@@ -579,11 +591,6 @@ directory, they will still identify themselves using git tags and
 commits.
 
 Then delete the temporary installation.
-
-=item *
-
-If this is maint release, make sure F<Porting/mergelog> is saved and
-committed.
 
 =item *
 
@@ -940,13 +947,6 @@ Finally, commit:
 At this point you may want  to compare the commit with a previous bump to
 see if they look similar. See commit ca8de22071 for an example of a
 previous version bump.
-
-=item *
-
-I<You MUST SKIP this step for RC, BLEAD>
-
-If this was a maint release, then edit F<Porting/mergelog> to change
-all the C<d> (deferred) flags to C<.> (needs review).
 
 =item *
 

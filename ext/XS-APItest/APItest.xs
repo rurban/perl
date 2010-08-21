@@ -17,8 +17,6 @@ typedef struct {
     AV *cscav;
     AV *bhkav;
     bool bhk_record;
-    peep_t orig_peep;
-    AV *peep_record;
 } my_cxt_t;
 
 START_MY_CXT
@@ -328,23 +326,6 @@ blockhook_test_eval(pTHX_ OP *const o)
 }
 
 STATIC BHK bhk_csc, bhk_test;
-
-STATIC void
-my_peep (pTHX_ OP *o, peep_next_t *next_peep)
-{
-    dMY_CXT;
-
-    if (!o)
-        return;
-
-    CALL_FPTR(MY_CXT.orig_peep)(aTHX_ o, next_peep);
-
-    for (; o; o = o->op_next) {
-        if (o->op_type == OP_CONST && cSVOPx_sv(o) && SvPOK(cSVOPx_sv(o))) {
-            av_push(MY_CXT.peep_record, newSVsv(cSVOPx_sv(o)));
-        }
-    }
-}
 
 #include "const-c.inc"
 
@@ -719,8 +700,6 @@ BOOT:
     BhkENTRY_set(&bhk_csc, start, blockhook_csc_start);
     BhkENTRY_set(&bhk_csc, pre_end, blockhook_csc_pre_end);
     Perl_blockhook_register(aTHX_ &bhk_csc);
-
-    MY_CXT.peep_record = newAV();
 }
 
 void
@@ -733,7 +712,6 @@ CLONE(...)
     MY_CXT.cscav = NULL;
     MY_CXT.bhkav = get_av("XS::APItest::bhkav", GV_ADDMULTI);
     MY_CXT.bhk_record = 0;
-    MY_CXT.peep_record = newAV();
 
 void
 print_double(val)
@@ -1113,27 +1091,17 @@ bhk_record(bool on)
         if (on)
             av_clear(MY_CXT.bhkav);
 
-void
-peep_enable ()
-    PREINIT:
-        dMY_CXT;
-    CODE:
-        av_clear(MY_CXT.peep_record);
-        MY_CXT.orig_peep = PL_peepp;
-        PL_peepp = my_peep;
+BOOT:
+	{
+	HV* stash;
+	SV** meth = NULL;
+	CV* cv;
+	stash = gv_stashpv("XS::APItest::TempLv", 0);
+	if (stash)
+	    meth = hv_fetchs(stash, "make_temp_mg_lv", 0);
+	if (!meth)
+	    croak("lost method 'make_temp_mg_lv'");
+	cv = GvCV(*meth);
+	CvLVALUE_on(cv);
+	}
 
-AV *
-peep_record ()
-    PREINIT:
-        dMY_CXT;
-    CODE:
-        RETVAL = MY_CXT.peep_record;
-    OUTPUT:
-        RETVAL
-
-void
-peep_record_clear ()
-    PREINIT:
-        dMY_CXT;
-    CODE:
-        av_clear(MY_CXT.peep_record);

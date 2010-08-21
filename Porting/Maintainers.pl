@@ -197,7 +197,7 @@ use File::Glob qw(:case);
     'Archive::Tar' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.66.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.68.tar.gz',
 	'FILES'		=> q[cpan/Archive-Tar],
 	'EXCLUDED'	=> [ qw(Makefile.PL) ],
 	'UPSTREAM'	=> 'cpan',
@@ -956,7 +956,7 @@ use File::Glob qw(:case);
     'Module::CoreList' =>
 	{
 	'MAINTAINER'	=> 'rgarcia',
-	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.36.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.37.tar.gz',
 	'FILES'		=> q[dist/Module-CoreList],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1328,7 +1328,7 @@ use File::Glob qw(:case);
     'Test::Harness' =>
 	{
 	'MAINTAINER'	=> 'andya',
-	'DISTRIBUTION'	=> 'ANDYA/Test-Harness-3.21.tar.gz',
+	'DISTRIBUTION'	=> 'ANDYA/Test-Harness-3.22.tar.gz',
 	'FILES'		=> q[cpan/Test-Harness],
 	'EXCLUDED'	=> [ qr{^examples/},
 			     qr{^inc/},

@@ -1372,11 +1372,11 @@ foreach my $op (qw(<=> == != < <= > >=)) {
     $obj = bless do {my $a; \$a}, 'Shklitza';
     $ref = $obj;
 
-    is ($obj, "CLiK KLAK");
-    is ($ref, "CLiK KLAK");
+    is ("$obj", "CLiK KLAK");
+    is ("$ref", "CLiK KLAK");
 
     weaken $ref;
-    is ($ref, "CLiK KLAK");
+    is ("$ref", "CLiK KLAK");
 
     bless $obj, 'Ksshfwoom';
 

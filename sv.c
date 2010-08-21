@@ -705,61 +705,6 @@ Perl_sv_free_arenas(pTHX)
   are decremented to point at the unused 'ghost' memory, knowing that
   the pointers are used with offsets to the real memory.
 
-  HE, HEK arenas are managed separately, with separate code, but may
-  be merge-able later..
-*/
-
-/* get_arena(size): this creates custom-sized arenas
-   TBD: export properly for hv.c: S_more_he().
-*/
-void*
-Perl_get_arena(pTHX_ const size_t arena_size, const svtype bodytype)
-{
-    dVAR;
-    struct arena_desc* adesc;
-    struct arena_set *aroot = (struct arena_set*) PL_body_arenas;
-    unsigned int curr;
-
-    /* shouldnt need this
-    if (!arena_size)	arena_size = PERL_ARENA_SIZE;
-    */
-
-    /* may need new arena-set to hold new arena */
-    if (!aroot || aroot->curr >= aroot->set_size) {
-	struct arena_set *newroot;
-	Newxz(newroot, 1, struct arena_set);
-	newroot->set_size = ARENAS_PER_SET;
-	newroot->next = aroot;
-	aroot = newroot;
-	PL_body_arenas = (void *) newroot;
-	DEBUG_m(PerlIO_printf(Perl_debug_log, "new arenaset %p\n", (void*)aroot));
-    }
-
-    /* ok, now have arena-set with at least 1 empty/available arena-desc */
-    curr = aroot->curr++;
-    adesc = &(aroot->set[curr]);
-    assert(!adesc->arena);
-    
-    Newx(adesc->arena, arena_size, char);
-    adesc->size = arena_size;
-    adesc->utype = bodytype;
-    DEBUG_m(PerlIO_printf(Perl_debug_log, "arena %d added: %p size %"UVuf"\n", 
-			  curr, (void*)adesc->arena, (UV)arena_size));
-
-    return adesc->arena;
-}
-
-
-/* return a thing to the free list */
-
-#define del_body(thing, root)			\
-    STMT_START {				\
-	void ** const thing_copy = (void **)thing;\
-	*thing_copy = *root;			\
-	*root = (void*)thing_copy;		\
-    } STMT_END
-
-/* 
 
 =head1 SV-Body Allocation
 
@@ -806,21 +751,17 @@ they are no longer allocated.
 
 In turn, the new_body_* allocators call S_new_body(), which invokes
 new_body_inline macro, which takes a lock, and takes a body off the
-linked list at PL_body_roots[sv_type], calling S_more_bodies() if
+linked list at PL_body_roots[sv_type], calling Perl_more_bodies() if
 necessary to refresh an empty list.  Then the lock is released, and
 the body is returned.
 
-S_more_bodies calls get_arena(), and carves it up into an array of N
+Perl_more_bodies allocates a new arena, and carves it up into an array of N
 bodies, which it strings into a linked list.  It looks up arena-size
 and body-size from the body_details table described below, thus
 supporting the multiple body-types.
 
 If PURIFY is defined, or PERL_ARENA_SIZE=0, arenas are not used, and
 the (new|del)_X*V macros are mapped directly to malloc/free.
-
-*/
-
-/* 
 
 For each sv-type, struct body_details bodies_by_type[] carries
 parameters which control these aspects of SV handling:
@@ -926,34 +867,19 @@ static const struct body_details bodies_by_type[] = {
       SVt_PV, FALSE, NONV, HASARENA,
       FIT_ARENA(0, sizeof(XPV) - STRUCT_OFFSET(XPV, xpv_cur)) },
 
-#if 2 *PTRSIZE <= IVSIZE
     /* 12 */
     { sizeof(XPVIV),
       copy_length(XPVIV, xiv_u) - STRUCT_OFFSET(XPV, xpv_cur),
       + STRUCT_OFFSET(XPV, xpv_cur),
       SVt_PVIV, FALSE, NONV, HASARENA,
       FIT_ARENA(0, sizeof(XPVIV) - STRUCT_OFFSET(XPV, xpv_cur)) },
-    /* 12 */
-#else
-    { sizeof(XPVIV),
-      copy_length(XPVIV, xiv_u),
-      0,
-      SVt_PVIV, FALSE, NONV, HASARENA,
-      FIT_ARENA(0, sizeof(XPVIV)) },
-#endif
 
-#if (2 *PTRSIZE <= IVSIZE) && (2 *PTRSIZE <= NVSIZE)
     /* 20 */
     { sizeof(XPVNV),
       copy_length(XPVNV, xnv_u) - STRUCT_OFFSET(XPV, xpv_cur),
       + STRUCT_OFFSET(XPV, xpv_cur),
       SVt_PVNV, FALSE, HADNV, HASARENA,
       FIT_ARENA(0, sizeof(XPVNV) - STRUCT_OFFSET(XPV, xpv_cur)) },
-#else
-    /* 20 */
-    { sizeof(XPVNV), copy_length(XPVNV, xnv_u), 0, SVt_PVNV, FALSE, HADNV,
-      HASARENA, FIT_ARENA(0, sizeof(XPVNV)) },
-#endif
 
     /* 28 */
     { sizeof(XPVMG), copy_length(XPVMG, xnv_u), 0, SVt_PVMG, FALSE, HADNV,
@@ -964,7 +890,7 @@ static const struct body_details bodies_by_type[] = {
       sizeof(regexp),
       0,
       SVt_REGEXP, FALSE, NONV, HASARENA,
-      FIT_ARENA(0, sizeof(regexp) - STRUCT_OFFSET(regexp, xpv_cur))
+      FIT_ARENA(0, sizeof(regexp))
     },
 
     /* 48 */
@@ -1012,8 +938,14 @@ static const struct body_details bodies_by_type[] = {
     (void *)((char *)S_new_body(aTHX_ sv_type)	\
 	     - bodies_by_type[sv_type].offset)
 
-#define del_body_allocated(p, sv_type)		\
-    del_body(p + bodies_by_type[sv_type].offset, &PL_body_roots[sv_type])
+/* return a thing to the free list */
+
+#define del_body(thing, root)				\
+    STMT_START {					\
+	void ** const thing_copy = (void **)thing;	\
+	*thing_copy = *root;				\
+	*root = (void*)thing_copy;			\
+    } STMT_END
 
 
 #define my_safemalloc(s)	(void*)safemalloc(s)
@@ -1057,8 +989,8 @@ static const struct body_details bodies_by_type[] = {
 #define new_XPVMG()	new_body_allocated(SVt_PVMG)
 #define del_XPVMG(p)	del_body_allocated(p, SVt_PVMG)
 
-#define new_XPVGV()	new_body_allocated(SVt_PVGV)
-#define del_XPVGV(p)	del_body_allocated(p, SVt_PVGV)
+#define del_XPVGV(p)	del_body(p + bodies_by_type[SVt_PVGV].offset,	\
+				 &PL_body_roots[SVt_PVGV])
 
 #endif /* PURIFY */
 
@@ -1069,16 +1001,18 @@ static const struct body_details bodies_by_type[] = {
 #define new_NOARENAZ(details) \
 	my_safecalloc((details)->body_size + (details)->offset)
 
-STATIC void *
-S_more_bodies (pTHX_ const svtype sv_type)
+void *
+Perl_more_bodies (pTHX_ const svtype sv_type, const size_t body_size,
+		  const size_t arena_size)
 {
     dVAR;
     void ** const root = &PL_body_roots[sv_type];
-    const struct body_details * const bdp = &bodies_by_type[sv_type];
-    const size_t body_size = bdp->body_size;
+    struct arena_desc *adesc;
+    struct arena_set *aroot = (struct arena_set *) PL_body_arenas;
+    unsigned int curr;
     char *start;
     const char *end;
-    const size_t arena_size = Perl_malloc_good_size(bdp->arena_size);
+    const size_t good_arena_size = Perl_malloc_good_size(arena_size);
 #if defined(DEBUGGING) && !defined(PERL_GLOBAL_STRUCT_PRIVATE)
     static bool done_sanity_check;
 
@@ -1094,37 +1028,68 @@ S_more_bodies (pTHX_ const svtype sv_type)
     }
 #endif
 
-    assert(bdp->arena_size);
+    assert(arena_size);
 
-    start = (char*) Perl_get_arena(aTHX_ arena_size, sv_type);
+    /* may need new arena-set to hold new arena */
+    if (!aroot || aroot->curr >= aroot->set_size) {
+	struct arena_set *newroot;
+	Newxz(newroot, 1, struct arena_set);
+	newroot->set_size = ARENAS_PER_SET;
+	newroot->next = aroot;
+	aroot = newroot;
+	PL_body_arenas = (void *) newroot;
+	DEBUG_m(PerlIO_printf(Perl_debug_log, "new arenaset %p\n", (void*)aroot));
+    }
 
-    end = start + arena_size - 2 * body_size;
+    /* ok, now have arena-set with at least 1 empty/available arena-desc */
+    curr = aroot->curr++;
+    adesc = &(aroot->set[curr]);
+    assert(!adesc->arena);
+    
+    Newx(adesc->arena, good_arena_size, char);
+    adesc->size = good_arena_size;
+    adesc->utype = sv_type;
+    DEBUG_m(PerlIO_printf(Perl_debug_log, "arena %d added: %p size %"UVuf"\n", 
+			  curr, (void*)adesc->arena, (UV)good_arena_size));
+
+    start = (char *) adesc->arena;
+
+    /* Get the address of the byte after the end of the last body we can fit.
+       Remember, this is integer division:  */
+    end = start + good_arena_size / body_size * body_size;
 
     /* computed count doesnt reflect the 1st slot reservation */
 #if defined(MYMALLOC) || defined(HAS_MALLOC_GOOD_SIZE)
     DEBUG_m(PerlIO_printf(Perl_debug_log,
 			  "arena %p end %p arena-size %d (from %d) type %d "
 			  "size %d ct %d\n",
-			  (void*)start, (void*)end, (int)arena_size,
-			  (int)bdp->arena_size, sv_type, (int)body_size,
-			  (int)arena_size / (int)body_size));
+			  (void*)start, (void*)end, (int)good_arena_size,
+			  (int)arena_size, sv_type, (int)body_size,
+			  (int)good_arena_size / (int)body_size));
 #else
     DEBUG_m(PerlIO_printf(Perl_debug_log,
 			  "arena %p end %p arena-size %d type %d size %d ct %d\n",
 			  (void*)start, (void*)end,
-			  (int)bdp->arena_size, sv_type, (int)body_size,
-			  (int)bdp->arena_size / (int)body_size));
+			  (int)arena_size, sv_type, (int)body_size,
+			  (int)good_arena_size / (int)body_size));
 #endif
     *root = (void *)start;
 
-    while (start <= end) {
+    while (1) {
+	/* Where the next body would start:  */
 	char * const next = start + body_size;
+
+	if (next >= end) {
+	    /* This is the last body:  */
+	    assert(next == end);
+
+	    *(void **)start = 0;
+	    return *root;
+	}
+
 	*(void**) start = (void *)next;
 	start = next;
     }
-    *(void **)start = 0;
-
-    return *root;
 }
 
 /* grab a new thing from the free list, allocating more if necessary.
@@ -1135,7 +1100,9 @@ S_more_bodies (pTHX_ const svtype sv_type)
     STMT_START { \
 	void ** const r3wt = &PL_body_roots[sv_type]; \
 	xpv = (PTR_TBL_ENT_t*) (*((void **)(r3wt))      \
-	  ? *((void **)(r3wt)) : more_bodies(sv_type)); \
+	  ? *((void **)(r3wt)) : Perl_more_bodies(aTHX_ sv_type, \
+					     bodies_by_type[sv_type].body_size,\
+					     bodies_by_type[sv_type].arena_size)); \
 	*(r3wt) = *(void**)(xpv); \
     } STMT_END
 
@@ -5242,7 +5209,7 @@ Perl_sv_unmagic(pTHX_ SV *const sv, const int type)
             const MGVTBL* const vtbl = mg->mg_virtual;
 	    *mgp = mg->mg_moremagic;
 	    if (vtbl && vtbl->svt_free)
-		CALL_FPTR(vtbl->svt_free)(aTHX_ sv, mg);
+		vtbl->svt_free(aTHX_ sv, mg);
 	    if (mg->mg_ptr && mg->mg_type != PERL_MAGIC_regex_global) {
 		if (mg->mg_len > 0)
 		    Safefree(mg->mg_ptr);
@@ -10854,7 +10821,7 @@ Perl_mg_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *const param)
 		nmg->mg_ptr = (char*)sv_dup_inc((const SV *)nmg->mg_ptr, param);
 	}
 	if ((nmg->mg_flags & MGf_DUP) && nmg->mg_virtual && nmg->mg_virtual->svt_dup) {
-	    CALL_FPTR(nmg->mg_virtual->svt_dup)(aTHX_ nmg, param);
+	    nmg->mg_virtual->svt_dup(aTHX_ nmg, param);
 	}
     }
     return mgret;
@@ -12827,9 +12794,11 @@ S_unreferenced_to_tmp_stack(pTHX_ AV *const unreferenced)
 void
 Perl_clone_params_del(CLONE_PARAMS *param)
 {
-    PerlInterpreter *const was = PERL_GET_THX;
+    /* This seemingly funky ordering keeps the build with PERL_GLOBAL_STRUCT
+       happy: */
     PerlInterpreter *const to = param->new_perl;
     dTHXa(to);
+    PerlInterpreter *const was = PERL_GET_THX;
 
     PERL_ARGS_ASSERT_CLONE_PARAMS_DEL;
 
@@ -12851,6 +12820,7 @@ Perl_clone_params_del(CLONE_PARAMS *param)
 CLONE_PARAMS *
 Perl_clone_params_new(PerlInterpreter *const from, PerlInterpreter *const to)
 {
+    dVAR;
     /* Need to play this game, as newAV() can call safesysmalloc(), and that
        does a dTHX; to get the context from thread local storage.
        FIXME - under PERL_CORE Newx(), Safefree() and friends should expand to

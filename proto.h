@@ -2571,11 +2571,7 @@ PERL_CALLCONV void	Perl_pad_free(pTHX_ PADOFFSET po);
 STATIC void	S_pad_reset(pTHX);
 #endif
 PERL_CALLCONV void	Perl_pad_swipe(pTHX_ PADOFFSET po, bool refadjust);
-PERL_CALLCONV void	Perl_peep(pTHX_ OP* o, peep_next_t *next_peep)
-			__attribute__nonnull__(pTHX_2);
-#define PERL_ARGS_ASSERT_PEEP	\
-	assert(next_peep)
-
+PERL_CALLCONV void	Perl_peep(pTHX_ OP* o);
 PERL_CALLCONV PerlIO*	Perl_start_glob(pTHX_ SV *tmpglob, IO *io)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2);
@@ -4492,11 +4488,6 @@ STATIC HV*	S_require_tie_mod(pTHX_ GV *gv, const char *varpv, SV* namesv, const 
 
 #endif
 
-PERL_CALLCONV void*	Perl_get_arena(pTHX_ const size_t arenasize, const svtype bodytype)
-			__attribute__malloc__
-			__attribute__warn_unused_result__;
-
-
 #if defined(PERL_IN_HV_C)
 STATIC void	S_hsplit(pTHX_ HV *hv)
 			__attribute__nonnull__(pTHX_1);
@@ -5891,7 +5882,6 @@ STATIC void	S_sv_release_COW(pTHX_ SV *sv, const char *pvx, SV *after)
 
 #  endif
 STATIC SV *	S_more_sv(pTHX);
-STATIC void *	S_more_bodies(pTHX_ const svtype sv_type);
 STATIC bool	S_sv_2iuv_common(pTHX_ SV *const sv)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_SV_2IUV_COMMON	\
@@ -5922,6 +5912,8 @@ STATIC void	S_anonymise_cv_maybe(pTHX_ GV *gv, CV *cv)
 	assert(gv); assert(cv)
 
 #endif
+
+PERL_CALLCONV void *	Perl_more_bodies(pTHX_ const svtype sv_type, const size_t body_size, const size_t arena_size);
 
 #if defined(PERL_IN_TOKE_C)
 STATIC void	S_check_uni(pTHX);
