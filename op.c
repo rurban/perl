@@ -2640,6 +2640,31 @@ S_fold_constants(pTHX_ register OP *o)
     return newop;
 
  nope:
+    if (!(PL_opargs[type] & OA_OTHERINT))
+	return o;
+
+    if (!(PL_hints & HINT_INTEGER)) {
+	if (type == OP_MODULO
+	    || type == OP_DIVIDE
+	    || type == OP_MULTIPLY
+	    || !(o->op_flags & OPf_KIDS))
+	{
+	    return o;
+	}
+
+	for (curop = ((UNOP*)o)->op_first; curop; curop = curop->op_sibling) {
+	    if (curop->op_type == OP_CONST) {
+		if (SvIOK(((SVOP*)curop)->op_sv))
+		    continue;
+		return o;
+	    }
+	    if (PL_opargs[curop->op_type] & OA_RETINTEGER)
+		continue;
+	    return o;
+	}
+	o->op_ppaddr = PL_ppaddr[++(o->op_type)];
+    }
+
     return o;
 }
 
