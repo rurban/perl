@@ -31,7 +31,6 @@ Perl_realloc
 Perl_mfree
 Perl_get_context
 Perl_set_context
-Perl_regcurly
 Perl_try_amagic_bin
 Perl_try_amagic_un
 Perl_amagic_call
@@ -164,6 +163,7 @@ Perl_gv_stashpv
 Perl_gv_stashpvn
 Perl_gv_stashsv
 Perl_hv_clear
+Perl_hv_copy_hints_hv
 Perl_hv_delayfree_ent
 Perl_hv_delete
 Perl_hv_delete_ent
@@ -496,6 +496,7 @@ Perl_save_generic_pvref
 Perl_save_shared_pvref
 Perl_save_gp
 Perl_save_hash
+Perl_save_hints
 Perl_save_helem_flags
 Perl_save_hptr
 Perl_save_I16
@@ -527,7 +528,7 @@ Perl_share_hek
 Perl_csighandler
 Perl_stack_grow
 Perl_start_subparse
-Perl_sv_2bool
+Perl_sv_2bool_flags
 Perl_sv_2cv
 Perl_sv_2io
 Perl_sv_2iv
@@ -558,8 +559,10 @@ Perl_sv_catsv
 Perl_sv_chop
 Perl_sv_clear
 Perl_sv_cmp
+Perl_sv_cmp_flags
 Perl_sv_cmp_locale
-Perl_sv_collxfrm
+Perl_sv_cmp_locale_flags
+Perl_sv_collxfrm_flags
 Perl_sv_compile_2op
 Perl_getcwd_sv
 Perl_sv_dec
@@ -567,7 +570,7 @@ Perl_sv_dec_nomg
 Perl_sv_dump
 Perl_sv_derived_from
 Perl_sv_does
-Perl_sv_eq
+Perl_sv_eq_flags
 Perl_sv_free
 Perl_sv_free2
 Perl_sv_gets
@@ -594,7 +597,6 @@ Perl_sv_pvutf8n_force
 Perl_sv_pvbyten_force
 Perl_sv_recode_to_utf8
 Perl_sv_cat_decode
-Perl_sv_reftype_len
 Perl_sv_reftype
 Perl_sv_replace
 Perl_sv_report_used

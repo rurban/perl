@@ -1029,111 +1029,6 @@ XS(XS_Internals_HvREHASH)	/* Subject to change  */
     Perl_croak(aTHX_ "Internals::HvREHASH $hashref");
 }
 
-XS(XS_mauve_reftype)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if (!SvROK(sv)) {
-       XSRETURN_NO;
-    } else {
-	STRLEN len;
-	char *type= (char *)sv_reftype_len(SvRV(sv),FALSE,&len);
-        XPUSHs(sv_2mortal(newSVpv(type,len)));
-    }
-}
-
-XS(XS_mauve_refaddr)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if (!SvROK(sv)) {
-       XSRETURN_NO;
-    } else {
-       XPUSHs(sv_2mortal(newSVuv(PTR2UV(SvRV(sv)))));
-    }
-}
-
-XS(XS_mauve_blessed)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if ( SvROK(sv) && SvOBJECT(SvRV(sv)) ) {
-	STRLEN len;
-	char *type= (char *)sv_reftype_len(SvRV(sv),TRUE,&len);
-        XPUSHs(sv_2mortal(newSVpv(type,len)));
-    } else {
-        XPUSHs(sv_2mortal(newSVpv("",0)));
-    }
-}
-
-XS(XS_mauve_weaken)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    sv_rvweaken(sv);
-    XSRETURN_EMPTY;
-}
-
-XS(XS_mauve_isweak)
-{
-    dVAR;
-    dXSARGS;
-    if (items != 1)
-       croak_xs_usage(cv,  "sv");
-    {
-	SV *	sv = ST(0);
-	if (SvMAGICAL(sv))
-	    mg_get(sv);
-	ST(0) = boolSV(SvROK(sv) && SvWEAKREF(sv));
-	XSRETURN(1);
-    }
-    XSRETURN(1);
-}
-
 XS(XS_re_is_regexp)
 {
     dVAR; 
@@ -1294,19 +1189,29 @@ XS(XS_re_regexp_pattern)
     {
         /* Houston, we have a regex! */
         SV *pattern;
-        STRLEN left = 0;
-        char reflags[sizeof(INT_PAT_MODS)];
 
         if ( GIMME_V == G_ARRAY ) {
+	    STRLEN left = 0;
+	    char reflags[sizeof(INT_PAT_MODS) + 1]; /* The +1 is for the charset
+						        modifier */
+            const char *fptr;
+            char ch;
+            U16 match_flags;
+
             /*
                we are in list context so stringify
                the modifiers that apply. We ignore "negative
                modifiers" in this scenario.
             */
 
-            const char *fptr = INT_PAT_MODS;
-            char ch;
-            U16 match_flags = (U16)((RX_EXTFLAGS(re) & PMf_COMPILETIME)
+            if (RX_EXTFLAGS(re) & RXf_PMf_LOCALE) {
+		reflags[left++] = LOCALE_PAT_MOD;
+	    }
+	    else if (RX_EXTFLAGS(re) & RXf_PMf_UNICODE) {
+		reflags[left++] = UNICODE_PAT_MOD;
+	    }
+            fptr = INT_PAT_MODS;
+            match_flags = (U16)((RX_EXTFLAGS(re) & PMf_COMPILETIME)
                                     >> RXf_PMf_STD_PMMOD_SHIFT);
 
             while((ch = *fptr++)) {
@@ -1650,11 +1555,6 @@ struct xsub_details details[] = {
     {"Tie::Hash::NamedCapture::NEXTKEY", XS_Tie_Hash_NamedCapture_NEXTK, NULL},
     {"Tie::Hash::NamedCapture::SCALAR", XS_Tie_Hash_NamedCapture_SCALAR, NULL},
     {"Tie::Hash::NamedCapture::flags", XS_Tie_Hash_NamedCapture_flags, NULL}
-    ,{"mauve::reftype", XS_mauve_reftype, "$"}
-    ,{"mauve::refaddr", XS_mauve_refaddr, "$"}
-    ,{"mauve::blessed", XS_mauve_blessed, "$"}
-    ,{"mauve::weaken", XS_mauve_weaken, "$"}
-    ,{"mauve::isweak", XS_mauve_isweak, "$"}
 };
 
 void

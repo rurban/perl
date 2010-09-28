@@ -9,7 +9,7 @@ require Exporter;
 use Carp;
 use Symbol qw(gensym qualify);
 
-$VERSION	= 1.06;
+$VERSION	= 1.07;
 @ISA		= qw(Exporter);
 @EXPORT		= qw(open3);
 
@@ -181,7 +181,7 @@ sub xopen {
 }
 
 sub xclose {
-    close $_[0] or croak "$Me: close($_[0]) failed: $!";
+    $_[0] =~ /\A=?(\d+)\z/ ? eval { require POSIX; POSIX::close($1); } : close $_[0]
 }
 
 sub fh_is_fd {

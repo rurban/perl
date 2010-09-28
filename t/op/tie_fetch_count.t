@@ -7,7 +7,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 92);
+    plan (tests => 94);
 }
 
 use strict;
@@ -68,16 +68,13 @@ $dummy  =  $var  !=   1 ; check_count '!=';
 $dummy  =  $var <=>   1 ; check_count '<=>';
 
 # String comparison
-TODO: {
-    local $::TODO = $TODO;
-    $dummy  =  $var  lt   1 ; check_count 'lt';
-    $dummy  =  $var  le   1 ; check_count 'le';
-    $dummy  =  $var  eq   1 ; check_count 'eq';
-    $dummy  =  $var  ge   1 ; check_count 'ge';
-    $dummy  =  $var  gt   1 ; check_count 'gt';
-    $dummy  =  $var  ne   1 ; check_count 'ne';
-    $dummy  =  $var cmp   1 ; check_count 'cmp';
-}
+$dummy  =  $var  lt   1 ; check_count 'lt';
+$dummy  =  $var  le   1 ; check_count 'le';
+$dummy  =  $var  eq   1 ; check_count 'eq';
+$dummy  =  $var  ge   1 ; check_count 'ge';
+$dummy  =  $var  gt   1 ; check_count 'gt';
+$dummy  =  $var  ne   1 ; check_count 'ne';
+$dummy  =  $var cmp   1 ; check_count 'cmp';
 
 # Bitwise operators
 $dummy  =  $var   &   1 ; check_count '&';
@@ -86,9 +83,9 @@ $dummy  =  $var   |   1 ; check_count '|';
 $dummy  = ~$var         ; check_count '~';
 
 # Logical operators
+$dummy  = !$var         ; check_count '!';
 TODO: {
     local $::TODO = $TODO;
-    $dummy  = !$var         ; check_count '!';
     $dummy  =  $var  ||   1 ; check_count '||';
     $dummy  = ($var  or   1); check_count 'or';
 }
@@ -146,12 +143,11 @@ $_ = "foo";
 $dummy  =  $var =~ m/ / ; check_count 'm//';
 $dummy  =  $var =~ s/ //; check_count 's///';
 $dummy  =  $var ~~    1 ; check_count '~~';
-TODO: {
-    local $::TODO = $TODO;
-    $dummy  =  $var =~ y/ //; check_count 'y///';
-               /$var/       ; check_count 'm/pattern/';
-              s/$var//      ; check_count 's/pattern//';
-}
+$dummy  =  $var =~ y/ //; check_count 'y///';
+           /$var/       ; check_count 'm/pattern/';
+           /$var foo/   ; check_count 'm/$tied foo/';
+          s/$var//      ; check_count 's/pattern//';
+          s/$var foo//  ; check_count 's/$tied foo//';
           s/./$var/     ; check_count 's//replacement/';
 
 # Dereferencing

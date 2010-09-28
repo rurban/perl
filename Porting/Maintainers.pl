@@ -258,7 +258,7 @@ use File::Glob qw(:case);
     'B::Debug' =>
 	{
 	'MAINTAINER'	=> 'rurban',
-	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.14.tar.gz',
+	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.16.tar.gz',
 	'FILES'		=> q[cpan/B-Debug],
 	'EXCLUDED'	=> [ qw( t/pod.t ) ],
 	'UPSTREAM'	=> 'cpan',
@@ -291,7 +291,7 @@ use File::Glob qw(:case);
     'bignum' =>
 	{
 	'MAINTAINER'	=> 'tels',
-	'DISTRIBUTION'	=> 'FLORA/bignum-0.24.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/bignum-0.25.tar.gz',
 	'FILES'		=> q[dist/bignum],
 	'EXCLUDED'	=> [ qr{^inc/Module/}, qw(t/pod.t t/pod_cov.t) ],
 	'UPSTREAM'	=> 'blead',
@@ -469,16 +469,16 @@ use File::Glob qw(:case);
 	'DISTRIBUTION'	=> 'GAAS/Digest-1.16.tar.gz',
 	'FILES'		=> q[cpan/Digest],
 	'EXCLUDED'	=> [ qw{digest-bench} ],
-	'UPSTREAM'	=> undef,
+	'UPSTREAM'	=> "cpan",
 	},
 
     'Digest::MD5' =>
 	{
 	'MAINTAINER'	=> 'gaas',
-	'DISTRIBUTION'	=> 'GAAS/Digest-MD5-2.40.tar.gz',
+	'DISTRIBUTION'	=> 'GAAS/Digest-MD5-2.50.tar.gz',
 	'FILES'		=> q[cpan/Digest-MD5],
 	'EXCLUDED'	=> [ qw{rfc1321.txt} ],
-	'UPSTREAM'	=> undef,
+	'UPSTREAM'	=> "cpan",
 	},
 
     'Digest::SHA' =>
@@ -493,7 +493,7 @@ use File::Glob qw(:case);
     'Encode' =>
 	{
 	'MAINTAINER'	=> 'dankogai',
-	'DISTRIBUTION'	=> 'DANKOGAI/Encode-2.39.tar.gz',
+	'DISTRIBUTION'	=> 'DANKOGAI/Encode-2.40.tar.gz',
 	'FILES'		=> q[cpan/Encode],
 	'UPSTREAM'	=> undef,
 	},
@@ -728,9 +728,9 @@ use File::Glob qw(:case);
     'if' =>
 	{
 	'MAINTAINER'	=> 'ilyaz',
-	'DISTRIBUTION'	=> 'ILYAZ/modules/if-0.0401.tar.gz',
-	'FILES'		=> q[cpan/if],
-	'UPSTREAM'	=> undef,
+	'DISTRIBUTION'	=> 'ILYAZ/modules/if-0.06.tar.gz',
+	'FILES'		=> q[dist/if],
+	'UPSTREAM'	=> 'blead',
 	},
 
     'IO' =>
@@ -849,7 +849,7 @@ use File::Glob qw(:case);
     'Math::BigInt' =>
 	{
 	'MAINTAINER'	=> 'tels',
-	'DISTRIBUTION'	=> 'FLORA/Math-BigInt-1.95.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/Math-BigInt-1.96.tar.gz',
 	'FILES'		=> q[dist/Math-BigInt],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qr{^examples/},
@@ -890,7 +890,7 @@ use File::Glob qw(:case);
     'Math::BigRat' =>
 	{
 	'MAINTAINER'	=> 'tels',
-	'DISTRIBUTION'	=> 'LETO/Math-BigRat-0.24.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/Math-BigRat-0.26.tar.gz',
 	'FILES'		=> q[cpan/Math-BigRat],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qw{
@@ -914,6 +914,7 @@ use File::Glob qw(:case);
 			   ],
 	'UPSTREAM'	=> 'cpan',
 	},
+
     'Memoize' =>
 	{
 	'MAINTAINER'	=> 'mjd',
@@ -955,7 +956,7 @@ use File::Glob qw(:case);
     'Module::CoreList' =>
 	{
 	'MAINTAINER'	=> 'rgarcia',
-	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.38.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.39.tar.gz',
 	'FILES'		=> q[dist/Module-CoreList],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1003,7 +1004,7 @@ use File::Glob qw(:case);
     'NEXT' =>
 	{
 	'MAINTAINER'	=> 'rafl',
-	'DISTRIBUTION'	=> 'FLORA/NEXT-0.64.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/NEXT-0.65.tar.gz',
 	'FILES'		=> q[cpan/NEXT],
 	'EXCLUDED'	=> [ qr{^demo/} ],
 	'UPSTREAM'	=> 'cpan',
@@ -1059,7 +1060,7 @@ use File::Glob qw(:case);
     'PathTools' =>
 	{
 	'MAINTAINER'	=> 'kwilliams',
-	'DISTRIBUTION'	=> 'SMUELLER/PathTools-3.31_02.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/PathTools-3.33.tar.gz',
 	'FILES'		=> q[dist/Cwd],
 	'EXCLUDED'	=> [ qr{^t/lib/Test/} ],
 	'UPSTREAM'	=> "blead",
@@ -1226,7 +1227,7 @@ use File::Glob qw(:case);
     'Safe' =>
 	{
 	'MAINTAINER'	=> 'rgarcia',
-	'DISTRIBUTION'	=> 'RGARCIA/Safe-2.27.tar.gz',
+	'DISTRIBUTION'	=> 'RGARCIA/Safe-2.28.tar.gz',
 	'FILES'		=> q[dist/Safe],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1435,7 +1436,7 @@ use File::Glob qw(:case);
     'threads' =>
 	{
 	'MAINTAINER'	=> 'jdhedden',
-	'DISTRIBUTION'	=> 'JDHEDDEN/threads-1.77.tar.gz',
+	'DISTRIBUTION'	=> 'JDHEDDEN/threads-1.81.tar.gz',
 	'FILES'		=> q[dist/threads],
 	'EXCLUDED'	=> [ qr{^examples/},
 			     qw(t/pod.t
@@ -1505,7 +1506,7 @@ use File::Glob qw(:case);
     'Unicode::Collate' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.59-withoutworldwriteables.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.60-withoutworldwriteables.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Collate],
 			    # ignore experimental XS version
 	'EXCLUDED'	=> [ qr{X$},
@@ -1517,7 +1518,7 @@ use File::Glob qw(:case);
     'Unicode::Normalize' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Normalize-1.06-withoutworldwriteables.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Normalize-1.07-withoutworldwriteables.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Normalize],
 	'EXCLUDED'	=> [ qw{MANIFEST.N Normalize.pmN disableXS enableXS }],
 	'UPSTREAM'	=> 'first-come',
@@ -1595,13 +1596,6 @@ use File::Glob qw(:case);
 			     qw{t/pod.t},
 			   ],
 	'UPSTREAM'	=> 'cpan',
-	},
-
-    'XS::APItest::KeywordRPN' =>
-	{
-	'MAINTAINER'	=> 'zefram',
-	'FILES'		=> q[ext/XS-APItest-KeywordRPN],
-	'UPSTREAM'	=> 'blead',
 	},
 
     'XSLoader' =>
@@ -1816,7 +1810,6 @@ use File::Glob qw(:case);
 				lib/less.{pm,t}
 				lib/locale.{pm,t}
 				lib/look.pl
-                                lib/mauve.{pm,t}
 				lib/open.{pm,t}
 				lib/open2.pl
 				lib/open3.pl

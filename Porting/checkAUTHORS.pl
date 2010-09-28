@@ -688,6 +688,8 @@ ilya\100math.berkeley.edu               ilya\100math.ohio-state.edu
 +                                       [9]ilya\100math.ohio-state.edu
 ilya\100martynov.org                    ilya\100juil.nonet
 
+joshua.pritikin\100db.com               joshua\100paloalto.com
+
 okamoto\100corp.hp.com                  okamoto\100hpcc123.corp.hp.com
 orwant\100oreilly.com                   orwant\100media.mit.edu
 
@@ -717,6 +719,7 @@ Peter.Dintelmann\100Dresdner-Bank.com   peter.dintelmann\100dresdner-bank.com
 pfeifer\100wait.de                      pfeifer\100charly.informatik.uni-dortmund.de
 +                                       upf\100de.uu.net
 rabbit\100rabbit.us                     rabbit+bugs\100rabbit.us
+perl\100aaroncrane.co.uk		arc\100cpan.org
 phil\100perkpartners.com                phil\100finchcomputer.com
 pimlott\100idiomtech.com                andrew\100pimlott.net
 +                                       pimlott\100abel.math.harvard.edu

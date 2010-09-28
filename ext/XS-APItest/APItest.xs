@@ -17,6 +17,11 @@ typedef struct {
     AV *cscav;
     AV *bhkav;
     bool bhk_record;
+    peep_t orig_peep;
+    peep_t orig_rpeep;
+    int peep_recording;
+    AV *peep_recorder;
+    AV *rpeep_recorder;
 } my_cxt_t;
 
 START_MY_CXT
@@ -327,11 +332,273 @@ blockhook_test_eval(pTHX_ OP *const o)
 
 STATIC BHK bhk_csc, bhk_test;
 
+STATIC void
+my_peep (pTHX_ OP *o)
+{
+    dMY_CXT;
+
+    if (!o)
+	return;
+
+    MY_CXT.orig_peep(aTHX_ o);
+
+    if (!MY_CXT.peep_recording)
+	return;
+
+    for (; o; o = o->op_next) {
+	if (o->op_type == OP_CONST && cSVOPx_sv(o) && SvPOK(cSVOPx_sv(o))) {
+	    av_push(MY_CXT.peep_recorder, newSVsv(cSVOPx_sv(o)));
+	}
+    }
+}
+
+STATIC void
+my_rpeep (pTHX_ OP *o)
+{
+    dMY_CXT;
+
+    if (!o)
+	return;
+
+    MY_CXT.orig_rpeep(aTHX_ o);
+
+    if (!MY_CXT.peep_recording)
+	return;
+
+    for (; o; o = o->op_next) {
+	if (o->op_type == OP_CONST && cSVOPx_sv(o) && SvPOK(cSVOPx_sv(o))) {
+	    av_push(MY_CXT.rpeep_recorder, newSVsv(cSVOPx_sv(o)));
+	}
+    }
+}
+
+/** RPN keyword parser **/
+
+#define sv_is_glob(sv) (SvTYPE(sv) == SVt_PVGV)
+#define sv_is_regexp(sv) (SvTYPE(sv) == SVt_REGEXP)
+#define sv_is_string(sv) \
+    (!sv_is_glob(sv) && !sv_is_regexp(sv) && \
+     (SvFLAGS(sv) & (SVf_IOK|SVf_NOK|SVf_POK|SVp_IOK|SVp_NOK|SVp_POK)))
+
+static SV *hintkey_rpn_sv, *hintkey_calcrpn_sv, *hintkey_stufftest_sv;
+static SV *hintkey_swaptwostmts_sv;
+static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
+
+/* low-level parser helpers */
+
+#define PL_bufptr (PL_parser->bufptr)
+#define PL_bufend (PL_parser->bufend)
+
+/* RPN parser */
+
+#define parse_var() THX_parse_var(aTHX)
+static OP *THX_parse_var(pTHX)
+{
+    char *s = PL_bufptr;
+    char *start = s;
+    PADOFFSET varpos;
+    OP *padop;
+    if(*s != '$') croak("RPN syntax error");
+    while(1) {
+	char c = *++s;
+	if(!isALNUM(c)) break;
+    }
+    if(s-start < 2) croak("RPN syntax error");
+    lex_read_to(s);
+    {
+	/* because pad_findmy() doesn't really use length yet */
+	SV *namesv = sv_2mortal(newSVpvn(start, s-start));
+	varpos = pad_findmy(SvPVX(namesv), s-start, 0);
+    }
+    if(varpos == NOT_IN_PAD || PAD_COMPNAME_FLAGS_isOUR(varpos))
+	croak("RPN only supports \"my\" variables");
+    padop = newOP(OP_PADSV, 0);
+    padop->op_targ = varpos;
+    return padop;
+}
+
+#define push_rpn_item(o) \
+    (tmpop = (o), tmpop->op_sibling = stack, stack = tmpop)
+#define pop_rpn_item() \
+    (!stack ? (croak("RPN stack underflow"), (OP*)NULL) : \
+     (tmpop = stack, stack = stack->op_sibling, \
+      tmpop->op_sibling = NULL, tmpop))
+
+#define parse_rpn_expr() THX_parse_rpn_expr(aTHX)
+static OP *THX_parse_rpn_expr(pTHX)
+{
+    OP *stack = NULL, *tmpop;
+    while(1) {
+	I32 c;
+	lex_read_space(0);
+	c = lex_peek_unichar(0);
+	switch(c) {
+	    case /*(*/')': case /*{*/'}': {
+		OP *result = pop_rpn_item();
+		if(stack) croak("RPN expression must return a single value");
+		return result;
+	    } break;
+	    case '0': case '1': case '2': case '3': case '4':
+	    case '5': case '6': case '7': case '8': case '9': {
+		UV val = 0;
+		do {
+		    lex_read_unichar(0);
+		    val = 10*val + (c - '0');
+		    c = lex_peek_unichar(0);
+		} while(c >= '0' && c <= '9');
+		push_rpn_item(newSVOP(OP_CONST, 0, newSVuv(val)));
+	    } break;
+	    case '$': {
+		push_rpn_item(parse_var());
+	    } break;
+	    case '+': {
+		OP *b = pop_rpn_item();
+		OP *a = pop_rpn_item();
+		lex_read_unichar(0);
+		push_rpn_item(newBINOP(OP_I_ADD, 0, a, b));
+	    } break;
+	    case '-': {
+		OP *b = pop_rpn_item();
+		OP *a = pop_rpn_item();
+		lex_read_unichar(0);
+		push_rpn_item(newBINOP(OP_I_SUBTRACT, 0, a, b));
+	    } break;
+	    case '*': {
+		OP *b = pop_rpn_item();
+		OP *a = pop_rpn_item();
+		lex_read_unichar(0);
+		push_rpn_item(newBINOP(OP_I_MULTIPLY, 0, a, b));
+	    } break;
+	    case '/': {
+		OP *b = pop_rpn_item();
+		OP *a = pop_rpn_item();
+		lex_read_unichar(0);
+		push_rpn_item(newBINOP(OP_I_DIVIDE, 0, a, b));
+	    } break;
+	    case '%': {
+		OP *b = pop_rpn_item();
+		OP *a = pop_rpn_item();
+		lex_read_unichar(0);
+		push_rpn_item(newBINOP(OP_I_MODULO, 0, a, b));
+	    } break;
+	    default: {
+		croak("RPN syntax error");
+	    } break;
+	}
+    }
+}
+
+#define parse_keyword_rpn() THX_parse_keyword_rpn(aTHX)
+static OP *THX_parse_keyword_rpn(pTHX)
+{
+    OP *op;
+    lex_read_space(0);
+    if(lex_peek_unichar(0) != '('/*)*/)
+	croak("RPN expression must be parenthesised");
+    lex_read_unichar(0);
+    op = parse_rpn_expr();
+    if(lex_peek_unichar(0) != /*(*/')')
+	croak("RPN expression must be parenthesised");
+    lex_read_unichar(0);
+    return op;
+}
+
+#define parse_keyword_calcrpn() THX_parse_keyword_calcrpn(aTHX)
+static OP *THX_parse_keyword_calcrpn(pTHX)
+{
+    OP *varop, *exprop;
+    lex_read_space(0);
+    varop = parse_var();
+    lex_read_space(0);
+    if(lex_peek_unichar(0) != '{'/*}*/)
+	croak("RPN expression must be braced");
+    lex_read_unichar(0);
+    exprop = parse_rpn_expr();
+    if(lex_peek_unichar(0) != /*{*/'}')
+	croak("RPN expression must be braced");
+    lex_read_unichar(0);
+    return newASSIGNOP(OPf_STACKED, varop, 0, exprop);
+}
+
+#define parse_keyword_stufftest() THX_parse_keyword_stufftest(aTHX)
+static OP *THX_parse_keyword_stufftest(pTHX)
+{
+    I32 c;
+    bool do_stuff;
+    lex_read_space(0);
+    do_stuff = lex_peek_unichar(0) == '+';
+    if(do_stuff) {
+	lex_read_unichar(0);
+	lex_read_space(0);
+    }
+    c = lex_peek_unichar(0);
+    if(c == ';') {
+	lex_read_unichar(0);
+    } else if(c != /*{*/'}') {
+	croak("syntax error");
+    }
+    if(do_stuff) lex_stuff_pvs(" ", 0);
+    return newOP(OP_NULL, 0);
+}
+
+#define parse_keyword_swaptwostmts() THX_parse_keyword_swaptwostmts(aTHX)
+static OP *THX_parse_keyword_swaptwostmts(pTHX)
+{
+    OP *a, *b;
+    a = parse_fullstmt(0);
+    b = parse_fullstmt(0);
+    if(a && b)
+	PL_hints |= HINT_BLOCK_SCOPE;
+    /* should use append_list(), but that's not part of the public API */
+    return !a ? b : !b ? a : newLISTOP(OP_LINESEQ, 0, b, a);
+}
+
+/* plugin glue */
+
+#define keyword_active(hintkey_sv) THX_keyword_active(aTHX_ hintkey_sv)
+static int THX_keyword_active(pTHX_ SV *hintkey_sv)
+{
+    HE *he;
+    if(!GvHV(PL_hintgv)) return 0;
+    he = hv_fetch_ent(GvHV(PL_hintgv), hintkey_sv, 0,
+		SvSHARED_HASH(hintkey_sv));
+    return he && SvTRUE(HeVAL(he));
+}
+
+static int my_keyword_plugin(pTHX_
+    char *keyword_ptr, STRLEN keyword_len, OP **op_ptr)
+{
+    if(keyword_len == 3 && strnEQ(keyword_ptr, "rpn", 3) &&
+		    keyword_active(hintkey_rpn_sv)) {
+	*op_ptr = parse_keyword_rpn();
+	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 7 && strnEQ(keyword_ptr, "calcrpn", 7) &&
+		    keyword_active(hintkey_calcrpn_sv)) {
+	*op_ptr = parse_keyword_calcrpn();
+	return KEYWORD_PLUGIN_STMT;
+    } else if(keyword_len == 9 && strnEQ(keyword_ptr, "stufftest", 9) &&
+		    keyword_active(hintkey_stufftest_sv)) {
+	*op_ptr = parse_keyword_stufftest();
+	return KEYWORD_PLUGIN_STMT;
+    } else if(keyword_len == 12 &&
+		    strnEQ(keyword_ptr, "swaptwostmts", 12) &&
+		    keyword_active(hintkey_swaptwostmts_sv)) {
+	*op_ptr = parse_keyword_swaptwostmts();
+	return KEYWORD_PLUGIN_STMT;
+    } else {
+	return next_keyword_plugin(aTHX_ keyword_ptr, keyword_len, op_ptr);
+    }
+}
+
 #include "const-c.inc"
 
-MODULE = XS::APItest:Hash		PACKAGE = XS::APItest::Hash
+MODULE = XS::APItest		PACKAGE = XS::APItest
 
 INCLUDE: const-xs.inc
+
+INCLUDE: numeric.xs
+
+MODULE = XS::APItest:Hash		PACKAGE = XS::APItest::Hash
 
 void
 rot13_hash(hash)
@@ -722,6 +989,14 @@ BOOT:
     BhkENTRY_set(&bhk_csc, start, blockhook_csc_start);
     BhkENTRY_set(&bhk_csc, pre_end, blockhook_csc_pre_end);
     Perl_blockhook_register(aTHX_ &bhk_csc);
+
+    MY_CXT.peep_recorder = newAV();
+    MY_CXT.rpeep_recorder = newAV();
+
+    MY_CXT.orig_peep = PL_peepp;
+    MY_CXT.orig_rpeep = PL_rpeepp;
+    PL_peepp = my_peep;
+    PL_rpeepp = my_rpeep;
 }
 
 void
@@ -734,6 +1009,8 @@ CLONE(...)
     MY_CXT.cscav = NULL;
     MY_CXT.bhkav = get_av("XS::APItest::bhkav", GV_ADDMULTI);
     MY_CXT.bhk_record = 0;
+    MY_CXT.peep_recorder = newAV();
+    MY_CXT.rpeep_recorder = newAV();
 
 void
 print_double(val)
@@ -1145,6 +1422,108 @@ bhk_record(bool on)
         if (on)
             av_clear(MY_CXT.bhkav);
 
+void
+test_savehints()
+    PREINIT:
+	SV **svp, *sv;
+    CODE:
+#define store_hint(KEY, VALUE) \
+		sv_setiv_mg(*hv_fetchs(GvHV(PL_hintgv), KEY, 1), (VALUE))
+#define hint_ok(KEY, EXPECT) \
+		((svp = hv_fetchs(GvHV(PL_hintgv), KEY, 0)) && \
+		    (sv = *svp) && SvIV(sv) == (EXPECT) && \
+		    (sv = cop_hints_fetchpvs(&PL_compiling, KEY)) && \
+		    SvIV(sv) == (EXPECT))
+#define check_hint(KEY, EXPECT) \
+		do { if (!hint_ok(KEY, EXPECT)) croak("fail"); } while(0)
+	PL_hints |= HINT_LOCALIZE_HH;
+	ENTER;
+	SAVEHINTS();
+	PL_hints &= HINT_INTEGER;
+	store_hint("t0", 123);
+	store_hint("t1", 456);
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 456);
+	ENTER;
+	SAVEHINTS();
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 456);
+	PL_hints |= HINT_INTEGER;
+	store_hint("t0", 321);
+	if (!(PL_hints & HINT_INTEGER)) croak("fail");
+	check_hint("t0", 321); check_hint("t1", 456);
+	LEAVE;
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 456);
+	ENTER;
+	SAVEHINTS();
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 456);
+	store_hint("t1", 654);
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 654);
+	LEAVE;
+	if (PL_hints & HINT_INTEGER) croak("fail");
+	check_hint("t0", 123); check_hint("t1", 456);
+	LEAVE;
+#undef store_hint
+#undef hint_ok
+#undef check_hint
+
+void
+test_copyhints()
+    PREINIT:
+	HV *a, *b;
+    CODE:
+	PL_hints |= HINT_LOCALIZE_HH;
+	ENTER;
+	SAVEHINTS();
+	sv_setiv_mg(*hv_fetchs(GvHV(PL_hintgv), "t0", 1), 123);
+	if (SvIV(cop_hints_fetchpvs(&PL_compiling, "t0")) != 123) croak("fail");
+	a = newHVhv(GvHV(PL_hintgv));
+	sv_2mortal((SV*)a);
+	sv_setiv_mg(*hv_fetchs(a, "t0", 1), 456);
+	if (SvIV(cop_hints_fetchpvs(&PL_compiling, "t0")) != 123) croak("fail");
+	b = hv_copy_hints_hv(a);
+	sv_2mortal((SV*)b);
+	sv_setiv_mg(*hv_fetchs(b, "t0", 1), 789);
+	if (SvIV(cop_hints_fetchpvs(&PL_compiling, "t0")) != 789) croak("fail");
+	LEAVE;
+
+void
+peep_enable ()
+    PREINIT:
+	dMY_CXT;
+    CODE:
+	av_clear(MY_CXT.peep_recorder);
+	av_clear(MY_CXT.rpeep_recorder);
+	MY_CXT.peep_recording = 1;
+
+void
+peep_disable ()
+    PREINIT:
+	dMY_CXT;
+    CODE:
+	MY_CXT.peep_recording = 0;
+
+SV *
+peep_record ()
+    PREINIT:
+	dMY_CXT;
+    CODE:
+	RETVAL = newRV_inc((SV *)MY_CXT.peep_recorder);
+    OUTPUT:
+	RETVAL
+
+SV *
+rpeep_record ()
+    PREINIT:
+	dMY_CXT;
+    CODE:
+	RETVAL = newRV_inc((SV *)MY_CXT.rpeep_recorder);
+    OUTPUT:
+	RETVAL
+
 BOOT:
 	{
 	HV* stash;
@@ -1158,3 +1537,13 @@ BOOT:
 	cv = GvCV(*meth);
 	CvLVALUE_on(cv);
 	}
+
+BOOT:
+{
+    hintkey_rpn_sv = newSVpvs_share("XS::APItest/rpn");
+    hintkey_calcrpn_sv = newSVpvs_share("XS::APItest/calcrpn");
+    hintkey_stufftest_sv = newSVpvs_share("XS::APItest/stufftest");
+    hintkey_swaptwostmts_sv = newSVpvs_share("XS::APItest/swaptwostmts");
+    next_keyword_plugin = PL_keyword_plugin;
+    PL_keyword_plugin = my_keyword_plugin;
+}

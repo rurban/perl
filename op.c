@@ -2236,9 +2236,10 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
 	type == OP_NOT)
 	yyerror("Using !~ with s///r doesn't make sense");
 
-    ismatchop = rtype == OP_MATCH ||
-		rtype == OP_SUBST ||
-		rtype == OP_TRANS;
+    ismatchop = (rtype == OP_MATCH ||
+		 rtype == OP_SUBST ||
+		 rtype == OP_TRANS)
+	     && !(right->op_flags & OPf_SPECIAL);
     if (ismatchop && right->op_private & OPpTARGET_MY) {
 	right->op_targ = 0;
 	right->op_private &= ~OPpTARGET_MY;
@@ -3648,8 +3649,12 @@ Perl_newPMOP(pTHX_ I32 type, I32 flags)
 
     if (PL_hints & HINT_RE_TAINT)
 	pmop->op_pmflags |= PMf_RETAINT;
-    if (PL_hints & HINT_LOCALE)
+    if (PL_hints & HINT_LOCALE) {
 	pmop->op_pmflags |= PMf_LOCALE;
+    }
+    else if ((! (PL_hints & HINT_BYTES)) && (PL_hints & HINT_UNI_8_BIT)) {
+        pmop->op_pmflags |= RXf_PMf_UNICODE;
+    }
 
 
 #ifdef USE_ITHREADS
@@ -4876,6 +4881,11 @@ S_new_logop(pTHX_ I32 type, I32 flags, OP** firstp, OP** otherp)
 	    op_free(first);
 	    if (other->op_type == OP_LEAVE)
 		other = newUNOP(OP_NULL, OPf_SPECIAL, other);
+	    else if (other->op_type == OP_MATCH
+	          || other->op_type == OP_SUBST
+	          || other->op_type == OP_TRANS)
+		/* Mark the op as being unbindable with =~ */
+		other->op_flags |= OPf_SPECIAL;
 	    return other;
 	}
 	else {
@@ -5028,6 +5038,10 @@ Perl_newCONDOP(pTHX_ I32 flags, OP *first, OP *trueop, OP *falseop)
 	}
 	if (live->op_type == OP_LEAVE)
 	    live = newUNOP(OP_NULL, OPf_SPECIAL, live);
+	else if (live->op_type == OP_MATCH || live->op_type == OP_SUBST
+	      || live->op_type == OP_TRANS)
+	    /* Mark the op as being unbindable with =~ */
+	    live->op_flags |= OPf_SPECIAL;
 	return live;
     }
     NewOp(1101, logop, 1, LOGOP);
@@ -7018,7 +7032,7 @@ Perl_ck_eval(pTHX_ OP *o)
     if ((PL_hints & HINT_LOCALIZE_HH) != 0 && GvHV(PL_hintgv)) {
 	/* Store a copy of %^H that pp_entereval can pick up. */
 	OP *hhop = newSVOP(OP_HINTSEVAL, 0,
-			   MUTABLE_SV(Perl_hv_copy_hints_hv(aTHX_ GvHV(PL_hintgv))));
+			   MUTABLE_SV(hv_copy_hints_hv(GvHV(PL_hintgv))));
 	cUNOPo->op_first->op_sibling = hhop;
 	o->op_private |= OPpEVAL_HAS_HH;
     }
@@ -7765,6 +7779,7 @@ OP *
 Perl_ck_smartmatch(pTHX_ OP *o)
 {
     dVAR;
+    PERL_ARGS_ASSERT_CK_SMARTMATCH;
     if (0 == (o->op_flags & OPf_SPECIAL)) {
 	OP *first  = cBINOPo->op_first;
 	OP *second = first->op_sibling;
@@ -8670,6 +8685,7 @@ Perl_ck_svconst(pTHX_ OP *o)
 OP *
 Perl_ck_chdir(pTHX_ OP *o)
 {
+    PERL_ARGS_ASSERT_CK_CHDIR;
     if (o->op_flags & OPf_KIDS) {
 	SVOP * const kid = (SVOP*)cUNOPo->op_first;
 

@@ -1399,10 +1399,8 @@ Perl_write_to_stderr(pTHX_ SV* msv)
 	dSAVED_ERRNO;
 #endif
 	PerlIO * const serr = Perl_error_log;
-	STRLEN msglen;
-	const char* message = SvPVx_const(msv, msglen);
 
-	PERL_WRITE_MSG_TO_CONSOLE(serr, message, msglen);
+	do_print(msv, serr);
 	(void)PerlIO_flush(serr);
 #ifdef USE_SFIO
 	RESTORE_ERRNO;
@@ -3828,7 +3826,8 @@ Perl_my_fflush_all(pTHX)
 void
 Perl_report_evil_fh(pTHX_ const GV *gv, const IO *io, I32 op)
 {
-    const char * const name = gv && isGV(gv) ? GvENAME(gv) : NULL;
+    const char * const name
+     = gv && (isGV(gv) || isGV_with_GP(gv)) ? GvENAME(gv) : NULL;
 
     if (op == OP_phoney_OUTPUT_ONLY || op == OP_phoney_INPUT_ONLY) {
 	if (ckWARN(WARN_IO)) {
@@ -5720,8 +5719,11 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
 	    opt = (U32) atoi(p);
 	    while (isDIGIT(*p))
 		p++;
-	    if (*p && *p != '\n' && *p != '\r')
+	    if (*p && *p != '\n' && *p != '\r') {
+	     if(isSPACE(*p)) goto the_end_of_the_opts_parser;
+	     else
 		 Perl_croak(aTHX_ "Unknown Unicode option letter '%c'", *p);
+	    }
        }
        else {
 	    for (; *p; p++) {
@@ -5747,15 +5749,20 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
 		 case PERL_UNICODE_UTF8CACHEASSERT:
 		      opt |= PERL_UNICODE_UTF8CACHEASSERT_FLAG; break;
 		 default:
-		      if (*p != '\n' && *p != '\r')
+		      if (*p != '\n' && *p != '\r') {
+			if(isSPACE(*p)) goto the_end_of_the_opts_parser;
+			else
 			  Perl_croak(aTHX_
 				     "Unknown Unicode option letter '%c'", *p);
+		      }
 		 }
 	    }
        }
   }
   else
        opt = PERL_UNICODE_DEFAULT_FLAGS;
+
+  the_end_of_the_opts_parser:
 
   if (opt & ~PERL_UNICODE_ALL_FLAGS)
        Perl_croak(aTHX_ "Unknown Unicode option value %"UVuf,

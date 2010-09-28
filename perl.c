@@ -751,6 +751,10 @@ perl_destruct(pTHXx)
 	PL_main_root = NULL;
     }
     PL_main_start = NULL;
+    /* note that  PL_main_cv isn't usually actually freed at this point,
+     * due to the CvOUTSIDE refs from subs compiled within it. It will
+     * get freed once all the subs are freed in sv_clean_all(), for
+     * destruct_level > 0 */
     SvREFCNT_dec(PL_main_cv);
     PL_main_cv = NULL;
     PL_dirty = TRUE;
@@ -770,8 +774,6 @@ perl_destruct(pTHXx)
 	 */
 	sv_clean_objs();
 	PL_sv_objcount = 0;
-	if (PL_defoutgv && !SvREFCNT(PL_defoutgv))
-	    PL_defoutgv = NULL; /* may have been freed */
     }
 
     /* unhook hooks which will soon be, or use, destroyed data */
@@ -832,9 +834,6 @@ perl_destruct(pTHXx)
 	/* The exit() function will do everything that needs doing. */
         return STATUS_EXIT;
     }
-
-    /* reset so print() ends up where we expect */
-    setdefout(NULL);
 
 #ifdef USE_ITHREADS
     /* the syntax tree is shared between clones
@@ -1042,6 +1041,8 @@ perl_destruct(pTHXx)
     /* Prepare to destruct main symbol table.  */
 
     hv = PL_defstash;
+    /* break ref loop  *:: <=> %:: */
+    (void)hv_delete(hv, "main::", 6, G_DISCARD);
     PL_defstash = 0;
     SvREFCNT_dec(hv);
     SvREFCNT_dec(PL_curstname);
@@ -1244,8 +1245,6 @@ perl_destruct(pTHXx)
     Safefree(PL_psig_name);
     PL_psig_name = (SV**)NULL;
     PL_psig_ptr = (SV**)NULL;
-    Safefree(PL_psig_pend);
-    PL_psig_pend = (int*)NULL;
     {
 	/* We need to NULL PL_psig_pend first, so that
 	   signal handlers know not to use it */

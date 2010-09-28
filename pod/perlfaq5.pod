@@ -644,7 +644,54 @@ techniques to make it possible for the intrepid hacker.
 =head2 How can I write() into a string?
 X<write, into a string>
 
-See L<perlform/"Accessing Formatting Internals"> for an C<swrite()> function.
+(contributed by brian d foy)
+
+If you want to C<write> into a string, you just have to <open> a
+filehandle to a string, which Perl has been able to do since Perl 5.6:
+
+	open FH, '>', \my $string;
+	write( FH );
+
+Since you want to be a good programmer, you probably want to use a lexical
+filehandle, even though formats are designed to work with bareword filehandles
+since the default format names take the filehandle name. However, you can
+control this with some Perl special per-filehandle variables: C<$^>, which
+names the top-of-page format, and C<$~> which shows the line format. You have
+to change the default filehandle to set these variables:
+
+	open my($fh), '>', \my $string;
+
+	{ # set per-filehandle variables
+	my $old_fh = select( $fh );
+	$~ = 'ANIMAL';
+	$^ = 'ANIMAL_TOP';
+	select( $old_fh );
+	}
+
+	format ANIMAL_TOP =
+	 ID  Type    Name
+	.
+
+	format ANIMAL =
+	@##   @<<<    @<<<<<<<<<<<<<<
+	$id,  $type,  $name
+	.
+
+Although write can work with lexical or package variables, whatever variables
+you use have to scope in the format. That most likely means you'll want to
+localize some package variables:
+
+	{
+	local( $id, $type, $name ) = qw( 12 cat Buster );
+	write( $fh );
+	}
+
+	print $string;
+
+There are also some tricks that you can play with C<formline> and the
+accumulator variable C<$^A>, but you lose a lot of the value of formats
+since C<formline> won't handle paging and so on. You end up reimplementing
+formats when you use them.
 
 =head2 How can I open a filehandle to a string?
 X<string> X<open> X<IO::String> X<filehandle>
@@ -727,64 +774,64 @@ Within Perl, you may use this directly:
 =head2 How come when I open a file read-write it wipes it out?
 X<clobber> X<read-write> X<clobbering> X<truncate> X<truncating>
 
-Because you're using something like this, which truncates the file and
+Because you're using something like this, which truncates the file
 I<then> gives you read-write access:
 
 	open my $fh, '+>', '/path/name'; # WRONG (almost always)
 
 Whoops. You should instead use this, which will fail if the file
-doesn't exist.
+doesn't exist:
 
 	open my $fh, '+<', '/path/name'; # open for update
 
 Using ">" always clobbers or creates. Using "<" never does
 either. The "+" doesn't change this.
 
-Here are examples of many kinds of file opens. Those using sysopen()
-all assume
+Here are examples of many kinds of file opens. Those using C<sysopen>
+all assume that you've pulled in the constants from C<Fcntl>:
 
 	use Fcntl;
 
 To open file for reading:
 
-	open my $fh, '<', $path                                 or die $!;
-	sysopen my $fh, $path, O_RDONLY                         or die $!;
+	open my $fh, '<', $path                               or die $!;
+	sysopen my $fh, $path, O_RDONLY                       or die $!;
 
 To open file for writing, create new file if needed or else truncate old file:
 
-	open my $fh, '>', $path                                 or die $!;
-	sysopen my $fh, $path, O_WRONLY|O_TRUNC|O_CREAT         or die $!;
-	sysopen my $fh, $path, O_WRONLY|O_TRUNC|O_CREAT, 0666   or die $!;
+	open my $fh, '>', $path                               or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_TRUNC|O_CREAT       or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_TRUNC|O_CREAT, 0666 or die $!;
 
 To open file for writing, create new file, file must not exist:
 
-	sysopen my $fh, $path, O_WRONLY|O_EXCL|O_CREAT          or die $!;
-	sysopen my $fh, $path, O_WRONLY|O_EXCL|O_CREAT, 0666    or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_EXCL|O_CREAT        or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_EXCL|O_CREAT, 0666  or die $!;
 
 To open file for appending, create if necessary:
 
-	open my $fh, '>>' $path                                 or die $!;
-	sysopen my $fh, $path, O_WRONLY|O_APPEND|O_CREAT        or die $!;
-	sysopen my $fh, $path, O_WRONLY|O_APPEND|O_CREAT, 0666  or die $!;
+	open my $fh, '>>' $path                               or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_APPEND|O_CREAT      or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_APPEND|O_CREAT, 0666 or die $!;
 
 To open file for appending, file must exist:
 
-	sysopen my $fh, $path, O_WRONLY|O_APPEND                or die $!;
+	sysopen my $fh, $path, O_WRONLY|O_APPEND              or die $!;
 
 To open file for update, file must exist:
 
-	open my $fh, '+<', $path                                or die $!;
-	sysopen my $fh, $path, O_RDWR                           or die $!;
+	open my $fh, '+<', $path                              or die $!;
+	sysopen my $fh, $path, O_RDWR                         or die $!;
 
 To open file for update, create file if necessary:
 
-	sysopen my $fh, $path, O_RDWR|O_CREAT                   or die $!;
-	sysopen my $fh, $path, O_RDWR|O_CREAT, 0666             or die $!;
+	sysopen my $fh, $path, O_RDWR|O_CREAT                 or die $!;
+	sysopen my $fh, $path, O_RDWR|O_CREAT, 0666           or die $!;
 
 To open file for update, file must not exist:
 
-	sysopen my $fh, $path, O_RDWR|O_EXCL|O_CREAT            or die $!;
-	sysopen my $fh, $path, O_RDWR|O_EXCL|O_CREAT, 0666      or die $!;
+	sysopen my $fh, $path, O_RDWR|O_EXCL|O_CREAT          or die $!;
+	sysopen my $fh, $path, O_RDWR|O_EXCL|O_CREAT, 0666    or die $!;
 
 To open a file without blocking, creating if necessary:
 
@@ -1081,11 +1128,11 @@ string without actually storing it in memory:
 	map_file my $string, $filename;
 
 Once mapped, you can treat C<$string> as you would any other string.
-Since you don't actually load the data, mmap-ing is very fast and does
-not increase your memory footprint.
+Since you don't necessarily have to load the data, mmap-ing can be
+very fast and may not increase your memory footprint.
 
-If you really want to load the entire file, you can use the
-C<File::Slurp> module to do it in one step.
+If you want to load the entire file, you can use the C<File::Slurp>
+module to do it in one one simple and efficient step:
 
 	use File::Slurp;
 
@@ -1111,13 +1158,14 @@ you see someone do this:
 
 You should think long and hard about why you need everything loaded at
 once. It's just not a scalable solution. You might also find it more
-fun to use the standard Tie::File module, or the DB_File module's
-$DB_RECNO bindings, which allow you to tie an array to a file so that
+fun to use the standard C<Tie::File> module, or the C<DB_File> module's
+C<$DB_RECNO> bindings, which allow you to tie an array to a file so that
 accessing an element the array actually accesses the corresponding
 line in the file.
 
 You can read the entire filehandle contents into a scalar.
 
+	my $var;
 	{
 	local $/;
 	open my $fh, '<', $file or die "can't open $file: $!";
@@ -1127,14 +1175,19 @@ You can read the entire filehandle contents into a scalar.
 That temporarily undefs your record separator, and will automatically
 close the file at block exit. If the file is already open, just use this:
 
-	$var = do { local $/; <$fh> };
+	my $var = do { local $/; <$fh> };
 
-For ordinary files you can also use the read function.
+You can do that one better by using a localized C<@ARGV> so you can
+eliminate the C<open>:
+
+	my $var = do { local( @ARGV, $/ ) = $file; <> };
+
+For ordinary files you can also use the C<read> function.
 
 	read( $fh, $var, -s $fh );
 
-The third argument tests the byte size of the data on the INPUT filehandle
-and reads that many bytes into the buffer $var.
+That third argument tests the byte size of the data on the C<INPUT> filehandle
+and reads that many bytes into the buffer C<$var>.
 
 =head2 How can I read in a file by paragraphs?
 X<file, reading by paragraphs>

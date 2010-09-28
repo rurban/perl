@@ -1,19 +1,10 @@
 #!perl -w
 
-BEGIN {
-  require Config; import Config;
-  if ($Config{'extensions'} !~ /\bXS\/APItest\b/) {
-    # Look, I'm using this fully-qualified variable more than once!
-    print "1..0 # Skip: XS::APItest was not built\n";
-    exit 0;
-  }
-}
-
 use strict;
 use utf8;
 use Test::More tests => 5;
 
-BEGIN {use_ok('XS::APItest')};
+require_ok('XS::APItest');
 
 sub make_temp_mg_lv :lvalue {  XS::APItest::TempLv::make_temp_mg_lv($_[0]); }
 

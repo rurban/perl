@@ -1093,9 +1093,12 @@ corresponding built-in.
     sub mytime ()	     mytime
 
 Any backslashed prototype character represents an actual argument
-that absolutely must start with that character.  The value passed
-as part of C<@_> will be a reference to the actual argument given
-in the subroutine call, obtained by applying C<\> to that argument.
+that must start with that character (optionally preceded by C<my>,
+C<our> or C<local>), with the exception of C<$>, which will accept a
+hash or array element even without a dollar sign, such as
+C<< my_function()->[0] >>. The value passed as part of C<@_> will be a
+reference to the actual argument given in the subroutine call,
+obtained by applying C<\> to that argument.
 
 You can also backslash several argument types simultaneously by using
 the C<\[]> notation:
@@ -1425,7 +1428,11 @@ of the original subroutine magically appears in the global $AUTOLOAD
 variable of the same package as the C<AUTOLOAD> routine.  The name
 is not passed as an ordinary argument because, er, well, just
 because, that's why.  (As an exception, a method call to a nonexistent
-C<import> or C<unimport> method is just skipped instead.)
+C<import> or C<unimport> method is just skipped instead.  Also, if
+the AUTOLOAD subroutine is an XSUB, C<$AUTOLOAD> is not populated;
+instead, you should call L<< C<SvPVX>E<sol>C<SvCUR>|perlapi >> on the
+C<CV> for C<AUTOLOAD> to retrieve the method name.)
+
 
 Many C<AUTOLOAD> routines load in a definition for the requested
 subroutine using eval(), then execute that subroutine using a special

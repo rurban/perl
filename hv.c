@@ -1382,8 +1382,18 @@ Perl_newHVhv(pTHX_ HV *ohv)
     return hv;
 }
 
-/* A rather specialised version of newHVhv for copying %^H, ensuring all the
-   magic stays on it.  */
+/*
+=for apidoc Am|HV *|hv_copy_hints_hv|HV *ohv
+
+A specialised version of L</newHVhv> for copying C<%^H>.  I<ohv> must be
+a pointer to a hash (which may have C<%^H> magic, but should be generally
+non-magical), or C<NULL> (interpreted as an empty hash).  The content
+of I<ohv> is copied to a new hash, which has the C<%^H>-specific magic
+added to it.  A pointer to the new hash is returned.
+
+=cut
+*/
+
 HV *
 Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 {
@@ -2979,7 +2989,7 @@ Perl_refcounted_he_free(pTHX_ struct refcounted_he *he) {
 /* pp_entereval is aware that labels are stored with a key ':' at the top of
    the linked list.  */
 const char *
-Perl_fetch_cop_label(pTHX_ COP *cop, STRLEN *len, U32 *flags) {
+Perl_fetch_cop_label(pTHX_ COP *const cop, STRLEN *len, U32 *flags) {
     struct refcounted_he *const chain = cop->cop_hints_hash;
 
     PERL_ARGS_ASSERT_FETCH_COP_LABEL;

@@ -163,15 +163,32 @@ sub to_bytes {
     is(charnames::vianame("U+10330"), "\x{10330}", "Verify vianame \\N{U+hex} returns a chr");
     use warnings;
     my $warning_count = @WARN;
-    ok (! defined charnames::vianame("NONE SUCH"));
+    ok (! defined charnames::vianame("NONE SUCH"), "Verify vianame returns undef for an undefined name");
     cmp_ok($warning_count, '==', scalar @WARN, "Verify vianame doesn't warn on unknown names");
+    ok (! defined charnames::string_vianame("MORE NONE SUCH"), "Verify string_vianame returns undef for an undefined name");
+    cmp_ok($warning_count, '==', scalar @WARN, "Verify string_vianame doesn't warn on unknown names");
 
     use bytes;
     is(charnames::vianame("GOTHIC LETTER AHSA"), 0x10330, "Verify vianame \\N{name} is unaffected by 'use bytes'");
     is(charnames::vianame("U+FF"), chr(0xFF), "Verify vianame \\N{U+FF} is unaffected by 'use bytes'");
-    cmp_ok($warning_count, '==', scalar @WARN, "Verify vianame doesn't warn on legal inputs");
+    cmp_ok($warning_count, '==', scalar @WARN, "Verify vianame doesn't warn on legal inputs under 'use bytes'");
     ok(! defined charnames::vianame("U+100"), "Verify vianame \\N{U+100} is undef under 'use bytes'");
     ok($warning_count == scalar @WARN - 1 && $WARN[-1] =~ /above 0xFF/, "Verify vianame gives appropriate warning for previous test");
+
+    $warning_count = @WARN;
+    ok(! defined charnames::string_vianame("GOTHIC LETTER AHSA"), "Verify string_vianame(\"GOTHIC LETTER AHSA\") is undefined under 'use bytes'");
+    ok($warning_count == scalar @WARN - 1 && $WARN[-1] =~ /above 0xFF/, "Verify string_vianame gives appropriate warning for previous test");
+    $warning_count = @WARN;
+    is(charnames::string_vianame("U+FF"), chr(0xFF), "Verify string_vianame(\"U+FF\") is chr(0xFF) under 'use bytes'");
+    cmp_ok($warning_count, '==', scalar @WARN, "Verify string_vianame doesn't warn on legal inputs under 'use bytes'");
+    is(charnames::string_vianame("LATIN SMALL LETTER Y WITH DIAERESIS"), chr(0xFF), "Verify string_vianame(\"LATIN SMALL LETTER Y WITH DIAERESIS\") is chr(0xFF) under 'use bytes'");
+    cmp_ok($warning_count, '==', scalar @WARN, "Verify string_vianame doesn't warn on legal inputs under 'use bytes'");
+    ok(! defined charnames::string_vianame("U+100"), "Verify string_vianame \\N{U+100} is undef under 'use bytes'");
+    ok($warning_count == scalar @WARN - 1 && $WARN[-1] =~ /above 0xFF/, "Verify string_vianame gives appropriate warning for previous test");
+    $warning_count = @WARN;
+    ok(! defined charnames::string_vianame("LATIN SMALL LETTER L WITH TILDE"), "Verify string_vianame(\"LATIN SMALL LETTER L WITH TILDE\") is undef under 'use bytes'");
+    ok($warning_count == scalar @WARN - 1 && $WARN[-1] =~ /String.*above 0xFF/, "Verify string_vianame gives appropriate warning for previous test");
+
 }
 
 {
@@ -182,6 +199,10 @@ sub to_bytes {
     is(sprintf("%04X", charnames::vianame("GOTHIC LETTER AHSA")), "10330");
 
 }
+
+# That these return the correct values is tested below when reading
+# NamedSequences.txt
+is("\N{TAMIL CONSONANT K}", charnames::string_vianame("TAMIL CONSONANT K"), "Verify \\N{TAMIL CONSONANT K} eq charnames::vianame(\"TAMIL CONSONANT K\")");
 
 is("\N{CHARACTER TABULATION}", "\t");
 
@@ -672,18 +693,24 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
 
     is("\N{mychar1}", "e", "Outer block: verify that \\N{mychar1} works");
     is(charnames::vianame("mychar1"), ord("e"), "Outer block: verify that vianame(mychar1) works");
+    is(charnames::string_vianame("mychar1"), "e", "Outer block: verify that string_vianame(mychar1) works");
     is("\N{mychar2}", "A", "Outer block: verify that \\N{mychar2} works");
     is(charnames::vianame("mychar2"), ord("A"), "Outer block: verify that vianame(mychar2) works");
+    is(charnames::string_vianame("mychar2"), "A", "Outer block: verify that string_vianame(mychar2) works");
     is("\N{myprivate1}", "\x{E8000}", "Outer block: verify that \\N{myprivate1} works");
     cmp_ok(charnames::vianame("myprivate1"), "==", 0xE8000, "Outer block: verify that vianame(myprivate1) works");
+    is(charnames::string_vianame("myprivate1"), chr(0xE8000), "Outer block: verify that string_vianame(myprivate1) works");
     is(charnames::viacode(0xE8000), "myprivate1", "Outer block: verify that myprivate1 viacode works");
     is("\N{myprivate2}", "\x{100000}", "Outer block: verify that \\N{myprivate2} works");
     cmp_ok(charnames::vianame("myprivate2"), "==", 0x100000, "Outer block: verify that vianame(myprivate2) works");
+    is(charnames::string_vianame("myprivate2"), chr(0x100000), "Outer block: verify that string_vianame(myprivate2) works");
     is(charnames::viacode(0x100000), "myprivate2", "Outer block: verify that myprivate2 viacode works");
     is("\N{BE}", "\N{KATAKANA LETTER BE}", "Outer block: verify that \\N uses the correct script ");
     cmp_ok(charnames::vianame("BE"), "==", ord("\N{KATAKANA LETTER BE}"), "Outer block: verify that vianame uses the correct script");
+    cmp_ok(charnames::string_vianame("BE"), "==", "\N{KATAKANA LETTER BE}", "Outer block: verify that string_vianame uses the correct script");
     is("\N{Hiragana: BE}", $hiragana_be, "Outer block: verify that :short works with \\N");
     cmp_ok(charnames::vianame("Hiragana: BE"), "==", ord($hiragana_be), "Outer block: verify that :short works with vianame");
+    cmp_ok(charnames::string_vianame("Hiragana: BE"), "==", $hiragana_be, "Outer block: verify that :short works with string_vianame");
 
     {
         use charnames ":full",
@@ -699,73 +726,97 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
             ;
         is("\N{mychar1}", "f", "Inner block: verify that \\N{mychar1} is redefined");
         is(charnames::vianame("mychar1"), ord("f"), "Inner block: verify that vianame(mychar1) is redefined");
+        is(charnames::string_vianame("mychar1"), "f", "Inner block: verify that string_vianame(mychar1) is redefined");
         is("\N{mychar2}", "\x{FFFD}", "Inner block: verify that \\N{mychar2} outer definition didn't leak");
         ok( ! defined charnames::vianame("mychar2"), "Inner block: verify that vianame(mychar2) outer definition didn't leak");
+        ok( ! defined charnames::string_vianame("mychar2"), "Inner block: verify that string_vianame(mychar2) outer definition didn't leak");
         is("\N{myprivate1}", "\x{E8001}", "Inner block: verify that \\N{myprivate1} is redefined ");
         cmp_ok(charnames::vianame("myprivate1"), "==", 0xE8001, "Inner block: verify that vianame(myprivate1) is redefined");
+        is(charnames::string_vianame("myprivate1"), chr(0xE8001), "Inner block: verify that string_vianame(myprivate1) is redefined");
         is(charnames::viacode(0xE8001), "myprivate1", "Inner block: verify that myprivate1 viacode is redefined");
         ok(! defined charnames::viacode(0xE8000), "Inner block: verify that outer myprivate1 viacode didn't leak");
         is("\N{myprivate2}", "\x{FFFD}", "Inner block: verify that \\N{myprivate2} outer definition didn't leak");
         ok(! defined charnames::vianame("myprivate2"), "Inner block: verify that vianame(myprivate2) outer definition didn't leak");
+        ok(! defined charnames::string_vianame("myprivate2"), "Inner block: verify that string_vianame(myprivate2) outer definition didn't leak");
         ok(! defined charnames::viacode(0x100000), "Inner block: verify that myprivate2 viacode outer definition didn't leak");
         is("\N{BE}", $hiragana_be, "Inner block: verify that \\N uses the correct script");
         cmp_ok(charnames::vianame("BE"), "==", ord($hiragana_be), "Inner block: verify that vianame uses the correct script");
+        cmp_ok(charnames::string_vianame("BE"), "==", $hiragana_be, "Inner block: verify that string_vianame uses the correct script");
         is("\N{Hiragana: BE}", "\x{FFFD}", "Inner block without :short: \\N with short doesn't work");
         ok(! defined charnames::vianame("Hiragana: BE"), "Inner block without :short: verify that vianame with short doesn't work");
+        ok(! defined charnames::string_vianame("Hiragana: BE"), "Inner block without :short: verify that string_vianame with short doesn't work");
 
         {   # An inner block where only :short definitions are valid.
             use charnames ":short";
             is("\N{mychar1}", "\x{FFFD}", "Inner inner block: verify that mychar1 outer definition didn't leak with \\N");
             ok( ! defined charnames::vianame("mychar1"), "Inner inner block: verify that mychar1 outer definition didn't leak with vianame");
+            ok( ! defined charnames::string_vianame("mychar1"), "Inner inner block: verify that mychar1 outer definition didn't leak with string_vianame");
             is("\N{mychar2}", "\x{FFFD}", "Inner inner block: verify that mychar2 outer definition didn't leak with \\N");
             ok( ! defined charnames::vianame("mychar2"), "Inner inner block: verify that mychar2 outer definition didn't leak with vianame");
+            ok( ! defined charnames::string_vianame("mychar2"), "Inner inner block: verify that mychar2 outer definition didn't leak with string_vianame");
             is("\N{myprivate1}", "\x{FFFD}", "Inner inner block: verify that myprivate1 outer definition didn't leak with \\N");
             ok(! defined charnames::vianame("myprivate1"), "Inner inner block: verify that myprivate1 outer definition didn't leak with vianame");
+            ok(! defined charnames::string_vianame("myprivate1"), "Inner inner block: verify that myprivate1 outer definition didn't leak with string_vianame");
             is("\N{myprivate2}", "\x{FFFD}", "Inner inner block: verify that myprivate2 outer definition didn't leak with \\N");
             ok(! defined charnames::vianame("myprivate2"), "Inner inner block: verify that myprivate2 outer definition didn't leak with vianame");
+            ok(! defined charnames::string_vianame("myprivate2"), "Inner inner block: verify that myprivate2 outer definition didn't leak with string_vianame");
             ok(! defined charnames::viacode(0xE8000), "Inner inner block: verify that mychar1 outer outer definition didn't leak with viacode");
             ok(! defined charnames::viacode(0xE8001), "Inner inner block: verify that mychar1 outer definition didn't leak with viacode");
             ok(! defined charnames::viacode(0x100000), "Inner inner block: verify that mychar2 outer definition didn't leak with viacode");
             is("\N{BE}", "\x{FFFD}", "Inner inner block without script: verify that outer :script didn't leak with \\N");
             ok(! defined charnames::vianame("BE"), "Inner inner block without script: verify that outer :script didn't leak with vianames");
+            ok(! defined charnames::string_vianame("BE"), "Inner inner block without script: verify that outer :script didn't leak with string_vianames");
             is("\N{HIRAGANA LETTER BE}", "\x{FFFD}", "Inner inner block without :full: verify that outer :full didn't leak with \\N");
             is("\N{Hiragana: BE}", $hiragana_be, "Inner inner block with :short: verify that \\N works with :short");
             cmp_ok(charnames::vianame("Hiragana: BE"), "==", ord($hiragana_be), "Inner inner block with :short: verify that vianame works with :short");
+            cmp_ok(charnames::string_vianame("Hiragana: BE"), "==", $hiragana_be, "Inner inner block with :short: verify that string_vianame works with :short");
         }
 
         # Back to previous block.  All previous tests should work again.
         is("\N{mychar1}", "f", "Inner block: verify that \\N{mychar1} is redefined");
         is(charnames::vianame("mychar1"), ord("f"), "Inner block: verify that vianame(mychar1) is redefined");
+        is(charnames::string_vianame("mychar1"), "f", "Inner block: verify that string_vianame(mychar1) is redefined");
         is("\N{mychar2}", "\x{FFFD}", "Inner block: verify that \\N{mychar2} outer definition didn't leak");
         ok( ! defined charnames::vianame("mychar2"), "Inner block: verify that vianame(mychar2) outer definition didn't leak");
+        ok( ! defined charnames::string_vianame("mychar2"), "Inner block: verify that string_vianame(mychar2) outer definition didn't leak");
         is("\N{myprivate1}", "\x{E8001}", "Inner block: verify that \\N{myprivate1} is redefined ");
         cmp_ok(charnames::vianame("myprivate1"), "==", 0xE8001, "Inner block: verify that vianame(myprivate1) is redefined");
+        is(charnames::string_vianame("myprivate1"), chr(0xE8001), "Inner block: verify that string_vianame(myprivate1) is redefined");
         is(charnames::viacode(0xE8001), "myprivate1", "Inner block: verify that myprivate1 viacode is redefined");
         ok(! defined charnames::viacode(0xE8000), "Inner block: verify that outer myprivate1 viacode didn't leak");
         is("\N{myprivate2}", "\x{FFFD}", "Inner block: verify that \\N{myprivate2} outer definition didn't leak");
         ok(! defined charnames::vianame("myprivate2"), "Inner block: verify that vianame(myprivate2) outer definition didn't leak");
+        ok(! defined charnames::string_vianame("myprivate2"), "Inner block: verify that string_vianame(myprivate2) outer definition didn't leak");
         ok(! defined charnames::viacode(0x100000), "Inner block: verify that myprivate2 viacode outer definition didn't leak");
         is("\N{BE}", $hiragana_be, "Inner block: verify that \\N uses the correct script");
         cmp_ok(charnames::vianame("BE"), "==", ord($hiragana_be), "Inner block: verify that vianame uses the correct script");
+        cmp_ok(charnames::string_vianame("BE"), "==", $hiragana_be, "Inner block: verify that string_vianame uses the correct script");
         is("\N{Hiragana: BE}", "\x{FFFD}", "Inner block without :short: \\N with short doesn't work");
         ok(! defined charnames::vianame("Hiragana: BE"), "Inner block without :short: verify that vianame with short doesn't work");
+        ok(! defined charnames::string_vianame("Hiragana: BE"), "Inner block without :short: verify that string_vianame with short doesn't work");
     }
 
     # Back to previous block.  All tests from that block should work again.
     is("\N{mychar1}", "e", "Outer block: verify that \\N{mychar1} works");
     is(charnames::vianame("mychar1"), ord("e"), "Outer block: verify that vianame(mychar1) works");
+    is(charnames::string_vianame("mychar1"), "e", "Outer block: verify that string_vianame(mychar1) works");
     is("\N{mychar2}", "A", "Outer block: verify that \\N{mychar2} works");
     is(charnames::vianame("mychar2"), ord("A"), "Outer block: verify that vianame(mychar2) works");
+    is(charnames::string_vianame("mychar2"), "A", "Outer block: verify that string_vianame(mychar2) works");
     is("\N{myprivate1}", "\x{E8000}", "Outer block: verify that \\N{myprivate1} works");
     cmp_ok(charnames::vianame("myprivate1"), "==", 0xE8000, "Outer block: verify that vianame(myprivate1) works");
+    is(charnames::string_vianame("myprivate1"), chr(0xE8000), "Outer block: verify that string_vianame(myprivate1) works");
     is(charnames::viacode(0xE8000), "myprivate1", "Outer block: verify that myprivate1 viacode works");
     is("\N{myprivate2}", "\x{100000}", "Outer block: verify that \\N{myprivate2} works");
     cmp_ok(charnames::vianame("myprivate2"), "==", 0x100000, "Outer block: verify that vianame(myprivate2) works");
+    is(charnames::string_vianame("myprivate2"), chr(0x100000), "Outer block: verify that string_vianame(myprivate2) works");
     is(charnames::viacode(0x100000), "myprivate2", "Outer block: verify that myprivate2 viacode works");
     is("\N{BE}", "\N{KATAKANA LETTER BE}", "Outer block: verify that \\N uses the correct script ");
     cmp_ok(charnames::vianame("BE"), "==", ord("\N{KATAKANA LETTER BE}"), "Outer block: verify that vianame uses the correct script");
+    cmp_ok(charnames::string_vianame("BE"), "==", "\N{KATAKANA LETTER BE}", "Outer block: verify that string_vianame uses the correct script");
     is("\N{Hiragana: BE}", $hiragana_be, "Outer block: verify that :short works with \\N");
     cmp_ok(charnames::vianame("Hiragana: BE"), "==", ord($hiragana_be), "Outer block: verify that :short works with vianame");
+    cmp_ok(charnames::string_vianame("Hiragana: BE"), "==", $hiragana_be, "Outer block: verify that :short works with string_vianame");
 }
 
 {
@@ -776,9 +827,15 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
 
     # For randomized tests below.
     my $seed;
-    $seed = $ENV{PERL_TEST_CHARNAMES_SEED} if
-                                    defined $ENV{PERL_TEST_CHARNAMES_SEED};
-    $seed = srand($seed);
+    if (defined $ENV{PERL_TEST_CHARNAMES_SEED}) {
+        $seed = srand($ENV{PERL_TEST_CHARNAMES_SEED});
+        if ($seed != $ENV{PERL_TEST_CHARNAMES_SEED}) {
+            die "srand returned '$seed' instead of '$ENV{PERL_TEST_CHARNAMES_SEED}'";
+        };
+    }
+    else {
+        $seed = srand;
+    }
 
     # We will look at the data grouped in "blocks" of the following
     # size.
@@ -789,12 +846,25 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
     # that are algorithmically determinable, such as "CKJ UNIFIED
     # IDEOGRAPH-hhhh" where the hhhh is the actual hex code point number
     # of the character.  The percentage of each type to test is
-    # independently settable.
+    # fuzzily independently settable.  This breaks down when the block size is
+    # 1 or is large enough that both types of names occur in the same block
     my $percentage_of_regular_names = 25;
-    my $percentage_of_algorithmic_names = 100 / $block_size; # 1 test/block
+    my $percentage_of_algorithmic_names = (100 / $block_size); # 1 test/block
+
+    # If wants everything tested, do so by changing the block size to 1 so
+    # every character is in its own block, otherwise there is a risk that the
+    # randomness will cause something to be tested more than once at the
+    # expense of testing something else not at all.
+    if ($percentage_of_regular_names >= 100
+        || $percentage_of_algorithmic_names >= 100)
+    {
+        $block_size_bits = 0;
+        $block_size = 2**$block_size_bits;
+    }
 
     # Changing the block size doesn't change anything with regards to
-    # testing the regular names, but will affect the algorithmic names.
+    # testing the regular names (except if you set it to 1 so that each code
+    # point is in its own block), but will affect the algorithmic names.
     # If you make the size too big so that blocks include both regular
     # names and algorithmic, the whole block will be sampled at the sum
     # of the two rates.  If you make it too small, then more algorithmic
@@ -838,8 +908,9 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
             /^(.*?);/;
             my $end_decimal = hex $1;
 
-            # Only the CJK ones have names, and they all have the code
-            # point as part of the name, which we can construct
+            # Only the CJK (and the Hangul which are instead dealt with below)
+            # ones have names, and they all have the code point as part of the
+            # name, which we can construct
             if ($name =~ /^<CJK/) {
                 for my $i ($decimal .. $end_decimal) {
                     $names[$i] = sprintf "CJK UNIFIED IDEOGRAPH-%04X", $i;
@@ -865,6 +936,21 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
         $algorithmic_names_count[$block] = 1;
     }
 
+    open $fh, "<", "../../lib/unicore/NameAliases.txt" or
+        die "Can't open ../../lib/unicore/NameAliases.txt: $!";
+    while (<$fh>) {
+        chomp;
+        s/^\s*#.*//;
+        next unless $_;
+        my ($hex, $name) = split ";";
+        if (rand() < .5) {
+            is(charnames::vianame($name), hex $hex, "Verify vianame(\"$name\") is 0x$hex");
+        }
+        else {
+            is(charnames::string_vianame($name), chr(hex $hex), "Verify string_vianame(\"$name\") is chr(0x$hex)");
+        }
+    }
+    close $fh;
 
     # Now, have all the names populated.  Do the tests
 
@@ -926,14 +1012,23 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
             } else {
 
                 # Otherwise, test that the name and code point map
-                # correctly
-                $all_pass &= is(charnames::vianame($names[$i]), $i, "Verify vianame(\"$names[$i]\") is $hex");
+                # correctly.  Half the time use vianame, and half
+                # string_vianame
+                if (rand() < .5) {
+                    $all_pass &= is(charnames::vianame($names[$i]), $i, "Verify vianame(\"$names[$i]\") is 0x$hex");
+                } else {
+                    $all_pass &= is(charnames::string_vianame($names[$i]), chr($i), "Verify string_vianame(\"$names[$i]\") is chr(0x$hex)");
+                }
                 $all_pass &= is(charnames::viacode($i), $names[$i], "Verify viacode(0x$hex) is \"$names[$i]\"");
 
                 # And make sure that a non-algorithmically named code
                 # point doesn't also map to one that is.
                 if ($names[$i] !~ /$hex$/) {
-                    $all_pass &= ok(! defined charnames::vianame("CJK UNIFIED IDEOGRAPH-$hex"), "Verify vianame(\"CJK UNIFIED IDEOGRAPH-$hex\") is undefined");
+                    if (rand() < .5) {
+                        $all_pass &= ok(! defined charnames::vianame("CJK UNIFIED IDEOGRAPH-$hex"), "Verify vianame(\"CJK UNIFIED IDEOGRAPH-$hex\") is undefined");
+                    } else {
+                        $all_pass &= ok(! defined charnames::string_vianame("CJK UNIFIED IDEOGRAPH-$hex"), "Verify string_vianame(\"CJK UNIFIED IDEOGRAPH-$hex\") is undefined");
+                    }
                 }
             }
         }
@@ -941,6 +1036,21 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
         # Skip to the next untested block.
         $block = $end_block + 1;
     }
+
+    open $fh, "<", "../../lib/unicore/NamedSequences.txt" or
+        die "Can't open ../../lib/unicore/NamedSequences.txt: $!";
+    while (<$fh>) {
+        chomp;
+        s/^\s*#.*//;
+        next unless $_;
+        my ($name, $codes) = split ";";
+        my $utf8 = pack("U*", map { hex } split " ", $codes);
+        is(charnames::string_vianame($name), $utf8, "Verify string_vianame(\"$name\") is the proper utf8");
+        is(charnames::string_vianame($name), $utf8, "Verify string_vianame(\"$name\") is the proper utf8");
+        #diag("$name, $utf8");
+    }
+    close $fh;
+
 
     unless ($all_pass) {
         diag(<<END

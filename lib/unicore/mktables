@@ -4675,16 +4675,23 @@ sub trace { return main::trace(@_); }
 
                 # If has or wants a single point range output
                 if ($start == $end || $range_size_1) {
-                    for my $i ($start .. $end) {
-                        push @OUT, sprintf "%04X\t\t%s\n", $i, $value;
-                        if ($output_names) {
-                            if (! defined $viacode[$i]) {
-                                $viacode[$i] =
-                                    Property::property_ref('Perl_Charnames')
-                                                                ->value_of($i)
-                                    || "";
+                    if (ref $range_size_1 eq 'CODE') {
+                        for my $i ($start .. $end) {
+                            push @OUT, &$range_size_1($i, $value);
+                        }
+                    }
+                    else {
+                        for my $i ($start .. $end) {
+                            push @OUT, sprintf "%04X\t\t%s\n", $i, $value;
+                            if ($output_names) {
+                                if (! defined $viacode[$i]) {
+                                    $viacode[$i] =
+                                        Property::property_ref('Perl_Charnames')
+                                                                    ->value_of($i)
+                                        || "";
+                                }
+                                $OUT[-1] =~ s/\n/\t# $viacode[$i]\n/;
                             }
-                            $OUT[-1] =~ s/\n/\t# $viacode[$i]\n/;
                         }
                     }
                 }
@@ -8536,6 +8543,17 @@ END
     return @return;
 }
 
+sub output_perl_charnames_line ($$) {
+
+    # Output the entries in Perl_charnames specially, using 5 digits instead
+    # of four.  This makes the entries a constant length, and simplifies
+    # charnames.pm which this table is for.  Unicode can have 6 digit
+    # ordinals, but they are all private use or noncharacters which do not
+    # have names, so won't be in this table.
+
+    return sprintf "%05X\t%s\n", $_[0], $_[1];
+}
+
 { # Closure
     # This is used to store the range list of all the code points usable when
     # the little used $compare_versions feature is enabled.
@@ -8978,23 +8996,6 @@ END
     }
 }
 
-# XXX Unused until revise charnames;
-#sub check_and_handle_compound_name {
-#    This looks at Name properties for parenthesized components and splits
-#    them off.  Thus it finds FF as an equivalent to Form Feed.
-#    my $code_point = shift;
-#    my $name = shift;
-#    if ($name =~ /^ ( .*? ) ( \s* ) \( ( [^)]* ) \) (.*) $/x) {
-#        #local $to_trace = 1 if main::DEBUG;
-#        trace $1, $2, $3, $4 if main::DEBUG && $to_trace;
-#        push @more_Names, "$code_point; $1";
-#        push @more_Names, "$code_point; $3";
-#        Carp::my_carp_bug("Expecting blank space before left parenthesis in '$_'.  Proceeding and assuming it was there;") if $2 ne " ";
-#        Carp::my_carp_bug("Not expecting anything after the right parenthesis in '$_'.  Proceeding and ignoring that;") if $4 ne "";
-#    }
-#    return;
-#}
-
 { # Closure for UnicodeData.txt handling
 
     # This file was the first one in the UCD; its design leads to some
@@ -9137,7 +9138,7 @@ END
                        File => 'Name',
                        Internal_Only_Warning => 1,
                        Perl_Extension => 1,
-                       Range_Size_1 => 1,
+                       Range_Size_1 => \&output_perl_charnames_line,
                        Type => $STRING,
                        );
 
@@ -9377,16 +9378,6 @@ END
                                  . $fields[$CHARNAME];
             }
             $fields[$NAME] = $fields[$CHARNAME];
-
-            # Some official names are really two alternate names with one in
-            # parentheses.  What we do here is use the full official one for
-            # the standard property (stored just above), but for the charnames
-            # table, we add two more entries, one for each of the alternate
-            # ones.
-            # elsif name ne ""
-            #check_and_handle_compound_name($cp, $fields[$CHARNAME]);
-            #check_and_handle_compound_name($cp, $unicode_1_name);
-            # XXX until charnames catches up.
         }
         elsif ($fields[$CHARNAME] =~ /^<(.+), First>$/) {
             $fields[$CHARNAME] = $fields[$NAME] = $1;
@@ -9758,7 +9749,6 @@ sub process_NamedSequences {
     #
     # This just adds the sequence to an array for later handling
 
-    return; # XXX Until charnames catches up
     my $file = shift;
     Carp::carp_extra_args(\@_) if main::DEBUG && @_;
 
@@ -9769,7 +9759,12 @@ sub process_NamedSequences {
                 "Doesn't look like 'KHMER VOWEL SIGN OM;17BB 17C6'");
             next;
         }
-        push @named_sequences, "$sequence\t\t$name";
+
+        # Note single \t in keeping with special output format of
+        # Perl_charnames.  But it turns out that the code points don't have to
+        # be 5 digits long, like the rest, based on the internal workings of
+        # charnames.pm.  This could be easily changed for consistency.
+        push @named_sequences, "$sequence\t$name";
     }
     return;
 }
@@ -12620,8 +12615,8 @@ Case_Folding is accessible through the /i modifier in regular expressions.
 
 The Name property is accessible through the \\N{} interpolation in
 double-quoted strings and regular expressions, but both usages require a C<use
-charnames;> to be specified, which also contains related functions viacode()
-and vianame().
+charnames;> to be specified, which also contains related functions viacode(),
+vianame(), and string_vianame().
 
 =head1 Unicode regular expression properties that are NOT accepted by Perl
 

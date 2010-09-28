@@ -331,7 +331,7 @@ all integers in the range.  This can take a lot of memory for large
 ranges.  Instead use:
 
 	@results = ();
-	for ($i=5; $i < 500_005; $i++) {
+	for ($i=5; $i <= 500_005; $i++) {
 		push(@results, some_func($i));
 		}
 
@@ -559,7 +559,7 @@ running projects:
 	% perl5.11.2 -E 'say scalar gmtime( 0x9FFF_FFFFFFFF )'
 	Thu Nov  2 00:42:39 5576711
 
-You're still out of luck if you need to keep tracking of decaying protons
+You're still out of luck if you need to keep track of decaying protons
 though.
 
 =head1 Data: Strings
@@ -1562,53 +1562,23 @@ that satisfies the condition.
 
 =head2 How do I handle linked lists?
 
-In general, you usually don't need a linked list in Perl, since with
-regular arrays, you can push and pop or shift and unshift at either
-end, or you can use splice to add and/or remove arbitrary number of
-elements at arbitrary points.  Both pop and shift are O(1)
-operations on Perl's dynamic arrays.  In the absence of shifts and
-pops, push in general needs to reallocate on the order every log(N)
-times, and unshift will need to copy pointers each time.
+(contributed by brian d foy)
 
-If you really, really wanted, you could use structures as described in
-L<perldsc> or L<perltoot> and do just what the algorithm book tells
-you to do.  For example, imagine a list node like this:
+Perl's arrays do not have a fixed size, so you don't need linked lists
+if you just want to add or remove items. You can use array operations
+such as C<push>, C<pop>, C<shift>, C<unshift>, or C<splice> to do
+that.
 
-	$node = {
-		VALUE => 42,
-		LINK  => undef,
-		};
+Sometimes, however, linked lists can be useful in situations where you
+want to "shard" an array so you have have many small arrays instead of
+a single big array. You can keep arrays longer than Perl's largest
+array index, lock smaller arrays separately in threaded programs,
+reallocate less memory, or quickly insert elements in the middle of
+the chain.
 
-You could walk the list this way:
-
-	print "List: ";
-	for ($node = $head;  $node; $node = $node->{LINK}) {
-		print $node->{VALUE}, " ";
-		}
-	print "\n";
-
-You could add to the list this way:
-
-	my ($head, $tail);
-	$tail = append($head, 1);       # grow a new head
-	for $value ( 2 .. 10 ) {
-		$tail = append($tail, $value);
-		}
-
-	sub append {
-		my($list, $value) = @_;
-		my $node = { VALUE => $value };
-		if ($list) {
-			$node->{LINK} = $list->{LINK};
-			$list->{LINK} = $node;
-			}
-		else {
-			$_[0] = $node;      # replace caller's version
-			}
-		return $node;
-		}
-
-But again, Perl's built-in are virtually always good enough.
+Steve Lembark goes through the details in his YAPC::NA 2009 talk "Perly
+Linked Lists" ( http://www.slideshare.net/lembark/perly-linked-lists ),
+although you can just use his C<LinkedList::Single> module.
 
 =head2 How do I handle circular lists?
 X<circular> X<array> X<Tie::Cycle> X<Array::Iterator::Circular>
@@ -2451,6 +2421,74 @@ If you actually need to be able to get a real reference back from
 each hash entry, you can use the Tie::RefHash module, which does the
 required work for you.
 
+=head2 How can I check if a key exists in a multilevel hash?
+
+(contributed by brian d foy)
+
+The trick to this problem is avoiding accidental autovivification. If 
+you want to check three keys deep, you might naïvely try this:
+
+	my %hash;
+	if( exists $hash{key1}{key2}{key3} ) {
+		...;
+		}
+		
+Even though you started with a completely empty hash, after that call to 
+C<exists> you've created the structure you needed to check for C<key3>:
+
+	%hash = (
+			  'key1' => {
+						  'key2' => {}
+						}
+			);
+
+That's autovivification. You can get around this in a few ways. The
+easiest way is to just turn it off. The lexical C<autovivification>
+pragma is available on CPAN. Now you don't add to the hash:
+
+	{
+	no autovivification;
+	my %hash;
+	if( exists $hash{key1}{key2}{key3} ) {
+		...;
+		}
+	}
+
+The C<Data::Diver> module on CPAN can do it for you too. Its C<Dive>
+subroutine can tell you not only if the keys exist but also get the
+value:
+
+	use Data::Diver qw(Dive);
+	
+    my @exists = Dive( \%hash, qw(key1 key2 key3) );
+    if(  ! @exists  ) {
+        ...; # keys do not exist
+    	} 
+    elsif(  ! defined $exists[0]  ) {
+        ...; # keys exist but value is undef
+    	}
+
+You can easily do this yourself too by checking each level of the hash
+before you move onto the next level. This is essentially what
+C<Data::Diver> does for you:
+
+	if( check_hash( \%hash, qw(key1 key2 key3) ) ) {
+		...;
+		}
+	
+	sub check_hash {
+	   my( $hash, @keys ) = @_;
+	
+	   return unless @keys;
+	
+	   foreach my $key ( @keys ) {
+		   return unless eval { exists $hash->{$key} };
+		   $hash = $hash->{$key};
+		   }
+	
+	   return 1;
+	   }
+
 =head1 Data: Misc
 
 =head2 How do I handle binary data correctly?
@@ -2471,13 +2509,13 @@ some gotchas.  See the section on Regular Expressions.
 Assuming that you don't care about IEEE notations like "NaN" or
 "Infinity", you probably just want to use a regular expression.
 
-	if (/\D/)            { print "has nondigits\n" }
-	if (/^\d+$/)         { print "is a whole number\n" }
-	if (/^-?\d+$/)       { print "is an integer\n" }
-	if (/^[+-]?\d+$/)    { print "is a +/- integer\n" }
-	if (/^-?\d+\.?\d*$/) { print "is a real number\n" }
-	if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/) { print "is a decimal number\n" }
-	if (/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?$/)
+	if (/\D/)             { print "has nondigits\n" }
+	if (/^\d+\z/)         { print "is a whole number\n" }
+	if (/^-?\d+\z/)       { print "is an integer\n" }
+	if (/^[+-]?\d+\z/)    { print "is a +/- integer\n" }
+	if (/^-?\d+\.?\d*\z/) { print "is a real number\n" }
+	if (/^-?(?:\d+(?:\.\d*)?|\.\d+)\z/) { print "is a decimal number\n" }
+	if (/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?\z/)
 			{ print "a C float\n" }
 
 There are also some commonly used modules for the task.

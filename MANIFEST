@@ -608,6 +608,7 @@ cpan/Digest-MD5/t/bits.t		See if Digest::MD5 extension works
 cpan/Digest-MD5/t/clone.t		See if Digest::MD5 extension works
 cpan/Digest-MD5/t/files.t		See if Digest::MD5 extension works
 cpan/Digest-MD5/t/md5-aaa.t		See if Digest::MD5 extension works
+cpan/Digest-MD5/t/threads.t		See if Digest::MD5 extension works
 cpan/Digest-MD5/t/utf8.t		See if Digest::MD5 extension works
 cpan/Digest-MD5/typemap			Digest::MD5 extension
 cpan/Digest-SHA/Changes			Digest::SHA changes
@@ -741,6 +742,7 @@ cpan/Encode/t/piconv.t			Test for piconv.t
 cpan/Encode/t/rt.pl			test script
 cpan/Encode/t/unibench.pl		benchmark script
 cpan/Encode/t/Unicode.t			test script
+cpan/Encode/t/utf8ref.t			test script
 cpan/Encode/t/utf8strict.t		test script
 cpan/Encode/TW/Makefile.PL		Encode extension
 cpan/Encode/TW/TW.pm			Encode extension
@@ -1022,8 +1024,6 @@ cpan/Getopt-Long/t/gol-linkage.t	See if Getopt::Long works
 cpan/Getopt-Long/t/gol-oo.t		See if Getopt::Long works
 cpan/Getopt-Long/t/gol-xargv.t		See if Getopt::Long works
 cpan/Getopt-Long/t/gol-xstring.t	See if Getopt::Long works
-cpan/if/if.pm			For "use if"
-cpan/if/t/if.t			Tests for "use if"
 cpan/IO-Compress/Changes				IO::Compress
 cpan/IO-Compress/examples/compress-zlib/filtdef		IO::Compress
 cpan/IO-Compress/examples/compress-zlib/filtinf		IO::Compress
@@ -2395,6 +2395,7 @@ cpan/Unicode-Collate/Collate/Locale/ca.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/cs.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/cy.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/da.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/de_phone.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/eo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/es.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/es_trad.pl			Unicode::Collate
@@ -2411,6 +2412,8 @@ cpan/Unicode-Collate/Collate/Locale/lt.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/lv.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/mt.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/nn.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/nso.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/om.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/pl.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale.pm			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ro.pl			Unicode::Collate
@@ -2418,7 +2421,9 @@ cpan/Unicode-Collate/Collate/Locale/sk.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sl.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sv.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sw.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/tn.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/tr.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/vi.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/wo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/yo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate.pm			Unicode::Collate
@@ -2439,6 +2444,8 @@ cpan/Unicode-Collate/t/loc_ca.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_cs.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_cy.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_da.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_deph.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_de.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_eo.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_es.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_estr.t			Unicode::Collate
@@ -2456,6 +2463,8 @@ cpan/Unicode-Collate/t/loc_lv.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_mt.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_nb.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_nn.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_nso.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_om.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_pl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_ro.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sk.t			Unicode::Collate
@@ -2463,7 +2472,9 @@ cpan/Unicode-Collate/t/loc_sl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sv.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sw.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_test.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_tn.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_tr.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_vi.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_wo.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_yo.t			Unicode::Collate
 cpan/Unicode-Collate/t/normal.t			Unicode::Collate
@@ -2693,6 +2704,8 @@ dist/I18N-LangTags/t/20_locales.t		See whether I18N::LangTags works
 dist/I18N-LangTags/t/50_super.t			See whether I18N::LangTags works
 dist/I18N-LangTags/t/55_supers_strict.t		See whether I18N::LangTags works
 dist/I18N-LangTags/t/80_all_env.t		See whether I18N::LangTags works
+dist/if/if.pm			For "use if"
+dist/if/t/if.t			Tests for "use if"
 dist/IO/ChangeLog		IO perl module change log
 dist/IO/hints/sco.pl		Hint for IO for named architecture
 dist/IO/IO.pm			Top-level interface to IO::* classes
@@ -2740,6 +2753,7 @@ dist/Locale-Maketext/lib/Locale/Maketext/TPJ13.pod	Locale::Maketext documentatio
 dist/Locale-Maketext/README				Locale::Maketext
 dist/Locale-Maketext/t/01_about_verbose.t		See if Locale::Maketext works
 dist/Locale-Maketext/t/04_use_external_lex_cache.t	See if Locale::Maketext works
+dist/Locale-Maketext/t/09_compile.t	Test Locale::Maketext::_compile
 dist/Locale-Maketext/t/10_make.t			See if Locale::Maketext works
 dist/Locale-Maketext/t/20_get.t				See if Locale::Maketext works
 dist/Locale-Maketext/t/30_local.t			See if Locale::Maketext works
@@ -2819,7 +2833,6 @@ dist/Module-CoreList/identify-dependencies	A usage example for Module::CoreList
 dist/Module-CoreList/lib/Module/CoreList.pm	Module::CoreList
 dist/Module-CoreList/Makefile.PL		Module::CoreList
 dist/Module-CoreList/MANIFEST			Module::CoreList
-dist/Module-CoreList/META.yml			Module::CoreList
 dist/Module-CoreList/README			Module::CoreList
 dist/Module-CoreList/t/corelist.t		Module::CoreList tests
 dist/Module-CoreList/t/deprecated.t		Module::CoreList tests
@@ -2973,6 +2986,7 @@ dist/threads/t/free2.t		More ithread destruction tests
 dist/threads/t/free.t		Test ithread destruction
 dist/threads/threads.xs		ithreads
 dist/threads/t/join.t		Testing the join function
+dist/threads/t/kill2.t		Tests thread signalling
 dist/threads/t/kill.t		Tests thread signalling
 dist/threads/t/libc.t		testing libc functions for threadsafety
 dist/threads/t/list.t		Test threads->list()
@@ -2997,6 +3011,7 @@ djgpp/fixpmain		DOS/DJGPP port
 doio.c			I/O operations
 doop.c			Support code for various operations
 dosish.h		Some defines for MS/DOSish machines
+dquote_static.c		Static functions for double quotish contexts
 dump.c			Debugging output
 embed.fnc		Database used by embed.pl
 embed.h			Maps symbols to safer names
@@ -3163,6 +3178,7 @@ ext/I18N-Langinfo/t/Langinfo.t	See whether I18N::Langinfo works
 ext/IPC-Open2/lib/IPC/Open2.pm	Open a two-ended pipe
 ext/IPC-Open2/t/IPC-Open2.t	See if IPC::Open2 works
 ext/IPC-Open3/lib/IPC/Open3.pm	Open a three-ended pipe
+ext/IPC-Open3/t/fd.t		See if IPC::Open3 works w/ file descriptors
 ext/IPC-Open3/t/IPC-Open3.t	See if IPC::Open3 works
 ext/mro/Changes			mro extension
 ext/mro/mro.pm			mro extension
@@ -3314,17 +3330,10 @@ ext/XS-APItest/APItest.xs	XS::APItest extension
 ext/XS-APItest/core.c		Test API functions when PERL_CORE is defined
 ext/XS-APItest/core_or_not.inc	Code common to core.c and notcore.c
 ext/XS-APItest/exception.c	XS::APItest extension
-ext/XS-APItest-KeywordRPN/KeywordRPN.pm	XS::APItest::KeywordRPN extension
-ext/XS-APItest-KeywordRPN/KeywordRPN.xs	XS::APItest::KeywordRPN extension
-ext/XS-APItest-KeywordRPN/Makefile.PL	XS::APItest::KeywordRPN extension
-ext/XS-APItest-KeywordRPN/README	XS::APItest::KeywordRPN extension
-ext/XS-APItest-KeywordRPN/t/keyword_plugin.t	test keyword plugin mechanism
-ext/XS-APItest-KeywordRPN/t/multiline.t	test plugin parsing across lines
-ext/XS-APItest-KeywordRPN/t/stuff_svcur_bug.t	test for a bug in lex_stuff_pvn
-ext/XS-APItest-KeywordRPN/t/swaptwostmts.t	test recursive descent statement parsing
 ext/XS-APItest/Makefile.PL	XS::APItest extension
 ext/XS-APItest/MANIFEST		XS::APItest extension
 ext/XS-APItest/notcore.c	Test API functions when PERL_CORE is not defined
+ext/XS-APItest/numeric.xs	XS::APItest wrappers for numeric.c
 ext/XS-APItest/README		XS::APItest extension
 ext/XS-APItest/t/BHK.pm		Helper for ./blockhooks.t
 ext/XS-APItest/t/blockhooks-csc.t	XS::APItest: more tests for PL_blockhooks
@@ -3332,20 +3341,28 @@ ext/XS-APItest/t/blockhooks.t	XS::APItest: tests for PL_blockhooks
 ext/XS-APItest/t/Block.pm	Helper for ./blockhooks.t
 ext/XS-APItest/t/caller.t	XS::APItest: tests for caller_cx
 ext/XS-APItest/t/call.t		XS::APItest extension
+ext/XS-APItest/t/copyhints.t	test hv_copy_hints_hv() API
 ext/XS-APItest/t/exception.t	XS::APItest extension
+ext/XS-APItest/t/grok.t		XS::APItest: tests for grok* functions
 ext/XS-APItest/t/hash.t		XS::APItest: tests for hash related APIs
+ext/XS-APItest/t/keyword_multiline.t	test keyword plugin parsing across lines
+ext/XS-APItest/t/keyword_plugin.t	test keyword plugin mechanism
 ext/XS-APItest/t/Markers.pm	Helper for ./blockhooks.t
 ext/XS-APItest/t/my_cxt.t	XS::APItest: test MY_CXT interface
 ext/XS-APItest/t/my_exit.t	XS::APItest: test my_exit
 ext/XS-APItest/t/Null.pm	Helper for ./blockhooks.t
 ext/XS-APItest/t/op.t		XS::APItest: tests for OP related APIs
+ext/XS-APItest/t/peep.t		test PL_peepp/PL_rpeepp
 ext/XS-APItest/t/pmflag.t	Test removal of Perl_pmflag()
 ext/XS-APItest/t/printf.t	XS::APItest extension
 ext/XS-APItest/t/ptr_table.t	Test ptr_table_* APIs
 ext/XS-APItest/t/push.t		XS::APItest extension
 ext/XS-APItest/t/rmagical.t	XS::APItest extension
+ext/XS-APItest/t/savehints.t	test SAVEHINTS() API
+ext/XS-APItest/t/stuff_svcur_bug.t	test for a bug in lex_stuff_pvn
 ext/XS-APItest/t/svpeek.t	XS::APItest extension
 ext/XS-APItest/t/svsetsv.t	Test behaviour of sv_setsv with/without PERL_CORE
+ext/XS-APItest/t/swaptwostmts.t	test recursive descent statement parsing
 ext/XS-APItest/t/temp_lv_sub.t	XS::APItest: tests for lvalue subs returning temps
 ext/XS-APItest/t/utf16_to_utf8.t	Test behaviour of utf16_to_utf8{,reversed}
 ext/XS-APItest/t/xs_special_subs_require.t	for require too
@@ -3493,6 +3510,7 @@ intrpvar.h			Variables held in each interpreter instance
 iperlsys.h			Perl's interface to the system
 keywords.h			The keyword numbers
 keywords.pl			Program to write keywords.h
+l1_char_class_tab.h		256 word bit table of character classes (for handy.h)
 lib/abbrev.pl			An abbreviation table builder
 lib/AnyDBM_File.pm		Perl module to emulate dbmopen
 lib/AnyDBM_File.t		See if AnyDBM_File works
@@ -3610,8 +3628,6 @@ lib/less.t			See if less support works
 lib/locale.pm			For "use locale"
 lib/locale.t			See if locale support works
 lib/look.pl			A "look" equivalent
-lib/mauve.pm			Temporary namespace for new built in "reftype" pseduo keyword (and friends)
-lib/mauve.t			tests for "mauve" namespace for new built in "reftype" pseduo keyword (and friends)
 lib/Net/hostent.pm		By-name interface to Perl's builtin gethost*
 lib/Net/hostent.t		See if Net::hostent works
 lib/Net/netent.pm		By-name interface to Perl's builtin getnet*
@@ -3994,6 +4010,7 @@ pod/perl5131delta.pod		Perl changes in version 5.13.1
 pod/perl5132delta.pod		Perl changes in version 5.13.2
 pod/perl5133delta.pod		Perl changes in version 5.13.3
 pod/perl5134delta.pod		Perl changes in version 5.13.4
+pod/perl5135delta.pod		Perl changes in version 5.13.5
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl570delta.pod		Perl changes in version 5.7.0
@@ -4167,6 +4184,7 @@ Porting/makerel			Release making utility
 Porting/make_snapshot.pl	Make a tgz snapshot of our tree with a .patch file in it
 Porting/manicheck		Check against MANIFEST
 Porting/manisort		Sort the MANIFEST
+Porting/mk_PL_charclass.pl	Populate the PL_charclass table
 Porting/newtests-perldelta.pl	Generate Perldelta stub for newly added tests
 Porting/perldelta_template.pod	Template for creating new perldelta.pod files
 Porting/perlhist_calculate.pl		Perform calculations to update perlhist
@@ -4188,7 +4206,7 @@ pp_ctl.c			Push/Pop code for control flow
 pp.h				Push/Pop code defs
 pp_hot.c			Push/Pop code for heavily used opcodes
 pp_pack.c			Push/Pop code for pack/unpack
-pp_proto.h			C++ definitions for Push/Pop code
+pp_proto.h			Not needed, but EU::MM currently references it
 pp_sort.c			Push/Pop code for sort
 pp.sym				Push/Pop code symbols
 pp_sys.c			Push/Pop code for system interaction
@@ -4635,6 +4653,7 @@ t/op/symbolcache.t		See if undef/delete works on stashes with functions
 t/op/sysio.t			See if sysread and syswrite work
 t/op/taint.t			See if tainting works
 t/op/threads_create.pl		Ancillary file for t/op/threads.t
+t/op/threads-dirh.t		Test interaction of threads and dir handles
 t/op/threads.t			Misc. tests for perl features with threads
 t/op/tiearray.t			See if tie for arrays works
 t/op/tie_fetch_count.t		See if FETCH is only called once on tied variables

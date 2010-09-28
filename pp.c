@@ -559,7 +559,6 @@ PP(pp_ref)
     dVAR; dSP; dTARGET;
     const char *pv;
     SV * const sv = POPs;
-    STRLEN len;
 
     if (sv)
 	SvGETMAGIC(sv);
@@ -567,8 +566,8 @@ PP(pp_ref)
     if (!sv || !SvROK(sv))
 	RETPUSHNO;
 
-    pv = sv_reftype_len(SvRV(sv),TRUE,&len);
-    PUSHp(pv, len);
+    pv = sv_reftype(SvRV(sv),TRUE);
+    PUSHp(pv, strlen(pv));
     RETURN;
 }
 
@@ -2337,8 +2336,8 @@ PP(pp_sle)
     {
       dPOPTOPssrl;
       const int cmp = (IN_LOCALE_RUNTIME
-		 ? sv_cmp_locale(left, right)
-		 : sv_cmp(left, right));
+		 ? sv_cmp_locale_flags(left, right, 0)
+		 : sv_cmp_flags(left, right, 0));
       SETs(boolSV(cmp * multiplier < rhs));
       RETURN;
     }
@@ -2350,7 +2349,7 @@ PP(pp_seq)
     tryAMAGICbin_MG(seq_amg, AMGf_set);
     {
       dPOPTOPssrl;
-      SETs(boolSV(sv_eq(left, right)));
+      SETs(boolSV(sv_eq_flags(left, right, 0)));
       RETURN;
     }
 }
@@ -2361,7 +2360,7 @@ PP(pp_sne)
     tryAMAGICbin_MG(sne_amg, AMGf_set);
     {
       dPOPTOPssrl;
-      SETs(boolSV(!sv_eq(left, right)));
+      SETs(boolSV(!sv_eq_flags(left, right, 0)));
       RETURN;
     }
 }
@@ -2373,8 +2372,8 @@ PP(pp_scmp)
     {
       dPOPTOPssrl;
       const int cmp = (IN_LOCALE_RUNTIME
-		 ? sv_cmp_locale(left, right)
-		 : sv_cmp(left, right));
+		 ? sv_cmp_locale_flags(left, right, 0)
+		 : sv_cmp_flags(left, right, 0));
       SETi( cmp );
       RETURN;
     }
@@ -2508,7 +2507,7 @@ PP(pp_not)
 {
     dVAR; dSP;
     tryAMAGICun_MG(not_amg, AMGf_set);
-    *PL_stack_sp = boolSV(!SvTRUE(*PL_stack_sp));
+    *PL_stack_sp = boolSV(!SvTRUE_nomg(*PL_stack_sp));
     return NORMAL;
 }
 

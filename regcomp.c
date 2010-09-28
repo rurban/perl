@@ -85,6 +85,8 @@
 #  include "regcomp.h"
 #endif
 
+#include "dquote_static.c"
+
 #ifdef op
 #undef op
 #endif /* op */
@@ -366,9 +368,10 @@ static const scan_data_t zero_scan_data =
 #define SCF_TRIE_RESTUDY        0x4000 /* Do restudy? */
 #define SCF_SEEN_ACCEPT         0x8000 
 
-#define UTF (RExC_utf8 != 0)
-#define LOC ((RExC_flags & RXf_PMf_LOCALE) != 0)
-#define FOLD ((RExC_flags & RXf_PMf_FOLD) != 0)
+#define UTF cBOOL(RExC_utf8)
+#define LOC cBOOL(RExC_flags & RXf_PMf_LOCALE)
+#define UNI_SEMANTICS cBOOL(RExC_flags & RXf_PMf_UNICODE)
+#define FOLD cBOOL(RExC_flags & RXf_PMf_FOLD)
 
 #define OOB_UNICODE		12345678
 #define OOB_NAMEDCLASS		-1
@@ -4317,6 +4320,8 @@ Perl_re_compile(pTHX_ SV * const pattern, U32 pm_flags)
 	    JMPENV_JUMP(jump_ret);
 	}
 
+	GET_RE_DEBUG_FLAGS;
+
         /* It's possible to write a regexp in ascii that represents Unicode
         codepoints outside of the byte range, such as via \x{100}. If we
         detect such a sequence we have to convert the entire pattern to utf8
@@ -4327,7 +4332,7 @@ Perl_re_compile(pTHX_ SV * const pattern, U32 pm_flags)
         -- dmq */
         DEBUG_PARSE_r(PerlIO_printf(Perl_debug_log,
 	    "UTF8 mismatch! Converting to utf8 for resizing and compile\n"));
-        exp = (char*)Perl_bytes_to_utf8(aTHX_ (U8*)exp, &len);
+        exp = (char*)Perl_bytes_to_utf8(aTHX_ (U8*)SvPV(pattern, plen), &len);
         xend = exp + len;
         RExC_orig_utf8 = RExC_utf8 = 1;
         SAVEFREEPV(exp);
@@ -4426,32 +4431,36 @@ Perl_re_compile(pTHX_ SV * const pattern, U32 pm_flags)
 			    >> RXf_PMf_STD_PMMOD_SHIFT);
 	const char *fptr = STD_PAT_MODS;        /*"msix"*/
 	char *p;
-	const STRLEN wraplen = plen + has_minus + has_p + has_runon
+        /* Allocate for the worst case, which is all the std flags are turned
+         * on, but this means no caret.  We never output a minus, as all those
+         * are defaults, so are covered by the caret */
+	const STRLEN wraplen = plen + has_p + has_runon
             + (sizeof(STD_PAT_MODS) - 1)
             + (sizeof("(?:)") - 1);
 
 	p = sv_grow(MUTABLE_SV(rx), wraplen + 1);
-	SvCUR_set(rx, wraplen);
 	SvPOK_on(rx);
 	SvFLAGS(rx) |= SvUTF8(pattern);
         *p++='('; *p++='?';
+
+        /* If a default, cover it using the caret */
+        if (has_minus || (r->extflags & ~(RXf_PMf_LOCALE|RXf_PMf_UNICODE))) {
+            *p++= DEFAULT_PAT_MOD;
+        }
+        if (r->extflags & RXf_PMf_LOCALE) {
+            *p++ = LOCALE_PAT_MOD;
+        }
+        else if (r->extflags & RXf_PMf_UNICODE) {
+            *p++ = UNICODE_PAT_MOD;
+        }
         if (has_p)
             *p++ = KEEPCOPY_PAT_MOD; /*'p'*/
         {
-            char *r = p + (sizeof(STD_PAT_MODS) - 1) + has_minus - 1;
-            char *colon = r + 1;
             char ch;
-
             while((ch = *fptr++)) {
                 if(reganch & 1)
                     *p++ = ch;
-                else
-                    *r-- = ch;
                 reganch >>= 1;
-            }
-            if(has_minus) {
-                *r = '-';
-                p = colon;
             }
         }
 
@@ -4464,6 +4473,7 @@ Perl_re_compile(pTHX_ SV * const pattern, U32 pm_flags)
             *p++ = '\n';
         *p++ = ')';
         *p = 0;
+	SvCUR_set(rx, p - SvPVX_const(rx));
     }
 
     r->intflags = 0;
@@ -5664,6 +5674,7 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 	if (*RExC_parse == '?') { /* (?...) */
 	    bool is_logical = 0;
 	    const char * const seqstart = RExC_parse;
+            bool has_use_defaults = FALSE;
 
 	    RExC_parse++;
 	    paren = *RExC_parse++;
@@ -5793,7 +5804,7 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 		RExC_parse++;
 	    case '=':           /* (?=...) */
 		RExC_seen_zerolen++;
-			break;
+                break;
 	    case '!':           /* (?!...) */
 		RExC_seen_zerolen++;
 	        if (*RExC_parse == ')') {
@@ -6118,12 +6129,19 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 		RExC_parse--; /* for vFAIL to print correctly */
                 vFAIL("Sequence (? incomplete");
                 break;
+            case DEFAULT_PAT_MOD:   /* Use default flags with the exceptions
+				       that follow */
+                has_use_defaults = TRUE;
+                STD_PMMOD_FLAGS_CLEAR(&RExC_flags);
+                RExC_flags &= ~(RXf_PMf_LOCALE|RXf_PMf_UNICODE);
+                goto parse_flags;
 	    default:
 	        --RExC_parse;
 	        parse_flags:      /* (?i) */  
 	    {
                 U32 posflags = 0, negflags = 0;
 	        U32 *flagsp = &posflags;
+                bool has_charset_modifier = 0;
 
 		while (*RExC_parse) {
 		    /* && strchr("iogcmsx", *RExC_parse) */
@@ -6131,6 +6149,32 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 		       and must be globally applied -- japhy */
                     switch (*RExC_parse) {
 	            CASE_STD_PMMOD_FLAGS_PARSE_SET(flagsp);
+                    case LOCALE_PAT_MOD:
+                        if (has_charset_modifier || flagsp == &negflags) {
+                            goto fail_modifiers;
+                        }
+                        *flagsp &= ~RXf_PMf_UNICODE;
+                        *flagsp |= RXf_PMf_LOCALE;
+                        has_charset_modifier = 1;
+                        break;
+                    case UNICODE_PAT_MOD:
+                        if (has_charset_modifier || flagsp == &negflags) {
+                            goto fail_modifiers;
+                        }
+                        *flagsp &= ~RXf_PMf_LOCALE;
+                        *flagsp |= RXf_PMf_UNICODE;
+                        has_charset_modifier = 1;
+                        break;
+                    case DUAL_PAT_MOD:
+                        if (has_use_defaults
+                            || has_charset_modifier
+                            || flagsp == &negflags)
+                        {
+                            goto fail_modifiers;
+                        }
+                        *flagsp &= ~(RXf_PMf_LOCALE|RXf_PMf_UNICODE);
+                        has_charset_modifier = 1;
+                        break;
                     case ONCE_PAT_MOD: /* 'o' */
                     case GLOBAL_PAT_MOD: /* 'g' */
 			if (SIZE_ONLY && ckWARN(WARN_REGEXP)) {
@@ -6171,7 +6215,11 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
                         }
 	                break;
                     case '-':
-                        if (flagsp == &negflags) {
+                        /* A flag is a default iff it is following a minus,  so
+                         * if there is a minus, it means will be trying to
+                         * re-specify a default which is an error */
+                        if (has_use_defaults || flagsp == &negflags) {
+            fail_modifiers:
                             RExC_parse++;
 		            vFAIL3("Sequence (%.*s...) not recognized", RExC_parse-seqstart, seqstart);
 		            /*NOTREACHED*/
@@ -7553,8 +7601,9 @@ tryagain:
 		    case '0': case '1': case '2': case '3':case '4':
 		    case '5': case '6': case '7': case '8':case '9':
 			if (*p == '0' ||
-			  (isDIGIT(p[1]) && atoi(p) >= RExC_npar) ) {
-                            I32 flags = 0;
+			    (isOCTAL(p[1]) && atoi(p) >= RExC_npar))
+			{
+			    I32 flags = PERL_SCAN_SILENT_ILLDIGIT;
 			    STRLEN numlen = 3;
 			    ender = grok_oct(p, &numlen, &flags, NULL);
 			    if (ender > 0xff) {
@@ -8177,9 +8226,10 @@ parseit:
 		value = grok_bslash_c(*RExC_parse++, SIZE_ONLY);
 		break;
 	    case '0': case '1': case '2': case '3': case '4':
-	    case '5': case '6': case '7': case '8': case '9':
+	    case '5': case '6': case '7':
 		{
-		    I32 flags = 0;
+		    /* Take 1-3 octal digits */
+		    I32 flags = PERL_SCAN_SILENT_ILLDIGIT;
 		    numlen = 3;
 		    value = grok_oct(--RExC_parse, &numlen, &flags, NULL);
 		    RExC_parse += numlen;
@@ -8197,10 +8247,12 @@ parseit:
 		    break;
 		}
 	    default:
-		if (!SIZE_ONLY && isALPHA(value))
+		/* Allow \_ to not give an error */
+		if (!SIZE_ONLY && isALNUM(value) && value != '_') {
 		    ckWARN2reg(RExC_parse,
 			       "Unrecognized escape \\%c in character class passed through",
 			       (int)value);
+		}
 		break;
 	    }
 	} /* end of \blah */
@@ -8991,31 +9043,6 @@ S_regtail_study(pTHX_ RExC_state_t *pRExC_state, regnode *p, const regnode *val,
     }
 
     return exact;
-}
-#endif
-
-/*
- - regcurly - a little FSA that accepts {\d+,?\d*}
- */
-#ifndef PERL_IN_XSUB_RE
-I32
-Perl_regcurly(register const char *s)
-{
-    PERL_ARGS_ASSERT_REGCURLY;
-
-    if (*s++ != '{')
-	return FALSE;
-    if (!isDIGIT(*s))
-	return FALSE;
-    while (isDIGIT(*s))
-	s++;
-    if (*s == ',')
-	s++;
-    while (isDIGIT(*s))
-	s++;
-    if (*s != '}')
-	return FALSE;
-    return TRUE;
 }
 #endif
 

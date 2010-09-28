@@ -4,7 +4,7 @@ use 5.006002;
 use strict;
 # use warnings;	# dont use warnings for older Perls
 
-our $VERSION = '0.54';
+our $VERSION = '0.55';
 
 # Package to store unsigned big integers in decimal and do math with them
 
@@ -2598,7 +2598,7 @@ the same terms as Perl itself.
 
 Original math code by Mark Biggar, rewritten by Tels L<http://bloodgate.com/>
 in late 2000.
-Seperated from BigInt and shaped API with the help of John Peacock.
+Separated from BigInt and shaped API with the help of John Peacock.
 
 Fixed, speed-up, streamlined and enhanced by Tels 2001 - 2007.
 

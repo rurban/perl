@@ -127,7 +127,7 @@ PP(pp_regcomp)
 	       sv_setsv(tmpstr, sv);
 	       continue;
 	    }
-	    sv_catsv(tmpstr, msv);
+	    sv_catsv_nomg(tmpstr, msv);
 	}
     	SvSETMAGIC(tmpstr);
 	SP = ORIGMARK;
@@ -217,6 +217,14 @@ PP(pp_regcomp)
 	    else if (SvAMAGIC(tmpstr)) {
 		/* make a copy to avoid extra stringifies */
 		tmpstr = newSVpvn_flags(t, len, SVs_TEMP | SvUTF8(tmpstr));
+	    }
+
+	    /* If it is gmagical, create a mortal copy, but without calling
+	       get-magic, as we have already done that. */
+	    if(SvGMAGICAL(tmpstr)) {
+		SV *mortalcopy = sv_newmortal();
+		sv_setsv_flags(mortalcopy, tmpstr, 0);
+		tmpstr = mortalcopy;
 	    }
 
 	    if (eng)
@@ -377,6 +385,7 @@ PP(pp_substcont)
 	(void)ReREFCNT_inc(rx);
     cx->sb_rxtainted |= RX_MATCH_TAINTED(rx);
     rxres_save(&cx->sb_rxres, rx);
+    PL_curpm = pm;
     RETURNOP(pm->op_pmstashstartu.op_pmreplstart);
 }
 
@@ -3254,8 +3263,11 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
 	}
     }
 
-    if (PL_unitcheckav)
+    if (PL_unitcheckav) {
+	OP *es = PL_eval_start;
 	call_list(PL_scopestack_ix, PL_unitcheckav);
+	PL_eval_start = es;
+    }
 
     /* compiled okay, so do it */
 
@@ -3770,7 +3782,7 @@ PP(pp_hintseval)
 {
     dVAR;
     dSP;
-    mXPUSHs(MUTABLE_SV(Perl_hv_copy_hints_hv(aTHX_ MUTABLE_HV(cSVOP_sv))));
+    mXPUSHs(MUTABLE_SV(hv_copy_hints_hv(MUTABLE_HV(cSVOP_sv))));
     RETURN;
 }
 

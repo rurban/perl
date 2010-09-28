@@ -5,7 +5,7 @@ use strict;
 # use warnings;	# dont use warnings for older Perls
 use vars qw/$VERSION/;
 
-$VERSION = '0.06';
+$VERSION = '0.07';
 
 package Math::BigInt;
 
@@ -300,7 +300,7 @@ optional routines the low-level math package does not provide on its own.
 Will be loaded on demand and called automatically by BigInt.
 
 Stuff here is really low-priority to optimize, since it is far better to
-implement the operation in the low-level math libary directly, possible even
+implement the operation in the low-level math library directly, possible even
 using a call to the native lib.
 
 =head1 METHODS

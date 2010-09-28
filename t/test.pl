@@ -54,6 +54,17 @@ sub plan {
     $planned = $n;
 }
 
+
+# Set the plan at the end.  See Test::More::done_testing.
+sub done_testing {
+    my $n = $test - 1;
+    $n = shift if @_;
+
+    _print "1..$n\n";
+    $planned = $n;
+}
+
+
 END {
     my $ran = $test - 1;
     if (!$NO_ENDING) {
@@ -66,17 +77,27 @@ END {
     }
 }
 
-# Use this instead of "print STDERR" when outputing failure diagnostic
-# messages
 sub _diag {
     return unless @_;
-    my @mess = map { /^#/ ? "$_\n" : "# $_\n" }
-               map { split /\n/ } @_;
+    my @mess = _comment(@_);
     $TODO ? _print(@mess) : _print_stderr(@mess);
 }
 
+# Use this instead of "print STDERR" when outputing failure diagnostic
+# messages
 sub diag {
     _diag(@_);
+}
+
+# Use this instead of "print" when outputing informational messages
+sub note {
+    return unless @_;
+    _print( _comment(@_) );
+}
+
+sub _comment {
+    return map { /^#/ ? "$_\n" : "# $_\n" }
+           map { split /\n/ } @_;
 }
 
 sub skip_all {
@@ -406,6 +427,7 @@ USE_OK
 # Arguments :
 #   switches => [ command-line switches ]
 #   nolib    => 1 # don't use -I../lib (included by default)
+#   non_portable => Don't warn if a one liner contains quotes
 #   prog     => one-liner (avoid quotes)
 #   progs    => [ multi-liner (avoid quotes) ]
 #   progfile => perl script
@@ -459,6 +481,9 @@ sub _create_runperl { # Create the string to qx in runperl().
 	die "test.pl:runperl(): 'progs' must be an ARRAYREF " . _where()
 	    unless ref $args{progs} eq "ARRAY";
         foreach my $prog (@{$args{progs}}) {
+	    if ($prog =~ tr/'"// && !$args{non_portable}) {
+		warn "quotes in prog >>$prog<< are not portable";
+	    }
             if ($is_mswin || $is_netware || $is_vms) {
                 $runperl = $runperl . qq ( -e "$prog" );
             }
@@ -546,7 +571,8 @@ sub runperl {
     return $result;
 }
 
-*run_perl = \&runperl; # Nice alias.
+# Nice alias
+*run_perl = *run_perl = \&runperl; # shut up "used only once" warning
 
 sub DIE {
     _print_stderr "# @_\n";
@@ -766,6 +792,33 @@ sub can_ok ($@) {
     _ok( !@nok, _where(), $name );
 }
 
+
+# Call $class->new( @$args ); and run the result through isa_ok.
+# See Test::More::new_ok
+sub new_ok {
+    my($class, $args, $obj_name) = @_;
+    $args ||= [];
+    $object_name = "The object" unless defined $obj_name;
+
+    local $Level = $Level + 1;
+
+    my $obj;
+    my $ok = eval { $obj = $class->new(@$args); 1 };
+    my $error = $@;
+
+    if($ok) {
+        isa_ok($obj, $class, $object_name);
+    }
+    else {
+        ok( 0, "new() died" );
+        diag("Error was:  $@");
+    }
+
+    return $obj;
+
+}
+
+
 sub isa_ok ($$;$) {
     my($object, $class, $obj_name) = @_;
 
@@ -824,9 +877,12 @@ sub watchdog ($;$)
         goto WATCHDOG_VIA_ALARM;
     }
 
+    # shut up use only once warning
+    my $threads_on = $threads::threads && $threads::threads;
+
     # Don't use a watchdog process if 'threads' is loaded -
     #   use a watchdog thread instead
-    if (! $threads::threads) {
+    if (!$threads_on) {
 
         # On Windows and VMS, try launching a watchdog process
         #   using system(1, ...) (see perlport.pod)

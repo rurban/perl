@@ -45,7 +45,13 @@ Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
 {
     SV **where;
 
-    if (!gv || SvTYPE((const SV *)gv) != SVt_PVGV) {
+    if (
+        !gv
+     || (
+            SvTYPE((const SV *)gv) != SVt_PVGV
+         && SvTYPE((const SV *)gv) != SVt_PVLV
+        )
+    ) {
 	const char *what;
 	if (type == SVt_PVIO) {
 	    /*
@@ -121,9 +127,9 @@ Perl_gv_fetchfile_flags(pTHX_ const char *const name, const STRLEN namelen,
 #else
 	sv_setpvn(GvSV(gv), name, namelen);
 #endif
-	if (PERLDB_LINE || PERLDB_SAVESRC)
-	    hv_magic(GvHVn(gv_AVadd(gv)), NULL, PERL_MAGIC_dbfile);
     }
+    if ((PERLDB_LINE || PERLDB_SAVESRC) && !GvAV(gv))
+	    hv_magic(GvHVn(gv_AVadd(gv)), NULL, PERL_MAGIC_dbfile);
     if (tmpbuf != smallbuf)
 	Safefree(tmpbuf);
     return gv;
