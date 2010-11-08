@@ -826,7 +826,7 @@ PP(pp_tie)
 	    break;
 	case SVt_PVGV:
 	case SVt_PVLV:
-	    if (isGV_with_GP(varsv)) {
+	    if (isGV_with_GP(varsv) && !SvFAKE(varsv)) {
 		methname = "TIEHANDLE";
 		how = PERL_MAGIC_tiedscalar;
 		/* For tied filehandles, we apply tiedscalar magic to the IO
@@ -903,7 +903,7 @@ PP(pp_untie)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv) && !SvFAKE(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHYES;
 
     if ((mg = SvTIED_mg(sv, how))) {
@@ -941,7 +941,7 @@ PP(pp_tied)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv) && !SvFAKE(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHUNDEF;
 
     if ((mg = SvTIED_mg(sv, how))) {
@@ -1348,6 +1348,7 @@ PP(pp_leavewrite)
     SV **newsp;
     I32 gimme;
     register PERL_CONTEXT *cx;
+    OP *retop;
 
     if (!io || !(ofp = IoOFP(io)))
         goto forget_top;
@@ -1428,6 +1429,7 @@ PP(pp_leavewrite)
   forget_top:
     POPBLOCK(cx,PL_curpm);
     POPFORMAT(cx);
+    retop = cx->blk_sub.retop;
     LEAVE;
 
     fp = IoOFP(io);
@@ -1460,7 +1462,7 @@ PP(pp_leavewrite)
     PUTBACK;
     PERL_UNUSED_VAR(newsp);
     PERL_UNUSED_VAR(gimme);
-    return cx->blk_sub.retop;
+    return retop;
 }
 
 PP(pp_prtf)
@@ -1653,6 +1655,9 @@ PP(pp_sysread)
 				  (struct sockaddr *)namebuf, &bufsize);
 	if (count < 0)
 	    RETPUSHUNDEF;
+	/* MSG_TRUNC can give oversized count; quietly lose it */
+	if (count > length)
+	    count = length;
 #ifdef EPOC
         /* Bogus return without padding */
 	bufsize = sizeof (struct sockaddr_in);
@@ -5517,7 +5522,8 @@ PP(pp_getlogin)
     EXTEND(SP, 1);
     if (!(tmps = PerlProc_getlogin()))
 	RETPUSHUNDEF;
-    PUSHp(tmps, strlen(tmps));
+    sv_setpv_mg(TARG, tmps);
+    PUSHs(TARG);
     RETURN;
 #else
     DIE(aTHX_ PL_no_func, "getlogin");

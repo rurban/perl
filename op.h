@@ -123,7 +123,6 @@ Deprecated.  Use C<GIMME_V> instead.
 				/*  On OP_ENTERSUB || OP_NULL, saw a "do". */
 				/*  On OP_EXISTS, treat av as av, not avhv.  */
 				/*  On OP_(ENTER|LEAVE)EVAL, don't clear $@ */
-				/*  On OP_ENTERITER, loop var is per-thread */
 				/*  On pushre, rx is used as part of split, e.g. split " " */
 				/*  On regcomp, "use re 'eval'" was in scope */
 				/*  On OP_READLINE, was <$filehandle> */
@@ -201,7 +200,7 @@ Deprecated.  Use C<GIMME_V> instead.
   /* OP_ENTERSUB only */
 #define OPpENTERSUB_DB		16	/* Debug subroutine. */
 #define OPpENTERSUB_HASTARG	32	/* Called from OP tree. */
-#define OPpENTERSUB_NOMOD	64	/* Immune to mod() for :attrlist. */
+#define OPpENTERSUB_NOMOD	64	/* Immune to op_lvalue() for :attrlist. */
   /* OP_ENTERSUB and OP_RV2CV only */
 #define OPpENTERSUB_AMPER	8	/* Used & form to call. */
 #define OPpENTERSUB_NOPAREN	128	/* bare sub call (without parens) */
@@ -622,6 +621,21 @@ struct loop {
 #define ref(o, type) doref(o, type, TRUE)
 #endif
 
+/*
+=head1 Optree Manipulation Functions
+
+=for apidoc Am|OP*|LINKLIST|OP *o
+Given the root of an optree, link the tree in execution order using the
+C<op_next> pointers and return the first op executed. If this has
+already been done, it will not be redone, and C<< o->op_next >> will be
+returned. If C<< o->op_next >> is not already set, I<o> should be at
+least an C<UNOP>.
+
+=cut
+*/
+
+#define LINKLIST(o) ((o)->op_next ? (o)->op_next : op_linklist((OP*)o))
+
 /* no longer used anywhere in core */
 #ifndef PERL_CORE
 #define cv_ckproto(cv, gv, p) \
@@ -696,13 +710,13 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define BhkFLAGS(hk)		((hk)->bhk_flags)
 
-#define BHKf_start	    0x01
-#define BHKf_pre_end	    0x02
-#define BHKf_post_end	    0x04
-#define BHKf_eval	    0x08
+#define BHKf_bhk_start	    0x01
+#define BHKf_bhk_pre_end    0x02
+#define BHKf_bhk_post_end   0x04
+#define BHKf_bhk_eval	    0x08
 
 #define BhkENTRY(hk, which) \
-    ((BhkFLAGS(hk) & BHKf_ ## which) ? ((hk)->bhk_ ## which) : NULL)
+    ((BhkFLAGS(hk) & BHKf_ ## which) ? ((hk)->which) : NULL)
 
 #define BhkENABLE(hk, which) \
     STMT_START { \
@@ -717,7 +731,7 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define BhkENTRY_set(hk, which, ptr) \
     STMT_START { \
-	(hk)->bhk_ ## which = ptr; \
+	(hk)->which = ptr; \
 	BhkENABLE(hk, which); \
     } STMT_END
 
@@ -740,6 +754,11 @@ preprocessing token; the type of I<arg> depends on I<which>.
 	    } \
 	} \
     } STMT_END
+
+/* flags for rv2cv_op_cv */
+
+#define RV2CVOPCV_MARK_EARLY     0x00000001
+#define RV2CVOPCV_RETURN_NAME_GV 0x00000002
 
 #ifdef PERL_MAD
 #  define MAD_NULL 1

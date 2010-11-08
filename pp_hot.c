@@ -112,7 +112,6 @@ PP(pp_and)
 PP(pp_sassign)
 {
     dVAR; dSP; dPOPTOPssrl;
-    U32 wasfake = 0;
 
     if (PL_op->op_private & OPpASSIGN_BACKWARDS) {
 	SV * const temp = left;
@@ -198,14 +197,7 @@ PP(pp_sassign)
 	}
 
     }
-    /* Allow glob assignments like *$x = ..., which, when the glob has a
-       SVf_FAKE flag, cannot be distinguished from $x = ... without looking
-       at the op tree. */
-    if( isGV_with_GP(right) && cBINOP->op_last->op_type == OP_RV2GV
-     && (wasfake = SvFLAGS(right) & SVf_FAKE) )
-	SvFLAGS(right) &= ~SVf_FAKE;
     SvSetMagicSV(right, left);
-    if(wasfake) SvFLAGS(right) |= SVf_FAKE;
     SETs(right);
     RETURN;
 }
@@ -223,13 +215,14 @@ PP(pp_cond_expr)
 PP(pp_unstack)
 {
     dVAR;
-    I32 oldsave;
     PERL_ASYNC_CHECK();
     TAINT_NOT;		/* Each statement is presumed innocent */
     PL_stack_sp = PL_stack_base + cxstack[cxstack_ix].blk_oldsp;
     FREETMPS;
-    oldsave = PL_scopestack[PL_scopestack_ix - 1];
-    LEAVE_SCOPE(oldsave);
+    if (!(PL_op->op_flags & OPf_SPECIAL)) {
+	I32 oldsave = PL_scopestack[PL_scopestack_ix - 1];
+	LEAVE_SCOPE(oldsave);
+    }
     return NORMAL;
 }
 
@@ -282,6 +275,8 @@ PP(pp_concat)
 	rbyte = !DO_UTF8(right);
     }
     if (lbyte != rbyte) {
+	/* sv_utf8_upgrade_nomg() may reallocate the stack */
+	PUTBACK;
 	if (lbyte)
 	    sv_utf8_upgrade_nomg(TARG);
 	else {
@@ -290,6 +285,7 @@ PP(pp_concat)
 	    sv_utf8_upgrade_nomg(right);
 	    rpv = SvPV_nomg_const(right, rlen);
 	}
+	SPAGAIN;
     }
     sv_catpvn_nomg(TARG, rpv, rlen);
 
@@ -831,7 +827,8 @@ PP(pp_rv2av)
     if (!(PL_op->op_private & OPpDEREFed))
 	SvGETMAGIC(sv);
     if (SvROK(sv)) {
-	tryAMAGICunDEREF_var(is_pp_rv2av ? to_av_amg : to_hv_amg);
+	sv = amagic_deref_call(sv, is_pp_rv2av ? to_av_amg : to_hv_amg);
+	SPAGAIN;
 
 	sv = SvRV(sv);
 	if (SvTYPE(sv) != type)
@@ -2124,7 +2121,7 @@ PP(pp_subst)
     /* In non-destructive replacement mode, duplicate target scalar so it
      * remains unchanged. */
     if (rpm->op_pmflags & PMf_NONDESTRUCT)
-	TARG = newSVsv(TARG);
+	TARG = sv_2mortal(newSVsv(TARG));
 
 #ifdef PERL_OLD_COPY_ON_WRITE
     /* Awooga. Awooga. "bool" types that are actually char are dangerous,
@@ -2461,6 +2458,7 @@ PP(pp_grepwhile)
     if (SvTRUEx(POPs))
 	PL_stack_base[PL_markstack_ptr[-1]++] = PL_stack_base[*PL_markstack_ptr];
     ++*PL_markstack_ptr;
+    FREETMPS;
     LEAVE_with_name("grep_item");					/* exit inner scope */
 
     /* All done yet? */
@@ -2597,6 +2595,29 @@ PP(pp_leavesublv)
 	if (gimme == G_SCALAR)
 	    goto temporise;
 	if (gimme == G_ARRAY) {
+	    mark = newsp + 1;
+	    /* We want an array here, but padav will have left us an arrayref for an lvalue,
+	     * so we need to expand it */
+	    if(SvTYPE(*mark) == SVt_PVAV) {
+		AV *const av = MUTABLE_AV(*mark);
+		const I32 maxarg = AvFILL(av) + 1;
+		(void)POPs; /* get rid of the array ref */
+		EXTEND(SP, maxarg);
+		if (SvRMAGICAL(av)) {
+		    U32 i;
+		    for (i=0; i < (U32)maxarg; i++) {
+			SV ** const svp = av_fetch(av, i, FALSE);
+			SP[i+1] = svp
+			    ? SvGMAGICAL(*svp) ? (mg_get(*svp), *svp) : *svp
+			    : &PL_sv_undef;
+		    }
+		}
+		else {
+		    Copy(AvARRAY(av), SP+1, maxarg, SV*);
+		}
+		SP += maxarg;
+		PUTBACK;
+	    }
 	    if (!CvLVALUE(cx->blk_sub.cv))
 		goto temporise_array;
 	    EXTEND_MORTAL(SP - newsp);
@@ -2767,12 +2788,14 @@ PP(pp_entersub)
 	if (sv == &PL_sv_yes) {		/* unfound import, ignore */
 	    if (hasargs)
 		SP = PL_stack_base + POPMARK;
+	    else
+		(void)POPMARK;
 	    RETURN;
 	}
 	SvGETMAGIC(sv);
 	if (SvROK(sv)) {
-	    SV * const * sp = &sv;	/* Used in tryAMAGICunDEREF macro. */
-	    tryAMAGICunDEREF(to_cv);
+	    sv = amagic_deref_call(sv, to_cv_amg);
+	    /* Don't SPAGAIN here.  */
 	}
 	else {
 	    const char *sym;

@@ -4,11 +4,11 @@ use warnings;
 
 our(@ISA, %EXPORT_TAGS, @EXPORT_OK, @EXPORT, $AUTOLOAD, %SIGRT) = ();
 
-our $VERSION = "1.20";
+our $VERSION = "1.22";
 
 use AutoLoader;
 
-use XSLoader ();
+require XSLoader;
 
 use Fcntl qw(FD_CLOEXEC F_DUPFD F_GETFD F_GETFL F_GETLK F_RDLCK F_SETFD
 	     F_SETFL F_SETLK F_SETLKW F_UNLCK F_WRLCK O_ACCMODE O_APPEND
@@ -33,24 +33,18 @@ sub croak { require Carp;  goto &Carp::croak }
 # declare usage to assist AutoLoad
 sub usage;
 
-XSLoader::load 'POSIX', $VERSION;
+XSLoader::load();
 
 sub AUTOLOAD {
-    no strict;
     no warnings 'uninitialized';
     if ($AUTOLOAD =~ /::(_?[a-z])/) {
 	# require AutoLoader;
 	$AutoLoader::AUTOLOAD = $AUTOLOAD;
 	goto &AutoLoader::AUTOLOAD
     }
-    local $! = 0;
     my $constname = $AUTOLOAD;
     $constname =~ s/.*:://;
-    my ($error, $val) = constant($constname);
-    croak $error if $error;
-    *$AUTOLOAD = sub { $val };
-
-    goto &$AUTOLOAD;
+    constant($constname);
 }
 
 package POSIX::SigAction;

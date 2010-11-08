@@ -497,6 +497,7 @@ anno4000\100lublin.zrz.tu-berlin.de     anno4000\100mailbox.tu-berlin.de
 +                                       siegel\100zrz.tu-berlin.de
 arnold\100gnu.ai.mit.edu                arnold\100emoryu2.arpa
 +                                       gatech!skeeve!arnold
+arodland\100cpan.org                    andrew\100hbslabs.com
 arussell\100cs.uml.edu                  adam\100adam-pc.(none)
 ash\100cpan.org                         ash_cpan\100firemirror.com
 avarab\100gmail.com                     avar\100cpan.org
@@ -652,6 +653,7 @@ mab\100wdl.loral.com                    markb\100rdcf.sm.unisys.com
 marcel\100codewerk.com                  gr\100univie.ac.at
 mark.p.lutz\100boeing.com               tecmpl1\100triton.ca.boeing.com
 marnix\100gmail.com                     pttesac!marnix!vanam
+marty+p5p\100kasei.com                  marty\100martian.org
 mats\100sm6sxl.net                      mats\100sm5sxl.net
 mbarbon\100dsi.unive.it                 mattia.barbon\100libero.it
 mcmahon\100ibiblio.org                  mcmahon\100metalab.unc.edu
@@ -663,6 +665,7 @@ mgjv\100comdyn.com.au                   mgjv\100tradingpost.com.au
 mlh\100swl.msd.ray.com                  webtools\100uewrhp03.msd.ray.com
 michael.schroeder\100informatik.uni-erlangen.de mls\100suse.de
 mike\100stok.co.uk                      mike\100exegenix.com
+miyagawa\100bulknews.net                    miyagawa\100edge.co.jp
 mjtg\100cam.ac.uk                       mjtg\100cus.cam.ac.uk
 mikedlr\100tardis.ed.ac.uk              mikedlr\100it.com.pl
 moritz\100casella.verplant.org          moritz\100faui2k3.org

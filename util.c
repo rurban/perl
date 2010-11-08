@@ -99,7 +99,6 @@ Perl_safesysmalloc(MEM_SIZE size)
 #endif
     ptr = (Malloc_t)PerlMem_malloc(size?size:1);	/* malloc(0) is NASTY on our system */
     PERL_ALLOC_CHECK(ptr);
-    DEBUG_m(PerlIO_printf(Perl_debug_log, "0x%"UVxf": (%05ld) malloc %ld bytes\n",PTR2UV(ptr),(long)PL_an++,(long)size));
     if (ptr != NULL) {
 #ifdef PERL_TRACK_MEMPOOL
 	struct perl_memory_debug_header *const header
@@ -122,6 +121,7 @@ Perl_safesysmalloc(MEM_SIZE size)
 #  endif
         ptr = (Malloc_t)((char*)ptr+sTHX);
 #endif
+	DEBUG_m(PerlIO_printf(Perl_debug_log, "0x%"UVxf": (%05ld) malloc %ld bytes\n",PTR2UV(ptr),(long)PL_an++,(long)size));
 	return ptr;
 }
     else {
@@ -1087,6 +1087,25 @@ Perl_savesvpv(pTHX_ SV *sv)
     return (char *) CopyD(pv,newaddr,len,char);
 }
 
+/*
+=for apidoc savesharedsvpv
+
+A version of C<savesharedpv()> which allocates the duplicate string in
+memory which is shared between threads.
+
+=cut
+*/
+
+char *
+Perl_savesharedsvpv(pTHX_ SV *sv)
+{
+    STRLEN len;
+    const char * const pv = SvPV_const(sv, len);
+
+    PERL_ARGS_ASSERT_SAVESHAREDSVPV;
+
+    return savesharedpvn(pv, len);
+}
 
 /* the SV for Perl_form() and mess() is not kept in an arena */
 
@@ -5089,27 +5108,30 @@ Perl_upg_version(pTHX_ SV *ver, bool qv)
 /*
 =for apidoc vverify
 
-Validates that the SV contains a valid version object.
+Validates that the SV contains valid internal structure for a version object.
+It may be passed either the version object (RV) or the hash itself (HV).  If
+the structure is valid, it returns the HV.  If the structure is invalid,
+it returns NULL.
 
-    bool vverify(SV *vobj);
+    SV *hv = vverify(sv);
 
 Note that it only confirms the bare minimum structure (so as not to get
 confused by derived classes which may contain additional hash entries):
 
 =over 4
 
-=item * The SV contains a [reference to a] hash
+=item * The SV is an HV or a reference to an HV
 
 =item * The hash contains a "version" key
 
-=item * The "version" key has [a reference to] an AV as its value
+=item * The "version" key has a reference to an AV as its value
 
 =back
 
 =cut
 */
 
-bool
+SV *
 Perl_vverify(pTHX_ SV *vs)
 {
     SV *sv;
@@ -5124,9 +5146,9 @@ Perl_vverify(pTHX_ SV *vs)
 	 && hv_exists(MUTABLE_HV(vs), "version", 7)
 	 && (sv = SvRV(*hv_fetchs(MUTABLE_HV(vs), "version", FALSE)))
 	 && SvTYPE(sv) == SVt_PVAV )
-	return TRUE;
+	return vs;
     else
-	return FALSE;
+	return NULL;
 }
 
 /*
@@ -5154,10 +5176,9 @@ Perl_vnumify(pTHX_ SV *vs)
 
     PERL_ARGS_ASSERT_VNUMIFY;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     /* see if various flags exist */
@@ -5233,10 +5254,9 @@ Perl_vnormal(pTHX_ SV *vs)
 
     PERL_ARGS_ASSERT_VNORMAL;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     if ( hv_exists(MUTABLE_HV(vs), "alpha", 5 ) )
@@ -5288,10 +5308,9 @@ Perl_vstringify(pTHX_ SV *vs)
 {
     PERL_ARGS_ASSERT_VSTRINGIFY;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     if (hv_exists(MUTABLE_HV(vs), "original",  sizeof("original") - 1)) {
@@ -5331,15 +5350,10 @@ Perl_vcmp(pTHX_ SV *lhv, SV *rhv)
 
     PERL_ARGS_ASSERT_VCMP;
 
-    if ( SvROK(lhv) )
-	lhv = SvRV(lhv);
-    if ( SvROK(rhv) )
-	rhv = SvRV(rhv);
-
-    if ( !vverify(lhv) )
-	Perl_croak(aTHX_ "Invalid version object");
-
-    if ( !vverify(rhv) )
+    /* extract the HVs from the objects */
+    lhv = vverify(lhv);
+    rhv = vverify(rhv);
+    if ( ! ( lhv && rhv ) )
 	Perl_croak(aTHX_ "Invalid version object");
 
     /* get the left hand term */
@@ -6452,6 +6466,84 @@ Perl_my_cxt_init(pTHX_ const char *my_cxt_key, size_t size)
 #endif /* #ifndef PERL_GLOBAL_STRUCT_PRIVATE */
 #endif /* PERL_IMPLICIT_CONTEXT */
 
+void
+Perl_xs_version_bootcheck(pTHX_ U32 items, U32 ax, const char *xs_p,
+			  STRLEN xs_len)
+{
+    SV *sv;
+    const char *vn = NULL;
+    SV *const module = PL_stack_base[ax];
+
+    PERL_ARGS_ASSERT_XS_VERSION_BOOTCHECK;
+
+    if (items >= 2)	 /* version supplied as bootstrap arg */
+	sv = PL_stack_base[ax + 1];
+    else {
+	/* XXX GV_ADDWARN */
+	vn = "XS_VERSION";
+	sv = get_sv(Perl_form(aTHX_ "%"SVf"::%s", module, vn), 0);
+	if (!sv || !SvOK(sv)) {
+	    vn = "VERSION";
+	    sv = get_sv(Perl_form(aTHX_ "%"SVf"::%s", module, vn), 0);
+	}
+    }
+    if (sv) {
+	SV *xssv = Perl_newSVpvn_flags(aTHX_ xs_p, xs_len, SVs_TEMP);
+	SV *pmsv = sv_derived_from(sv, "version")
+	    ? sv : sv_2mortal(new_version(sv));
+	xssv = upg_version(xssv, 0);
+	if ( vcmp(pmsv,xssv) ) {
+	    SV *string = vstringify(xssv);
+	    SV *xpt = Perl_newSVpvf(aTHX_ "%"SVf" object version %"SVf
+				    " does not match ", module, string);
+
+	    SvREFCNT_dec(string);
+	    string = vstringify(pmsv);
+
+	    if (vn) {
+		Perl_sv_catpvf(aTHX_ xpt, "$%"SVf"::%s %"SVf, module, vn,
+			       string);
+	    } else {
+		Perl_sv_catpvf(aTHX_ xpt, "bootstrap parameter %"SVf, string);
+	    }
+	    SvREFCNT_dec(string);
+
+	    Perl_sv_2mortal(aTHX_ xpt);
+	    Perl_croak_sv(aTHX_ xpt);
+	}
+    }
+}
+
+void
+Perl_xs_apiversion_bootcheck(pTHX_ SV *module, const char *api_p,
+			     STRLEN api_len)
+{
+    SV *xpt = NULL;
+    SV *compver = Perl_newSVpvn_flags(aTHX_ api_p, api_len, SVs_TEMP);
+    SV *runver;
+
+    PERL_ARGS_ASSERT_XS_APIVERSION_BOOTCHECK;
+
+    /* This might croak  */
+    compver = upg_version(compver, 0);
+    /* This should never croak */
+    runver = new_version(PL_apiversion);
+    if (vcmp(compver, runver)) {
+	SV *compver_string = vstringify(compver);
+	SV *runver_string = vstringify(runver);
+	xpt = Perl_newSVpvf(aTHX_ "Perl API version %"SVf
+			    " of %"SVf" does not match %"SVf,
+			    compver_string, module, runver_string);
+	Perl_sv_2mortal(aTHX_ xpt);
+
+	SvREFCNT_dec(compver_string);
+	SvREFCNT_dec(runver_string);
+    }
+    SvREFCNT_dec(runver);
+    if (xpt)
+	Perl_croak_sv(aTHX_ xpt);
+}
+
 #ifndef HAS_STRLCAT
 Size_t
 Perl_my_strlcat(char *dst, const char *src, Size_t size)
@@ -6507,13 +6599,17 @@ Perl_get_db_sub(pTHX_ SV **svp, CV *cv)
     PL_tainted = FALSE;
     save_item(dbsv);
     if (!PERLDB_SUB_NN) {
-	GV * const gv = CvGV(cv);
+	GV *gv = CvGV(cv);
 
 	if ( svp && ((CvFLAGS(cv) & (CVf_ANON | CVf_CLONED))
 	     || strEQ(GvNAME(gv), "END")
 	     || ((GvCV(gv) != cv) && /* Could be imported, and old sub redefined. */
 		 !( (SvTYPE(*svp) == SVt_PVGV)
-		    && (GvCV((const GV *)*svp) == cv) )))) {
+		    && (GvCV((const GV *)*svp) == cv)
+		    && (gv = (GV *)*svp) 
+		  )
+		)
+	)) {
 	    /* Use GV from the stack as a fallback. */
 	    /* GV is potentially non-unique, or contain different CV. */
 	    SV * const tmp = newRV(MUTABLE_SV(cv));

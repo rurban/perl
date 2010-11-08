@@ -299,6 +299,7 @@
 /Pod/Checker.pm
 /Pod/Escapes.pm
 /Pod/Find.pm
+/Pod/Html.pm
 /Pod/InputObjects.pm
 /Pod/LaTeX.pm
 /Pod/Man.pm
@@ -347,6 +348,7 @@
 /Text/Wrap.pm
 /Thread
 /Tie/File.pm
+/Tie/Hash/NamedCapture.pm
 /Tie/Memoize.pm
 /Tie/RefHash.pm
 /Time/HiRes.pm

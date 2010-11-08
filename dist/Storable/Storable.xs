@@ -3841,31 +3841,6 @@ static int do_store(
 	return status == 0;
 }
 
-/*
- * pstore
- *
- * Store the transitive data closure of given object to disk.
- * Returns 0 on error, a true value otherwise.
- */
-static int pstore(pTHX_ PerlIO *f, SV *sv)
-{
-	TRACEME(("pstore"));
-	return do_store(aTHX_ f, sv, 0, FALSE, (SV**) 0);
-
-}
-
-/*
- * net_pstore
- *
- * Same as pstore(), but network order is used for integers and doubles are
- * emitted as strings.
- */
-static int net_pstore(pTHX_ PerlIO *f, SV *sv)
-{
-	TRACEME(("net_pstore"));
-	return do_store(aTHX_ f, sv, 0, TRUE, (SV**) 0);
-}
-
 /***
  *** Memory stores.
  ***/
@@ -3880,42 +3855,6 @@ static SV *mbuf2sv(pTHX)
 	dSTCXT;
 
 	return newSVpv(mbase, MBUF_SIZE());
-}
-
-/*
- * mstore
- *
- * Store the transitive data closure of given object to memory.
- * Returns undef on error, a scalar value containing the data otherwise.
- */
-static SV *mstore(pTHX_ SV *sv)
-{
-	SV *out;
-
-	TRACEME(("mstore"));
-
-	if (!do_store(aTHX_ (PerlIO*) 0, sv, 0, FALSE, &out))
-		return &PL_sv_undef;
-
-	return out;
-}
-
-/*
- * net_mstore
- *
- * Same as mstore(), but network order is used for integers and doubles are
- * emitted as strings.
- */
-static SV *net_mstore(pTHX_ SV *sv)
-{
-	SV *out;
-
-	TRACEME(("net_mstore"));
-
-	if (!do_store(aTHX_ (PerlIO*) 0, sv, 0, TRUE, &out))
-		return &PL_sv_undef;
-
-	return out;
 }
 
 /***
@@ -6412,37 +6351,44 @@ init_perinterp()
  CODE:
   init_perinterp(aTHX);
 
-int
+# pstore
+#
+# Store the transitive data closure of given object to disk.
+# Returns undef on error, a true value otherwise.
+
+# net_pstore
+#
+# Same as pstore(), but network order is used for integers and doubles are
+# emitted as strings.
+
+void
 pstore(f,obj)
 OutputStream	f
 SV *	obj
- CODE:
-  RETVAL = pstore(aTHX_ f, obj);
- OUTPUT:
-  RETVAL
+ ALIAS:
+  net_pstore = 1
+ PPCODE:
+  ST(0) = do_store(aTHX_ f, obj, 0, ix, (SV **)0) ? &PL_sv_yes : &PL_sv_undef;
+  XSRETURN(1);
 
-int
-net_pstore(f,obj)
-OutputStream	f
-SV *	obj
- CODE:
-  RETVAL = net_pstore(aTHX_ f, obj);
- OUTPUT:
-  RETVAL
+# mstore
+#
+# Store the transitive data closure of given object to memory.
+# Returns undef on error, a scalar value containing the data otherwise.
+
+# net_mstore
+#
+# Same as mstore(), but network order is used for integers and doubles are
+# emitted as strings.
 
 SV *
 mstore(obj)
 SV *	obj
+ ALIAS:
+  net_mstore = 1
  CODE:
-  RETVAL = mstore(aTHX_ obj);
- OUTPUT:
-  RETVAL
-
-SV *
-net_mstore(obj)
-SV *	obj
- CODE:
-  RETVAL = net_mstore(aTHX_ obj);
+  if (!do_store(aTHX_ (PerlIO*) 0, obj, 0, ix, &RETVAL))
+    RETVAL = &PL_sv_undef;
  OUTPUT:
   RETVAL
 
@@ -6470,23 +6416,23 @@ SV *	sv
  OUTPUT:
   RETVAL
 
-int
+bool
 last_op_in_netorder()
  CODE:
-  RETVAL = last_op_in_netorder(aTHX);
+  RETVAL = !!last_op_in_netorder(aTHX);
  OUTPUT:
   RETVAL
 
-int
+bool
 is_storing()
+ ALIAS:
+ is_storing = ST_STORE
+ is_retrieving = ST_RETRIEVE
  CODE:
-  RETVAL = is_storing(aTHX);
- OUTPUT:
-  RETVAL
+ {
+  dSTCXT;
 
-int
-is_retrieving()
- CODE:
-  RETVAL = is_retrieving(aTHX);
+  RETVAL = cxt->entry && (cxt->optype & ix) ? TRUE : FALSE;
+ }
  OUTPUT:
   RETVAL

@@ -105,11 +105,15 @@ typedef struct yy_parser {
     COP		*saved_curcop;	/* the previous PL_curcop */
     char	tokenbuf[256];
 
+    bool	in_pod;		/* lexer is within a =pod section */
 } yy_parser;
 
 /* flags for lexer API */
 #define LEX_STUFF_UTF8		0x00000001
 #define LEX_KEEP_PREVIOUS	0x00000002
+
+/* flags for parser API */
+#define PARSE_OPTIONAL          0x00000001
 
 /*
  * Local variables:

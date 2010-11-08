@@ -204,15 +204,16 @@ struct regnode_charclass {
     U8	flags;
     U8  type;
     U16 next_off;
-    U32 arg1;
+    U32 arg1;				/* used as ptr in S_regclass */
     char bitmap[ANYOF_BITMAP_SIZE];	/* only compile-time */
 };
 
-struct regnode_charclass_class {	/* has [[:blah:]] classes */
-    U8	flags;				/* should have ANYOF_CLASS here */
+/* has runtime (locale) \d, \w, ..., [:posix:] classes */
+struct regnode_charclass_class {
+    U8	flags;				/* ANYOF_CLASS bit must go here */
     U8  type;
     U16 next_off;
-    U32 arg1;
+    U32 arg1;					/* used as ptr in S_regclass */
     char bitmap[ANYOF_BITMAP_SIZE];		/* both compile-time */
     char classflags[ANYOF_CLASSBITMAP_SIZE];	/* and run-time */
 };
@@ -271,6 +272,8 @@ struct regnode_charclass_class {	/* has [[:blah:]] classes */
 #undef STRING
 
 #define	OP(p)		((p)->type)
+#define FLAGS(p)	((p)->flags)	/* Caution: Doesn't apply to all \
+					   regnode types */
 #define	OPERAND(p)	(((struct regnode_string *)p)->string)
 #define MASK(p)		((char*)OPERAND(p))
 #define	STR_LEN(p)	(((struct regnode_string *)p)->str_len)
@@ -306,25 +309,22 @@ struct regnode_charclass_class {	/* has [[:blah:]] classes */
 
 #define SIZE_ONLY (RExC_emit == &PL_regdummy)
 
+/* Flags for node->flags of several of the node types */
+#define USE_UNI                0x01
+
 /* Flags for node->flags of ANYOF */
 
-#define ANYOF_CLASS		0x08	/* has [[:blah:]] classes */
+#define ANYOF_CLASS		0x08	/* has runtime \d, \w, [:posix:], ... */
+#define ANYOF_LARGE      ANYOF_CLASS    /* Same; name retained for back compat */
 #define ANYOF_INVERT		0x04
 #define ANYOF_FOLD		0x02
 #define ANYOF_LOCALE		0x01
 
-/* Used for regstclass only */
-#define ANYOF_EOS		0x10		/* Can match an empty string too */
+/* EOS used for regstclass only */
+#define ANYOF_EOS		0x10	/* Can match an empty string too */
 
-/* There is a character or a range past 0xff */
-#define ANYOF_UNICODE		0x20
-#define ANYOF_UNICODE_ALL	0x40	/* Can match any char past 0xff */
-
-/* size of node is large (includes class pointer) */
-#define ANYOF_LARGE 		0x80
-
-/* Are there any runtime flags on in this node? */
-#define ANYOF_RUNTIME(s)	(ANYOF_FLAGS(s) & 0x0f)
+#define ANYOF_UNICODE		0x20	/* Matches >= one thing past 0xff */
+#define ANYOF_UNICODE_ALL	0x40	/* Matches 0x100 - infinity */
 
 #define ANYOF_FLAGS_ALL		0xff
 
@@ -782,7 +782,7 @@ re.pm, especially to the documentation.
 
 #ifdef DEBUGGING
 
-#define GET_RE_DEBUG_FLAGS_DECL IV re_debug_flags = 0; GET_RE_DEBUG_FLAGS;
+#define GET_RE_DEBUG_FLAGS_DECL VOL IV re_debug_flags = 0; GET_RE_DEBUG_FLAGS;
 
 #define RE_PV_COLOR_DECL(rpv,rlen,isuni,dsv,pv,l,m,c1,c2) \
     const char * const rpv =                          \

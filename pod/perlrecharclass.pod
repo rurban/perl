@@ -113,14 +113,19 @@ Any character that isn't matched by C<\d> will be matched by C<\D>.
 =head3 Word characters
 
 A C<\w> matches a single alphanumeric character (an alphabetic character, or a
-decimal digit) or an underscore (C<_>), not a whole word.  To match a whole
+decimal digit) or a connecting punctuation character, such as an
+underscore ("_").  It does not match a whole word.  To match a whole
 word, use C<\w+>.  This isn't the same thing as matching an English word, but 
-is the same as a string of Perl-identifier characters.  What is considered a
+in the ASCII range is the same as a string of Perl-identifier
+characters.  What is considered a
 word character depends on several factors, detailed below in L</Locale,
 EBCDIC, Unicode and UTF-8>.  If those factors indicate a Unicode
 interpretation, C<\w> matches the characters that are considered word
 characters in the Unicode database. That is, it not only matches ASCII letters,
-but also Thai letters, Greek letters, etc.  If a Unicode interpretation
+but also Thai letters, Greek letters, etc.  This includes connector
+punctuation (like the underscore) which connect two words together, or
+marks, such as a C<COMBINING TILDE>, which are generally used to add
+diacritical marks to letters.   If a Unicode interpretation
 is not indicated, C<\w> matches those characters that are considered
 word characters by the current locale or EBCDIC code page.  Without a
 locale or EBCDIC code page, C<\w> matches the ASCII letters, digits and
@@ -229,7 +234,7 @@ UTF-8 format, or the locale or EBCDIC code page that is in effect includes them.
 =back
 
 It is worth noting that C<\d>, C<\w>, etc, match single characters, not
-complete numbers or words. To match a number (that consists of integers),
+complete numbers or words. To match a number (that consists of digits),
 use C<\d+>; to match a word, use C<\w+>.
 
 =head3 \N
@@ -522,7 +527,8 @@ The other counterpart, in the column labelled "Full-range Unicode", matches any
 appropriate characters in the full Unicode character set.  For example,
 C<\p{Alpha}> will match not just the ASCII alphabetic characters, but any
 character in the entire Unicode character set that is considered to be
-alphabetic.
+alphabetic.  The backslash sequence column is a (short) synonym for
+the Full-range Unicode form.
 
 (Each of the counterparts has various synonyms as well.
 L<perluniprops/Properties accessible through \p{} and \P{}> lists all the
@@ -533,8 +539,8 @@ and any C<\p> property name can be prefixed with "Is" such as C<\p{IsAlpha}>.)
 Both the C<\p> forms are unaffected by any locale that is in effect, or whether
 the string is in UTF-8 format or not, or whether the platform is EBCDIC or not.
 In contrast, the POSIX character classes are affected.  If the source string is
-in UTF-8 format, the POSIX classes (with the exception of C<[[:punct:]]>, see
-Note [5] below) behave like their "Full-range" Unicode counterparts.  If the
+in UTF-8 format, the POSIX classes behave like their "Full-range"
+Unicode counterparts.  If the
 source string is not in UTF-8 format, and no locale is in effect, and the
 platform is not EBCDIC, all the POSIX classes behave like their ASCII-range
 counterparts.  Otherwise, they behave based on the rules of the locale or
@@ -548,25 +554,25 @@ EBCDIC code page is present, they will behave in accordance with those; if
 absent, the classes will match only their ASCII-range counterparts.  If you
 disagree with this proposal, send email to C<perl5-porters@perl.org>.
 
- [[:...:]]      ASCII-range        Full-range  backslash  Note
-                 Unicode            Unicode    sequence
+ [[:...:]]      ASCII-range          Full-range  backslash  Note
+                 Unicode              Unicode     sequence
  -----------------------------------------------------
-   alpha      \p{PosixAlpha}       \p{Alpha}
-   alnum      \p{PosixAlnum}       \p{Alnum}
+   alpha      \p{PosixAlpha}       \p{XPosixAlpha}
+   alnum      \p{PosixAlnum}       \p{XPosixAlnum}
    ascii      \p{ASCII}          
-   blank      \p{PosixBlank}       \p{Blank} =             [1]
-                                   \p{HorizSpace}  \h      [1]
-   cntrl      \p{PosixCntrl}       \p{Cntrl}               [2]
-   digit      \p{PosixDigit}       \p{Digit}       \d
-   graph      \p{PosixGraph}       \p{Graph}               [3]
-   lower      \p{PosixLower}       \p{Lower}
-   print      \p{PosixPrint}       \p{Print}               [4]
-   punct      \p{PosixPunct}       \p{Punct}               [5]
-              \p{PerlSpace}        \p{SpacePerl}   \s      [6]
-   space      \p{PosixSpace}       \p{Space}               [6]
-   upper      \p{PosixUpper}       \p{Upper}
-   word       \p{PerlWord}         \p{Word}        \w
-   xdigit     \p{ASCII_Hex_Digit}  \p{XDigit}
+   blank      \p{PosixBlank}       \p{XPosixBlank}  \h      [1]
+                                   or \p{HorizSpace}        [1]
+   cntrl      \p{PosixCntrl}       \p{XPosixCntrl}          [2]
+   digit      \p{PosixDigit}       \p{XPosixDigit}  \d
+   graph      \p{PosixGraph}       \p{XPosixGraph}          [3]
+   lower      \p{PosixLower}       \p{XPosixLower}
+   print      \p{PosixPrint}       \p{XPosixPrint}          [4]
+   punct      \p{PosixPunct}       \p{XPosixPunct}          [5]
+              \p{PerlSpace}        \p{XPerlSpace}   \s      [6]
+   space      \p{PosixSpace}       \p{XPosixSpace}          [6]
+   upper      \p{PosixUpper}       \p{XPosixUpper}
+   word       \p{PosixWord}        \p{XPosixWord}   \w
+   xdigit     \p{ASCII_Hex_Digit}  \p{XPosixXDigit}
 
 =over 4
 
@@ -595,20 +601,22 @@ of all the alphanumerical characters and all punctuation characters.
 All printable characters, which is the set of all the graphical characters
 plus whitespace characters that are not also controls.
 
-=item [5] (punct)
+=item [5]
 
 C<\p{PosixPunct}> and C<[[:punct:]]> in the ASCII range match all the
 non-controls, non-alphanumeric, non-space characters:
 C<[-!"#$%&'()*+,./:;<=E<gt>?@[\\\]^_`{|}~]> (although if a locale is in effect,
 it could alter the behavior of C<[[:punct:]]>).
 
-C<\p{Punct}> matches a somewhat different set in the ASCII range, namely
+The similarly named property, C<\p{Punct}>, matches a somewhat different
+set in the ASCII range, namely
 C<[-!"#%&'()*,./:;?@[\\\]_{}]>.  That is, it is missing C<[$+E<lt>=E<gt>^`|~]>.
 This is because Unicode splits what POSIX considers to be punctuation into two
 categories, Punctuation and Symbols.
 
-When the matching string is in UTF-8 format, C<[[:punct:]]> matches what it
-matches in the ASCII range, plus what C<\p{Punct}> matches.  This is different
+C<\p{PosixPunct>, and when the matching string is in UTF-8 format,
+C<[[:punct:]]>, match what they match in the ASCII range, plus what
+C<\p{Punct}> matches.  This is different
 than strictly matching according to C<\p{Punct}>.  Another way to say it is that
 for a UTF-8 string, C<[[:punct:]]> matches all the characters that Unicode
 considers to be punctuation, plus all the ASCII-range characters that Unicode
@@ -621,6 +629,11 @@ matches the vertical tab, C<\cK>.   Same for the two ASCII-only range forms.
 
 =back
 
+There are various other synonyms that can be used for these besides
+C<\p{HorizSpace}> and \C<\p{XPosixBlank}>.  For example
+C<\p{PosixAlpha}> can be written as C<\p{Alpha}>.  All are listed
+in L<perluniprops/Properties accessible through \p{} and \P{}>.
+
 =head4 Negation
 X<character class, negation>
 
@@ -631,10 +644,12 @@ Some examples:
      POSIX         ASCII-range     Full-range  backslash
                     Unicode         Unicode    sequence
  -----------------------------------------------------
- [[:^digit:]]   \P{PosixDigit}     \P{Digit}      \D
- [[:^space:]]   \P{PosixSpace}     \P{Space}
-                \P{PerlSpace}      \P{SpacePerl}  \S
- [[:^word:]]    \P{PerlWord}       \P{Word}       \W
+ [[:^digit:]]   \P{PosixDigit}  \P{XPosixDigit}   \D
+ [[:^space:]]   \P{PosixSpace}  \P{XPosixSpace}
+                \P{PerlSpace}   \P{XPerlSpace}    \S
+ [[:^word:]]    \P{PerlWord}    \P{XPosixWord}    \W
+
+Again, the backslash sequence means Full-range Unicode.
 
 =head4 [= =] and [. .]
 
@@ -682,7 +697,9 @@ nor EBCDIC, they match the ASCII defaults (0 to 9 for C<\d>; 52 letters,
 A regular expression is marked for Unicode semantics if it is encoded in
 utf8 (usually as a result of including a literal character whose code
 point is above 255), or if it contains a C<\N{U+...}> or C<\N{I<name>}>
-construct.
+construct, or (starting in Perl 5.14) if it was compiled in the scope of a
+C<S<use feature "unicode_strings">> pragma, or has the C<"u"> regular
+expression modifier.
 
 The differences in behavior between locale and non-locale semantics
 can affect any character whose code point is 255 or less.  The
@@ -693,6 +710,11 @@ L<perlunicode/The "Unicode Bug">.
 
 For portability reasons, it may be better to not use C<\w>, C<\d>, C<\s>
 or the POSIX character classes, and use the Unicode properties instead.
+That way you can control whether you want matching of just characters in
+the ASCII character set, or any Unicode characters.
+C<S<use feature "unicode_strings">> will allow seamless Unicode behavior
+no matter what the internal encodings are, but won't allow restricting
+to just the ASCII characters.
 
 =head4 Examples
 

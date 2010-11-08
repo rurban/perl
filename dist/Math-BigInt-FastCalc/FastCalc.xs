@@ -34,42 +34,31 @@ PROTOTYPES: DISABLE
       ST(0) = sv_2mortal(newSViv(value));	\
       XSRETURN(1);
 
-#define RETURN_MORTAL_BOOL(temp, comp)			\
-      ST(0) = sv_2mortal(boolSV( SvIV(temp) == comp));
-
-#define CONSTANT_OBJ(int)			\
-    RETVAL = newAV();				\
-    sv_2mortal((SV*)RETVAL);			\
-    av_push (RETVAL, newSViv( int ));
-
-void 
-_set_XS_BASE(BASE, BASE_LEN)
-  SV* BASE
-  SV* BASE_LEN
-
-  CODE:
-    XS_BASE = SvNV(BASE); 
-    XS_BASE_LEN = SvIV(BASE_LEN); 
+BOOT:
+{
+    if (items < 4)
+	croak_xs_usage(cv, "package, version, base_len, base");
+    XS_BASE_LEN = SvIV(ST(2)); 
+    XS_BASE = SvNV(ST(3)); 
+}
 
 ##############################################################################
 # _new
 
-AV *
+SV *
 _new(class, x)
   SV*	x
   INIT:
     STRLEN len;
     char* cur;
     STRLEN part_len;
+    AV *av = newAV();
 
   CODE:
-    /* create the array */
-    RETVAL = newAV();
-    sv_2mortal((SV*)RETVAL);
     if (SvUOK(x) && SvUV(x) < XS_BASE)
       {
       /* shortcut for integer arguments */
-      av_push (RETVAL, newSVuv( SvUV(x) ));
+      av_push (av, newSVuv( SvUV(x) ));
       }
     else
       {
@@ -95,10 +84,11 @@ _new(class, x)
         /* printf ("part '%s' (part_len: %i, len: %i, BASE_LEN: %i)\n", cur, part_len, len, XS_BASE_LEN); */
         if (part_len > 0)
 	  {
-	  av_push (RETVAL, newSVpvn(cur, part_len) );
+	  av_push (av, newSVpvn(cur, part_len) );
 	  }
         }
       }
+    RETVAL = newRV_noinc((SV *)av);
   OUTPUT:
     RETVAL
 
@@ -304,37 +294,17 @@ _num(class,x)
 
 ##############################################################################
 
-AV *
+SV *
 _zero(class)
+  ALIAS:
+    _one = 1
+    _two = 2
+    _ten = 10
+  PREINIT:
+    AV *av = newAV();
   CODE:
-    CONSTANT_OBJ(0)
-  OUTPUT:
-    RETVAL
-
-##############################################################################
-
-AV *
-_one(class)
-  CODE:
-    CONSTANT_OBJ(1)
-  OUTPUT:
-    RETVAL
-
-##############################################################################
-
-AV *
-_two(class)
-  CODE:
-    CONSTANT_OBJ(2)
-  OUTPUT:
-    RETVAL
-
-##############################################################################
-
-AV *
-_ten(class)
-  CODE:
-    CONSTANT_OBJ(10)
+    av_push (av, newSViv( ix ));
+    RETVAL = newRV_noinc((SV *)av);
   OUTPUT:
     RETVAL
 
@@ -343,6 +313,8 @@ _ten(class)
 void
 _is_even(class, x)
   SV*	x
+  ALIAS:
+    _is_odd = 1
   INIT:
     AV*	a;
     SV*	temp;
@@ -350,97 +322,32 @@ _is_even(class, x)
   CODE:
     a = (AV*)SvRV(x);		/* ref to aray, don't check ref */
     temp = *av_fetch(a, 0, 0);	/* fetch first element */
-    ST(0) = sv_2mortal(boolSV((SvIV(temp) & 1) == 0));
-
-##############################################################################
-
-void
-_is_odd(class, x)
-  SV*	x
-  INIT:
-    AV*	a;
-    SV*	temp;
-
-  CODE:
-    a = (AV*)SvRV(x);		/* ref to aray, don't check ref */
-    temp = *av_fetch(a, 0, 0);	/* fetch first element */
-    ST(0) = sv_2mortal(boolSV((SvIV(temp) & 1) != 0));
-
-##############################################################################
-
-void
-_is_one(class, x)
-  SV*	x
-  INIT:
-    AV*	a;
-    SV*	temp;
-
-  CODE:
-    a = (AV*)SvRV(x);			/* ref to aray, don't check ref */
-    if ( av_len(a) != 0)
-      {
-      ST(0) = &PL_sv_no;
-      XSRETURN(1);			/* len != 1, can't be '1' */
-      }
-    temp = *av_fetch(a, 0, 0);		/* fetch first element */
-    RETURN_MORTAL_BOOL(temp, 1);
-
-##############################################################################
-
-void
-_is_two(class, x)
-  SV*	x
-  INIT:
-    AV*	a;
-    SV*	temp;
-
-  CODE:
-    a = (AV*)SvRV(x);			/* ref to aray, don't check ref */
-    if ( av_len(a) != 0)
-      {
-      ST(0) = &PL_sv_no;
-      XSRETURN(1);			/* len != 1, can't be '2' */
-      }
-    temp = *av_fetch(a, 0, 0);		/* fetch first element */
-    RETURN_MORTAL_BOOL(temp, 2);
-
-##############################################################################
-
-void
-_is_ten(class, x)
-  SV*	x
-  INIT:
-    AV*	a;
-    SV*	temp;
-
-  CODE:
-    a = (AV*)SvRV(x);			/* ref to aray, don't check ref */
-    if ( av_len(a) != 0)
-      {
-      ST(0) = &PL_sv_no;
-      XSRETURN(1);			/* len != 1, can't be '10' */
-      }
-    temp = *av_fetch(a, 0, 0);		/* fetch first element */
-    RETURN_MORTAL_BOOL(temp, 10);
+    ST(0) = sv_2mortal(boolSV((SvIV(temp) & 1) == ix));
 
 ##############################################################################
 
 void
 _is_zero(class, x)
   SV*	x
+  ALIAS:
+    _is_one = 1
+    _is_two = 2
+    _is_ten = 10
   INIT:
     AV*	a;
-    SV*	temp;
 
   CODE:
     a = (AV*)SvRV(x);			/* ref to aray, don't check ref */
     if ( av_len(a) != 0)
       {
-      ST(0) = &PL_sv_no;
-      XSRETURN(1);			/* len != 1, can't be '0' */
+      ST(0) = &PL_sv_no;		/* len != 1, can't be '0' */
       }
-    temp = *av_fetch(a, 0, 0);		/* fetch first element */
-    RETURN_MORTAL_BOOL(temp, 0);
+    else
+      {
+      SV *const temp = *av_fetch(a, 0, 0);	/* fetch first element */
+      ST(0) = boolSV(SvIV(temp) == ix);
+      }
+    XSRETURN(1);		
 
 ##############################################################################
 

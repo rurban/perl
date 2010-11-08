@@ -67,6 +67,7 @@ struct mro_meta {
     (((smeta)->mro_which && (which) == (smeta)->mro_which) \
      ? (smeta)->mro_linear_current			   \
      : Perl_mro_get_private_data(aTHX_ (smeta), (which)))
+#define mro_isa_changed_in(stash) mro_isa_changed_in3(stash, NULL, 0)
 
 /* Subject to change.
    Don't access this directly.
@@ -77,6 +78,13 @@ struct xpvhv_aux {
     AV		*xhv_backreferences; /* back references for weak references */
     HE		*xhv_eiter;	/* current entry of iterator */
     I32		xhv_riter;	/* current root of iterator */
+/* Concerning xhv_name_count: When non-zero, xhv_name is actually a pointer 
+ * to an array of HEK pointers, this being the length. The first element is
+ * the name of the stash, which may be NULL. If xhv_name_count is positive,
+ * then *xhv_name is one of the effective names. If xhv_name_count is nega-
+ * tive, then xhv_name[1] is the first effective name.
+ */
+    I32		xhv_name_count;
     struct mro_meta *xhv_mro_meta;
 };
 
@@ -171,6 +179,14 @@ Null HV pointer.
 Returns the package name of a stash, or NULL if C<stash> isn't a stash.
 See C<SvSTASH>, C<CvSTASH>.
 
+=for apidoc Am|char*|HvENAME|HV* stash
+Returns the effective name of a stash, or NULL if there is none. The
+effective name represents a location in the symbol table where this stash
+resides. It is updated automatically when packages are aliased or deleted.
+A stash that is no longer in the symbol table has no effective name. This
+name is preferable to C<HvNAME> for use in MRO linearisations and isa
+caches.
+
 =for apidoc Am|void*|HeKEY|HE* he
 Returns the actual pointer stored in the key slot of the hash entry. The
 pointer may be either C<char*> or C<SV*>, depending on the value of
@@ -246,6 +262,7 @@ C<SV*>.
 #define HvRITER_get(hv)	(SvOOK(hv) ? HvAUX(hv)->xhv_riter : -1)
 #define HvEITER_get(hv)	(SvOOK(hv) ? HvAUX(hv)->xhv_eiter : NULL)
 #define HvNAME(hv)	HvNAME_get(hv)
+#define HvENAME(hv)	HvENAME_get(hv)
 
 /* Checking that hv is a valid package stash is the
    caller's responsibility */
@@ -255,12 +272,36 @@ C<SV*>.
 
 /* FIXME - all of these should use a UTF8 aware API, which should also involve
    getting the length. */
+#define HvNAME_HEK_NN(hv)      \
+ (                              \
+  HvAUX(hv)->xhv_name_count      \
+   ? *(HEK **)HvAUX(hv)->xhv_name \
+   : HvAUX(hv)->xhv_name           \
+ )
 /* This macro may go away without notice.  */
-#define HvNAME_HEK(hv) (SvOOK(hv) ? HvAUX(hv)->xhv_name : NULL)
-#define HvNAME_get(hv)	((SvOOK(hv) && (HvAUX(hv)->xhv_name)) \
-			 ? HEK_KEY(HvAUX(hv)->xhv_name) : NULL)
-#define HvNAMELEN_get(hv)	((SvOOK(hv) && (HvAUX(hv)->xhv_name)) \
-				 ? HEK_LEN(HvAUX(hv)->xhv_name) : 0)
+#define HvNAME_HEK(hv) \
+	(SvOOK(hv) && HvAUX(hv)->xhv_name ? HvNAME_HEK_NN(hv) : NULL)
+#define HvNAME_get(hv) \
+	((SvOOK(hv) && (HvAUX(hv)->xhv_name) && HvNAME_HEK_NN(hv)) \
+			 ? HEK_KEY(HvNAME_HEK_NN(hv)) : NULL)
+#define HvNAMELEN_get(hv) \
+	((SvOOK(hv) && (HvAUX(hv)->xhv_name) && HvNAME_HEK_NN(hv)) \
+				 ? HEK_LEN(HvNAME_HEK_NN(hv)) : 0)
+#define HvENAME_HEK_NN(hv)                                             \
+ (                                                                      \
+  HvAUX(hv)->xhv_name_count > 0   ? *(HEK **)HvAUX(hv)->xhv_name      : \
+  HvAUX(hv)->xhv_name_count < -1  ? ((HEK **)HvAUX(hv)->xhv_name)[1] : \
+  HvAUX(hv)->xhv_name_count == -1 ? NULL                              : \
+                                    HvAUX(hv)->xhv_name                 \
+ )
+#define HvENAME_HEK(hv) \
+	(SvOOK(hv) && HvAUX(hv)->xhv_name ? HvENAME_HEK_NN(hv) : NULL)
+#define HvENAME_get(hv) \
+	((SvOOK(hv) && (HvAUX(hv)->xhv_name) && HvENAME_HEK_NN(hv)) \
+			 ? HEK_KEY(HvENAME_HEK_NN(hv)) : NULL)
+#define HvENAMELEN_get(hv) \
+	((SvOOK(hv) && (HvAUX(hv)->xhv_name) && HvENAME_HEK_NN(hv)) \
+				 ? HEK_LEN(HvENAME_HEK_NN(hv)) : 0)
 
 /* the number of keys (including any placeholers) */
 #define XHvTOTALKEYS(xhv)	((xhv)->xhv_keys)
@@ -450,14 +491,10 @@ C<SV*>.
    between threads (because it hangs from OPs, which are shared), hence the
    alternate definition and mutex.  */
 
-#define cop_hints_fetchsv(cop, keysv, hash) \
-    Perl_cop_hints_fetchpvn(aTHX_ (cop), SvPV_nolen(keysv), SvCUR(keysv), \
-	(SvUTF8(keysv) ? HVhek_UTF8 : 0), (hash))
-
-#define cop_hints_fetchpvs(cop, key) \
-    Perl_cop_hints_fetchpvn(aTHX_ (cop), STR_WITH_LEN(key), 0, 0)
-
 struct refcounted_he;
+
+/* flags for the refcounted_he API */
+#define REFCOUNTED_HE_KEY_UTF8		0x00000001
 
 #ifdef PERL_CORE
 
@@ -481,6 +518,30 @@ struct refcounted_he {
        non-NUL terminated key.  */
     char                  refcounted_he_data[1];
 };
+
+/*
+=for apidoc m|SV *|refcounted_he_fetch_pvs|const struct refcounted_he *chain|const char *key|U32 flags
+
+Like L</refcounted_he_fetch_pvn>, but takes a literal string instead of
+a string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define refcounted_he_fetch_pvs(chain, key, flags) \
+    Perl_refcounted_he_fetch_pvn(aTHX_ chain, STR_WITH_LEN(key), 0, flags)
+
+/*
+=for apidoc m|struct refcounted_he *|refcounted_he_new_pvs|struct refcounted_he *parent|const char *key|SV *value|U32 flags
+
+Like L</refcounted_he_new_pvn>, but takes a literal string instead of
+a string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define refcounted_he_new_pvs(parent, key, value, flags) \
+    Perl_refcounted_he_new_pvn(aTHX_ parent, STR_WITH_LEN(key), 0, value, flags)
 
 /* Flag bits are HVhek_UTF8, HVhek_WASUTF8, then */
 #define HVrhek_undef	0x00 /* Value is undef. */

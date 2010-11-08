@@ -29,10 +29,9 @@ our @EXPORT_OK  = qw(
                      hash_seed hv_store
 
                     );
-our $VERSION = '0.09';
-require DynaLoader;
-local @ISA = qw(DynaLoader);
-bootstrap Hash::Util $VERSION;
+our $VERSION = '0.10';
+require XSLoader;
+XSLoader::load();
 
 sub import {
     my $class = shift;

@@ -251,7 +251,6 @@ inet_ntoa(ip_address_sv)
 	{
 	STRLEN addrlen;
 	struct in_addr addr;
-	char * addr_str;
 	char * ip_address;
 	if (DO_UTF8(ip_address_sv) && !sv_utf8_downgrade(ip_address_sv, 1))
 	     croak("Wide character in %s", "Socket::inet_ntoa");
@@ -270,14 +269,11 @@ inet_ntoa(ip_address_sv)
 	 * in HP-UX + GCC + 64bitint (returns "0.0.0.0"),
 	 * so let's use this sprintf() workaround everywhere.
 	 * This is also more threadsafe than using inet_ntoa(). */
-	Newx(addr_str, 4 * 3 + 3 + 1, char); /* IPv6? */
-	sprintf(addr_str, "%d.%d.%d.%d",
-		((addr.s_addr >> 24) & 0xFF),
-		((addr.s_addr >> 16) & 0xFF),
-		((addr.s_addr >>  8) & 0xFF),
-		( addr.s_addr        & 0xFF));
-	ST(0) = newSVpvn_flags(addr_str, strlen(addr_str), SVs_TEMP);
-	Safefree(addr_str);
+	ST(0) = sv_2mortal(Perl_newSVpvf(aTHX_ "%d.%d.%d.%d", /* IPv6? */
+					 ((addr.s_addr >> 24) & 0xFF),
+					 ((addr.s_addr >> 16) & 0xFF),
+					 ((addr.s_addr >>  8) & 0xFF),
+					 ( addr.s_addr        & 0xFF)));
 	}
 
 void
@@ -465,22 +461,34 @@ inet_ntop(af, ip_address_sv)
         CODE:
 #ifdef HAS_INETNTOP
 	STRLEN addrlen, struct_size;
+#ifdef AF_INET6
 	struct in6_addr addr;
 	char str[INET6_ADDRSTRLEN];
+#else
+	struct in_addr addr;
+	char str[INET_ADDRSTRLEN];
+#endif
 	char *ip_address = SvPV(ip_address_sv, addrlen);
 
-        if(af == AF_INET) {
-            struct_size = sizeof(struct in_addr);
-        } else if(af == AF_INET6) {
-            struct_size = sizeof(struct in6_addr);
-        } else {
-           croak("Bad address family for %s, got %d, should be either AF_INET or AF_INET6",
+	struct_size = sizeof(addr);
+
+	if(af != AF_INET
+#ifdef AF_INET6
+	    && af != AF_INET6
+#endif
+	  ) {
+           croak("Bad address family for %s, got %d, should be"
+#ifdef AF_INET6
+	       " either AF_INET or AF_INET6",
+#else
+	       " AF_INET",
+#endif
                "Socket::inet_ntop",
                af);
         }
 
 	Copy( ip_address, &addr, sizeof addr, char );
-	inet_ntop(af, &addr, str, INET6_ADDRSTRLEN);
+	inet_ntop(af, &addr, str, sizeof str);
 
 	ST(0) = newSVpvn_flags(str, strlen(str), SVs_TEMP);
 #else
@@ -494,9 +502,23 @@ inet_pton(af, host)
         CODE:
 #ifdef HAS_INETPTON
         int ok;
-        struct in6_addr ip_address;
-        if(af != AF_INET && af != AF_INET6) {
-           croak("Bad address family for %s, got %d, should be either AF_INET or AF_INET6",
+#ifdef AF_INET6
+	struct in6_addr ip_address;
+#else
+	struct in_addr ip_address;
+#endif
+
+	if(af != AF_INET
+#ifdef AF_INET6
+		&& af != AF_INET6
+#endif
+	  ) {
+		croak("Bad address family for %s, got %d, should be"
+#ifdef AF_INET6
+			" either AF_INET or AF_INET6",
+#else
+			" AF_INET",
+#endif
                         "Socket::inet_pton",
                         af);
         }
@@ -504,8 +526,7 @@ inet_pton(af, host)
 
         ST(0) = sv_newmortal();
         if (ok) {
-                sv_setpvn( ST(0), (char *)&ip_address,
-                           af == AF_INET6 ? sizeof(ip_address) : sizeof(struct in_addr) );
+                sv_setpvn( ST(0), (char *)&ip_address, sizeof(ip_address) );
         }
 #else
         ST(0) = (SV *)not_here("inet_pton");

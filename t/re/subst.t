@@ -7,7 +7,7 @@ BEGIN {
 }
 
 require './test.pl';
-plan( tests => 172 );
+plan( tests => 174 );
 
 # Stolen from re/ReTest.pl. Can't just use the file since it doesn't support
 # like() and it conflicts with test.pl
@@ -64,7 +64,7 @@ like( $@, qr{Using !~ with s///r doesn't make sense}, 's///r !~ operator gives e
         must_warn sub { $b = $a =~ s/left/right/r }, '^Use of uninitialized value', 's///r Uninitialized warning';
 
         $a = 'david';
-        must_warn 's/david/sucks/r; 1',    '^Useless use of Non-destructive substitution', 's///r void context warning';
+        must_warn 's/david/sucks/r; 1',    '^Useless use of non-destructive substitution', 's///r void context warning';
 }
 
 $a = '';
@@ -87,6 +87,11 @@ ok( defined tied($m), 's///r magic isn\'t lost' );
 
 $b = $m =~ s/xxx/yyy/r;
 ok( ! defined tied($b), 's///r magic isn\'t contagious' );
+
+my $ref = \("aaa" =~ s/aaa/bbb/r);
+is (Internals::SvREFCNT($$ref), 1, 's///r does not leak');
+$ref = \("aaa" =~ s/aaa/bbb/rg);
+is (Internals::SvREFCNT($$ref), 1, 's///rg does not leak');
 
 $x = 'foo';
 $_ = "x";

@@ -1,7 +1,7 @@
 #!./perl
 
 # A place to put some simple leak tests. Uses XS::APItest to make
-# PL_sv_count available, allowing us to run a bit a code multiple times and
+# PL_sv_count available, allowing us to run a bit of code multiple times and
 # see if the count increases.
 
 BEGIN {
@@ -13,7 +13,7 @@ BEGIN {
 	or skip_all("XS::APItest not available");
 }
 
-plan tests => 5;
+plan tests => 19;
 
 # run some code N times. If the number of SVs at the end of loop N is
 # greater than (N-1)*delta at the end of loop 1, we've got a leak
@@ -71,3 +71,73 @@ sub STORE	{ $_[0]->[$_[1]] = $_[2] }
 # [perl #74484]  repeated tries leaked SVs on the tmps stack
 
 leak_expr(5, 0, q{"YYYYYa" =~ /.+?(a(.+?)|b)/ }, "trie leak");
+
+# [perl #48004] map/grep didn't free tmps till the end
+
+{
+    # qr/1/ just creates tmps that are hopefully freed per iteration
+
+    my $s;
+    my @a;
+    my @count = (0) x 4; # pre-allocate
+
+    grep qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 0, "void   grep expr:  no new tmps per iter");
+    grep { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 0, "void   grep block: no new tmps per iter");
+
+    $s = grep qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 0, "scalar grep expr:  no new tmps per iter");
+    $s = grep { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 0, "scalar grep block: no new tmps per iter");
+
+    @a = grep qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 0, "list   grep expr:  no new tmps per iter");
+    @a = grep { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 0, "list   grep block: no new tmps per iter");
+
+
+    map qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 0, "void   map expr:  no new tmps per iter");
+    map { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 0, "void   map block: no new tmps per iter");
+
+    $s = map qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 0, "scalar map expr:  no new tmps per iter");
+    $s = map { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 0, "scalar map block: no new tmps per iter");
+
+    @a = map qr/1/ && ($count[$_] = sv_count()) && 99,  0..3;
+    is(@count[3] - @count[0], 3, "list   map expr:  one new tmp per iter");
+    @a = map { qr/1/ && ($count[$_] = sv_count()) && 99 }  0..3;
+    is(@count[3] - @count[0], 3, "list   map block: one new tmp per iter");
+
+}
+
+SKIP:
+{ # broken by 304474c3, fixed by cefd5c7c, but didn't seem to cause
+  # any other test failures
+  # base test case from ribasushi (Peter Rabbitson)
+  eval { require Scalar::Util; Scalar::Util->import("weaken"); 1; }
+    or skip "no weaken", 1;
+  my $weak;
+  {
+    $weak = my $in = {};
+    weaken($weak);
+    my $out = { in => $in, in => undef }
+  }
+  ok(!$weak, "hash referenced weakened SV released");
+}
+
+# RT #72246: rcatline memory leak on bad $/
+
+leak(2, 0,
+    sub {
+	my $f;
+	open CATLINE, '<', \$f;
+	local $/ = "\x{262E}";
+	my $str = "\x{2622}";
+	eval { $str .= <CATLINE> };
+    },
+    "rcatline leak"
+);

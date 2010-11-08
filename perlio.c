@@ -1340,6 +1340,8 @@ int
 PerlIO_apply_layers(pTHX_ PerlIO *f, const char *mode, const char *names)
 {
     int code = 0;
+    ENTER;
+    save_scalar(PL_errgv);
     if (f && names) {
 	PerlIO_list_t * const layers = PerlIO_list_alloc(aTHX);
 	code = PerlIO_parse_layers(aTHX_ layers, names);
@@ -1348,6 +1350,7 @@ PerlIO_apply_layers(pTHX_ PerlIO *f, const char *mode, const char *names)
 	}
 	PerlIO_list_free(aTHX_ layers);
     }
+    LEAVE;
     return code;
 }
 
@@ -5232,8 +5235,7 @@ Perl_PerlIO_context_layers(pTHX_ const char *mode)
     if (!direction)
 	return NULL;
 
-    layers = Perl_refcounted_he_fetch(aTHX_ PL_curcop->cop_hints_hash,
-				      0, direction, 5, 0, 0);
+    layers = cop_hints_fetch_pvn(PL_curcop, direction, 5, 0, 0);
 
     assert(layers);
     return SvOK(layers) ? SvPV_nolen_const(layers) : NULL;

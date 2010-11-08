@@ -4,7 +4,8 @@ use strict;
 use vars qw( @ISA $VERSION $MATCH_SUPERS $USING_LANGUAGE_TAGS
 $USE_LITERALS $MATCH_SUPERS_TIGHTLY);
 use Carp ();
-use I18N::LangTags 0.30 ();
+use I18N::LangTags ();
+use I18N::LangTags::Detect ();
 
 #--------------------------------------------------------------------------
 
@@ -26,7 +27,7 @@ BEGIN {
 }
 
 
-$VERSION = '1.16';
+$VERSION = '1.17';
 @ISA = ();
 
 $MATCH_SUPERS = 1;
@@ -147,8 +148,7 @@ sub failure_handler_auto {
     $handle->{'failure_lex'} ||= {};
     my $lex = $handle->{'failure_lex'};
 
-    my $value;
-    $lex->{$phrase} ||= ($value = $handle->_compile($phrase));
+    my $value ||= ($lex->{$phrase} ||= $handle->_compile($phrase));
 
     # Dumbly copied from sub maketext:
     return ${$value} if ref($value) eq 'SCALAR';
@@ -160,12 +160,11 @@ sub failure_handler_auto {
     # If we make it here, there was an exception thrown in the
     #  call to $value, and so scream:
     if($@) {
-        my $err = $@;
         # pretty up the error message
-        $err =~ s{\s+at\s+\(eval\s+\d+\)\s+line\s+(\d+)\.?\n?}
+        $@ =~ s{\s+at\s+\(eval\s+\d+\)\s+line\s+(\d+)\.?\n?}
                  {\n in bracket code [compiled line $1],}s;
         #$err =~ s/\n?$/\n/s;
-        Carp::croak "Error in maketexting \"$phrase\":\n$err as used";
+        Carp::croak "Error in maketexting \"$phrase\":\n$@ as used";
         # Rather unexpected, but suppose that the sub tried calling
         # a method that didn't exist.
     }
@@ -195,9 +194,12 @@ sub maketext {
     my($handle, $phrase) = splice(@_,0,2);
     Carp::confess('No handle/phrase') unless (defined($handle) && defined($phrase));
 
+    # backup $@ in case it it's still being used in the calling code.
+    # If no failures, we'll re-set it back to what it was later.
+    my $at = $@;
 
-    # Don't interefere with $@ in case that's being interpolated into the msg.
-    local $@;
+    # Copy @_ case one of its elements is $@.
+    @_ = @_;
 
     # Look up the value:
 
@@ -248,10 +250,12 @@ sub maketext {
             DEBUG and warn "WARNING0: maketext fails looking for <$phrase>\n";
             my $fail;
             if(ref($fail = $handle->{'fail'}) eq 'CODE') { # it's a sub reference
+                $@ = $at; # Put $@ back in case we altered it along the way.
                 return &{$fail}($handle, $phrase, @_);
                 # If it ever returns, it should return a good value.
             }
             else { # It's a method name
+                $@ = $at; # Put $@ back in case we altered it along the way.
                 return $handle->$fail($phrase, @_);
                 # If it ever returns, it should return a good value.
             }
@@ -262,8 +266,14 @@ sub maketext {
         }
     }
 
-    return $$value if ref($value) eq 'SCALAR';
-    return $value unless ref($value) eq 'CODE';
+    if(ref($value) eq 'SCALAR'){
+        $@ = $at; # Put $@ back in case we altered it along the way.
+        return $$value ;
+    }
+    if(ref($value) ne 'CODE'){
+        $@ = $at; # Put $@ back in case we altered it along the way.
+        return $value ;
+    }
 
     {
         local $SIG{'__DIE__'};
@@ -272,18 +282,19 @@ sub maketext {
     # If we make it here, there was an exception thrown in the
     #  call to $value, and so scream:
     if ($@) {
-        my $err = $@;
         # pretty up the error message
-        $err =~ s{\s+at\s+\(eval\s+\d+\)\s+line\s+(\d+)\.?\n?}
+        $@ =~ s{\s+at\s+\(eval\s+\d+\)\s+line\s+(\d+)\.?\n?}
                  {\n in bracket code [compiled line $1],}s;
         #$err =~ s/\n?$/\n/s;
-        Carp::croak "Error in maketexting \"$phrase\":\n$err as used";
+        Carp::croak "Error in maketexting \"$phrase\":\n$@ as used";
         # Rather unexpected, but suppose that the sub tried calling
         # a method that didn't exist.
     }
     else {
+        $@ = $at; # Put $@ back in case we altered it along the way.
         return $value;
     }
+    $@ = $at; # Put $@ back in case we altered it along the way.
 }
 
 ###########################################################################
@@ -380,7 +391,6 @@ sub _langtag_munging {
 ###########################################################################
 
 sub _ambient_langprefs {
-    require I18N::LangTags::Detect;
     return  I18N::LangTags::Detect::detect();
 }
 
@@ -435,10 +445,11 @@ sub _try_use {   # Basically a wrapper around "require Modulename"
     }
 
     DEBUG and warn " About to use $module ...\n";
-    {
-        local $SIG{'__DIE__'};
-        eval "require $module"; # used to be "use $module", but no point in that.
-    }
+
+    local $SIG{'__DIE__'};
+    local $@;
+    eval "require $module"; # used to be "use $module", but no point in that.
+
     if($@) {
         DEBUG and warn "Error using $module \: $@\n";
         return $tried{$module} = 0;
@@ -489,6 +500,13 @@ sub _compile {
     # It returns either a coderef if there's brackety bits in this, or
     #  otherwise a ref to a scalar.
 
+    my $string_to_compile = $_[1]; # There are taint issues using regex on @_ - perlbug 60378,27344
+
+    # The while() regex is more expensive than this check on strings that don't need a compile.
+    # this op causes a ~2% speed hit for strings that need compile and a 250% speed improvement
+    # on strings that don't need compiling.
+    return \"$string_to_compile" if($string_to_compile !~ m/[\[~\]]/ms); # return a string ref if chars [~] are not in the string
+
     my $target = ref($_[0]) || $_[0];
 
     my(@code);
@@ -499,10 +517,9 @@ sub _compile {
         my $in_group = 0; # start out outside a group
         my($m, @params); # scratch
 
-	my $string_to_compile = $_[1]; # There are taint issues using regex on @_ - perlbug 60378,27344
         while($string_to_compile =~  # Iterate over chunks.
-            m/\G(
-                [^\~\[\]]+  # non-~[] stuff
+            m/(
+                [^\~\[\]]+  # non-~[] stuff (Capture everything else here)
                 |
                 ~.       # ~[, ~], ~~, ~other
                 |

@@ -655,8 +655,8 @@ int scnt;
 	    if (scnt == 4) {
 		unsigned int c1, c2;
 		scnt = sscanf(inspec, "%2x%2x", &c1, &c2);
-		outspec[0] == c1 & 0xff;
-		outspec[1] == c2 & 0xff;
+		outspec[0] = c1 & 0xff;
+		outspec[1] = c2 & 0xff;
 		if (scnt > 1) {
 		    (*output_cnt) += 2;
 		    count += 4;
@@ -13452,7 +13452,7 @@ candelete_fromperl(pTHX_ CV *cv)
   mysv = SvROK(ST(0)) ? SvRV(ST(0)) : ST(0);
   Newx(fspec, VMS_MAXRSS, char);
   if (fspec == NULL) _ckvmssts(SS$_INSFMEM);
-  if (SvTYPE(mysv) == SVt_PVGV) {
+  if (isGV_with_GP(mysv)) {
     if (!(io = GvIOp(mysv)) || !PerlIO_getname(IoIFP(io),fspec)) {
       set_errno(EINVAL); set_vaxc_errno(LIB$_INVARG);
       ST(0) = &PL_sv_no;
@@ -13493,7 +13493,7 @@ rmscopy_fromperl(pTHX_ CV *cv)
 
   mysv = SvROK(ST(0)) ? SvRV(ST(0)) : ST(0);
   Newx(inspec, VMS_MAXRSS, char);
-  if (SvTYPE(mysv) == SVt_PVGV) {
+  if (isGV_with_GP(mysv)) {
     if (!(io = GvIOp(mysv)) || !PerlIO_getname(IoIFP(io),inspec)) {
       set_errno(EINVAL); set_vaxc_errno(LIB$_INVARG);
       ST(0) = sv_2mortal(newSViv(0));
@@ -13512,7 +13512,7 @@ rmscopy_fromperl(pTHX_ CV *cv)
   }
   mysv = SvROK(ST(1)) ? SvRV(ST(1)) : ST(1);
   Newx(outspec, VMS_MAXRSS, char);
-  if (SvTYPE(mysv) == SVt_PVGV) {
+  if (isGV_with_GP(mysv)) {
     if (!(io = GvIOp(mysv)) || !PerlIO_getname(IoIFP(io),outspec)) {
       set_errno(EINVAL); set_vaxc_errno(LIB$_INVARG);
       ST(0) = sv_2mortal(newSViv(0));

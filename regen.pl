@@ -26,8 +26,9 @@ warnings.pl
 embed.pl
 );
 
-foreach my $pl (@scripts) {
+my $tap = $ARGV[0] && $ARGV[0] eq '--tap' ? '# ' : '';
+foreach my $pl (map {"regen/$_"} @scripts) {
   my @command =  ($^X, $pl, @ARGV);
-  print "@command\n";
+  print "$tap@command\n";
   system @command;
 }

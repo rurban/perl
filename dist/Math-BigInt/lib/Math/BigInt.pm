@@ -6,7 +6,7 @@ package Math::BigInt;
 #
 
 # The following hash values are used:
-#   value: unsigned int with actual value (as a Math::BigInt::Calc or similiar)
+#   value: unsigned int with actual value (as a Math::BigInt::Calc or similar)
 #   sign : +,-,NaN,+inf,-inf
 #   _a   : accuracy
 #   _p   : precision
@@ -18,7 +18,7 @@ package Math::BigInt;
 my $class = "Math::BigInt";
 use 5.006002;
 
-$VERSION = '1.96';
+$VERSION = '1.98';
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(objectify bgcd blcm); 
@@ -799,7 +799,7 @@ sub bone
   }
 
 ##############################################################################
-# string conversation
+# string conversion
 
 sub bsstr
   {
@@ -1787,7 +1787,7 @@ sub bmodinv
   {
   # Modular inverse.  given a number which is (hopefully) relatively
   # prime to the modulus, calculate its inverse using Euclid's
-  # alogrithm.  If the number is not relatively prime to the modulus
+  # algorithm.  If the number is not relatively prime to the modulus
   # (i.e. their gcd is not one) then NaN is returned.
 
   # set up parameters
@@ -2559,7 +2559,7 @@ sub objectify
         {
         $k = $a[0]->new($k);
         }
-      elsif (!defined $up && ref($k) ne $a[0])
+      elsif (ref($k) ne $a[0] and !defined $up || ref $k ne $up)
 	{
 	# foreign object, try to convert to integer
         $k->can('as_number') ? $k = $k->as_number() : $k = $a[0]->new($k);
@@ -3099,7 +3099,7 @@ Math::BigInt - Arbitrary size integer/float math package
   # will warn if Math::BigInt::GMP cannot be found
   use Math::BigInt lib => 'GMP';
 
-  # to supress the warning use this:
+  # to suppress the warning use this:
   # use Math::BigInt try => 'GMP';
 
   # dies if GMP cannot be loaded:
@@ -3230,7 +3230,7 @@ Math::BigInt - Arbitrary size integer/float math package
   $x->as_int();		   # return as BigInt (in BigInt: same as copy())
   $x->numify();		   # return as scalar (might overflow!)
   
-  # conversation to string (do not modify their argument)
+  # conversion to string (do not modify their argument)
   $x->bstr();		   # normalized string (e.g. '3')
   $x->bsstr();		   # norm. string in scientific notation (e.g. '3E0')
   $x->as_hex();		   # as signed hexadecimal string with prefixed 0x
@@ -3269,7 +3269,7 @@ Input values to these routines may be any string, that looks like a number
 and results in an integer, including hexadecimal and binary numbers.
 
 Scalars holding numbers may also be passed, but note that non-integer numbers
-may already have lost precision due to the conversation to float. Quote
+may already have lost precision due to the conversion to float. Quote
 your input if you want BigInt to see all the digits:
 
 	$x = Math::BigInt->new(12345678890123456789);	# bad
@@ -3508,7 +3508,7 @@ See L<Input> for more info on accepted input formats.
 
 =head2 from_bin()
 
-	$x = Math::BigInt->from_bin("0x10011");	# input is binary
+	$x = Math::BigInt->from_bin("0b10011");	# input is binary
 
 =head2 bnan()
 
@@ -3988,7 +3988,7 @@ This loses precision, to avoid this use L<as_int()> instead.
 	$x->modify('bpowd');
 
 This method returns 0 if the object can be modified with the given
-peration, or 1 if not.
+operation, or 1 if not.
 
 This is used for instance by L<Math::BigInt::Constant>.
 
@@ -4715,7 +4715,7 @@ As a shortcut, you can use the module C<bignum>:
 
 	use bignum;
 
-Also good for oneliners:
+Also good for one-liners:
 
 	perl -Mbignum -le 'print 2 ** 255'
 
@@ -4877,7 +4877,7 @@ instead.
 
 The quotient is always the greatest integer less than or equal to the
 real-valued quotient of the two operands, and the remainder (when it is
-nonzero) always has the same sign as the second operand; so, for
+non-zero) always has the same sign as the second operand; so, for
 example,
 
 	  1 / 4  => ( 0, 1)

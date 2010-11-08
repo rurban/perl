@@ -194,11 +194,12 @@ Unary "!" performs logical negation, i.e., "not".  See also C<not> for a lower
 precedence version of this.
 X<!>
 
-Unary "-" performs arithmetic negation if the operand is numeric.  If
-the operand is an identifier, a string consisting of a minus sign
-concatenated with the identifier is returned.  Otherwise, if the string
-starts with a plus or minus, a string starting with the opposite sign
-is returned.  One effect of these rules is that -bareword is equivalent
+Unary "-" performs arithmetic negation if the operand is numeric,
+including any string that looks like a number.  If the operand is
+an identifier, a string consisting of a minus sign concatenated
+with the identifier is returned.  Otherwise, if the string starts
+with a plus or minus, a string starting with the opposite sign is
+returned.  One effect of these rules is that -bareword is equivalent
 to the string "-bareword".  If, however, the string begins with a
 non-alphabetic character (excluding "+" or "-"), Perl will attempt to convert
 the string to a numeric and the arithmetic negation is performed. If the
@@ -235,9 +236,10 @@ of operation work on some other string.  The right argument is a search
 pattern, substitution, or transliteration.  The left argument is what is
 supposed to be searched, substituted, or transliterated instead of the default
 $_.  When used in scalar context, the return value generally indicates the
-success of the operation.  The exception is substitution with the C</r>
-(non-destructive) option, which causes the return value to be the result of
-the substition.  Behavior in list context depends on the particular operator.
+success of the operation.  The exceptions are substitution (s///)
+and transliteration (y///) with the C</r> (non-destructive) option,
+which cause the B<r>eturn value to be the result of the substitution.
+Behavior in list context depends on the particular operator.
 See L</"Regexp Quote-Like Operators"> for details and L<perlretut> for
 examples using these operators.
 
@@ -253,7 +255,8 @@ pattern C<\>, which it will consider a syntax error.
 Binary "!~" is just like "=~" except the return value is negated in
 the logical sense.
 
-Binary "!~" with a non-destructive substitution (s///r) is a syntax error.
+Binary "!~" with a non-destructive substitution (s///r) or transliteration
+(y///r) is a syntax error.
 
 =head2 Multiplicative Operators
 X<operator, multiplicative>
@@ -1187,8 +1190,8 @@ X<\l> X<\u> X<\L> X<\U> X<\E> X<\Q>
     \u		uppercase next char
     \L		lowercase till \E
     \U		uppercase till \E
-    \E		end case modification
     \Q		quote non-word characters till \E
+    \E		end either case modification or quoted section
 
 If C<use locale> is in effect, the case map used by C<\l>, C<\L>,
 C<\u> and C<\U> is taken from the current locale.  See L<perllocale>.
@@ -1223,10 +1226,24 @@ C<join $", @array>.    "Punctuation" arrays such as C<@*> are only
 interpolated if the name is enclosed in braces C<@{*}>, but special
 arrays C<@_>, C<@+>, and C<@-> are interpolated, even without braces.
 
-You cannot include a literal C<$> or C<@> within a C<\Q> sequence.
-An unescaped C<$> or C<@> interpolates the corresponding variable,
-while escaping will cause the literal string C<\$> to be inserted.
-You'll need to write something like C<m/\Quser\E\@\Qhost/>.
+For double-quoted strings, the quoting from C<\Q> is applied after
+interpolation and escapes are processed.
+
+    "abc\Qfoo\tbar$s\Exyz"
+
+is equivalent to
+
+    "abc" . quotemeta("foo\tbar$s") . "xyz"
+
+For the pattern of regex operators (C<qr//>, C<m//> and C<s///>),
+the quoting from C<\Q> is applied after interpolation is processed,
+but before escapes are processed. This allows the pattern to match
+literally (except for C<$> and C<@>). For example, the following matches:
+
+    '\s\t' =~ /\Q\s\t/
+
+Because C<$> or C<@> trigger interpolation, you'll need to use something
+like C</\Quser\E\@\Qhost/> to match them literally.
 
 Patterns are subject to an additional level of interpretation as a
 regular expression.  This is done as a second pass, after variables are
@@ -1410,31 +1427,33 @@ $Etc.  The conditional is true if any variables were assigned, i.e., if
 the pattern matched.
 
 The C</g> modifier specifies global pattern matching--that is,
-matching as many times as possible within the string.  How it behaves
-depends on the context.  In list context, it returns a list of the
+matching as many times as possible within the string. How it behaves
+depends on the context. In list context, it returns a list of the
 substrings matched by any capturing parentheses in the regular
-expression.  If there are no parentheses, it returns a list of all
+expression. If there are no parentheses, it returns a list of all
 the matched strings, as if there were parentheses around the whole
 pattern.
 
 In scalar context, each execution of C<m//g> finds the next match,
 returning true if it matches, and false if there is no further match.
-The position after the last match can be read or set using the pos()
-function; see L<perlfunc/pos>.   A failed match normally resets the
+The position after the last match can be read or set using the C<pos()>
+function; see L<perlfunc/pos>. A failed match normally resets the
 search position to the beginning of the string, but you can avoid that
-by adding the C</c> modifier (e.g. C<m//gc>).  Modifying the target
+by adding the C</c> modifier (e.g. C<m//gc>). Modifying the target
 string also resets the search position.
 
 =item \G assertion
 
 You can intermix C<m//g> matches with C<m/\G.../g>, where C<\G> is a
-zero-width assertion that matches the exact position where the previous
-C<m//g>, if any, left off.  Without the C</g> modifier, the C<\G> assertion
-still anchors at pos(), but the match is of course only attempted once.
-Using C<\G> without C</g> on a target string that has not previously had a
-C</g> match applied to it is the same as using the C<\A> assertion to match
-the beginning of the string.  Note also that, currently, C<\G> is only
-properly supported when anchored at the very beginning of the pattern.
+zero-width assertion that matches the exact position where the
+previous C<m//g>, if any, left off. Without the C</g> modifier, the
+C<\G> assertion still anchors at C<pos()> as it was at the start of
+the operation (see L<perlfunc/pos>), but the match is of course only
+attempted once. Using C<\G> without C</g> on a target string that has
+not previously had a C</g> match applied to it is the same as using
+the C<\A> assertion to match the beginning of the string.  Note also
+that, currently, C<\G> is only properly supported when anchored at the
+very beginning of the pattern.
 
 Examples:
 
@@ -1800,10 +1819,10 @@ C<use warnings> pragma and the B<-w> switch (that is, the C<$^W> variable)
 produces warnings if the STRING contains the "," or the "#" character.
 
 
-=item tr/SEARCHLIST/REPLACEMENTLIST/cds
+=item tr/SEARCHLIST/REPLACEMENTLIST/cdsr
 X<tr> X<y> X<transliterate> X</c> X</d> X</s>
 
-=item y/SEARCHLIST/REPLACEMENTLIST/cds
+=item y/SEARCHLIST/REPLACEMENTLIST/cdsr
 
 Transliterates all occurrences of the characters found in the search list
 with the corresponding character in the replacement list.  It returns
@@ -1811,6 +1830,12 @@ the number of characters replaced or deleted.  If no string is
 specified via the =~ or !~ operator, the $_ string is transliterated.  (The
 string specified with =~ must be a scalar variable, an array element, a
 hash element, or an assignment to one of those, i.e., an lvalue.)
+
+If the C</r> (non-destructive) option is used then it will perform the
+replacement on a copy of the string and return the copy whether or not it
+was modified. The original string will always remain unchanged in
+this case. The copy will always be a plain string, even if the input is an
+object or a tied variable.
 
 A character range may be specified with a hyphen, so C<tr/A-J/0-9/>
 does the same replacement as C<tr/ACEGIBDFHJ/0246813579/>.
@@ -1837,6 +1862,8 @@ Options:
     c	Complement the SEARCHLIST.
     d	Delete found but unreplaced characters.
     s	Squash duplicate replaced characters.
+    r	Return the modified string and leave the original string
+	untouched.
 
 If the C</c> modifier is specified, the SEARCHLIST character set
 is complemented.  If the C</d> modifier is specified, any characters
@@ -1867,8 +1894,15 @@ Examples:
     tr/a-zA-Z//s;		# bookkeeper -> bokeper
 
     ($HOST = $host) =~ tr/a-z/A-Z/;
+    $HOST = $host =~ tr/a-z/A-Z/r;   # same thing
+
+    $HOST = $host =~ tr/a-z/A-Z/r    # chained with s///
+                  =~ s/:/ -p/r;
 
     tr/a-zA-Z/ /cs;		# change non-alphas to single space
+
+    @stripped = map tr/a-zA-Z/ /csr, @original;
+				# /r with map
 
     tr [\200-\377]
        [\000-\177];		# delete 8th bit
@@ -2635,17 +2669,17 @@ floating point.  But by saying
 
     use integer;
 
-you may tell the compiler that it's okay to use integer operations
-(if it feels like it) from here to the end of the enclosing BLOCK.
-An inner BLOCK may countermand this by saying
+you may tell the compiler to use integer operations
+(see L<integer> for a detailed explanation) from here to the end of
+the enclosing BLOCK.  An inner BLOCK may countermand this by saying
 
     no integer;
 
 which lasts until the end of that BLOCK.  Note that this doesn't
-mean everything is only an integer, merely that Perl may use integer
-operations if it is so inclined.  For example, even under C<use
-integer>, if you take the C<sqrt(2)>, you'll still get C<1.4142135623731>
-or so.
+mean everything is an integer, merely that Perl will use integer
+operations for arithmetic, comparison, and bitwise operators.  For
+example, even under C<use integer>, if you take the C<sqrt(2)>, you'll
+still get C<1.4142135623731> or so.
 
 Used on numbers, the bitwise operators ("&", "|", "^", "~", "<<",
 and ">>") always produce integral results.  (But see also

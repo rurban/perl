@@ -6,7 +6,7 @@
 
 SRCDIR     = ..
 PV         = 59
-INST_VER   = 5.13.5
+INST_VER   = 5.13.6
 
 # INSTALL_ROOT specifies a path where this perl will be installed on CE device
 INSTALL_ROOT=/netzwerk/sprache/perl
@@ -666,11 +666,6 @@ ERRNO_PM	= $(LIBDIR)\Errno.pm
 
 EXTENSION_PM	=		\
 		$(ERRNO_PM)
-
-POD2HTML	= $(PODDIR)\pod2html
-POD2MAN		= $(PODDIR)\pod2man
-POD2LATEX	= $(PODDIR)\pod2latex
-POD2TEXT	= $(PODDIR)\pod2text
 
 CFG_VARS = \
  "INST_DRV=$(INST_DRV)" \

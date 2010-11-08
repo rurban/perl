@@ -443,7 +443,7 @@ $z = 1e+129;			# definitely a float (may fail on UTS)
 $x = $class->new($z); is ($x->bsstr(),'1e+129');
 
 ###############################################################################
-# test for whitespace inlcuding newlines to be handled correctly
+# test for whitespace including newlines to be handled correctly
 
 # is ($Math::BigInt::strict,1);		# the default
 
@@ -525,7 +525,7 @@ $x = $class->new('+inf'); is ($x,'inf');
 
 ###############################################################################
 ###############################################################################
-# the followin tests only make sense with Math::BigInt::Calc or BareCalc or
+# the following tests only make sense with Math::BigInt::Calc or BareCalc or
 # FastCalc
 
 exit if $CALC !~ /^Math::BigInt::(|Bare|Fast)Calc$/; # for Pari et al.
@@ -583,7 +583,7 @@ is ($x, 23456);
 
 # construct a number with a zero-hole of BASE_LEN_SMALL
 {
- my @bl = $CL->_base_len(); my $bl = $bl[4];
+ my @bl = $CL->_base_len(); my $bl = $bl[5];
 
  $x = '1' x $bl . '0' x $bl . '1' x $bl . '0' x $bl;
  $y = '1' x (2*$bl);

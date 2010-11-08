@@ -80,12 +80,6 @@ static I32 read_e_script(pTHX_ int idx, SV *buf_sv, int maxlen);
 #  define validate_suid(validarg, scriptname, fdscript, suidscript, linestr_sv, rsfp) S_validate_suid(aTHX_ rsfp)
 #endif
 
-#define CALL_BODY_EVAL(myop) \
-    if (PL_op == (myop)) \
-	PL_op = PL_ppaddr[OP_ENTEREVAL](aTHX); \
-    if (PL_op) \
-	CALLRUNOPS(aTHX);
-
 #define CALL_BODY_SUB(myop) \
     if (PL_op == (myop)) \
 	PL_op = PL_ppaddr[OP_ENTERSUB](aTHX); \
@@ -870,7 +864,6 @@ perl_destruct(pTHXx)
     PL_minus_F      = FALSE;
     PL_doswitches   = FALSE;
     PL_dowarn       = G_WARN_OFF;
-    PL_doextract    = FALSE;
     PL_sawampersand = FALSE;	/* must save all match strings */
     PL_unsafe       = FALSE;
 
@@ -1010,6 +1003,7 @@ perl_destruct(pTHXx)
     SvREFCNT_dec(PL_utf8_tofold);
     SvREFCNT_dec(PL_utf8_idstart);
     SvREFCNT_dec(PL_utf8_idcont);
+    SvREFCNT_dec(PL_utf8_foldclosures);
     PL_utf8_alnum	= NULL;
     PL_utf8_ascii	= NULL;
     PL_utf8_alpha	= NULL;
@@ -1029,12 +1023,13 @@ perl_destruct(pTHXx)
     PL_utf8_tofold	= NULL;
     PL_utf8_idstart	= NULL;
     PL_utf8_idcont	= NULL;
+    PL_utf8_foldclosures = NULL;
 
     if (!specialWARN(PL_compiling.cop_warnings))
 	PerlMemShared_free(PL_compiling.cop_warnings);
     PL_compiling.cop_warnings = NULL;
-    Perl_refcounted_he_free(aTHX_ PL_compiling.cop_hints_hash);
-    PL_compiling.cop_hints_hash = NULL;
+    cophh_free(CopHINTHASH_get(&PL_compiling));
+    CopHINTHASH_set(&PL_compiling, cophh_new_empty());
     CopFILE_free(&PL_compiling);
     CopSTASH_free(&PL_compiling);
 
@@ -1752,6 +1747,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
     const char *scriptname = NULL;
     VOL bool dosearch = FALSE;
     register char c;
+    bool doextract = FALSE;
     const char *cddir = NULL;
 #ifdef USE_SITECUSTOMIZE
     bool minus_f = FALSE;
@@ -1880,7 +1876,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 		goto reswitch;
 	    }
 	case 'x':
-	    PL_doextract = TRUE;
+	    doextract = TRUE;
 	    s++;
 	    if (*s)
 		cddir = s;
@@ -2024,7 +2020,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 #  endif
 #endif
 
-	if (PL_doextract) {
+	if (doextract) {
 
 	    /* This will croak if suidscript is true, as -x cannot be used with
 	       setuid scripts.  */
@@ -2158,7 +2154,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
     }
 #endif
 
-    lex_start(linestr_sv, rsfp, TRUE);
+    lex_start(linestr_sv, rsfp, 0);
     PL_subname = newSVpvs("main");
 
     if (add_read_e_script)
@@ -2667,7 +2663,8 @@ Perl_call_sv(pTHX_ SV *sv, VOL I32 flags)
 /*
 =for apidoc p||eval_sv
 
-Tells Perl to C<eval> the string in the SV.
+Tells Perl to C<eval> the string in the SV. It supports the same flags
+as C<call_sv>, with the obvious exception of G_EVAL. See L<perlcall>.
 
 =cut
 */
@@ -2715,7 +2712,12 @@ Perl_eval_sv(pTHX_ SV *sv, I32 flags)
     switch (ret) {
     case 0:
  redo_body:
-	CALL_BODY_EVAL((OP*)&myop);
+	if (PL_op == (OP*)(&myop)) {
+	    PL_op = PL_ppaddr[OP_ENTEREVAL](aTHX);
+	    if (!PL_op)
+		goto fail; /* failed in compilation */
+	}
+	CALLRUNOPS(aTHX);
 	retval = PL_stack_sp - (PL_stack_base + oldmark);
 	if (!(flags & G_KEEPERR)) {
 	    CLEAR_ERRSV();
@@ -2738,6 +2740,7 @@ Perl_eval_sv(pTHX_ SV *sv, I32 flags)
 	    PL_restartop = 0;
 	    goto redo_body;
 	}
+      fail:
 	PL_stack_sp = PL_stack_base + oldmark;
 	if ((flags & G_WANT) == G_ARRAY)
 	    retval = 0;
@@ -3673,24 +3676,21 @@ S_find_beginning(pTHX_ SV* linestr_sv, PerlIO *rsfp)
 
     /* skip forward in input to the real script? */
 
-    while (PL_doextract) {
+    do {
 	if ((s = sv_gets(linestr_sv, rsfp, 0)) == NULL)
 	    Perl_croak(aTHX_ "No Perl script found in input\n");
 	s2 = s;
-	if (*s == '#' && s[1] == '!' && ((s = instr(s,"perl")) || (s = instr(s2,"PERL")))) {
-	    PerlIO_ungetc(rsfp, '\n');		/* to keep line count right */
-	    PL_doextract = FALSE;
-	    while (*s && !(isSPACE (*s) || *s == '#')) s++;
-	    s2 = s;
-	    while (*s == ' ' || *s == '\t') s++;
-	    if (*s++ == '-') {
-		while (isDIGIT(s2[-1]) || s2[-1] == '-' || s2[-1] == '.'
-		       || s2[-1] == '_') s2--;
-		if (strnEQ(s2-4,"perl",4))
-		    while ((s = moreswitches(s)))
-			;
-	    }
-	}
+    } while (!(*s == '#' && s[1] == '!' && ((s = instr(s,"perl")) || (s = instr(s2,"PERL")))));
+    PerlIO_ungetc(rsfp, '\n');		/* to keep line count right */
+    while (*s && !(isSPACE (*s) || *s == '#')) s++;
+    s2 = s;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s++ == '-') {
+	while (isDIGIT(s2[-1]) || s2[-1] == '-' || s2[-1] == '.'
+	       || s2[-1] == '_') s2--;
+	if (strnEQ(s2-4,"perl",4))
+	    while ((s = moreswitches(s)))
+		;
     }
 }
 
@@ -3892,6 +3892,39 @@ S_nuke_stacks(pTHX)
     Safefree(PL_savestack);
 }
 
+void
+Perl_populate_isa(pTHX_ const char *name, STRLEN len, ...)
+{
+    GV *const gv = gv_fetchpvn(name, len, GV_ADD | GV_ADDMULTI, SVt_PVAV);
+    AV *const isa = GvAVn(gv);
+    va_list args;
+
+    PERL_ARGS_ASSERT_POPULATE_ISA;
+
+    if(AvFILLp(isa) != -1)
+	return;
+
+    /* NOTE: No support for tied ISA */
+
+    va_start(args, len);
+    do {
+	const char *const parent = va_arg(args, const char*);
+	size_t parent_len;
+
+	if (!parent)
+	    break;
+	parent_len = va_arg(args, size_t);
+
+	/* Arguments are supplied with a trailing ::  */
+	assert(parent_len > 2);
+	assert(parent[parent_len - 1] == ':');
+	assert(parent[parent_len - 2] == ':');
+	av_push(isa, newSVpvn(parent, parent_len - 2));
+	(void) gv_fetchpvn(parent, parent_len, GV_ADD, SVt_PVGV);
+    } while (1);
+    va_end(args);
+}
+
 
 STATIC void
 S_init_predump_symbols(pTHX)
@@ -3899,7 +3932,6 @@ S_init_predump_symbols(pTHX)
     dVAR;
     GV *tmpgv;
     IO *io;
-    AV *isa;
 
     sv_setpvs(get_sv("\"", GV_ADD), " ");
     PL_ofsgv = (GV*)SvREFCNT_inc(gv_fetchpvs(",", GV_ADD|GV_NOTQUAL, SVt_PV));
@@ -3918,14 +3950,11 @@ S_init_predump_symbols(pTHX)
        so that code that does C<use IO::Handle>; will still work.
     */
 		   
-    isa = get_av("IO::File::ISA", GV_ADD | GV_ADDMULTI);
-    av_push(isa, newSVpvs("IO::Handle"));
-    av_push(isa, newSVpvs("IO::Seekable"));
-    av_push(isa, newSVpvs("Exporter"));
-    (void) gv_fetchpvs("IO::Handle::", GV_ADD, SVt_PVGV);
-    (void) gv_fetchpvs("IO::Seekable::", GV_ADD, SVt_PVGV);
-    (void) gv_fetchpvs("Exporter::", GV_ADD, SVt_PVGV);
-
+    Perl_populate_isa(aTHX_ STR_WITH_LEN("IO::File::ISA"),
+		      STR_WITH_LEN("IO::Handle::"),
+		      STR_WITH_LEN("IO::Seekable::"),
+		      STR_WITH_LEN("Exporter::"),
+		      NULL);
 
     PL_stdingv = gv_fetchpvs("STDIN", GV_ADD|GV_NOTQUAL, SVt_PVIO);
     GvMULTI_on(PL_stdingv);

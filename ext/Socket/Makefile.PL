@@ -1,5 +1,5 @@
 use ExtUtils::MakeMaker;
-use ExtUtils::Constant 0.11 'WriteConstants';
+use ExtUtils::Constant 0.23 'WriteConstants';
 use Config;
 WriteMakefile(
     NAME	 => 'Socket',
@@ -72,7 +72,7 @@ push @names,
          foreach qw(INADDR_ANY INADDR_LOOPBACK INADDR_NONE INADDR_BROADCAST);
 
 WriteConstants(
-    ($] > 5.009002 ? (PROXYSUBS => 1) : ()),
+    PROXYSUBS => {autoload => 1},
     NAME => 'Socket',
     NAMES => \@names,
 );

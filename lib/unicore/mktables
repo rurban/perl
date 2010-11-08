@@ -16,6 +16,13 @@
 # that instituted the change to main::objaddr, and subsequent commits that
 # changed 0+$self to pack 'J', $self.)
 
+my $start_time;
+BEGIN { # Get the time the script started running; do it at compiliation to
+        # get it as close as possible
+    $start_time= time;
+}
+
+
 require 5.010_001;
 use strict;
 use warnings;
@@ -311,7 +318,7 @@ my $unicode_reference_url = 'http://www.unicode.org/reports/tr44/';
 #   is nonsensical.
 #
 # There are no match tables generated for matches of the null string.  These
-# would like like qr/\p{JSN=}/ currently without modifying the regex code.
+# would look like qr/\p{JSN=}/ currently without modifying the regex code.
 # Perhaps something like them could be added if necessary.  The JSN does have
 # a real code point U+110B that maps to the null string, but it is a
 # contributory property, and therefore not output by default.  And it's easily
@@ -349,6 +356,18 @@ my $unicode_reference_url = 'http://www.unicode.org/reports/tr44/';
 #
 # to 1, and every file whose object is in @input_file_objects and doesn't have
 # a, 'non_skip => 1,' in its constructor will be skipped.
+#
+# To compare the output tables, it may be useful to specify the -annotate
+# flag.  This causes the tables to expand so there is one entry for each
+# non-algorithmically named code point giving, currently its name, and its
+# graphic representation if printable (and you have a font that knows about
+# it).  This makes it easier to see what the particular code points are in
+# each output table.  The tables are usable, but because they don't have
+# ranges (for the most part), a Perl using them will run slower.  Non-named
+# code points are annotated with a description of their status, and contiguous
+# ones with the same description will be output as a range rather than
+# individually.  Algorithmically named characters are also output as ranges,
+# except when there are just a few contiguous ones.
 #
 # FUTURE ISSUES
 #
@@ -413,7 +432,6 @@ my $unicode_reference_url = 'http://www.unicode.org/reports/tr44/';
 # kPrimaryNumeric property have commas and an unexpected comment.  A filter
 # could be added for these; or for a particular installation, the Unihan.txt
 # file could be edited to fix them.
-# have to be
 #
 # HOW TO ADD A FILE TO BE PROCESSED
 #
@@ -617,9 +635,7 @@ my $glob_list = 0;             # ? Should we try to include unknown .txt files
                                # in the input.
 my $output_range_counts = 1;   # ? Should we include the number of code points
                                # in ranges in the output
-my $output_names = 0;          # ? Should character names be in the output
-my @viacode;                   # Contains the 1 million character names, if
-                               # $output_names is true
+my $annotate = 0;              # ? Should character names be in the output
 
 # Verbosity levels; 0 is quiet
 my $NORMAL_VERBOSITY = 1;
@@ -676,8 +692,8 @@ while (@ARGV) {
     elsif ($arg eq '-c') {
         $output_range_counts = ! $output_range_counts
     }
-    elsif ($arg eq '-output_names') {
-        $output_names = 1;
+    elsif ($arg eq '-annotate') {
+        $annotate = 1;
     }
     else {
         my $with_c = 'with';
@@ -703,9 +719,10 @@ usage: $0 [-c|-p|-q|-v|-w] [-C dir] [-L filelist] [ -P pod_dir ]
   -maketest   : Make test script 'TestProp.pl' in current (or -C directory),
                 overrides -T
   -makelist   : Rewrite the file list $file_list based on current setup
-  -output_names : Output each character's name in the table files; useful for
-                doing what-ifs, looking at diffs; is slow, memory intensive,
-                resulting tables are usable but very large.
+  -annotate   : Output an annotation for each character in the table files;
+                useful for debugging mktables, looking at diffs; but is slow,
+                memory intensive; resulting tables are usable but slow and
+                very large.
   -check A B  : Executes $0 only if A and B are the same
 END
     }
@@ -713,7 +730,7 @@ END
 
 # Stores the most-recently changed file.  If none have changed, can skip the
 # build
-my $youngest = -M $0;   # Do this before the chdir!
+my $most_recent = (stat $0)[9];   # Do this before the chdir!
 
 # Change directories now, because need to read 'version' early.
 if ($use_directory) {
@@ -1136,7 +1153,8 @@ my %status_past_participles = (
     $DEPRECATED => 'deprecated',
 );
 
-# The format of the values of the map tables:
+# The format of the values of the tables:
+my $EMPTY_FORMAT = "";
 my $BINARY_FORMAT = 'b';
 my $DECIMAL_FORMAT = 'd';
 my $FLOAT_FORMAT = 'f';
@@ -1144,6 +1162,7 @@ my $INTEGER_FORMAT = 'i';
 my $HEX_FORMAT = 'x';
 my $RATIONAL_FORMAT = 'r';
 my $STRING_FORMAT = 's';
+my $DECOMP_STRING_FORMAT = 'c';
 
 my %map_table_formats = (
     $BINARY_FORMAT => 'binary',
@@ -1152,7 +1171,8 @@ my %map_table_formats = (
     $INTEGER_FORMAT => 'integer',
     $HEX_FORMAT => 'positive hex whole number; a code point',
     $RATIONAL_FORMAT => 'rational: an integer or a fraction',
-    $STRING_FORMAT => 'arbitrary string',
+    $STRING_FORMAT => 'string',
+    $DECOMP_STRING_FORMAT => 'Perl\'s internal (Normalize.pm) decomposition mapping',
 );
 
 # Unicode didn't put such derived files in a separate directory at first.
@@ -1170,11 +1190,16 @@ my %loose_property_name_of; # Loosely maps property names to standard form
 
 # These constants names and values were taken from the Unicode standard,
 # version 5.1, section 3.12.  They are used in conjunction with Hangul
-# syllables
-my $SBase = 0xAC00;
-my $LBase = 0x1100;
-my $VBase = 0x1161;
-my $TBase = 0x11A7;
+# syllables.  The '_string' versions are so generated tables can retain the
+# hex format, which is the more familiar value
+my $SBase_string = "0xAC00";
+my $SBase = CORE::hex $SBase_string;
+my $LBase_string = "0x1100";
+my $LBase = CORE::hex $LBase_string;
+my $VBase_string = "0x1161";
+my $VBase = CORE::hex $VBase_string;
+my $TBase_string = "0x11A7";
+my $TBase = CORE::hex $TBase_string;
 my $SCount = 11172;
 my $LCount = 19;
 my $VCount = 21;
@@ -1210,6 +1235,8 @@ my $MAX_FLOATING_SLOP = 10 ** - $MIN_FRACTION_LENGTH; # And in floating terms
 my $gc;
 my $perl;
 my $block;
+my $perl_charname;
+my $print;
 
 # Are there conflicting names because of beginning with 'In_', or 'Is_'
 my $has_In_conflicts = 0;
@@ -1242,6 +1269,141 @@ sub objaddr($) {
 
     # Numifying a ref gives its address.
     return pack 'J', $_[0];
+}
+
+# These are used only if $annotate is true.
+# The entire range of Unicode characters is examined to populate these
+# after all the input has been processed.  But most can be skipped, as they
+# have the same descriptive phrases, such as being unassigned
+my @viacode;            # Contains the 1 million character names
+my @printable;          # boolean: And are those characters printable?
+my @annotate_char_type; # Contains a type of those characters, specifically
+                        # for the purposes of annotation.
+my $annotate_ranges;    # A map of ranges of code points that have the same
+                        # name for the purposes of annoation.  They map to the
+                        # upper edge of the range, so that the end point can
+                        # be immediately found.  This is used to skip ahead to
+                        # the end of a range, and avoid processing each
+                        # individual code point in it.
+my $unassigned_sans_noncharacters; # A Range_List of the unassigned
+                                   # characters, but excluding those which are
+                                   # also noncharacter code points
+
+# The annotation types are an extension of the regular range types, though
+# some of the latter are folded into one.  Make the new types negative to
+# avoid conflicting with the regular types
+my $SURROGATE_TYPE = -1;
+my $UNASSIGNED_TYPE = -2;
+my $PRIVATE_USE_TYPE = -3;
+my $NONCHARACTER_TYPE = -4;
+my $CONTROL_TYPE = -5;
+my $UNKNOWN_TYPE = -6;  # Used only if there is a bug in this program
+
+sub populate_char_info ($) {
+    # Used only with the $annotate option.  Populates the arrays with the
+    # input code point's info that are needed for outputting more detailed
+    # comments.  If calling context wants a return, it is the end point of
+    # any contiguous range of characters that share essentially the same info
+
+    my $i = shift;
+    Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+    $viacode[$i] = $perl_charname->value_of($i) || "";
+
+    # A character is generally printable if Unicode says it is,
+    # but below we make sure that most Unicode general category 'C' types
+    # aren't.
+    $printable[$i] = $print->contains($i);
+
+    $annotate_char_type[$i] = $perl_charname->type_of($i) || 0;
+
+    # Only these two regular types are treated specially for annotations
+    # purposes
+    $annotate_char_type[$i] = 0 if $annotate_char_type[$i] != $CP_IN_NAME
+                                && $annotate_char_type[$i] != $HANGUL_SYLLABLE;
+
+    # Give a generic name to all code points that don't have a real name.
+    # We output ranges, if applicable, for these.  Also calculate the end
+    # point of the range.
+    my $end;
+    if (! $viacode[$i]) {
+        if ($gc-> table('Surrogate')->contains($i)) {
+            $viacode[$i] = 'Surrogate';
+            $annotate_char_type[$i] = $SURROGATE_TYPE;
+            $printable[$i] = 0;
+            $end = $gc->table('Surrogate')->containing_range($i)->end;
+        }
+        elsif ($gc-> table('Private_use')->contains($i)) {
+            $viacode[$i] = 'Private Use';
+            $annotate_char_type[$i] = $PRIVATE_USE_TYPE;
+            $printable[$i] = 0;
+            $end = $gc->table('Private_Use')->containing_range($i)->end;
+        }
+        elsif (Property::property_ref('Noncharacter_Code_Point')-> table('Y')->
+                                                                contains($i))
+        {
+            $viacode[$i] = 'Noncharacter';
+            $annotate_char_type[$i] = $NONCHARACTER_TYPE;
+            $printable[$i] = 0;
+            $end = property_ref('Noncharacter_Code_Point')->table('Y')->
+                                                    containing_range($i)->end;
+        }
+        elsif ($gc-> table('Control')->contains($i)) {
+            $viacode[$i] = 'Control';
+            $annotate_char_type[$i] = $CONTROL_TYPE;
+            $printable[$i] = 0;
+            $end = 0x81 if $i == 0x80;  # Hard-code this one known case
+        }
+        elsif ($gc-> table('Unassigned')->contains($i)) {
+            $viacode[$i] = 'Unassigned, block=' . $block-> value_of($i);
+            $annotate_char_type[$i] = $UNASSIGNED_TYPE;
+            $printable[$i] = 0;
+
+            # Because we name the unassigned by the blocks they are in, it
+            # can't go past the end of that block, and it also can't go past
+            # the unassigned range it is in.  The special table makes sure
+            # that the non-characters, which are unassigned, are separated
+            # out.
+            $end = min($block->containing_range($i)->end,
+                       $unassigned_sans_noncharacters-> containing_range($i)->
+                                                                         end);
+        } else {
+            my_carp_bug("Can't figure out how to annotate"
+                        . sprintf("U+%04X", $i)
+                        . "Proceeding anyway.");
+            $viacode[$i] = 'UNKNOWN';
+            $annotate_char_type[$i] = $UNKNOWN_TYPE;
+            $printable[$i] = 0;
+        }
+    }
+
+    # Here, has a name, but if it's one in which the code point number is
+    # appended to the name, do that.
+    elsif ($annotate_char_type[$i] == $CP_IN_NAME) {
+        $viacode[$i] .= sprintf("-%04X", $i);
+        $end = $perl_charname->containing_range($i)->end;
+    }
+
+    # And here, has a name, but if it's a hangul syllable one, replace it with
+    # the correct name from the Unicode algorithm
+    elsif ($annotate_char_type[$i] == $HANGUL_SYLLABLE) {
+        use integer;
+        my $SIndex = $i - $SBase;
+        my $L = $LBase + $SIndex / $NCount;
+        my $V = $VBase + ($SIndex % $NCount) / $TCount;
+        my $T = $TBase + $SIndex % $TCount;
+        $viacode[$i] = "HANGUL SYLLABLE $Jamo{$L}$Jamo{$V}";
+        $viacode[$i] .= $Jamo{$T} if $T != $TBase;
+        $end = $perl_charname->containing_range($i)->end;
+    }
+
+    return if ! defined wantarray;
+    return $i if ! defined $end;    # If not a range, return the input
+
+    # Save this whole range so can find the end point quickly
+    $annotate_ranges->add_map($i, $end, $end);
+
+    return $end;
 }
 
 # Commented code below should work on Perl 5.8.
@@ -1502,7 +1664,7 @@ package main;
         # "protection" is only by convention.  All that happens is that the
         # accessor functions' names begin with an underscore.  So instead of
         # calling set_foo, the call is _set_foo.  (Real protection could be
-        # accomplished by having a new subroutine, end_package called at the
+        # accomplished by having a new subroutine, end_package, called at the
         # end of each package, and then storing the __LINE__ ranges and
         # checking them on every accessor.  But that is way overkill.)
 
@@ -2841,8 +3003,8 @@ sub trace { return main::trace(@_); }
         return $i + 1;
     }
 
-    sub value_of {
-        # Returns the value associated with the code point, undef if none
+    sub containing_range {
+        # Returns the range object that contains the code point, undef if none
 
         my $self = shift;
         my $codepoint = shift;
@@ -2853,7 +3015,34 @@ sub trace { return main::trace(@_); }
 
         # contains() returns 1 beyond where we should look
         no overloading;
-        return $ranges{pack 'J', $self}->[$i-1]->value;
+        return $ranges{pack 'J', $self}->[$i-1];
+    }
+
+    sub value_of {
+        # Returns the value associated with the code point, undef if none
+
+        my $self = shift;
+        my $codepoint = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $range = $self->containing_range($codepoint);
+        return unless defined $range;
+
+        return $range->value;
+    }
+
+    sub type_of {
+        # Returns the type of the range containing the code point, undef if
+        # the code point is not in the table
+
+        my $self = shift;
+        my $codepoint = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $range = $self->containing_range($codepoint);
+        return unless defined $range;
+
+        return $range->type;
     }
 
     sub _search_ranges {
@@ -2972,10 +3161,10 @@ sub trace { return main::trace(@_); }
         #
         # The range list is kept sorted so that the range with the lowest
         # starting position is first in the list, and generally, adjacent
-        # ranges with the same values are merged into single larger one (see
+        # ranges with the same values are merged into a single larger one (see
         # exceptions below).
         #
-        # There are more parameters, all are key => value pairs:
+        # There are more parameters; all are key => value pairs:
         #   Type    gives the type of the value.  It is only valid for '+'.
         #           All ranges have types; if this parameter is omitted, 0 is
         #           assumed.  Ranges with type 0 are assumed to obey the
@@ -2999,7 +3188,7 @@ sub trace { return main::trace(@_); }
         #       => $IF_NOT_EQUIVALENT means to replace the existing values
         #                         with this one if they are not equivalent.
         #                         Ranges are equivalent if their types are the
-        #                         same, and they are the same string, or if
+        #                         same, and they are the same string; or if
         #                         both are type 0 ranges, if their Unicode
         #                         standard forms are identical.  In this last
         #                         case, the routine chooses the more "modern"
@@ -3015,11 +3204,13 @@ sub trace { return main::trace(@_); }
         #                         existing one, but has a different value,
         #                         don't replace the existing one, but insert
         #                         this, one so that the same range can occur
-        #                         multiple times.
+        #                         multiple times.  They are stored LIFO, so
+        #                         that the final one inserted is the first one
+        #                         returned in an ordered search of the table.
         #       => anything else  is the same as => $IF_NOT_EQUIVALENT
         #
-        # "same value" means identical for type-0 ranges, and it means having
-        # the same standard forms for non-type-0 ranges.
+        # "same value" means identical for non-type-0 ranges, and it means
+        # having the same standard forms for type-0 ranges.
 
         return Carp::carp_too_few_args(\@_, 5) if main::DEBUG && @_ < 5;
 
@@ -3244,23 +3435,60 @@ sub trace { return main::trace(@_); }
             return;
         }
 
-        # Here, we have taken care of the case where $replace is $NO, which
-        # means that whatever action we now take is done unconditionally.  It
-        # still could be that this call will result in a no-op, if duplicates
-        # aren't allowed, and we are inserting a range that merely duplicates
-        # data already in the range list; or also if deleting a non-existent
-        # range.
-        # $i still points to the first potential affected range.  Now find the
-        # highest range affected, which will determine the length parameter to
-        # splice.  (The input range can span multiple existing ones.)  While
-        # we are looking through the range list, see also if this is an
-        # insertion that will change the values of at least one of the
-        # affected ranges.  We don't need to do this check unless this is an
-        # insertion of non-multiples, and also since this is a boolean, we
-        # don't need to do it if have already determined that it will make a
-        # change; just unconditionally change them.  $cdm is created to be 1
-        # if either of these is true. (The 'c' in the name comes from below)
-        my $cdm = ($operation eq '-' || $replace == $MULTIPLE);
+        # Here, we have taken care of the case where $replace is $NO.
+        # Remember that here, r[$i-1]->end < $start <= r[$i]->end
+        # If inserting a multiple record, this is where it goes, before the
+        # first (if any) existing one.  This implies an insertion, and no
+        # change to any existing ranges.  Note that $i can be -1 if this new
+        # range doesn't actually duplicate any existing, and comes at the
+        # beginning of the list.
+        if ($replace == $MULTIPLE) {
+
+            if ($start != $end) {
+                Carp::my_carp_bug("$owner_name_of{$addr}Can't cope with adding a multiple record when the range ($start..$end) contains more than one code point.  No action taken.");
+                return;
+            }
+
+            # Don't add an exact duplicate, as it isn't really a multiple
+            if ($end >= $r->[$i]->start) {
+                if ($r->[$i]->start != $r->[$i]->end) {
+                    Carp::my_carp_bug("$owner_name_of{$addr}Can't cope with adding a multiple record when the other range ($r->[$i]) contains more than one code point.  No action taken.");
+                    return;
+                }
+                return if $value eq $r->[$i]->value && $type eq $r->[$i]->type;
+            }
+
+            trace "Adding multiple record at $i with $start..$end, $value" if main::DEBUG && $to_trace;
+            my @return = splice @$r,
+                                $i,
+                                0,
+                                Range->new($start,
+                                           $end,
+                                           Value => $value,
+                                           Type => $type);
+            if (main::DEBUG && $to_trace) {
+                trace "After splice:";
+                trace 'i-2=[', $i-2, ']', $r->[$i-2] if $i >= 2;
+                trace 'i-1=[', $i-1, ']', $r->[$i-1] if $i >= 1;
+                trace "i  =[", $i, "]", $r->[$i] if $i >= 0;
+                trace 'i+1=[', $i+1, ']', $r->[$i+1] if $i < @$r - 1;
+                trace 'i+2=[', $i+2, ']', $r->[$i+2] if $i < @$r - 2;
+                trace 'i+3=[', $i+3, ']', $r->[$i+3] if $i < @$r - 3;
+            }
+            return @return;
+        }
+
+        # Here, we have taken care of $NO and $MULTIPLE replaces.  This leaves
+        # delete, insert, and replace either unconditionally or if not
+        # equivalent.  $i still points to the first potential affected range.
+        # Now find the highest range affected, which will determine the length
+        # parameter to splice.  (The input range can span multiple existing
+        # ones.)  If this isn't a deletion, while we are looking through the
+        # range list, see also if this is a replacement rather than a clean
+        # insertion; that is if it will change the values of at least one
+        # existing range.  Start off assuming it is an insert, until find it
+        # isn't.
+        my $clean_insert = $operation eq '+';
         my $j;        # This will point to the highest affected range
 
         # For non-zero types, the standard form is the value itself;
@@ -3273,12 +3501,12 @@ sub trace { return main::trace(@_); }
             # searching
             last if $end < $r->[$j]->start;
 
-            # Here, overlaps the range at $j.  If the value's don't match,
-            # and this is supposedly an insertion, it becomes a change
-            # instead.  This is what the 'c' stands for in $cdm.
-            if (! $cdm) {
+            # Here, overlaps the range at $j.  If the values don't match,
+            # and so far we think this is a clean insertion, it becomes a
+            # non-clean insertion, i.e., a 'change' or 'replace' instead.
+            if ($clean_insert) {
                 if ($r->[$j]->standard_form ne $standard_form) {
-                    $cdm = 1;
+                    $clean_insert = 0;
                 }
                 else {
 
@@ -3292,7 +3520,7 @@ sub trace { return main::trace(@_); }
                         # same, but the non-standardized values aren't.  If
                         # replacing unconditionally, then replace
                         if( $replace == $UNCONDITIONALLY) {
-                            $cdm = 1;
+                            $clean_insert = 0;
                         }
                         else {
 
@@ -3306,13 +3534,13 @@ sub trace { return main::trace(@_); }
                                             && $pre_existing =~ /[a-z]/;
 
                             if ($old_mixed != $new_mixed) {
-                                $cdm = 1 if $new_mixed;
+                                $clean_insert = 0 if $new_mixed;
                                 if (main::DEBUG && $to_trace) {
-                                    if ($cdm) {
-                                        trace "Replacing $pre_existing with $value";
+                                    if ($clean_insert) {
+                                        trace "Retaining $pre_existing over $value";
                                     }
                                     else {
-                                        trace "Retaining $pre_existing over $value";
+                                        trace "Replacing $pre_existing with $value";
                                     }
                                 }
                             }
@@ -3326,13 +3554,13 @@ sub trace { return main::trace(@_); }
                                 my $old_punct = $pre_existing =~ /[-_]/;
 
                                 if ($old_punct != $new_punct) {
-                                    $cdm = 1 if $new_punct;
+                                    $clean_insert = 0 if $new_punct;
                                     if (main::DEBUG && $to_trace) {
-                                        if ($cdm) {
-                                            trace "Replacing $pre_existing with $value";
+                                        if ($clean_insert) {
+                                            trace "Retaining $pre_existing over $value";
                                         }
                                         else {
-                                            trace "Retaining $pre_existing over $value";
+                                            trace "Replacing $pre_existing with $value";
                                         }
                                     }
                                 }   # else existing one is just as "good";
@@ -3354,44 +3582,6 @@ sub trace { return main::trace(@_); }
 
         $j--;        # $j now points to the highest affected range.
         trace "Final affected range is $j: $r->[$j]" if main::DEBUG && $to_trace;
-
-        # If inserting a multiple record, this is where it goes, after all the
-        # existing ones for this range.  This implies an insertion, and no
-        # change to any existing ranges.  Note that $j can be -1 if this new
-        # range doesn't actually duplicate any existing, and comes at the
-        # beginning of the list, in which case we can handle it like any other
-        # insertion, and is easier to do so.
-        if ($replace == $MULTIPLE && $j >= 0) {
-
-            # This restriction could be remedied with a little extra work, but
-            # it won't hopefully ever be necessary
-            if ($r->[$j]->start != $r->[$j]->end) {
-                Carp::my_carp_bug("$owner_name_of{$addr}Can't cope with adding a multiple when the other range ($r->[$j]) contains more than one code point.  No action taken.");
-                return;
-            }
-
-            # Don't add an exact duplicate, as it isn't really a multiple
-            return if $value eq $r->[$j]->value && $type eq $r->[$j]->type;
-
-            trace "Adding multiple record at $j+1 with $start..$end, $value" if main::DEBUG && $to_trace;
-            my @return = splice @$r,
-                                $j+1,
-                                0,
-                                Range->new($start,
-                                           $end,
-                                           Value => $value,
-                                           Type => $type);
-            if (main::DEBUG && $to_trace) {
-                trace "After splice:";
-                trace 'j-2=[', $j-2, ']', $r->[$j-2] if $j >= 2;
-                trace 'j-1=[', $j-1, ']', $r->[$j-1] if $j >= 1;
-                trace "j  =[", $j, "]", $r->[$j] if $j >= 0;
-                trace 'j+1=[', $j+1, ']', $r->[$j+1] if $j < @$r - 1;
-                trace 'j+2=[', $j+2, ']', $r->[$j+2] if $j < @$r - 2;
-                trace 'j+3=[', $j+3, ']', $r->[$j+3] if $j < @$r - 3;
-            }
-            return @return;
-        }
 
         # Here, have taken care of $NO and $MULTIPLE replaces.
         # $j points to the highest affected range.  But it can be < $i or even
@@ -3418,8 +3608,9 @@ sub trace { return main::trace(@_); }
         }
         else {
 
-            # Here the entire input range is not in the gap before $i.  There
-            # is an affected one, and $j points to the highest such one.
+            # Here part of the input range is not in the gap before $i.  Thus,
+            # there is at least one affected one, and $j points to the highest
+            # such one.
 
             # At this point, here is the situation:
             # This is not an insertion of a multiple, nor of tentative ($NO)
@@ -3435,21 +3626,21 @@ sub trace { return main::trace(@_); }
             #   r[$i-1]->end < $start <= $end <= r[$j]->end
             #
             # Also:
-            #   $cdm is a boolean which is set true if and only if this is a
-            #        change or deletion (multiple was handled above).  In
-            #        other words, it could be renamed to be just $cd.
+            #   $clean_insert is a boolean which is set true if and only if
+            #        this is a "clean insertion", i.e., not a change nor a
+            #        deletion (multiple was handled above).
 
             # We now have enough information to decide if this call is a no-op
-            # or not.  It is a no-op if it is a deletion of a non-existent
-            # range, or an insertion of already existing data.
+            # or not.  It is a no-op if this is an insertion of already
+            # existing data.
 
-            if (main::DEBUG && $to_trace && ! $cdm
+            if (main::DEBUG && $to_trace && $clean_insert
                                          && $i == $j
                                          && $start >= $r->[$i]->start)
             {
                     trace "no-op";
             }
-            return if ! $cdm      # change or delete => not no-op
+            return if $clean_insert
                       && $i == $j # more than one affected range => not no-op
 
                       # Here, r[$i-1]->end < $start <= $end <= r[$i]->end
@@ -3511,7 +3702,7 @@ sub trace { return main::trace(@_); }
                 # Here the new element adds to the one below, but not to the
                 # one above.  If inserting, and only to that one range,  can
                 # just change its ending to include the new one.
-                if ($length == 0 && ! $cdm) {
+                if ($length == 0 && $clean_insert) {
                     $r->[$i-1]->set_end($end);
                     trace "inserted range extends range to below so it is now $r->[$i-1]" if main::DEBUG && $to_trace;
                     return;
@@ -3527,7 +3718,7 @@ sub trace { return main::trace(@_); }
 
                 # Here the new element adds to the one above, but not below.
                 # Mirror the code above
-                if ($length == 0 && ! $cdm) {
+                if ($length == 0 && $clean_insert) {
                     $r->[$j+1]->set_start($start);
                     trace "inserted range extends range to above so it is now $r->[$j+1]" if main::DEBUG && $to_trace;
                     return;
@@ -3961,6 +4152,36 @@ sub trace { return main::trace(@_); }
         return $self->_add_delete('+', $start, $end, "");
     }
 
+    sub matches_identically_to {
+        # Return a boolean as to whether or not two Range_Lists match identical
+        # sets of code points.
+
+        my $self = shift;
+        my $other = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        # These are ordered in increasing real time to figure out (at least
+        # until a patch changes that and doesn't change this)
+        return 0 if $self->max != $other->max;
+        return 0 if $self->min != $other->min;
+        return 0 if $self->range_count != $other->range_count;
+        return 0 if $self->count != $other->count;
+
+        # Here they could be identical because all the tests above passed.
+        # The loop below is somewhat simpler since we know they have the same
+        # number of elements.  Compare range by range, until reach the end or
+        # find something that differs.
+        my @a_ranges = $self->ranges;
+        my @b_ranges = $other->ranges;
+        for my $i (0 .. @a_ranges - 1) {
+            my $a = $a_ranges[$i];
+            my $b = $b_ranges[$i];
+            trace "self $a; other $b" if main::DEBUG && $to_trace;
+            return 0 if $a->start != $b->start || $a->end != $b->end;
+        }
+        return 1;
+    }
+
     sub is_code_point_usable {
         # This used only for making the test script.  See if the input
         # proposed trial code point is one that Perl will handle.  If second
@@ -4178,6 +4399,12 @@ sub trace { return main::trace(@_); }
     # The constructor can override the global flag of the same name.
     main::set_access('output_range_counts', \%output_range_counts, 'r');
 
+    my %format;
+    # The format of the entries of the table.  This is calculated from the
+    # data in the table (or passed in the constructor).  This is an enum e.g.,
+    # $STRING_FORMAT
+    main::set_access('format', \%format, 'r', 'p_s');
+
     sub new {
         # All arguments are key => value pairs, which you can see below, most
         # of which match fields documented above.  Otherwise: Pod_Entry,
@@ -4198,6 +4425,7 @@ sub trace { return main::trace(@_); }
         $full_name{$addr} = delete $args{'Full_Name'};
         my $complete_name = $complete_name{$addr}
                           = delete $args{'Complete_Name'};
+        $format{$addr} = delete $args{'Format'};
         $internal_only{$addr} = delete $args{'Internal_Only_Warning'} || 0;
         $output_range_counts{$addr} = delete $args{'Output_Range_Counts'};
         $property{$addr} = delete $args{'_Property'};
@@ -4205,7 +4433,6 @@ sub trace { return main::trace(@_); }
         $status{$addr} = delete $args{'Status'} || $NORMAL;
         $status_info{$addr} = delete $args{'_Status_Info'} || "";
         $range_size_1{$addr} = delete $args{'Range_Size_1'} || 0;
-        $range_size_1{$addr} = 1 if $output_names;  # Make sure 1 name per line
 
         my $description = delete $args{'Description'};
         my $externally_ok = delete $args{'Externally_Ok'};
@@ -4315,12 +4542,18 @@ sub trace { return main::trace(@_); }
     # Here are the methods that are required to be defined by any derived
     # class
     for my $sub (qw(
+                    handle_special_range
                     append_to_body
                     pre_body
                 ))
-                # append_to_body and pre_body are called in the write() method
-                # to add stuff after the main body of the table, but before
-                # its close; and to prepend stuff before the beginning of the
+                # write() knows how to write out normal ranges, but it calls
+                # handle_special_range() when it encounters a non-normal one.
+                # append_to_body() is called by it after it has handled all
+                # ranges to add anything after the main portion of the table.
+                # And finally, pre_body() is called after all this to build up
+                # anything that should appear before the main portion of the
+                # table.  Doing it this way allows things in the middle to
+                # affect what should appear before the main portion of the
                 # table.
     {
         no strict "refs";
@@ -4627,7 +4860,10 @@ sub trace { return main::trace(@_); }
     }
 
     sub write {
-        # Write a representation of the table to its file.
+        # Write a representation of the table to its file.  It calls several
+        # functions furnished by sub-classes of this abstract base class to
+        # handle non-normal ranges, to add stuff before the table, and at its
+        # end.
 
         my $self = shift;
         my $tab_stops = shift;       # The number of tab stops over to put any
@@ -4640,18 +4876,30 @@ sub trace { return main::trace(@_); }
         my $addr = do { no overloading; pack 'J', $self; };
 
         # Start with the header
-        my @OUT = $self->header;
+        my @HEADER = $self->header;
 
         # Then the comments
-        push @OUT, "\n", main::simple_fold($comment{$addr}, '# '), "\n"
+        push @HEADER, "\n", main::simple_fold($comment{$addr}, '# '), "\n"
                                                         if $comment{$addr};
 
-        # Then any pre-body stuff.
-        my $pre_body = $self->pre_body;
-        push @OUT, $pre_body, "\n" if $pre_body;
+        # Things discovered processing the main body of the document may
+        # affect what gets output before it, therefore pre_body() isn't called
+        # until after all other processing of the table is done.
 
-        # The main body looks like a 'here' document
-        push @OUT, "return <<'END';\n";
+        # The main body looks like a 'here' document.  If annotating, get rid
+        # of the comments before passing to the caller, as some callers, such
+        # as charnames.pm, can't cope with them.  (Outputting range counts
+        # also introduces comments, but these don't show up in the tables that
+        # can't cope with comments, and there aren't that many of them that
+        # it's worth the extra real time to get rid of them).
+        my @OUT;
+        if ($annotate) {
+            # Use the line below in Perls that don't have /r
+            #push @OUT, 'return join "\n",  map { s/\s*#.*//mg; $_ } split "\n", <<\'END\';' . "\n";
+            push @OUT, "return <<'END' =~ s/\\s*#.*//mgr;\n";
+        } else {
+            push @OUT, "return <<'END';\n";
+        }
 
         if ($range_list{$addr}->is_empty) {
 
@@ -4663,39 +4911,47 @@ sub trace { return main::trace(@_); }
         }
         else {
             my $range_size_1 = $range_size_1{$addr};
+            my $format;            # Used only in $annotate option
+            my $include_name;      # Used only in $annotate option
+
+            if ($annotate) {
+
+                # if annotating each code point, must print 1 per line.
+                # The variable could point to a subroutine, and we don't want
+                # to lose that fact, so only set if not set already
+                $range_size_1 = 1 if ! $range_size_1;
+
+                $format = $self->format;
+
+                # The name of the character is output only for tables that
+                # don't already include the name in the output.
+                my $property = $self->property;
+                $include_name =
+                    !  ($property == $perl_charname
+                        || $property == main::property_ref('Unicode_1_Name')
+                        || $property == main::property_ref('Name')
+                        || $property == main::property_ref('Name_Alias')
+                       );
+            }
 
             # Output each range as part of the here document.
+            RANGE:
             for my $set ($range_list{$addr}->ranges) {
+                if ($set->type != 0) {
+                    $self->handle_special_range($set);
+                    next RANGE;
+                }
                 my $start = $set->start;
                 my $end   = $set->end;
                 my $value  = $set->value;
 
                 # Don't output ranges whose value is the one to suppress
-                next if defined $suppress_value && $value eq $suppress_value;
+                next RANGE if defined $suppress_value
+                              && $value eq $suppress_value;
 
-                # If has or wants a single point range output
-                if ($start == $end || $range_size_1) {
-                    if (ref $range_size_1 eq 'CODE') {
-                        for my $i ($start .. $end) {
-                            push @OUT, &$range_size_1($i, $value);
-                        }
-                    }
-                    else {
-                        for my $i ($start .. $end) {
-                            push @OUT, sprintf "%04X\t\t%s\n", $i, $value;
-                            if ($output_names) {
-                                if (! defined $viacode[$i]) {
-                                    $viacode[$i] =
-                                        Property::property_ref('Perl_Charnames')
-                                                                    ->value_of($i)
-                                        || "";
-                                }
-                                $OUT[-1] =~ s/\n/\t# $viacode[$i]\n/;
-                            }
-                        }
-                    }
-                }
-                else  {
+                # If there is a range and doesn't need a single point range
+                # output
+                if ($start != $end && ! $range_size_1) {
                     push @OUT, sprintf "%04X\t%04X\t%s", $start, $end, $value;
 
                     # Add a comment with the size of the range, if requested.
@@ -4716,6 +4972,166 @@ sub trace { return main::trace(@_); }
                                             $count);
                         $OUT[-1] = Text::Tabs::unexpand($OUT[-1]);
                     }
+                    next RANGE;
+                }
+
+                # Here to output a single code point per line
+
+                # If not to annotate, use the simple formats
+                if (! $annotate) {
+
+                    # Use any passed in subroutine to output.
+                    if (ref $range_size_1 eq 'CODE') {
+                        for my $i ($start .. $end) {
+                            push @OUT, &{$range_size_1}($i, $value);
+                        }
+                    }
+                    else {
+
+                        # Here, caller is ok with default output.
+                        for (my $i = $start; $i <= $end; $i++) {
+                            push @OUT, sprintf "%04X\t\t%s\n", $i, $value;
+                        }
+                    }
+                    next RANGE;
+                }
+
+                # Here, wants annotation.
+                for (my $i = $start; $i <= $end; $i++) {
+
+                    # Get character information if don't have it already
+                    main::populate_char_info($i)
+                                        if ! defined $viacode[$i];
+                    my $type = $annotate_char_type[$i];
+
+                    # Figure out if should output the next code points as part
+                    # of a range or not.  If this is not in an annotation
+                    # range, then won't output as a range, so returns $i.
+                    # Otherwise use the end of the annotation range, but no
+                    # further than the maximum possible end point of the loop.
+                    my $range_end = main::min($annotate_ranges->value_of($i)
+                                                                        || $i,
+                                               $end);
+
+                    # Use a range if it is a range, and either is one of the
+                    # special annotation ranges, or the range is at most 3
+                    # long.  This last case causes the algorithmically named
+                    # code points to be output individually in spans of at
+                    # most 3, as they are the ones whose $type is > 0.
+                    if ($range_end != $i
+                        && ( $type < 0 || $range_end - $i > 2))
+                    {
+                        # Here is to output a range.  We don't allow a
+                        # caller-specified output format--just use the
+                        # standard one.
+                        push @OUT, sprintf "%04X\t%04X\t%s\t#", $i,
+                                                                $range_end,
+                                                                $value;
+                        my $range_name = $viacode[$i];
+
+                        # For the code points which end in their hex value, we
+                        # eliminate that from the output annotation, and
+                        # capitalize only the first letter of each word.
+                        if ($type == $CP_IN_NAME) {
+                            my $hex = sprintf "%04X", $i;
+                            $range_name =~ s/-$hex$//;
+                            my @words = split " ", $range_name;
+                            for my $word (@words) {
+                                $word = ucfirst(lc($word)) if $word ne 'CJK';
+                            }
+                            $range_name = join " ", @words;
+                        }
+                        elsif ($type == $HANGUL_SYLLABLE) {
+                            $range_name = "Hangul Syllable";
+                        }
+
+                        $OUT[-1] .= " $range_name" if $range_name;
+
+                        # Include the number of code points in the range
+                        my $count = main::clarify_number($range_end - $i + 1);
+                        $OUT[-1] .= " [$count]\n";
+
+                        # Skip to the end of the range
+                        $i = $range_end;
+                    }
+                    else { # Not in a range.
+                        my $comment = "";
+
+                        # When outputting the names of each character, use
+                        # the character itself if printable
+                        $comment .= "'" . chr($i) . "' " if $printable[$i];
+
+                        # To make it more readable, use a minimum indentation
+                        my $comment_indent;
+
+                        # Determine the annotation
+                        if ($format eq $DECOMP_STRING_FORMAT) {
+
+                            # This is very specialized, with the type of
+                            # decomposition beginning the line enclosed in
+                            # <...>, and the code points that the code point
+                            # decomposes to separated by blanks.  Create two
+                            # strings, one of the printable characters, and
+                            # one of their official names.
+                            (my $map = $value) =~ s/ \ * < .*? > \ +//x;
+                            my $tostr = "";
+                            my $to_name = "";
+                            my $to_chr = "";
+                            foreach my $to (split " ", $map) {
+                                $to = CORE::hex $to;
+                                $to_name .= " + " if $to_name;
+                                $to_chr .= chr($to);
+                                main::populate_char_info($to)
+                                                    if ! defined $viacode[$to];
+                                $to_name .=  $viacode[$to];
+                            }
+
+                            $comment .=
+                                    "=> '$to_chr'; $viacode[$i] => $to_name";
+                            $comment_indent = 25;   # Determined by experiment
+                        }
+                        else {
+
+                            # Assume that any table that has hex format is a
+                            # mapping of one code point to another.
+                            if ($format eq $HEX_FORMAT) {
+                                my $decimal_value = CORE::hex $value;
+                                main::populate_char_info($decimal_value)
+                                        if ! defined $viacode[$decimal_value];
+                                $comment .= "=> '"
+                                         . chr($decimal_value)
+                                         . "'; " if $printable[$decimal_value];
+                            }
+                            $comment .= $viacode[$i] if $include_name
+                                                        && $viacode[$i];
+                            if ($format eq $HEX_FORMAT) {
+                                my $decimal_value = CORE::hex $value;
+                                $comment .= " => $viacode[$decimal_value]"
+                                                    if $viacode[$decimal_value];
+                            }
+
+                            # If including the name, no need to indent, as the
+                            # name will already be way across the line.
+                            $comment_indent = ($include_name) ? 0 : 60;
+                        }
+
+                        # Use any passed in routine to output the base part of
+                        # the line.
+                        if (ref $range_size_1 eq 'CODE') {
+                            my $base_part = &{$range_size_1}($i, $value);
+                            chomp $base_part;
+                            push @OUT, $base_part;
+                        }
+                        else {
+                            push @OUT, sprintf "%04X\t\t%s", $i, $value;
+                        }
+
+                        # And add the annotation.
+                        $OUT[-1] = sprintf "%-*s\t# %s", $comment_indent,
+                                                         $OUT[-1],
+                                                         $comment if $comment;
+                        $OUT[-1] .= "\n";
+                    }
                 }
             } # End of loop through all the table's ranges
         }
@@ -4728,10 +5144,18 @@ sub trace { return main::trace(@_); }
         # And finish the here document.
         push @OUT, "END\n";
 
+        # Done with the main portion of the body.  Can now figure out what
+        # should appear before it in the file.
+        my $pre_body = $self->pre_body;
+        push @HEADER, $pre_body, "\n" if $pre_body;
+
         # All these files have a .pl suffix
         $file_path{$addr}->[-1] .= '.pl';
 
-        main::write($file_path{$addr}, \@OUT);
+        main::write($file_path{$addr},
+                    $annotate,      # utf8 iff annotating
+                    \@HEADER,
+                    \@OUT);
         return;
     }
 
@@ -4803,15 +5227,18 @@ sub trace { return main::trace(@_); }
     # Accessors for the range list stored in this table.  First for
     # unconditional
     for my $sub (qw(
+                    containing_range
                     contains
                     count
                     each_range
                     hash
                     is_empty
+                    matches_identically_to
                     max
                     min
                     range_count
                     reset_each_range
+                    type_of
                     value_of
                 ))
     {
@@ -4891,25 +5318,10 @@ sub trace { return main::trace(@_); }
                     \%anomalous_entries,
                     'readable_array');
 
-    my %format;
-    # The format of the entries of the table.  This is calculated from the
-    # data in the table (or passed in the constructor).  This is an enum e.g.,
-    # $STRING_FORMAT
-    main::set_access('format', \%format);
-
     my %core_access;
     # This is a string, solely for documentation, indicating how one can get
     # access to this property via the Perl core.
     main::set_access('core_access', \%core_access, 'r', 's');
-
-    my %has_specials;
-    # Boolean set when non-zero map-type ranges are added to this table,
-    # which happens in only a few tables.  This is purely for performance, to
-    # avoid having to search through every table upon output, so if all the
-    # non-zero maps got deleted before output, this would remain set, and the
-    # only penalty would be performance.  Currently, most map tables that get
-    # output have specials in them, so this doesn't help that much anyway.
-    main::set_access('has_specials', \%has_specials);
 
     my %to_output_map;
     # Boolean as to whether or not to write out this map table
@@ -4927,7 +5339,6 @@ sub trace { return main::trace(@_); }
 
         my $core_access = delete $args{'Core_Access'};
         my $default_map = delete $args{'Default_Map'};
-        my $format = delete $args{'Format'};
         my $property = delete $args{'_Property'};
         my $full_name = delete $args{'Full_Name'};
         # Rest of parameters passed on
@@ -4947,7 +5358,6 @@ sub trace { return main::trace(@_); }
         $anomalous_entries{$addr} = [];
         $core_access{$addr} = $core_access;
         $default_map{$addr} = $default_map;
-        $format{$addr} = $format;
 
         $self->initialize($initialize) if defined $initialize;
 
@@ -4995,8 +5405,6 @@ sub trace { return main::trace(@_); }
         return if $self->carp_if_locked;
 
         my $addr = do { no overloading; pack 'J', $self; };
-
-        $has_specials{$addr} = 1 if $type;
 
         $self->_range_list->add_map($lower, $upper,
                                     $string,
@@ -5055,11 +5463,6 @@ sub trace { return main::trace(@_); }
                                           $value,
                                           Type => $range->type,
                                           Replace => $UNCONDITIONALLY);
-        }
-
-        # Copy the specials information from the other table to $self
-        if ($has_specials{$other_addr}) {
-            $has_specials{$addr} = 1;
         }
 
         return;
@@ -5325,12 +5728,133 @@ END
 
     my %swash_keys; # Makes sure don't duplicate swash names.
 
+    # The remaining variables are temporaries used while writing each table,
+    # to output special ranges.
+    my $has_hangul_syllables;
+    my @multi_code_point_maps;  # Map is to more than one code point.
+
+    # The key is the base name of the code point, and the value is an
+    # array giving all the ranges that use this base name.  Each range
+    # is actually a hash giving the 'low' and 'high' values of it.
+    my %names_ending_in_code_point;
+
+    # Inverse mapping.  The list of ranges that have these kinds of
+    # names.  Each element contains the low, high, and base names in a
+    # hash.
+    my @code_points_ending_in_code_point;
+
+    sub handle_special_range {
+        # Called in the middle of write when it finds a range it doesn't know
+        # how to handle.
+
+        my $self = shift;
+        my $range = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $addr = do { no overloading; pack 'J', $self; };
+
+        my $type = $range->type;
+
+        my $low = $range->start;
+        my $high = $range->end;
+        my $map = $range->value;
+
+        # No need to output the range if it maps to the default.
+        return if $map eq $default_map{$addr};
+
+        # Switch based on the map type...
+        if ($type == $HANGUL_SYLLABLE) {
+
+            # These are entirely algorithmically determinable based on
+            # some constants furnished by Unicode; for now, just set a
+            # flag to indicate that have them.  After everything is figured
+            # out, we will output the code that does the algorithm.
+            $has_hangul_syllables = 1;
+        }
+        elsif ($type == $CP_IN_NAME) {
+
+            # Code points whose the name ends in their code point are also
+            # algorithmically determinable, but need information about the map
+            # to do so.  Both the map and its inverse are stored in data
+            # structures output in the file.
+            push @{$names_ending_in_code_point{$map}->{'low'}}, $low;
+            push @{$names_ending_in_code_point{$map}->{'high'}}, $high;
+
+            push @code_points_ending_in_code_point, { low => $low,
+                                                        high => $high,
+                                                        name => $map
+                                                    };
+        }
+        elsif ($range->type == $MULTI_CP || $range->type == $NULL) {
+
+            # Multi-code point maps and null string maps have an entry
+            # for each code point in the range.  They use the same
+            # output format.
+            for my $code_point ($low .. $high) {
+
+                # The pack() below can't cope with surrogates.
+                if ($code_point >= 0xD800 && $code_point <= 0xDFFF) {
+                    Carp::my_carp("Surrogage code point '$code_point' in mapping to '$map' in $self.  No map created");
+                    next;
+                }
+
+                # Generate the hash entries for these in the form that
+                # utf8.c understands.
+                my $tostr = "";
+                my $to_name = "";
+                my $to_chr = "";
+                foreach my $to (split " ", $map) {
+                    if ($to !~ /^$code_point_re$/) {
+                        Carp::my_carp("Illegal code point '$to' in mapping '$map' from $code_point in $self.  No map created");
+                        next;
+                    }
+                    $tostr .= sprintf "\\x{%s}", $to;
+                    $to = CORE::hex $to;
+                    if ($annotate) {
+                        $to_name .= " + " if $to_name;
+                        $to_chr .= chr($to);
+                        main::populate_char_info($to)
+                                            if ! defined $viacode[$to];
+                        $to_name .=  $viacode[$to];
+                    }
+                }
+
+                # I (khw) have never waded through this line to
+                # understand it well enough to comment it.
+                my $utf8 = sprintf(qq["%s" => "$tostr",],
+                        join("", map { sprintf "\\x%02X", $_ }
+                            unpack("U0C*", pack("U", $code_point))));
+
+                # Add a comment so that a human reader can more easily
+                # see what's going on.
+                push @multi_code_point_maps,
+                        sprintf("%-45s # U+%04X", $utf8, $code_point);
+                if (! $annotate) {
+                    $multi_code_point_maps[-1] .= " => $map";
+                }
+                else {
+                    main::populate_char_info($code_point)
+                                    if ! defined $viacode[$code_point];
+                    $multi_code_point_maps[-1] .= " '"
+                        . chr($code_point)
+                        . "' => '$to_chr'; $viacode[$code_point] => $to_name";
+                }
+            }
+        }
+        else {
+            Carp::my_carp("Unrecognized map type '$range->type' in '$range' in $self.  Not written");
+        }
+
+        return;
+    }
+
     sub pre_body {
         # Returns the string that should be output in the file before the main
-        # body of this table.  This includes some hash entries identifying the
-        # format of the body, and what the single value should be for all
-        # ranges missing from it.  It also includes any code points which have
-        # map_types that don't go in the main table.
+        # body of this table.  It isn't called until the main body is
+        # calculated, saving a pass.  The string includes some hash entries
+        # identifying the format of the body, and what the single value should
+        # be for all ranges missing from it.  It also includes any code points
+        # which have map_types that don't go in the main table.
 
         my $self = shift;
         Carp::carp_extra_args(\@_) if main::DEBUG && @_;
@@ -5349,119 +5873,13 @@ END
         }
         $swash_keys{$name} = "$self";
 
-        my $default_map = $default_map{$addr};
-
         my $pre_body = "";
-        if ($has_specials{$addr}) {
 
-            # Here, some maps with non-zero type have been added to the table.
-            # Go through the table and handle each of them.  None will appear
-            # in the body of the table, so delete each one as we go.  The
-            # code point count has already been calculated, so ok to delete
-            # now.
-
-            my @multi_code_point_maps;
-            my $has_hangul_syllables = 0;
-
-            # The key is the base name of the code point, and the value is an
-            # array giving all the ranges that use this base name.  Each range
-            # is actually a hash giving the 'low' and 'high' values of it.
-            my %names_ending_in_code_point;
-
-            # Inverse mapping.  The list of ranges that have these kinds of
-            # names.  Each element contains the low, high, and base names in a
-            # hash.
-            my @code_points_ending_in_code_point;
-
-            my $range_map = $self->_range_list;
-            foreach my $range ($range_map->ranges) {
-                next unless $range->type != 0;
-                my $low = $range->start;
-                my $high = $range->end;
-                my $map = $range->value;
-                my $type = $range->type;
-
-                # No need to output the range if it maps to the default.  And
-                # the write method won't output it either, so no need to
-                # delete it to keep it from being output, and is faster to
-                # skip than to delete anyway.
-                next if $map eq $default_map;
-
-                # Delete the range to keep write() from trying to output it
-                $range_map->delete_range($low, $high);
-
-                # Switch based on the map type...
-                if ($type == $HANGUL_SYLLABLE) {
-
-                    # These are entirely algorithmically determinable based on
-                    # some constants furnished by Unicode; for now, just set a
-                    # flag to indicate that have them.  Below we will output
-                    # the code that does the algorithm.
-                    $has_hangul_syllables = 1;
-                }
-                elsif ($type == $CP_IN_NAME) {
-
-                    # If the name ends in the code point it represents, are
-                    # also algorithmically determinable, but need information
-                    # about the map to do so.  Both the map and its inverse
-                    # are stored in data structures output in the file.
-                    push @{$names_ending_in_code_point{$map}->{'low'}}, $low;
-                    push @{$names_ending_in_code_point{$map}->{'high'}}, $high;
-
-                    push @code_points_ending_in_code_point, { low => $low,
-                                                              high => $high,
-                                                              name => $map
-                                                            };
-                }
-                elsif ($range->type == $MULTI_CP || $range->type == $NULL) {
-
-                    # Multi-code point maps and null string maps have an entry
-                    # for each code point in the range.  They use the same
-                    # output format.
-                    for my $code_point ($low .. $high) {
-
-                        # The pack() below can't cope with surrogates.
-                        if ($code_point >= 0xD800 && $code_point <= 0xDFFF) {
-                            Carp::my_carp("Surrogage code point '$code_point' in mapping to '$map' in $self.  No map created");
-                            next;
-                        }
-
-                        # Generate the hash entries for these in the form that
-                        # utf8.c understands.
-                        my $tostr = "";
-                        foreach my $to (split " ", $map) {
-                            if ($to !~ /^$code_point_re$/) {
-                                Carp::my_carp("Illegal code point '$to' in mapping '$map' from $code_point in $self.  No map created");
-                                next;
-                            }
-                            $tostr .= sprintf "\\x{%s}", $to;
-                        }
-
-                        # I (khw) have never waded through this line to
-                        # understand it well enough to comment it.
-                        my $utf8 = sprintf(qq["%s" => "$tostr",],
-                                join("", map { sprintf "\\x%02X", $_ }
-                                    unpack("U0C*", pack("U", $code_point))));
-
-                        # Add a comment so that a human reader can more easily
-                        # see what's going on.
-                        push @multi_code_point_maps,
-                                sprintf("%-45s # U+%04X => %s", $utf8,
-                                                                $code_point,
-                                                                $map);
-                    }
-                }
-                else {
-                    Carp::my_carp("Unrecognized map type '$range->type' in '$range' in $self.  Using type 0 instead");
-                    $range_map->add_map($low, $high, $map, Replace => $UNCONDITIONALLY, Type => 0);
-                }
-            } # End of loop through all ranges
-
-            # Here have gone through the whole file.  If actually generated
-            # anything for each map type, add its respective header and
-            # trailer
-            if (@multi_code_point_maps) {
-                $pre_body .= <<END;
+        # Here we assume we were called after have gone through the whole
+        # file.  If we actually generated anything for each map type, add its
+        # respective header and trailer
+        if (@multi_code_point_maps) {
+            $pre_body .= <<END;
 
 # Some code points require special handling because their mappings are each to
 # multiple code points.  These do not appear in the main body, but are defined
@@ -5472,59 +5890,59 @@ END
 # under "use bytes").  Each value is the UTF-8 of the translation, for speed.
 %utf8::ToSpec$name = (
 END
-                $pre_body .= join("\n", @multi_code_point_maps) . "\n);\n";
-            }
+            $pre_body .= join("\n", @multi_code_point_maps) . "\n);\n";
+        }
 
-            if ($has_hangul_syllables || @code_points_ending_in_code_point) {
+        if ($has_hangul_syllables || @code_points_ending_in_code_point) {
 
-                # Convert these structures to output format.
-                my $code_points_ending_in_code_point =
-                    main::simple_dumper(\@code_points_ending_in_code_point,
-                                        ' ' x 8);
-                my $names = main::simple_dumper(\%names_ending_in_code_point,
-                                                ' ' x 8);
+            # Convert these structures to output format.
+            my $code_points_ending_in_code_point =
+                main::simple_dumper(\@code_points_ending_in_code_point,
+                                    ' ' x 8);
+            my $names = main::simple_dumper(\%names_ending_in_code_point,
+                                            ' ' x 8);
 
-                # Do the same with the Hangul names,
-                my $jamo;
-                my $jamo_l;
-                my $jamo_v;
-                my $jamo_t;
-                my $jamo_re;
-                if ($has_hangul_syllables) {
+            # Do the same with the Hangul names,
+            my $jamo;
+            my $jamo_l;
+            my $jamo_v;
+            my $jamo_t;
+            my $jamo_re;
+            if ($has_hangul_syllables) {
 
-                    # Construct a regular expression of all the possible
-                    # combinations of the Hangul syllables.
-                    my @L_re;   # Leading consonants
-                    for my $i ($LBase .. $LBase + $LCount - 1) {
-                        push @L_re, $Jamo{$i}
-                    }
-                    my @V_re;   # Middle vowels
-                    for my $i ($VBase .. $VBase + $VCount - 1) {
-                        push @V_re, $Jamo{$i}
-                    }
-                    my @T_re;   # Trailing consonants
-                    for my $i ($TBase + 1 .. $TBase + $TCount - 1) {
-                        push @T_re, $Jamo{$i}
-                    }
-
-                    # The whole re is made up of the L V T combination.
-                    $jamo_re = '('
-                               . join ('|', sort @L_re)
-                               . ')('
-                               . join ('|', sort @V_re)
-                               . ')('
-                               . join ('|', sort @T_re)
-                               . ')?';
-
-                    # These hashes needed by the algorithm were generated
-                    # during reading of the Jamo.txt file
-                    $jamo = main::simple_dumper(\%Jamo, ' ' x 8);
-                    $jamo_l = main::simple_dumper(\%Jamo_L, ' ' x 8);
-                    $jamo_v = main::simple_dumper(\%Jamo_V, ' ' x 8);
-                    $jamo_t = main::simple_dumper(\%Jamo_T, ' ' x 8);
+                # Construct a regular expression of all the possible
+                # combinations of the Hangul syllables.
+                my @L_re;   # Leading consonants
+                for my $i ($LBase .. $LBase + $LCount - 1) {
+                    push @L_re, $Jamo{$i}
+                }
+                my @V_re;   # Middle vowels
+                for my $i ($VBase .. $VBase + $VCount - 1) {
+                    push @V_re, $Jamo{$i}
+                }
+                my @T_re;   # Trailing consonants
+                for my $i ($TBase + 1 .. $TBase + $TCount - 1) {
+                    push @T_re, $Jamo{$i}
                 }
 
-                $pre_body .= <<END;
+                # The whole re is made up of the L V T combination.
+                $jamo_re = '('
+                            . join ('|', sort @L_re)
+                            . ')('
+                            . join ('|', sort @V_re)
+                            . ')('
+                            . join ('|', sort @T_re)
+                            . ')?';
+
+                # These hashes needed by the algorithm were generated
+                # during reading of the Jamo.txt file
+                $jamo = main::simple_dumper(\%Jamo, ' ' x 8);
+                $jamo_l = main::simple_dumper(\%Jamo_L, ' ' x 8);
+                $jamo_v = main::simple_dumper(\%Jamo_V, ' ' x 8);
+                $jamo_t = main::simple_dumper(\%Jamo_T, ' ' x 8);
+            }
+
+            $pre_body .= <<END;
 
 # To achieve significant memory savings when this file is read in,
 # algorithmically derivable code points are omitted from the main body below.
@@ -5551,10 +5969,10 @@ $names
 $code_points_ending_in_code_point
     );
 END
-                # Earlier releases didn't have Jamos.  No sense outputting
-                # them unless will be used.
-                if ($has_hangul_syllables) {
-                    $pre_body .= <<END;
+            # Earlier releases didn't have Jamos.  No sense outputting
+            # them unless will be used.
+            if ($has_hangul_syllables) {
+                $pre_body .= <<END;
 
     # Convert from code point to Jamo short name for use in composing Hangul
     # syllable names
@@ -5586,19 +6004,19 @@ $jamo_t
     # These constants names and values were taken from the Unicode standard,
     # version 5.1, section 3.12.  They are used in conjunction with Hangul
     # syllables
-    my \$SBase = 0xAC00;
-    my \$LBase = 0x1100;
-    my \$VBase = 0x1161;
-    my \$TBase = 0x11A7;
-    my \$SCount = 11172;
-    my \$LCount = 19;
-    my \$VCount = 21;
-    my \$TCount = 28;
+    my \$SBase = $SBase_string;
+    my \$LBase = $LBase_string;
+    my \$VBase = $VBase_string;
+    my \$TBase = $TBase_string;
+    my \$SCount = $SCount;
+    my \$LCount = $LCount;
+    my \$VCount = $VCount;
+    my \$TCount = $TCount;
     my \$NCount = \$VCount * \$TCount;
 END
-                } # End of has Jamos
+            } # End of has Jamos
 
-                $pre_body .= << 'END';
+            $pre_body .= << 'END';
 
     sub name_to_code_point_special {
         my $name = shift;
@@ -5606,8 +6024,8 @@ END
         # Returns undef if not one of the specially handled names; otherwise
         # returns the code point equivalent to the input name
 END
-                if ($has_hangul_syllables) {
-                    $pre_body .= << 'END';
+            if ($has_hangul_syllables) {
+                $pre_body .= << 'END';
 
         if (substr($name, 0, $HANGUL_SYLLABLE_LENGTH) eq $HANGUL_SYLLABLE) {
             $name = substr($name, $HANGUL_SYLLABLE_LENGTH);
@@ -5618,8 +6036,8 @@ END
             return ($L * $VCount + $V) * $TCount + $T + $SBase;
         }
 END
-                }
-                $pre_body .= << 'END';
+            }
+            $pre_body .= << 'END';
 
         # Name must end in '-code_point' for this to handle.
         if ($name !~ /^ (.*) - ($code_point_re) $/x) {
@@ -5653,8 +6071,8 @@ END
         # Returns the name of a code point if algorithmically determinable;
         # undef if not
 END
-                if ($has_hangul_syllables) {
-                    $pre_body .= << 'END';
+            if ($has_hangul_syllables) {
+                $pre_body .= << 'END';
 
         # If in the Hangul range, calculate the name based on Unicode's
         # algorithm
@@ -5669,8 +6087,8 @@ END
             return $name;
         }
 END
-                }
-                $pre_body .= << 'END';
+            }
+            $pre_body .= << 'END';
 
         # Look through list of these code points for one in range.
         foreach my $hash (@code_points_ending_in_code_point) {
@@ -5684,13 +6102,50 @@ END
 } # End closure
 
 END
-            } # End of has hangul or code point in name maps.
-        } # End of has specials
+        } # End of has hangul or code point in name maps.
+
+        my $format = $self->format;
+
+        my $return = <<END;
+# The name this swash is to be known by, with the format of the mappings in
+# the main body of the table, and what all code points missing from this file
+# map to.
+\$utf8::SwashInfo{'To$name'}{'format'} = '$format'; # $map_table_formats{$format}
+END
+        my $default_map = $default_map{$addr};
+        $return .= "\$utf8::SwashInfo{'To$name'}{'missing'} = '$default_map';";
+
+        if ($default_map eq $CODE_POINT) {
+            $return .= ' # code point maps to itself';
+        }
+        elsif ($default_map eq "") {
+            $return .= ' # code point maps to the null string';
+        }
+        $return .= "\n";
+
+        $return .= $pre_body;
+
+        return $return;
+    }
+
+    sub write {
+        # Write the table to the file.
+
+        my $self = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $addr = do { no overloading; pack 'J', $self; };
+
+        # Clear the temporaries
+        $has_hangul_syllables = 0;
+        undef @multi_code_point_maps;
+        undef %names_ending_in_code_point;
+        undef @code_points_ending_in_code_point;
 
         # Calculate the format of the table if not already done.
-        my $format = $format{$addr};
-        my $property = $self->property;
-        my $type = $property->type;
+        my $format = $self->format;
+        my $type = $self->property->type;
+        my $default_map = $self->default_map;
         if (! defined $format) {
             if ($type == $BINARY) {
 
@@ -5721,6 +6176,8 @@ END
                     # most restrictive, and so on.
                     $format = $DECIMAL_FORMAT;
                     foreach my $range (@ranges) {
+                        next if $range->type != 0;  # Non-normal ranges don't
+                                                    # affect the main body
                         my $map = $range->value;
                         if ($map ne $default_map) {
                             last if $format eq $STRING_FORMAT;  # already at
@@ -5746,47 +6203,21 @@ END
             }
         } # end of calculating format
 
-        my $return = <<END;
-# The name this swash is to be known by, with the format of the mappings in
-# the main body of the table, and what all code points missing from this file
-# map to.
-\$utf8::SwashInfo{'To$name'}{'format'} = '$format'; # $map_table_formats{$format}
-END
-        my $missing = $default_map;
-        if ($missing eq $CODE_POINT
+        if ($default_map eq $CODE_POINT
             && $format ne $HEX_FORMAT
-            && ! defined $format{$addr})    # Is expected if was manually set
+            && ! defined $self->format)    # manual settings are always
+                                           # considered ok
         {
             Carp::my_carp_bug("Expecting hex format for mapping table for $self, instead got '$format'")
         }
-        $format{$addr} = $format;
-        $return .= "\$utf8::SwashInfo{'To$name'}{'missing'} = '$missing';";
-        if ($missing eq $CODE_POINT) {
-            $return .= ' # code point maps to itself';
-        }
-        elsif ($missing eq "") {
-            $return .= ' # code point maps to the null string';
-        }
-        $return .= "\n";
 
-        $return .= $pre_body;
-
-        return $return;
-    }
-
-    sub write {
-        # Write the table to the file.
-
-        my $self = shift;
-        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
-
-        my $addr = do { no overloading; pack 'J', $self; };
+        $self->_set_format($format);
 
         return $self->SUPER::write(
             ($self->property == $block)
                 ? 7     # block file needs more tab stops
                 : 3,
-            $default_map{$addr});   # don't write defaulteds
+            $default_map);   # don't write defaulteds
     }
 
     # Accessors for the underlying list that should fail if locked.
@@ -5904,6 +6335,7 @@ sub trace { return main::trace(@_); }
         # Optional
         my $initialize = delete $args{'Initialize'};
         my $matches_all = delete $args{'Matches_All'} || 0;
+        my $format = delete $args{'Format'};
         # Rest of parameters passed on.
 
         my $range_list = Range_List->new(Initialize => $initialize,
@@ -5926,6 +6358,7 @@ sub trace { return main::trace(@_); }
                                       Full_Name => $full_name,
                                       _Property => $property,
                                       _Range_List => $range_list,
+                                      Format => $EMPTY_FORMAT,
                                       );
         my $addr = do { no overloading; pack 'J', $self; };
 
@@ -5935,6 +6368,10 @@ sub trace { return main::trace(@_); }
         $matches_all{$addr} = $matches_all;
         $leader{$addr} = $self;
         $parent{$addr} = $self;
+
+        if (defined $format && $format ne $EMPTY_FORMAT) {
+            Carp::my_carp_bug("'Format' must be '$EMPTY_FORMAT' in a match table instead of '$format'.  Using '$EMPTY_FORMAT'");
+        }
 
         return $self;
     }
@@ -6064,7 +6501,7 @@ sub trace { return main::trace(@_); }
         return;
     }
 
-    sub is_equivalent_to {
+    sub is_set_equivalent_to {
         # Return boolean of whether or not the other object is a table of this
         # type and has been marked equivalent to this one.
 
@@ -6077,7 +6514,7 @@ sub trace { return main::trace(@_); }
         unless ($other->isa(__PACKAGE__)) {
             my $ref_other = ref $other;
             my $ref_self = ref $self;
-            Carp::my_carp_bug("Argument to 'is_equivalent_to' must be another $ref_self, not a '$ref_other'.  $other not set equivalent to $self.");
+            Carp::my_carp_bug("Argument to 'is_set_equivalent_to' must be another $ref_self, not a '$ref_other'.  $other not set equivalent to $self.");
             return 0;
         }
 
@@ -6085,43 +6522,6 @@ sub trace { return main::trace(@_); }
         no overloading;
         return $leader{pack 'J', $self} == $leader{pack 'J', $other};
         return;
-    }
-
-    sub matches_identically_to {
-        # Return a boolean as to whether or not two tables match identical
-        # sets of code points.
-
-        my $self = shift;
-        my $other = shift;
-        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
-
-        unless ($other->isa(__PACKAGE__)) {
-            my $ref_other = ref $other;
-            my $ref_self = ref $self;
-            Carp::my_carp_bug("Argument to 'matches_identically_to' must be another $ref_self, not a '$ref_other'.  $other not set equivalent to $self.");
-            return 0;
-        }
-
-        # These are ordered in increasing real time to figure out (at least
-        # until a patch changes that and doesn't change this)
-        return 0 if $self->max != $other->max;
-        return 0 if $self->min != $other->min;
-        return 0 if $self->range_count != $other->range_count;
-        return 0 if $self->count != $other->count;
-
-        # Here they could be identical because all the tests above passed.
-        # The loop below is somewhat simpler since we know they have the same
-        # number of elements.  Compare range by range, until reach the end or
-        # find something that differs.
-        my @a_ranges = $self->_range_list->ranges;
-        my @b_ranges = $other->_range_list->ranges;
-        for my $i (0 .. @a_ranges - 1) {
-            my $a = $a_ranges[$i];
-            my $b = $b_ranges[$i];
-            trace "self $a; other $b" if main::DEBUG && $to_trace;
-            return 0 if $a->start != $b->start || $a->end != $b->end;
-        }
-        return 1;
     }
 
     sub set_equivalent_to {
@@ -6154,18 +6554,27 @@ sub trace { return main::trace(@_); }
 
         # If already are equivalent, no need to re-do it;  if subroutine
         # returns null, it found an error, also do nothing
-        my $are_equivalent = $self->is_equivalent_to($other);
+        my $are_equivalent = $self->is_set_equivalent_to($other);
         return if ! defined $are_equivalent || $are_equivalent;
 
         my $addr = do { no overloading; pack 'J', $self; };
         my $current_leader = ($related) ? $parent{$addr} : $leader{$addr};
 
-        if ($related &&
-            ! $other->perl_extension
-            && ! $current_leader->perl_extension)
-        {
-            Carp::my_carp_bug("set_equivalent_to should have 'Related => 0 for equivalencing two Unicode properties.  Assuming $self is not related to $other");
-            $related = 0;
+        if ($related) {
+            if ($current_leader->perl_extension) {
+                if ($other->perl_extension) {
+                    Carp::my_carp_bug("Use add_alias() to set two Perl tables '$self' and '$other', equivalent.");
+                    return;
+                }
+            } elsif (! $other->perl_extension) {
+                Carp::my_carp_bug("set_equivalent_to should have 'Related => 0 for equivalencing two Unicode properties.  Assuming $self is not related to $other");
+                $related = 0;
+            }
+        }
+
+        if (! $self->is_empty && ! $self->matches_identically_to($other)) {
+            Carp::my_carp_bug("$self should be empty or match identically to $other.  Not setting equivalent");
+            return;
         }
 
         my $leader = do { no overloading; pack 'J', $current_leader; };
@@ -7139,6 +7548,7 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
                     aliases
                     comment
                     complete_name
+                    containing_range
                     core_access
                     count
                     default_map
@@ -7171,6 +7581,7 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
                     status
                     status_info
                     to_output_map
+                    type_of
                     value_of
                     write
                 ))
@@ -7447,19 +7858,15 @@ sub force_unlink ($) {
     return;
 }
 
-sub write ($\@) {
-    # Given a filename and a reference to an array of lines, write the lines
-    # to the file
+sub write ($$@) {
+    # Given a filename and references to arrays of lines, write the lines of
+    # each array to the file
     # Filename can be given as an arrayref of directory names
 
-    my $file  = shift;
-    my $lines_ref = shift;
-    Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+    return Carp::carp_too_few_args(\@_, 3) if main::DEBUG && @_ < 3;
 
-    if (! defined $lines_ref) {
-        Carp::my_carp("Missing lines to write parameter for $file.  Writing skipped;");
-        return;
-    }
+    my $file  = shift;
+    my $use_utf8 = shift;
 
     # Get into a single string if an array, and get rid of, in Unix terms, any
     # leading '.'
@@ -7472,10 +7879,6 @@ sub write ($\@) {
 
     push @files_actually_output, $file;
 
-    unless (@$lines_ref) {
-        Carp::my_carp("Output file '$file' is empty; writing it anyway;");
-    }
-
     force_unlink ($file);
 
     my $OUT;
@@ -7484,7 +7887,15 @@ sub write ($\@) {
         return;
     }
 
-    print $OUT @$lines_ref or die Carp::my_carp("write to '$file' failed: $!");
+    binmode $OUT, ":utf8" if $use_utf8;
+
+    while (defined (my $lines_ref = shift)) {
+        unless (@$lines_ref) {
+            Carp::my_carp("An array of lines for writing to file '$file' is empty; writing it anyway;");
+        }
+
+        print $OUT @$lines_ref or die Carp::my_carp("write to '$file' failed: $!");
+    }
     close $OUT or die Carp::my_carp("close '$file' failed: $!");
 
     print "$file written.\n" if $verbosity >= $VERBOSE;
@@ -7908,7 +8319,7 @@ sub finish_property_setup {
         ;
 
         # The defaults apply only to unassigned characters
-        $default_R .= '$gc->table("Cn") & $default;';
+        $default_R .= '$gc->table("Unassigned") & $default;';
 
         if ($v_version lt v3.0.0) {
             $default = Multi_Default->new(R => $default_R, 'L');
@@ -7928,7 +8339,7 @@ sub finish_property_setup {
             if ($v_version ge 3.1.0) {
                 $default_AL .= '$default->delete_range(0xFDD0, 0xFDEF);';
             }
-            $default_AL .= '$gc->table("Cn") & $default';
+            $default_AL .= '$gc->table("Unassigned") & $default';
             $default = Multi_Default->new(AL => $default_AL,
                                           R => $default_R,
                                           'L');
@@ -8570,7 +8981,7 @@ sub output_perl_charnames_line ($$) {
         # 0374          ; NFD_QC; N
         # 003C..003E    ; Math
         #
-        # the fields are: "codepoint range ; property; map"
+        # the fields are: "codepoint-range ; property; map"
         #
         # meaning the codepoints in the range all have the value 'map' under
         # 'property'.
@@ -9131,7 +9542,7 @@ END
         # Name_Alias properties.  (The final duplicates elements of the
         # first.)  A comment for it will later be constructed based on the
         # actual properties present and used
-        Property->new('Perl_Charnames',
+        $perl_charname = Property->new('Perl_Charnames',
                        Core_Access => '\N{...} and "use charnames"',
                        Default_Map => "",
                        Directory => File::Spec->curdir(),
@@ -9145,7 +9556,7 @@ END
         my $Perl_decomp = Property->new('Perl_Decomposition_Mapping',
                                         Directory => File::Spec->curdir(),
                                         File => 'Decomposition',
-                                        Format => $STRING_FORMAT,
+                                        Format => $DECOMP_STRING_FORMAT,
                                         Internal_Only_Warning => 1,
                                         Perl_Extension => 1,
                                         Default_Map => $CODE_POINT,
@@ -9325,7 +9736,7 @@ END
         # Certain fields just haven't been empty so far in any Unicode
         # version, so don't look at those, namely $MIRRORED, $BIDI, $CCC,
         # $CATEGORY.  This leaves just the two fields, and so we hard-code in
-        # the defaults; which are verly unlikely to ever change.
+        # the defaults; which are very unlikely to ever change.
         $fields[$UPPER] = $CODE_POINT if $fields[$UPPER] eq "";
         $fields[$LOWER] = $CODE_POINT if $fields[$LOWER] eq "";
 
@@ -9505,6 +9916,7 @@ END
             # code in this subroutine that does the same thing, but doesn't
             # know about these ranges.
             $_ = "";
+
             return;
         }
 
@@ -9580,7 +9992,6 @@ END
             # essentially be this code.)  This uses the algorithm published by
             # Unicode.
             if (property_ref('Decomposition_Mapping')->to_output_map) {
-        local $to_trace = 1 if main::DEBUG;
                 for (my $S = $SBase; $S < $SBase + $SCount; $S++) {
                     use integer;
                     my $SIndex = $S - $SBase;
@@ -9867,7 +10278,7 @@ sub setup_special_casing {
         # The simple version's name in each mapping merely has an 's' in front
         # of the full one's
         my $simple = property_ref('s' . $case);
-        $simple->initialize($case) if $simple->to_output_map();
+        $simple->initialize($full) if $simple->to_output_map();
     }
 
     return;
@@ -9975,6 +10386,7 @@ sub filter_old_style_case_folding {
     # it takes no part in anything we do.
     my $to_output_simple;
 
+    # XXX
     # These are experimental, perhaps will need these to pass to regcomp.c to
     # handle the cases where for example the Kelvin sign character folds to k,
     # and in regcomp, we need to know which of the characters can have a
@@ -10043,7 +10455,7 @@ sub filter_old_style_case_folding {
             $file->insert_adjusted_lines("$range; Simple_Case_Folding; $map");
         }
 
-        # Experimental, see comment above
+        # XXX Experimental, see comment above
         if ($type ne 'S' && hex($range) >= 256) {   # assumes range is 1 point
             my @folded = split ' ', $map;
             if (hex $folded[0] < 256 && @folded == 1) {
@@ -10058,7 +10470,7 @@ sub filter_old_style_case_folding {
     }
 
     sub post_fold {
-        # Experimental, see comment above
+        # XXX Experimental, see comment above
         return;
 
         #local $to_trace = 1 if main::DEBUG;
@@ -10718,7 +11130,8 @@ sub compile_perl() {
     # range, with their names prefaced by 'Posix', to signify that these match
     # what the Posix standard says they should match.  A couple are
     # effectively this, but the name doesn't have 'Posix' in it because there
-    # just isn't any Posix equivalent.
+    # just isn't any Posix equivalent.  'XPosix' are the Posix tables extended
+    # to the full Unicode range, by our guesses as to what is appropriate.
 
     # 'Any' is all code points.  As an error check, instead of just setting it
     # to be that, construct it to be the union of all the major categories
@@ -10783,6 +11196,7 @@ sub compile_perl() {
         $Lower->set_equivalent_to($gc->table('Lowercase_Letter'),
                                                                 Related => 1);
     }
+    $Lower->add_alias('XPosixLower');
     $perl->add_match_table("PosixLower",
                             Description => "[a-z]",
                             Initialize => $Lower & $ASCII,
@@ -10797,6 +11211,7 @@ sub compile_perl() {
         $Upper->set_equivalent_to($gc->table('Uppercase_Letter'),
                                                                 Related => 1);
     }
+    $Upper->add_alias('XPosixUpper');
     $perl->add_match_table("PosixUpper",
                             Description => "[A-Z]",
                             Initialize => $Upper & $ASCII,
@@ -10891,6 +11306,7 @@ sub compile_perl() {
         $Alpha += $gc->table('Nl') if defined $gc->table('Nl');
         $Alpha->add_description('Alphabetic');
     }
+    $Alpha->add_alias('XPosixAlpha');
     $perl->add_match_table("PosixAlpha",
                             Description => "[A-Za-z]",
                             Initialize => $Alpha & $ASCII,
@@ -10900,23 +11316,27 @@ sub compile_perl() {
                         Description => 'Alphabetic and (Decimal) Numeric',
                         Initialize => $Alpha + $gc->table('Decimal_Number'),
                         );
+    $Alnum->add_alias('XPosixAlnum');
     $perl->add_match_table("PosixAlnum",
                             Description => "[A-Za-z0-9]",
                             Initialize => $Alnum & $ASCII,
                             );
 
     my $Word = $perl->add_match_table('Word',
-                                Description => '\w, including beyond ASCII',
+                                Description => '\w, including beyond ASCII;'
+                                            . ' = \p{Alnum} + \pM + \p{Pc}',
                                 Initialize => $Alnum + $gc->table('Mark'),
                                 );
+    $Word->add_alias('XPosixWord');
     my $Pc = $gc->table('Connector_Punctuation'); # 'Pc' Not in release 1
     $Word += $Pc if defined $Pc;
 
     # This is a Perl extension, so the name doesn't begin with Posix.
-    $perl->add_match_table('PerlWord',
+    my $PerlWord = $perl->add_match_table('PerlWord',
                     Description => '\w, restricted to ASCII = [A-Za-z0-9_]',
                     Initialize => $Word & $ASCII,
                     );
+    $PerlWord->add_alias('PosixWord');
 
     my $Blank = $perl->add_match_table('Blank',
                                 Description => '\h, Horizontal white space',
@@ -10929,6 +11349,7 @@ sub compile_perl() {
                                             -   0x200B, # ZWSP
                                 );
     $Blank->add_alias('HorizSpace');        # Another name for it.
+    $Blank->add_alias('XPosixBlank');
     $perl->add_match_table("PosixBlank",
                             Description => "\\t and ' '",
                             Initialize => $Blank & $ASCII,
@@ -10950,24 +11371,28 @@ sub compile_perl() {
                 Description => '\s including beyond ASCII plus vertical tab',
                 Initialize => $Blank + $VertSpace,
     );
+    $Space->add_alias('XPosixSpace');
     $perl->add_match_table("PosixSpace",
                             Description => "\\t, \\n, \\cK, \\f, \\r, and ' '.  (\\cK is vertical tab)",
                             Initialize => $Space & $ASCII,
                             );
 
     # Perl's traditional space doesn't include Vertical Tab
-    my $SpacePerl = $perl->add_match_table('SpacePerl',
+    my $XPerlSpace = $perl->add_match_table('XPerlSpace',
                                   Description => '\s, including beyond ASCII',
                                   Initialize => $Space - 0x000B,
                                 );
-    $perl->add_match_table('PerlSpace',
+    $XPerlSpace->add_alias('SpacePerl');    # A pre-existing synonym
+    my $PerlSpace = $perl->add_match_table('PerlSpace',
                             Description => '\s, restricted to ASCII',
-                            Initialize => $SpacePerl & $ASCII,
+                            Initialize => $XPerlSpace & $ASCII,
                             );
+
 
     my $Cntrl = $perl->add_match_table('Cntrl',
                                         Description => 'Control characters');
     $Cntrl->set_equivalent_to($gc->table('Cc'), Related => 1);
+    $Cntrl->add_alias('XPosixCntrl');
     $perl->add_match_table("PosixCntrl",
                             Description => "ASCII control characters: NUL, SOH, STX, ETX, EOT, ENQ, ACK, BEL, BS, HT, LF, VT, FF, CR, SO, SI, DLE, DC1, DC2, DC3, DC4, NAK, SYN, ETB, CAN, EOM, SUB, ESC, FS, GS, RS, US, and DEL",
                             Initialize => $Cntrl & $ASCII,
@@ -10984,35 +11409,42 @@ sub compile_perl() {
                         Description => 'Characters that are graphical',
                         Initialize => ~ ($Space + $controls),
                         );
+    $Graph->add_alias('XPosixGraph');
     $perl->add_match_table("PosixGraph",
                             Description =>
                                 '[-!"#$%&\'()*+,./:;<>?@[\\\]^_`{|}~0-9A-Za-z]',
                             Initialize => $Graph & $ASCII,
                             );
 
-    my $Print = $perl->add_match_table('Print',
+    $print = $perl->add_match_table('Print',
                         Description => 'Characters that are graphical plus space characters (but no controls)',
                         Initialize => $Blank + $Graph - $gc->table('Control'),
                         );
+    $print->add_alias('XPosixPrint');
     $perl->add_match_table("PosixPrint",
                             Description =>
                               '[- 0-9A-Za-z!"#$%&\'()*+,./:;<>?@[\\\]^_`{|}~]',
-                            Initialize => $Print & $ASCII,
+                            Initialize => $print & $ASCII,
                             );
 
     my $Punct = $perl->add_match_table('Punct');
     $Punct->set_equivalent_to($gc->table('Punctuation'), Related => 1);
 
     # \p{punct} doesn't include the symbols, which posix does
+    my $XPosixPunct = $perl->add_match_table('XPosixPunct',
+                    Description => '\p{Punct} + ASCII-range \p{Symbol}',
+                    Initialize => $gc->table('Punctuation')
+                                + ($ASCII & $gc->table('Symbol')),
+        );
     $perl->add_match_table('PosixPunct',
         Description => '[-!"#$%&\'()*+,./:;<>?@[\\\]^_`{|}~]',
-        Initialize => $ASCII & ($gc->table('Punctuation')
-                                + $gc->table('Symbol')),
+        Initialize => $ASCII & $XPosixPunct,
         );
 
     my $Digit = $perl->add_match_table('Digit',
-                            Description => '\d, extended beyond just [0-9]');
+                            Description => '[0-9] + all other decimal digits');
     $Digit->set_equivalent_to($gc->table('Decimal_Number'), Related => 1);
+    $Digit->add_alias('XPosixDigit');
     my $PosixDigit = $perl->add_match_table("PosixDigit",
                                             Description => '[0-9]',
                                             Initialize => $Digit & $ASCII,
@@ -11020,6 +11452,7 @@ sub compile_perl() {
 
     # Hex_Digit was not present in first release
     my $Xdigit = $perl->add_match_table('XDigit');
+    $Xdigit->add_alias('XPosixXDigit');
     my $Hex = property_ref('Hex_Digit');
     if (defined $Hex && ! $Hex->is_empty) {
         $Xdigit->set_equivalent_to($Hex->table('Y'), Related => 1);
@@ -11031,6 +11464,10 @@ sub compile_perl() {
                               0xFF10..0xFF19, 0xFF21..0xFF26, 0xFF41..0xFF46]);
         $Xdigit->add_description('[0-9A-Fa-f] and corresponding fullwidth versions, like U+FF10: FULLWIDTH DIGIT ZERO');
     }
+    $perl->add_match_table('PosixXDigit',
+                            Initialize => $ASCII & $Xdigit,
+                            Description => '[0-9A-Fa-f]',
+                        );
 
     my $dt = property_ref('Decomposition_Type');
     $dt->add_match_table('Non_Canon', Full_Name => 'Non_Canonical',
@@ -11137,7 +11574,6 @@ sub compile_perl() {
         $lv_lvt_v->add_comment('For use in \X; matches: HST=LV | HST=LVT | HST=V');
     }
 
-    my $perl_charname = property_ref('Perl_Charnames');
     # Was previously constructed to contain both Name and Unicode_1_Name
     my @composition = ('Name', 'Unicode_1_Name');
 
@@ -11163,7 +11599,7 @@ sub compile_perl() {
         $alias_sentence = <<END;
 The Name_Alias property adds duplicate code point entries with a corrected
 name.  The original (less correct, but still valid) name will be physically
-first.
+last.
 END
     }
     my $comment;
@@ -11175,27 +11611,6 @@ END
         $comment .= ", and $composition[-1]";
     }
 
-    # Wait for charnames to catch up
-#    foreach my $entry (@more_Names,
-#                        split "\n", <<"END"
-#000A; LF
-#000C; FF
-#000D; CR
-#0085; NEL
-#200C; ZWNJ
-#200D; ZWJ
-#FEFF; BOM
-#FEFF; BYTE ORDER MARK
-#END
-#    ) {
-#        #local $to_trace = 1 if main::DEBUG;
-#        trace $entry if main::DEBUG && $to_trace;
-#        my ($code_point, $name) = split /\s*;\s*/, $entry;
-#        $code_point = hex $code_point;
-#        trace $code_point, $name if main::DEBUG && $to_trace;
-#        $perl_charname->add_duplicate($code_point, $name);
-#    }
-#    #$perl_charname->add_comment("This file is for charnames.pm.  It is the union of the $comment properties, plus certain commonly used but unofficial names, such as 'FF' and 'ZWNJ'.  Unicode_1_Name entries are used only for otherwise nameless code points.$alias_sentence");
     $perl_charname->add_comment(join_lines( <<END
 This file is for charnames.pm.  It is the union of the $comment properties.
 Unicode_1_Name entries are used only for otherwise nameless code
@@ -11319,6 +11734,24 @@ END
                                Pod_Entry => 0,
                                Status => $alias->status,
                                Externally_Ok => 0);
+        }
+    }
+
+    # Here done with all the basic stuff.  Ready to populate the information
+    # about each character if annotating them.
+    if ($annotate) {
+
+        # See comments at its declaration
+        $annotate_ranges = Range_Map->new;
+
+        # This separates out the non-characters from the other unassigneds, so
+        # can give different annotations for each.
+        $unassigned_sans_noncharacters = Range_List->new(
+         Initialize => $gc->table('Unassigned')
+                       & property_ref('Noncharacter_Code_Point')->table('N'));
+
+        for (my $i = 0; $i <= $LAST_UNICODE_CODEPOINT; $i++ ) {
+            $i = populate_char_info($i);    # Note sets $i so may cause skips
         }
     }
 
@@ -11487,7 +11920,7 @@ sub add_perl_synonyms() {
                 # name.  We could be in trouble, but not if this is just a
                 # synonym for another table that we have already made a child
                 # of the pre-existing one.
-                if ($pre_existing->is_equivalent_to($actual)) {
+                if ($pre_existing->is_set_equivalent_to($actual)) {
                     trace "$pre_existing is already equivalent to $actual; adding alias perl=$proposed_name to it" if main::DEBUG && $to_trace;
                     $pre_existing->add_alias($proposed_name);
                     next;
@@ -12656,8 +13089,8 @@ accessible through the Perl core, although some may be accessed indirectly.
 For example, the uc() function implements the Uppercase_Mapping property and
 uses the F<Upper.pl> file found in this directory.
 
-The available files with their properties (short names in parentheses),
-and any flags or comments about them, are:
+The available files in the current installation, with their properties (short
+names in parentheses), and any flags or comments about them, are:
 
 @map_tables_actually_output
 
@@ -12703,8 +13136,8 @@ L<perlunicode>
 
 END
 
-    # And write it.
-    main::write([ $pod_directory, "$pod_file.pod" ], @OUT);
+    # And write it.  The 0 means no utf8.
+    main::write([ $pod_directory, "$pod_file.pod" ], 0, \@OUT);
     return;
 }
 
@@ -12765,7 +13198,7 @@ END
 1;
 END
 
-    main::write("Heavy.pl", @heavy);
+    main::write("Heavy.pl", 0, \@heavy);  # The 0 means no utf8.
     return;
 }
 
@@ -13538,10 +13971,12 @@ sub make_property_test_script() {
         }
     }
 
-    &write($t_path, [<DATA>,
-		     @output,
-		     (map {"Test_X('$_');\n"} @backslash_X_tests),
-		     "Finished();\n"]);
+    &write($t_path,
+           0,           # Not utf8;
+           [<DATA>,
+            @output,
+            (map {"Test_X('$_');\n"} @backslash_X_tests),
+            "Finished();\n"]);
     return;
 }
 
@@ -13816,6 +14251,7 @@ File::Find::find({
 }, File::Spec->curdir());
 
 my @mktables_list_output_files;
+my $old_start_time = 0;
 
 if (! -e $file_list) {
     print "'$file_list' doesn't exist, so forcing rebuild.\n" if $verbosity >= $VERBOSE;
@@ -13838,6 +14274,9 @@ else {
         for my $list ( \@input, \@mktables_list_output_files ) {
             while (<$file_handle>) {
                 s/^ \s+ | \s+ $//xg;
+                if (/^ \s* \# .* Autogenerated\ starting\ on\ (\d+)/x) {
+                    $old_start_time = $1;
+                }
                 next if /^ \s* (?: \# .* )? $/x;
                 last if /^ =+ $/x;
                 my ( $file ) = split /\t/;
@@ -13945,12 +14384,12 @@ if ( $verbosity >= $VERBOSE ) {
          "Checking ".scalar( @mktables_list_output_files )." output files.\n";
 }
 
-# We set $youngest to be the most recently changed input file, including this
-# program itself (done much earlier in this file)
+# We set $most_recent to be the most recently changed input file, including
+# this program itself (done much earlier in this file)
 foreach my $in (@input_files) {
-    my $age = -M $in;
-    next unless defined $age;        # Keep going even if missing a file
-    $youngest = $age if $age < $youngest;
+    next unless -e $in;        # Keep going even if missing a file
+    my $mod_time = (stat $in)[9];
+    $most_recent = $mod_time if $mod_time > $most_recent;
 
     # See that the input files have distinct names, to warn someone if they
     # are adding a new one
@@ -13963,30 +14402,31 @@ foreach my $in (@input_files) {
     }
 }
 
-my $ok = ! $write_unchanged_files
-        && scalar @mktables_list_output_files;        # If none known, rebuild
+my $rebuild = $write_unchanged_files    # Rebuild: if unconditional rebuild
+              || ! scalar @mktables_list_output_files  # or if no outputs known
+              || $old_start_time < $most_recent;       # or out-of-date
 
 # Now we check to see if any output files are older than youngest, if
 # they are, we need to continue on, otherwise we can presumably bail.
-if ($ok) {
+if (! $rebuild) {
     foreach my $out (@mktables_list_output_files) {
         if ( ! file_exists($out)) {
             print "'$out' is missing.\n" if $verbosity >= $VERBOSE;
-            $ok = 0;
+            $rebuild = 1;
             last;
          }
         #local $to_trace = 1 if main::DEBUG;
-        trace $youngest, -M $out if main::DEBUG && $to_trace;
-        if ( -M $out > $youngest ) {
-            #trace "$out: age: ", -M $out, ", youngest: $youngest\n" if main::DEBUG && $to_trace;
+        trace $most_recent, (stat $out)[9] if main::DEBUG && $to_trace;
+        if ( (stat $out)[9] <= $most_recent ) {
+            #trace "$out:  most recent mod time: ", (stat $out)[9], ", youngest: $most_recent\n" if main::DEBUG && $to_trace;
             print "'$out' is too old.\n" if $verbosity >= $VERBOSE;
-            $ok = 0;
+            $rebuild = 1;
             last;
         }
     }
 }
-if ($ok) {
-    print "Files seem to be ok, not bothering to rebuild.\n";
+if (! $rebuild) {
+    print "Files seem to be ok, not bothering to rebuild.  Add '-w' option to force build\n";
     exit(0);
 }
 print "Must rebuild tables.\n" if $verbosity >= $VERBOSE;
@@ -14029,11 +14469,12 @@ if ( $file_list and $make_list ) {
         return
     }
     else {
+        my $localtime = localtime $start_time;
         print $ofh <<"END";
 #
 # $file_list -- File list for $0.
 #
-#   Autogenerated on @{[scalar localtime]}
+#   Autogenerated starting on $start_time ($localtime)
 #
 # - First section is input files
 #   ($0 itself is not listed but is automatically considered an input)

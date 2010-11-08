@@ -194,8 +194,7 @@ PP(pp_regcomp)
 		PM_SETRE(pm, NULL);	/* crucial if regcomp aborts */
 #endif
 	    } else if (PL_curcop->cop_hints_hash) {
-	        SV *ptr = Perl_refcounted_he_fetch(aTHX_ PL_curcop->cop_hints_hash, 0,
-				       "regcomp", 7, 0, 0);
+	        SV *ptr = cop_hints_fetch_pvs(PL_curcop, "regcomp", 0);
                 if (ptr && SvIOK(ptr) && SvIV(ptr))
                     eng = INT2PTR(regexp_engine*,SvIV(ptr));
 	    }
@@ -1113,8 +1112,41 @@ PP(pp_mapwhile)
 	/* copy the new items down to the destination list */
 	dst = PL_stack_base + (PL_markstack_ptr[-2] += items) - 1;
 	if (gimme == G_ARRAY) {
-	    while (items-- > 0)
-		*dst-- = SvTEMP(TOPs) ? POPs : sv_mortalcopy(POPs);
+	    /* add returned items to the collection (making mortal copies
+	     * if necessary), then clear the current temps stack frame
+	     * *except* for those items. We do this splicing the items
+	     * into the start of the tmps frame (so some items may be on
+	     * the tmps stack twice), then moving PL_tmps_floor above
+	     * them, then freeing the frame. That way, the only tmps that
+	     * accumulate over iterations are the return values for map.
+	     * We have to do to this way so that everything gets correctly
+	     * freed if we die during the map.
+	     */
+	    I32 tmpsbase;
+	    I32 i = items;
+	    /* make space for the slice */
+	    EXTEND_MORTAL(items);
+	    tmpsbase = PL_tmps_floor + 1;
+	    Move(PL_tmps_stack + tmpsbase,
+		 PL_tmps_stack + tmpsbase + items,
+		 PL_tmps_ix - PL_tmps_floor,
+		 SV*);
+	    PL_tmps_ix += items;
+
+	    while (i-- > 0) {
+		SV *sv = POPs;
+		if (!SvTEMP(sv))
+		    sv = sv_mortalcopy(sv);
+		*dst-- = sv;
+		PL_tmps_stack[tmpsbase++] = SvREFCNT_inc_simple(sv);
+	    }
+	    /* clear the stack frame except for the items */
+	    PL_tmps_floor += items;
+	    FREETMPS;
+	    /* FREETMPS may have cleared the TEMP flag on some of the items */
+	    i = items;
+	    while (i-- > 0)
+		SvTEMP_on(PL_tmps_stack[--tmpsbase]);
 	}
 	else {
 	    /* scalar context: we don't care about which values map returns
@@ -1124,7 +1156,11 @@ PP(pp_mapwhile)
 		(void)POPs;
 		*dst-- = &PL_sv_undef;
 	    }
+	    FREETMPS;
 	}
+    }
+    else {
+	FREETMPS;
     }
     LEAVE_with_name("grep_item");					/* exit inner scope */
 
@@ -1577,8 +1613,14 @@ Perl_qerror(pTHX_ SV *err)
 
     PERL_ARGS_ASSERT_QERROR;
 
-    if (PL_in_eval)
-	sv_catsv(ERRSV, err);
+    if (PL_in_eval) {
+	if (PL_in_eval & EVAL_KEEPERR) {
+		Perl_ck_warner(aTHX_ packWARN(WARN_MISC), "\t(in cleanup) %s",
+			       SvPV_nolen_const(err));
+	}
+	else
+	    sv_catsv(ERRSV, err);
+    }
     else if (PL_errors)
 	sv_catsv(PL_errors, err);
     else
@@ -1611,6 +1653,9 @@ Perl_die_unwind(pTHX_ SV *msv)
 	    SV *namesv;
 	    register PERL_CONTEXT *cx;
 	    SV **newsp;
+	    COP *oldcop;
+	    JMPENV *restartjmpenv;
+	    OP *restartop;
 
 	    if (cxix < cxstack_ix)
 		dounwind(cxix);
@@ -1625,6 +1670,9 @@ Perl_die_unwind(pTHX_ SV *msv)
 	    }
 	    POPEVAL(cx);
 	    namesv = cx->blk_eval.old_namesv;
+	    oldcop = cx->blk_oldcop;
+	    restartjmpenv = cx->blk_eval.cur_top_env;
+	    restartop = cx->blk_eval.retop;
 
 	    if (gimme == G_SCALAR)
 		*++newsp = &PL_sv_undef;
@@ -1636,7 +1684,7 @@ Perl_die_unwind(pTHX_ SV *msv)
 	     * XXX it might be better to find a way to avoid messing with
 	     * PL_curcop in save_re_context() instead, but this is a more
 	     * minimal fix --GSAR */
-	    PL_curcop = cx->blk_oldcop;
+	    PL_curcop = oldcop;
 
 	    if (optype == OP_REQUIRE) {
                 const char* const msg = SvPVx_nolen_const(exceptsv);
@@ -1657,9 +1705,8 @@ Perl_die_unwind(pTHX_ SV *msv)
 	    else {
 		sv_setsv(ERRSV, exceptsv);
 	    }
-	    assert(CxTYPE(cx) == CXt_EVAL);
-	    PL_restartjmpenv = cx->blk_eval.cur_top_env;
-	    PL_restartop = cx->blk_eval.retop;
+	    PL_restartjmpenv = restartjmpenv;
+	    PL_restartop = restartop;
 	    JMPENV_JUMP(3);
 	    /* NOTREACHED */
 	}
@@ -1872,9 +1919,7 @@ PP(pp_caller)
     }
 
     PUSHs(cx->blk_oldcop->cop_hints_hash ?
-	  sv_2mortal(newRV_noinc(
-				 MUTABLE_SV(Perl_refcounted_he_chain_2hv(aTHX_
-					      cx->blk_oldcop->cop_hints_hash))))
+	  sv_2mortal(newRV_noinc(MUTABLE_SV(cop_hints_2hv(cx->blk_oldcop, 0))))
 	  : &PL_sv_undef);
     RETURN;
 }
@@ -2186,7 +2231,6 @@ PP(pp_return)
 	retop = cx->blk_eval.retop;
 	if (CxTRYBLOCK(cx))
 	    break;
-	lex_end();
 	if (optype == OP_REQUIRE &&
 	    (MARK == SP || (gimme == G_SCALAR && !SvTRUE(*SP))) )
 	{
@@ -2739,6 +2783,14 @@ PP(pp_goto)
 				    enterops, enterops + GOTO_DEPTH);
 		if (retop)
 		    break;
+		if (gotoprobe->op_sibling &&
+			gotoprobe->op_sibling->op_type == OP_UNSTACK &&
+			gotoprobe->op_sibling->op_sibling) {
+		    retop = dofindlabel(gotoprobe->op_sibling->op_sibling,
+					label, enterops, enterops + GOTO_DEPTH);
+		    if (retop)
+			break;
+		}
 	    }
 	    PL_lastgotoprobe = gotoprobe;
 	}
@@ -2950,7 +3002,7 @@ Perl_sv_compile_2op(pTHX_ SV *sv, OP** startop, const char *code, PAD** padp)
     PERL_ARGS_ASSERT_SV_COMPILE_2OP;
 
     ENTER_with_name("eval");
-    lex_start(sv, NULL, FALSE);
+    lex_start(sv, NULL, 0);
     SAVETMPS;
     /* switch to eval mode */
 
@@ -3010,7 +3062,6 @@ Perl_sv_compile_2op(pTHX_ SV *sv, OP** startop, const char *code, PAD** padp)
 
     (*startop)->op_type = OP_NULL;
     (*startop)->op_ppaddr = PL_ppaddr[OP_NULL];
-    lex_end();
     /* XXX DAPM do this properly one year */
     *padp = MUTABLE_AV(SvREFCNT_inc_simple(PL_comppad));
     LEAVE_with_name("eval");
@@ -3166,7 +3217,7 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
     else
 	CLEAR_ERRSV();
 
-    CALL_BLOCK_HOOKS(eval, saveop);
+    CALL_BLOCK_HOOKS(bhk_eval, saveop);
 
     /* note that yyparse() may raise an exception, e.g. C<BEGIN{die}>,
      * so honour CATCH_GET and trap it here if necessary */
@@ -3198,7 +3249,6 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
 		namesv = cx->blk_eval.old_namesv;
 	    }
 	}
-	lex_end();
 	if (yystatus != 3)
 	    LEAVE_with_name("eval"); /* pp_entereval knows about this LEAVE.  */
 
@@ -3355,7 +3405,7 @@ PP(pp_require)
 
     sv = POPs;
     if ( (SvNIOKp(sv) || SvVOK(sv)) && PL_op->op_type != OP_DOFILE) {
-	sv = new_version(sv);
+	sv = sv_2mortal(new_version(sv));
 	if (!sv_derived_from(PL_patchlevel, "version"))
 	    upg_version(PL_patchlevel, TRUE);
 	if (cUNOP->op_first->op_type == OP_CONST && cUNOP->op_first->op_private & OPpCONST_NOVER) {
@@ -3724,7 +3774,7 @@ PP(pp_require)
 
     ENTER_with_name("eval");
     SAVETMPS;
-    lex_start(NULL, tryrsfp, TRUE);
+    lex_start(NULL, tryrsfp, 0);
 
     SAVEHINTS();
     PL_hints = 0;
@@ -3819,7 +3869,7 @@ PP(pp_entereval)
     TAINT_PROPER("eval");
 
     ENTER_with_name("eval");
-    lex_start(sv, NULL, FALSE);
+    lex_start(sv, NULL, 0);
     SAVETMPS;
 
     /* switch to eval mode */
@@ -3852,25 +3902,18 @@ PP(pp_entereval)
     }
     SAVECOMPILEWARNINGS();
     PL_compiling.cop_warnings = DUP_WARNINGS(PL_curcop->cop_warnings);
-    if (PL_compiling.cop_hints_hash) {
-	Perl_refcounted_he_free(aTHX_ PL_compiling.cop_hints_hash);
-    }
+    cophh_free(CopHINTHASH_get(&PL_compiling));
     if (Perl_fetch_cop_label(aTHX_ PL_curcop, NULL, NULL)) {
 	/* The label, if present, is the first entry on the chain. So rather
 	   than writing a blank label in front of it (which involves an
 	   allocation), just use the next entry in the chain.  */
 	PL_compiling.cop_hints_hash
-	    = PL_curcop->cop_hints_hash->refcounted_he_next;
+	    = cophh_copy(PL_curcop->cop_hints_hash->refcounted_he_next);
 	/* Check the assumption that this removed the label.  */
 	assert(Perl_fetch_cop_label(aTHX_ &PL_compiling, NULL, NULL) == NULL);
     }
     else
-	PL_compiling.cop_hints_hash = PL_curcop->cop_hints_hash;
-    if (PL_compiling.cop_hints_hash) {
-	HINTS_REFCNT_LOCK;
-	PL_compiling.cop_hints_hash->refcounted_he_refcnt++;
-	HINTS_REFCNT_UNLOCK;
-    }
+	PL_compiling.cop_hints_hash = cophh_copy(PL_curcop->cop_hints_hash);
     /* special case: an eval '' executed within the DB package gets lexically
      * placed in the first non-DB CV rather than the current CV - this
      * allows the debugger to execute code, find lexicals etc, in the
@@ -3962,7 +4005,6 @@ PP(pp_leaveeval)
     assert(CvDEPTH(PL_compcv) == 1);
 #endif
     CvDEPTH(PL_compcv) = 0;
-    lex_end();
 
     if (optype == OP_REQUIRE &&
 	!(gimme == G_SCALAR ? SvTRUE(*SP) : SP > newsp))

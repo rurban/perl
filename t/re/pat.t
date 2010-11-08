@@ -23,7 +23,7 @@ BEGIN {
 }
 
 
-plan tests => 398;  # Update this when adding/deleting tests.
+plan tests => 408;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -1070,6 +1070,31 @@ sub run_tests {
         ok "-" =~ /\s*\p{Dash}{1}/;
         ok " " =~ /\w*\p{Blank}{1,4}/;
 
+    }
+
+    {   # Some constructs with Latin1 characters cause a utf8 string not to
+        # match itself in non-utf8
+        my $c = "\xc0";
+        my $pattern = my $utf8_pattern = qr/((\xc0)+,?)/;
+        utf8::upgrade($utf8_pattern);
+        ok $c =~ $pattern, "\\xc0 =~ $pattern; Neither pattern nor target utf8";
+        ok $c =~ /$pattern/i, "\\xc0 =~ /$pattern/i; Neither pattern nor target utf8";
+        ok $c =~ $utf8_pattern, "\\xc0 =~ $pattern; pattern utf8, target not";
+        ok $c =~ /$utf8_pattern/i, "\\xc0 =~ /$pattern/i; pattern utf8, target not";
+        utf8::upgrade($c);
+        ok $c =~ $pattern, "\\xc0 =~ $pattern; target utf8, pattern not";
+        ok $c =~ /$pattern/i, "\\xc0 =~ /$pattern/i; target utf8, pattern not";
+        ok $c =~ $utf8_pattern, "\\xc0 =~ $pattern; Both target and pattern utf8";
+        ok $c =~ /$utf8_pattern/i, "\\xc0 =~ /$pattern/i; Both target and pattern utf8";
+    }
+
+    SKIP: {   # Make sure can override the formatting
+        if ($IS_EBCDIC) {
+            skip "Needs to be customized to run on EBCDIC", 2;
+        }
+        use feature 'unicode_strings';
+        ok "\xc0" =~ /\w/, 'Under unicode_strings: "\xc0" =~ /\w/';
+        ok "\xc0" !~ /(?d:\w)/, 'Under unicode_strings: "\xc0" !~ /(?d:\w)/';
     }
 
     {

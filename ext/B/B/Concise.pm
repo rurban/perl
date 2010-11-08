@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.79";
+our $VERSION   = "0.81";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -462,7 +462,7 @@ sub walk_topdown {
 	    walk_topdown($kid, $sub, $level + 1);
 	}
     }
-    elsif (class($op) eq "PMOP") {
+    if (class($op) eq "PMOP") {
 	my $maybe_root = $op->pmreplroot;
 	if (ref($maybe_root) and $maybe_root->isa("B::OP")) {
 	    # It really is the root of the replacement, not something
@@ -604,6 +604,7 @@ $priv{"sassign"}{64} = "BKWARD";
 $priv{$_}{64} = "RTIME" for ("match", "subst", "substcont", "qr");
 @{$priv{"trans"}}{1,2,4,8,16,64} = ("<UTF", ">UTF", "IDENT", "SQUASH", "DEL",
 				    "COMPL", "GROWS");
+$priv{transr} = $priv{trans};
 $priv{"repeat"}{64} = "DOLIST";
 $priv{"leaveloop"}{64} = "CONT";
 $priv{$_}{4} = "DREFed" for (qw(rv2sv rv2av rv2hv));
@@ -836,7 +837,7 @@ sub concise_op {
 	} else {
 	    $h{arg} = "($precomp)";
 	}
-    } elsif ($h{class} eq "PVOP" and $h{name} ne "trans") {
+    } elsif ($h{class} eq "PVOP" and $h{name} !~ '^transr?\z') {
 	$h{arg} = '("' . $op->pv . '")';
 	$h{svval} = '"' . $op->pv . '"';
     } elsif ($h{class} eq "COP") {

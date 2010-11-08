@@ -1,7 +1,7 @@
 use warnings;
 use strict;
 
-use Test::More tests => 22;
+use Test::More tests => 32;
 
 BEGIN { $^H |= 0x20000; }
 
@@ -146,6 +146,32 @@ $t = "";
 eval q{
 	use XS::APItest qw(swaptwostmts);
 	no warnings "void";
+	{ $t .= "a"; }
+	swaptwostmts
+	if(1) { { $t .= "b"; } }
+	{};
+	{ $t .= "d"; }
+};
+is $@, "";
+is $t, "abd";
+
+$t = "";
+eval q{
+	use XS::APItest qw(swaptwostmts);
+	no warnings "void";
+	{ $t .= "a"; }
+	swaptwostmts
+	if(1) { { $t .= "b"; } }
+	[];
+	{ $t .= "d"; }
+};
+is $@, "";
+is $t, "abd";
+
+$t = "";
+eval q{
+	use XS::APItest qw(swaptwostmts);
+	no warnings "void";
 	"@{[ $t .= 'a' ]}";
 	swaptwostmts
 	if(1) { "@{[ $t .= 'b' ]}"; }
@@ -154,5 +180,49 @@ eval q{
 };
 is $@, "";
 is $t, "acbd";
+
+$t = "";
+eval q{
+	use XS::APItest qw(swaptwostmts);
+	$t .= "a";
+	swaptwostmts
+	x:
+	$t .= "b";
+	z:
+	$t .= "c";
+	$t .= "d";
+};
+is $@, "";
+is $t, "acbd";
+
+$t = "";
+eval q{
+	use XS::APItest qw(swaptwostmts);
+	$t .= "a";
+	goto x;
+	$t .= "b";
+	swaptwostmts
+	x:
+	$t .= "c";
+	$t .= "d";
+	$t .= "e";
+};
+is $@, "";
+is $t, "ace";
+
+$t = "";
+eval q{
+	use XS::APItest qw(swaptwostmts);
+	$t .= "a";
+	goto x;
+	$t .= "b";
+	swaptwostmts
+	$t .= "c";
+	x:
+	$t .= "d";
+	$t .= "e";
+};
+is $@, "";
+is $t, "adce";
 
 1;

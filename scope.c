@@ -183,10 +183,8 @@ S_save_scalar_at(pTHX_ SV **sptr, const U32 flags)
 
     if (SvTYPE(osv) >= SVt_PVMG && SvMAGIC(osv) && SvTYPE(osv) != SVt_PVGV) {
 	if (SvGMAGICAL(osv)) {
-	    const bool oldtainted = PL_tainted;
 	    SvFLAGS(osv) |= (SvFLAGS(osv) &
 	       (SVp_IOK|SVp_NOK|SVp_POK)) >> PRIVSHIFT;
-	    PL_tainted = oldtainted;
 	}
 	if (!(flags & SAVEf_KEEPOLDELEM))
 	    mg_localize(osv, sv, (flags & SAVEf_SETMAGIC) != 0);
@@ -600,17 +598,12 @@ void
 Perl_save_hints(pTHX)
 {
     dVAR;
-    if (PL_compiling.cop_hints_hash) {
-	HINTS_REFCNT_LOCK;
-	    PL_compiling.cop_hints_hash->refcounted_he_refcnt++;
-	    HINTS_REFCNT_UNLOCK;
-    }
+    COPHH *save_cophh = cophh_copy(CopHINTHASH_get(&PL_compiling));
     if (PL_hints & HINT_LOCALIZE_HH) {
-	save_pushptri32ptr(GvHV(PL_hintgv), PL_hints,
-			   PL_compiling.cop_hints_hash, SAVEt_HINTS);
+	save_pushptri32ptr(GvHV(PL_hintgv), PL_hints, save_cophh, SAVEt_HINTS);
 	GvHV(PL_hintgv) = hv_copy_hints_hv(GvHV(PL_hintgv));
     } else {
-	save_pushi32ptr(PL_hints, PL_compiling.cop_hints_hash, SAVEt_HINTS);
+	save_pushi32ptr(PL_hints, save_cophh, SAVEt_HINTS);
     }
 }
 
@@ -866,13 +859,17 @@ Perl_leave_scope(pTHX_ I32 base)
 	    if (SSPOPINT)
 		SvFAKE_on(gv);
             /* putting a method back into circulation ("local")*/
-	    if (GvCVu(gv) && (hv=GvSTASH(gv)) && HvNAME_get(hv))
+	    if (GvCVu(gv) && (hv=GvSTASH(gv)) && HvENAME_get(hv))
                 mro_method_changed_in(hv);
 	    SvREFCNT_dec(gv);
 	    break;
 	case SAVEt_FREESV:
 	    ptr = SSPOPPTR;
 	    SvREFCNT_dec(MUTABLE_SV(ptr));
+	    break;
+	case SAVEt_FREECOPHH:
+	    ptr = SSPOPPTR;
+	    cophh_free((COPHH *)ptr);
 	    break;
 	case SAVEt_MORTALIZESV:
 	    ptr = SSPOPPTR;
@@ -1021,8 +1018,8 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvREFCNT_dec(MUTABLE_SV(GvHV(PL_hintgv)));
 		GvHV(PL_hintgv) = NULL;
 	    }
-	    Perl_refcounted_he_free(aTHX_ PL_compiling.cop_hints_hash);
-	    PL_compiling.cop_hints_hash = (struct refcounted_he *) SSPOPPTR;
+	    cophh_free(CopHINTHASH_get(&PL_compiling));
+	    CopHINTHASH_set(&PL_compiling, (COPHH*)SSPOPPTR);
 	    *(I32*)&PL_hints = (I32)SSPOPINT;
 	    if (PL_hints & HINT_LOCALIZE_HH) {
 		SvREFCNT_dec(MUTABLE_SV(GvHV(PL_hintgv)));

@@ -4,7 +4,7 @@ use strict;
 use Carp;
 use base qw(Unicode::Collate);
 
-our $VERSION = '0.60';
+our $VERSION = '0.66';
 
 use File::Spec;
 
@@ -13,21 +13,31 @@ my $KeyPath = File::Spec->catfile('allkeys.txt');
 my $PL_EXT  = '.pl';
 
 my %LocaleFile = map { ($_, $_) } qw(
-   af az ca cs cy da eo es et fi fil fo fr ha haw
-   is kl lt lv mt nn nso om pl ro sk sl sv sw tn tr vi wo yo
+   af ar az ca cs cy da eo es et fi fil fo fr ha haw
+   hr hu hy ig is ja kk kl ko lt lv mt nb nn nso om pl ro ru
+   se sk sl sq sv sw tn to tr uk vi wo yo zh
 );
    $LocaleFile{'default'}         = '';
    $LocaleFile{'de__phonebook'}   = 'de_phone';
    $LocaleFile{'es__traditional'} = 'es_trad';
-   $LocaleFile{'nb'} = 'nn';
+   $LocaleFile{'be'} = 'ru';
+   $LocaleFile{'bg'} = 'ru';
+   $LocaleFile{'mk'} = 'ru';
+   $LocaleFile{'sr'} = 'ru';
+   $LocaleFile{'zh__big5han'}   = 'zh_big5';
+   $LocaleFile{'zh__gb2312han'} = 'zh_gb';
+   $LocaleFile{'zh__pinyin'}    = 'zh_pin';
+   $LocaleFile{'zh__stroke'}    = 'zh_strk';
 
 sub _locale {
     my $locale = shift;
     if ($locale) {
 	$locale = lc $locale;
 	$locale =~ tr/\-\ \./_/;
-	$locale =~ s/_phone\z/_phonebook/;
+	$locale =~ s/_phone(?:bk)?\z/_phonebook/;
 	$locale =~ s/_trad\z/_traditional/;
+	$locale =~ s/_big5\z/_big5han/;
+	$locale =~ s/_gb2312\z/_gb2312han/;
 	$LocaleFile{$locale} and return $locale;
 
 	my ($l,$t,$v) = split(/_/, $locale.'__');
@@ -84,10 +94,21 @@ Unicode::Collate::Locale - Linguistic tailoring for DUCET via Unicode::Collate
 
   use Unicode::Collate::Locale;
 
+  #construct
   $Collator = Unicode::Collate::Locale->
       new(locale => $locale_name, %tailoring);
 
+  #sort
   @sorted = $Collator->sort(@not_sorted);
+
+  #compare
+  $result = $Collator->cmp($a, $b); # returns 1, 0, or -1.
+
+B<Note:> Strings in C<@not_sorted>, C<$a> and C<$b> are interpreted
+according to Perl's Unicode support. See L<perlunicode>,
+L<perluniintro>, L<perlunitut>, L<perlunifaq>, L<utf8>.
+Otherwise you can use C<preprocess> (cf. C<Unicode::Collate>)
+or should decode them before.
 
 =head1 DESCRIPTION
 
@@ -156,7 +177,10 @@ this method returns a string C<'default'> meaning no special tailoring.
       locale name       description
     ----------------------------------------------------------
       af                Afrikaans
+      ar                Arabic
       az                Azerbaijani (Azeri)
+      be                Belarusian
+      bg                Bulgarian
       ca                Catalan
       cs                Czech
       cy                Welsh
@@ -172,10 +196,18 @@ this method returns a string C<'default'> meaning no special tailoring.
       fr                French
       ha                Hausa
       haw               Hawaiian
+      hr                Croatian
+      hu                Hungarian
+      hy                Armenian
+      ig                Igbo
       is                Icelandic
+      ja                Japanese [1]
+      kk                Kazakh
       kl                Kalaallisut
+      ko                Korean [2]
       lt                Lithuanian
       lv                Latvian
+      mk                Macedonian
       mt                Maltese
       nb                Norwegian Bokmal
       nn                Norwegian Nynorsk
@@ -183,22 +215,62 @@ this method returns a string C<'default'> meaning no special tailoring.
       om                Oromo
       pl                Polish
       ro                Romanian
+      ru                Russian
+      se                Northern Sami
       sk                Slovak
       sl                Slovenian
+      sq                Albanian
+      sr                Serbian
       sv                Swedish
       sw                Swahili
       tn                Tswana
+      to                Tonga
       tr                Turkish
+      uk                Ukrainian
       vi                Vietnamese
       wo                Wolof
       yo                Yoruba
+      zh                Chinese
+      zh__big5han       Chinese (ideographs: big5 order)
+      zh__gb2312han     Chinese (ideographs: GB-2312 order)
+      zh__pinyin        Chinese (ideographs: pinyin order)
+      zh__stroke        Chinese (ideographs: stroke order)
+    ----------------------------------------------------------
+
+Locales according to the default UCA rules include
+de (German),
+en (English),
+ga (Irish),
+id (Indonesian),
+it (Italian),
+ka (Georgian),
+ln (Lingala),
+ms (Malay),
+nl (Dutch),
+pt (Portuguese),
+st (Southern Sotho),
+xh (Xhosa),
+zu (Zulu).
+
+B<Note>
+
+[1] ja: Ideographs are sorted in JIS X 0208 order.
+Fullwidth and halfwidth forms are identical to their normal form.
+The difference between hiragana and katakana is at the 4th level,
+the comparison also requires C<(variable =E<gt> 'Non-ignorable')>,
+and then C<katakana_before_hiragana> has no effect.
+
+[2] ko: Plenty of ideographs are sorted by their reading. Such
+an ideograph is primary (level 1) equal to, and secondary (level 2)
+greater than, the corresponding hangul syllable.
 
 =head1 INSTALL
 
-Installation of Unicode::Collate::Locale requires F<Collate/Locale.pm>,
-F<Collate/Locale/*.pm> and F<Collate/allkeys.txt>.  On building,
-Unicode::Collate::Locale doesn't require F<data/*.txt> and F<mklocale>.
-Tests for Unicode::Collate::Locale are named F<t/loc_*.t>.
+Installation of C<Unicode::Collate::Locale> requires F<Collate/Locale.pm>,
+F<Collate/Locale/*.pm>, F<Collate/CJK/*.pm> and F<Collate/allkeys.txt>.
+On building, C<Unicode::Collate::Locale> doesn't require any of F<data/*.txt>,
+F<gendata/*>, and F<mklocale>.
+Tests for C<Unicode::Collate::Locale> are named F<t/loc_*.t>.
 
 =head1 CAVEAT
 
@@ -206,11 +278,12 @@ Tests for Unicode::Collate::Locale are named F<t/loc_*.t>.
 
 =item tailoring is not maximum
 
-If a certain letter is tailored, its equivalents are not always
+Even if a certain letter is tailored, its equivalent would not always
 tailored as well as it. For example, even though W is tailored,
 fullwidth W (C<U+FF37>), W with acute (C<U+1E82>), etc. are not
-tailored. Thus the result may depend on whether source strings
-are normalized or not.
+tailored. The result may depend on whether source strings are
+normalized or not, and whether decomposed or composed.
+Thus C<(normalization =E<gt> undef> is less preferred.
 
 =back
 
@@ -235,6 +308,10 @@ L<http://www.unicode.org/reports/tr10/>
 =item The Default Unicode Collation Element Table (DUCET)
 
 L<http://www.unicode.org/Public/UCA/latest/allkeys.txt>
+
+=item Unicode Locale Data Markup Language (LDML) - UTS #35
+
+L<http://www.unicode.org/reports/tr35/>
 
 =item CLDR - Unicode Common Locale Data Repository
 

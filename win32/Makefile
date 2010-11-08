@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.13.5
+#INST_VER	= \5.13.6
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -612,13 +612,6 @@ UTILS		=			\
 		..\utils\cpan2dist	\
 		..\utils\shasum		\
 		..\utils\instmodsh	\
-		..\pod\pod2html		\
-		..\pod\pod2latex	\
-		..\pod\pod2man		\
-		..\pod\pod2text		\
-		..\pod\pod2usage	\
-		..\pod\podchecker	\
-		..\pod\podselect	\
 		..\x2p\find2perl	\
 		..\x2p\psed		\
 		..\x2p\s2p		\
@@ -1100,8 +1093,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5136delta.pod
-	$(MAKE) -f ..\win32\pod.mak converters
+	copy ..\pod\perldelta.pod ..\pod\perl5137delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
@@ -1188,23 +1180,22 @@ distclean: realclean
 	-if exist $(LIBDIR)\Test rmdir /s /q $(LIBDIR)\Test
 	-if exist $(LIBDIR)\Thread rmdir /s /q $(LIBDIR)\Thread
 	-if exist $(LIBDIR)\threads rmdir /s /q $(LIBDIR)\threads
+	-if exist $(LIBDIR)\Tie\Hash rmdir /s /q $(LIBDIR)\Tie\Hash
 	-if exist $(LIBDIR)\Unicode\Collate rmdir /s /q $(LIBDIR)\Unicode\Collate
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perlaix.pod perlamiga.pod perlapi.pod perlapollo.pod \
-	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
-	    perlcygwin.pod perl5135delta.pod perldgux.pod perldos.pod \
-	    perlepoc.pod perlfreebsd.pod perlhaiku.pod perlhpux.pod \
-	    perlhurd.pod perlintern.pod perlirix.pod perljp.pod perlko.pod \
-	    perllinux.pod perlmacos.pod perlmacosx.pod perlmodlib.pod \
-	    perlmpeix.pod perlnetware.pod perlopenbsd.pod perlos2.pod \
-	    perlos390.pod perlos400.pod perlplan9.pod perlqnx.pod \
-	    perlriscos.pod perlsolaris.pod perlsymbian.pod perltoc.pod \
-	    perltru64.pod perltw.pod perluniprops.pod perluts.pod \
-	    perlvmesa.pod perlvos.pod perlwin32.pod \
-	    pod2html pod2latex pod2man pod2text pod2usage \
-	    podchecker podselect
+	    perl5137delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perlapollo.pod perlbeos.pod perlbs2000.pod perlce.pod \
+	    perlcn.pod perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
+	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
+	    perlintern.pod perlirix.pod perljp.pod perlko.pod perllinux.pod \
+	    perlmacos.pod perlmacosx.pod perlmodlib.pod perlmpeix.pod \
+	    perlnetware.pod perlopenbsd.pod perlos2.pod perlos390.pod \
+	    perlos400.pod perlplan9.pod perlqnx.pod perlriscos.pod \
+	    perlsolaris.pod perlsymbian.pod perltoc.pod perltru64.pod \
+	    perltw.pod perluniprops.pod perluts.pod perlvmesa.pod \
+	    perlvos.pod perlwin32.pod
 	-cd ..\utils && del /f h2ph splain perlbug pl2pm c2ph pstruct h2xs \
 	    perldoc perlivp dprofpp libnetcfg enc2xs piconv cpan *.bat \
 	    xsubpp instmodsh prove ptar ptardiff cpanp-run-perl cpanp cpan2dist shasum corelist config_data

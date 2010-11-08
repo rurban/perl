@@ -179,6 +179,7 @@ S_is_container_magic(const MAGIC *mg)
     case PERL_MAGIC_rhash:
     case PERL_MAGIC_symtab:
     case PERL_MAGIC_tied: /* treat as value, so 'local @tied' isn't tied */
+    case PERL_MAGIC_checkcall:
 	return 0;
     default:
 	return 1;
@@ -522,6 +523,24 @@ Perl_mg_localize(pTHX_ SV *sv, SV *nsv, bool setmagic)
     }	    
 }
 
+#define mg_free_struct(sv, mg) S_mg_free_struct(aTHX_ sv, mg)
+static void
+S_mg_free_struct(pTHX_ SV *sv, MAGIC *mg)
+{
+    const MGVTBL* const vtbl = mg->mg_virtual;
+    if (vtbl && vtbl->svt_free)
+	vtbl->svt_free(aTHX_ sv, mg);
+    if (mg->mg_ptr && mg->mg_type != PERL_MAGIC_regex_global) {
+	if (mg->mg_len > 0 || mg->mg_type == PERL_MAGIC_utf8)
+	    Safefree(mg->mg_ptr);
+	else if (mg->mg_len == HEf_SVKEY)
+	    SvREFCNT_dec(MUTABLE_SV(mg->mg_ptr));
+    }
+    if (mg->mg_flags & MGf_REFCOUNTED)
+	SvREFCNT_dec(mg->mg_obj);
+    Safefree(mg);
+}
+
 /*
 =for apidoc mg_free
 
@@ -539,24 +558,46 @@ Perl_mg_free(pTHX_ SV *sv)
     PERL_ARGS_ASSERT_MG_FREE;
 
     for (mg = SvMAGIC(sv); mg; mg = moremagic) {
-        const MGVTBL* const vtbl = mg->mg_virtual;
 	moremagic = mg->mg_moremagic;
-	if (vtbl && vtbl->svt_free)
-	    vtbl->svt_free(aTHX_ sv, mg);
-	if (mg->mg_ptr && mg->mg_type != PERL_MAGIC_regex_global) {
-	    if (mg->mg_len > 0 || mg->mg_type == PERL_MAGIC_utf8)
-		Safefree(mg->mg_ptr);
-	    else if (mg->mg_len == HEf_SVKEY)
-		SvREFCNT_dec(MUTABLE_SV(mg->mg_ptr));
-	}
-	if (mg->mg_flags & MGf_REFCOUNTED)
-	    SvREFCNT_dec(mg->mg_obj);
-	Safefree(mg);
+	mg_free_struct(sv, mg);
 	SvMAGIC_set(sv, moremagic);
     }
     SvMAGIC_set(sv, NULL);
     SvMAGICAL_off(sv);
     return 0;
+}
+
+/*
+=for apidoc Am|void|mg_free_type|SV *sv|int how
+
+Remove any magic of type I<how> from the SV I<sv>.  See L</sv_magic>.
+
+=cut
+*/
+
+void
+Perl_mg_free_type(pTHX_ SV *sv, int how)
+{
+    MAGIC *mg, *prevmg, *moremg;
+    PERL_ARGS_ASSERT_MG_FREE_TYPE;
+    for (prevmg = NULL, mg = SvMAGIC(sv); mg; prevmg = mg, mg = moremg) {
+	MAGIC *newhead;
+	moremg = mg->mg_moremagic;
+	if (mg->mg_type == how) {
+	    /* temporarily move to the head of the magic chain, in case
+	       custom free code relies on this historical aspect of mg_free */
+	    if (prevmg) {
+		prevmg->mg_moremagic = moremg;
+		mg->mg_moremagic = SvMAGIC(sv);
+		SvMAGIC_set(sv, mg);
+	    }
+	    newhead = mg->mg_moremagic;
+	    mg_free_struct(sv, mg);
+	    SvMAGIC_set(sv, newhead);
+	    mg = prevmg;
+	}
+    }
+    mg_magical(sv);
 }
 
 #include <signal.h>
@@ -740,17 +781,13 @@ Perl_emulate_cop_io(pTHX_ const COP *const c, SV *const sv)
 	sv_setpvs(sv, "");
 	SvUTF8_off(sv);
 	if ((CopHINTS_get(c) & HINT_LEXICAL_IO_IN)) {
-	    SV *const value = Perl_refcounted_he_fetch(aTHX_
-						       c->cop_hints_hash,
-						       0, "open<", 5, 0, 0);
+	    SV *const value = cop_hints_fetch_pvs(c, "open<", 0);
 	    assert(value);
 	    sv_catsv(sv, value);
 	}
 	sv_catpvs(sv, "\0");
 	if ((CopHINTS_get(c) & HINT_LEXICAL_IO_OUT)) {
-	    SV *const value = Perl_refcounted_he_fetch(aTHX_
-						       c->cop_hints_hash,
-						       0, "open>", 5, 0, 0);
+	    SV *const value = cop_hints_fetch_pvs(c, "open>", 0);
 	    assert(value);
 	    sv_catsv(sv, value);
 	}
@@ -1593,7 +1630,9 @@ Perl_magic_clearisa(pTHX_ SV *sv, MAGIC *mg)
             : (const GV *)mg_find(mg->mg_obj, PERL_MAGIC_isa)->mg_obj
     );
 
-    if (stash)
+    /* The stash may have been detached from the symbol table, so check its
+       name before doing anything. */
+    if (stash && HvENAME_get(stash))
 	mro_isa_changed_in(stash);
 
     return 0;
@@ -2904,13 +2943,8 @@ Perl_sighandler(int sig)
     OP *myop = PL_op;
     U32 flags = 0;
     XPV * const tXpv = PL_Xpv;
+    I32 old_ss_ix = PL_savestack_ix;
 
-    if (PL_savestack_ix + 15 <= PL_savestack_max)
-	flags |= 1;
-    if (PL_markstack_ptr < PL_markstack_max - 2)
-	flags |= 4;
-    if (PL_scopestack_ix < PL_scopestack_max - 3)
-	flags |= 16;
 
     if (!PL_psig_ptr[sig]) {
 		PerlIO_printf(Perl_error_log, "Signal SIG%s received, but no signal handler set.\n",
@@ -2920,14 +2954,19 @@ Perl_sighandler(int sig)
 
     /* Max number of items pushed there is 3*n or 4. We cannot fix
        infinity, so we fix 4 (in fact 5): */
-    if (flags & 1) {
+    if (PL_savestack_ix + 15 <= PL_savestack_max) {
+	flags |= 1;
 	PL_savestack_ix += 5;		/* Protect save in progress. */
-	SAVEDESTRUCTOR_X(S_unwind_handler_stack, (void*)&flags);
+	SAVEDESTRUCTOR_X(S_unwind_handler_stack, NULL);
     }
-    if (flags & 4)
+    if (PL_markstack_ptr < PL_markstack_max - 2) {
+	flags |= 2;
 	PL_markstack_ptr++;		/* Protect mark. */
-    if (flags & 16)
-	PL_scopestack_ix += 1;
+    }
+    if (PL_scopestack_ix < PL_scopestack_max - 3) {
+	flags |= 4;
+	PL_scopestack_ix++;
+    }
     /* sv_2cv is too complicated, try a simpler variant first: */
     if (!SvROK(PL_psig_ptr[sig]) || !(cv = MUTABLE_CV(SvRV(PL_psig_ptr[sig])))
 	|| SvTYPE(cv) != SVt_PVCV) {
@@ -2944,16 +2983,15 @@ Perl_sighandler(int sig)
 	goto cleanup;
     }
 
-    if(PL_psig_name[sig]) {
-	sv = SvREFCNT_inc_NN(PL_psig_name[sig]);
-	flags |= 64;
-#if !defined(PERL_IMPLICIT_CONTEXT)
-	PL_sig_sv = sv;
-#endif
-    } else {
-	sv = sv_newmortal();
-	sv_setpv(sv,PL_sig_name[sig]);
-    }
+    sv = PL_psig_name[sig]
+	    ? SvREFCNT_inc_NN(PL_psig_name[sig])
+	    : newSVpv(PL_sig_name[sig],0);
+    flags |= 8;
+    SAVEFREESV(sv);
+
+    /* make sure our assumption about the size of the SAVEs are correct:
+     * 3 for SAVEDESTRUCTOR_X, 2 for SAVEFREESV */
+    assert(old_ss_ix + 2 + ((flags & 1) ? 3+5 : 0)  == PL_savestack_ix);
 
     PUSHSTACKi(PERLSI_SIGNAL);
     PUSHMARK(SP);
@@ -3011,13 +3049,13 @@ Perl_sighandler(int sig)
 	die_sv(ERRSV);
     }
 cleanup:
-    if (flags & 1)
-	PL_savestack_ix -= 8; /* Unprotect save in progress. */
-    if (flags & 4)
+    /* pop any of SAVEFREESV, SAVEDESTRUCTOR_X and "save in progress" */
+    PL_savestack_ix = old_ss_ix;
+    if (flags & 2)
 	PL_markstack_ptr--;
-    if (flags & 16)
+    if (flags & 4)
 	PL_scopestack_ix -= 1;
-    if (flags & 64)
+    if (flags & 8)
 	SvREFCNT_dec(sv);
     PL_op = myop;			/* Apparently not needed... */
 
@@ -3085,20 +3123,19 @@ S_restore_magic(pTHX_ const void *p)
 
 }
 
+/* clean up the mess created by Perl_sighandler().
+ * Note that this is only called during an exit in a signal handler;
+ * a die is trapped by the call_sv() and the SAVEDESTRUCTOR_X manually
+ * skipped over. This is why we don't need to fix up the markstack and
+ * scopestack - they're going to be set to 0 anyway */
+
 static void
 S_unwind_handler_stack(pTHX_ const void *p)
 {
     dVAR;
-    const U32 flags = *(const U32*)p;
+    PERL_UNUSED_ARG(p);
 
-    PERL_ARGS_ASSERT_UNWIND_HANDLER_STACK;
-
-    if (flags & 1)
-	PL_savestack_ix -= 5; /* Unprotect save in progress. */
-#if !defined(PERL_IMPLICIT_CONTEXT)
-    if (flags & 64)
-	SvREFCNT_dec(PL_sig_sv);
-#endif
+    PL_savestack_ix -= 5; /* Unprotect save in progress. */
 }
 
 /*
@@ -3129,8 +3166,8 @@ Perl_magic_sethint(pTHX_ SV *sv, MAGIC *mg)
        Doing this here saves a lot of doing it manually in perl code (and
        forgetting to do it, and consequent subtle errors.  */
     PL_hints |= HINT_LOCALIZE_HH;
-    PL_compiling.cop_hints_hash
-	= Perl_refcounted_he_new(aTHX_ PL_compiling.cop_hints_hash, key, sv);
+    CopHINTHASH_set(&PL_compiling,
+	cophh_store_sv(CopHINTHASH_get(&PL_compiling), key, 0, sv, 0));
     return 0;
 }
 
@@ -3155,9 +3192,9 @@ Perl_magic_clearhint(pTHX_ SV *sv, MAGIC *mg)
     PERL_UNUSED_ARG(sv);
 
     PL_hints |= HINT_LOCALIZE_HH;
-    PL_compiling.cop_hints_hash
-	= Perl_refcounted_he_new(aTHX_ PL_compiling.cop_hints_hash,
-				 MUTABLE_SV(mg->mg_ptr), &PL_sv_placeholder);
+    CopHINTHASH_set(&PL_compiling,
+	cophh_delete_sv(CopHINTHASH_get(&PL_compiling),
+				 MUTABLE_SV(mg->mg_ptr), 0, 0));
     return 0;
 }
 
@@ -3174,10 +3211,8 @@ Perl_magic_clearhints(pTHX_ SV *sv, MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_CLEARHINTS;
     PERL_UNUSED_ARG(sv);
     PERL_UNUSED_ARG(mg);
-    if (PL_compiling.cop_hints_hash) {
-	Perl_refcounted_he_free(aTHX_ PL_compiling.cop_hints_hash);
-	PL_compiling.cop_hints_hash = NULL;
-    }
+    cophh_free(CopHINTHASH_get(&PL_compiling));
+    CopHINTHASH_set(&PL_compiling, cophh_new_empty());
     return 0;
 }
 

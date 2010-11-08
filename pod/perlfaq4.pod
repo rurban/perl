@@ -890,14 +890,14 @@ Perl distribution) lets you say:
 
 A substitution can do this for you. For a single line, you want to
 replace all the leading or trailing whitespace with nothing. You
-can do that with a pair of substitutions.
+can do that with a pair of substitutions:
 
 	s/^\s+//;
 	s/\s+$//;
 
 You can also write that as a single substitution, although it turns
 out the combined statement is slower than the separate ones. That
-might not matter to you, though.
+might not matter to you, though:
 
 	s/^\s+|\s+$//g;
 
@@ -906,30 +906,29 @@ beginning or the end of the string since the anchors have a lower
 precedence than the alternation. With the C</g> flag, the substitution
 makes all possible matches, so it gets both. Remember, the trailing
 newline matches the C<\s+>, and  the C<$> anchor can match to the
-physical end of the string, so the newline disappears too. Just add
+absolute end of the string, so the newline disappears too. Just add
 the newline to the output, which has the added benefit of preserving
 "blank" (consisting entirely of whitespace) lines which the C<^\s+>
-would remove all by itself.
+would remove all by itself:
 
-	while( <> )
-		{
+	while( <> ) {
 		s/^\s+|\s+$//g;
 		print "$_\n";
 		}
 
-For a multi-line string, you can apply the regular expression
-to each logical line in the string by adding the C</m> flag (for
+For a multi-line string, you can apply the regular expression to each
+logical line in the string by adding the C</m> flag (for
 "multi-line"). With the C</m> flag, the C<$> matches I<before> an
-embedded newline, so it doesn't remove it. It still removes the
-newline at the end of the string.
+embedded newline, so it doesn't remove it. This pattern still removes
+the newline at the end of the string:
 
 	$string =~ s/^\s+|\s+$//gm;
 
 Remember that lines consisting entirely of whitespace will disappear,
 since the first part of the alternation can match the entire string
-and replace it with nothing. If need to keep embedded blank lines,
+and replace it with nothing. If you need to keep embedded blank lines,
 you have to do a little more work. Instead of matching any whitespace
-(since that includes a newline), just match the other whitespace.
+(since that includes a newline), just match the other whitespace:
 
 	$string =~ s/^[\t\f ]+|[\t\f ]+$//mg;
 
@@ -2388,7 +2387,7 @@ Usually a hash ref, perhaps like this:
 		PALS   => [ "Norbert", "Rhys", "Phineas"],
 	};
 
-References are documented in L<perlref> and the upcoming L<perlreftut>.
+References are documented in L<perlref> and L<perlreftut>.
 Examples of complex data structures are given in L<perldsc> and
 L<perllol>.  Examples of structures and object-oriented classes are
 in L<perltoot>.
@@ -2507,31 +2506,39 @@ some gotchas.  See the section on Regular Expressions.
 =head2 How do I determine whether a scalar is a number/whole/integer/float?
 
 Assuming that you don't care about IEEE notations like "NaN" or
-"Infinity", you probably just want to use a regular expression.
+"Infinity", you probably just want to use a regular expression:
 
-	if (/\D/)             { print "has nondigits\n" }
-	if (/^\d+\z/)         { print "is a whole number\n" }
-	if (/^-?\d+\z/)       { print "is an integer\n" }
-	if (/^[+-]?\d+\z/)    { print "is a +/- integer\n" }
-	if (/^-?\d+\.?\d*\z/) { print "is a real number\n" }
-	if (/^-?(?:\d+(?:\.\d*)?|\.\d+)\z/) { print "is a decimal number\n" }
-	if (/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?\z/)
-			{ print "a C float\n" }
+	use 5.010;
+	
+	given( $number ) {
+		when( /\D/ )             
+			{ say "\thas nondigits"; continue }
+		when( /^\d+\z/ )         
+			{ say "\tis a whole number"; continue }
+		when( /^-?\d+\z/ )       
+			{ say "\tis an integer"; continue }
+		when( /^[+-]?\d+\z/ )    
+			{ say "\tis a +/- integer"; continue }
+		when( /^-?(?:\d+\.?|\.\d)\d*\z/ ) 
+			{ say "\tis a real number"; continue }
+		when( /^[+-]?(?=\.?\d)\d*\.?\d*(?:e[+-]?\d+)?\z/i)
+			{ say "\tis a C float" }
+		}
 
 There are also some commonly used modules for the task.
 L<Scalar::Util> (distributed with 5.8) provides access to perl's
 internal function C<looks_like_number> for determining whether a
-variable looks like a number.  L<Data::Types> exports functions that
+variable looks like a number. L<Data::Types> exports functions that
 validate data types using both the above and other regular
 expressions. Thirdly, there is C<Regexp::Common> which has regular
 expressions to match various types of numbers. Those three modules are
 available from the CPAN.
 
 If you're on a POSIX system, Perl supports the C<POSIX::strtod>
-function.  Its semantics are somewhat cumbersome, so here's a
-C<getnum> wrapper function for more convenient access.  This function
+function. Its semantics are somewhat cumbersome, so here's a
+C<getnum> wrapper function for more convenient access. This function
 takes a string and returns the number it found, or C<undef> for input
-that isn't a C float.  The C<is_numeric> function is a front end to
+that isn't a C float. The C<is_numeric> function is a front end to
 C<getnum> if you just want to say, "Is this a float?"
 
 	sub getnum {

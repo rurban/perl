@@ -539,14 +539,14 @@ in restricted hashes. This caused such hash entries not to appear
 when iterating over the hash or when checking for the keys
 with the C<hv_exists> function.
 
-You can run into similar problems when you store C<&PL_sv_true> or
-C<&PL_sv_false> into AVs or HVs. Trying to modify such elements
+You can run into similar problems when you store C<&PL_sv_yes> or
+C<&PL_sv_no> into AVs or HVs. Trying to modify such elements
 will give you the following error:
 
     Modification of a read-only value attempted
 
 To make a long story short, you can use the special variables
-C<&PL_sv_undef>, C<&PL_sv_true> and C<&PL_sv_false> with AVs and
+C<&PL_sv_undef>, C<&PL_sv_yes> and C<&PL_sv_no> with AVs and
 HVs, but you have to make sure you know what you're doing.
 
 Generally, if you want to store an undefined value in an AV
@@ -1125,8 +1125,20 @@ Note that because multiple extensions may be using C<PERL_MAGIC_ext>
 or C<PERL_MAGIC_uvar> magic, it is important for extensions to take
 extra care to avoid conflict.  Typically only using the magic on
 objects blessed into the same class as the extension is sufficient.
-For C<PERL_MAGIC_ext> magic, it may also be appropriate to add an I32
-'signature' at the top of the private data area and check that.
+For C<PERL_MAGIC_ext> magic, it is usually a good idea to define an
+C<MGVTBL>, even if all its fields will be C<0>, so that individual
+C<MAGIC> pointers can be identified as a particular kind of magic
+using their C<mg_virtual> field.
+
+    STATIC MGVTBL my_vtbl = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    MAGIC *mg;
+    for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
+        if (mg->mg_type == PERL_MAGIC_ext && mg->mg_virtual == &my_vtbl) {
+            /* this is really ours, not another module's PERL_MAGIC_ext */
+            my_priv_data_t *priv = (my_priv_data_t *)mg->mg_ptr;
+        }
+    }
 
 Also note that the C<sv_set*()> and C<sv_cat*()> functions described
 earlier do B<not> invoke 'set' magic on their targets.  This must
@@ -1884,7 +1896,7 @@ this:
     STATIC BHK my_hooks;
 
     BOOT:
-        BhkENTRY_set(&my_hooks, start, my_start_hook);
+        BhkENTRY_set(&my_hooks, bhk_start, my_start_hook);
         Perl_blockhook_register(aTHX_ &my_hooks);
 
 This will arrange to have C<my_start_hook> called at the start of
@@ -1892,7 +1904,7 @@ compiling every lexical scope. The available hooks are:
 
 =over 4
 
-=item C<void start(pTHX_ int full)>
+=item C<void bhk_start(pTHX_ int full)>
 
 This is called just after starting a new lexical scope. Note that Perl
 code like
@@ -1905,20 +1917,20 @@ C<}>, so calls to C<start> and C<pre/post_end> will match. Anything
 pushed onto the save stack by this hook will be popped just before the
 scope ends (between the C<pre_> and C<post_end> hooks, in fact).
 
-=item C<void pre_end(pTHX_ OP **o)>
+=item C<void bhk_pre_end(pTHX_ OP **o)>
 
 This is called at the end of a lexical scope, just before unwinding the
 stack. I<o> is the root of the optree representing the scope; it is a
 double pointer so you can replace the OP if you need to.
 
-=item C<void post_end(pTHX_ OP **o)>
+=item C<void bhk_post_end(pTHX_ OP **o)>
 
 This is called at the end of a lexical scope, just after unwinding the
 stack. I<o> is as above. Note that it is possible for calls to C<pre_>
 and C<post_end> to nest, if there is something on the save stack that
 calls string eval.
 
-=item C<void eval(pTHX_ OP *const o)>
+=item C<void bhk_eval(pTHX_ OP *const o)>
 
 This is called just before starting to compile an C<eval STRING>, C<do
 FILE>, C<require> or C<use>, after the eval has been set up. I<o> is the

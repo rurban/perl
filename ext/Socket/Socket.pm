@@ -1,7 +1,7 @@
 package Socket;
 
 our($VERSION, @ISA, @EXPORT, @EXPORT_OK, %EXPORT_TAGS);
-$VERSION = "1.89";
+$VERSION = "1.91";
 
 =head1 NAME
 
@@ -198,7 +198,7 @@ use Carp;
 use warnings::register;
 
 require Exporter;
-use XSLoader ();
+require XSLoader;
 @ISA = qw(Exporter);
 @EXPORT = qw(
 	inet_aton inet_ntoa
@@ -431,18 +431,6 @@ sub sockaddr_un {
     }
 }
 
-sub AUTOLOAD {
-    my($constname);
-    ($constname = $AUTOLOAD) =~ s/.*:://;
-    croak "&Socket::constant not defined" if $constname eq 'constant';
-    my ($error, $val) = constant($constname);
-    if ($error) {
-	croak $error;
-    }
-    *$AUTOLOAD = sub { $val };
-    goto &$AUTOLOAD;
-}
-
-XSLoader::load 'Socket', $VERSION;
+XSLoader::load();
 
 1;

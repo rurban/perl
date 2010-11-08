@@ -17,7 +17,7 @@ BEGIN {
     require feature;
     feature->import(':5.10');
 }
-use Test::More tests => 90;
+use Test::More tests => 94;
 use Config ();
 
 use B::Deparse;
@@ -165,6 +165,19 @@ eval <<EOFCODE and test($x);
    package main;
    1
 EOFCODE
+
+# [perl #33752]
+{
+  my $code = <<"EOCODE";
+{
+    our \$\x{1e1f}\x{14d}\x{14d};
+}
+EOCODE
+  my $deparsed
+   = $deparse->coderef2text(eval "sub { our \$\x{1e1f}\x{14d}\x{14d} }" );
+  s/$ \n//x for $deparsed, $code;
+  is $deparsed, $code, 'our $funny_Unicode_chars';
+}
 
 __DATA__
 # 2
@@ -654,3 +667,14 @@ pop @_;
 'foo' =~ ($_ =~ /foo/);
 'foo' =~ ($_ =~ tr/fo//);
 'foo' =~ ($_ =~ s/foo//);
+####
+# Test @threadsv_names under 5005threads
+foreach $' (1, 2) {
+    sleep $';
+}
+####
+# y///r
+tr/a/b/r;
+####
+# y/uni/code/
+tr/\x{345}/\x{370}/;

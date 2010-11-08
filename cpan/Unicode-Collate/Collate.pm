@@ -14,7 +14,7 @@ use File::Spec;
 
 no warnings 'utf8';
 
-our $VERSION = '0.60';
+our $VERSION = '0.66';
 our $PACKAGE = __PACKAGE__;
 
 my @Path = qw(Unicode Collate);
@@ -101,12 +101,17 @@ use constant CJK_UidFin    => 0x9FA5;
 use constant CJK_UidF41    => 0x9FBB;
 use constant CJK_UidF51    => 0x9FC3;
 use constant CJK_UidF52    => 0x9FCB;
-use constant CJK_ExtAIni   => 0x3400;
-use constant CJK_ExtAFin   => 0x4DB5;
-use constant CJK_ExtBIni   => 0x20000;
-use constant CJK_ExtBFin   => 0x2A6D6;
+use constant CJK_ExtAIni   => 0x3400;  # Unicode 3.0.0
+use constant CJK_ExtAFin   => 0x4DB5;  # Unicode 3.0.0
+use constant CJK_ExtBIni   => 0x20000; # Unicode 3.1.0
+use constant CJK_ExtBFin   => 0x2A6D6; # Unicode 3.1.0
 use constant CJK_ExtCIni   => 0x2A700; # Unicode 5.2.0
 use constant CJK_ExtCFin   => 0x2B734; # Unicode 5.2.0
+
+my %CompatUI = map +($_ => 1), (
+    0xFA0E, 0xFA0F, 0xFA11, 0xFA13, 0xFA14, 0xFA1F,
+    0xFA21, 0xFA23, 0xFA24, 0xFA27, 0xFA28, 0xFA29,
+);
 
 # Logical_Order_Exception in PropList.txt
 my $DefaultRearrange = [ 0x0E40..0x0E44, 0x0EC0..0x0EC4 ];
@@ -144,6 +149,7 @@ our @ChangeNG = qw/
     ignoreChar ignoreName undefChar undefName variableTable
     versionTable alternateTable backwardsTable forwardsTable rearrangeTable
     derivCode normCode rearrangeHash backwardsFlag
+    suppress suppressHash
   /;
 # The hash key 'ignored' is deleted at v 0.21.
 # The hash key 'isShift' is deleted at v 0.23.
@@ -276,6 +282,11 @@ sub new
     my $class = shift;
     my $self = bless { @_ }, $class;
 
+    # keys of $self->{suppressHash} are $self->{suppress}.
+    if ($self->{suppress} && @{ $self->{suppress} }) {
+	@{ $self->{suppressHash} }{ @{ $self->{suppress} } } = ();
+    } # before read_table()
+
     # If undef is passed explicitly, no file is read.
     $self->{table} = $KeyFile if ! exists $self->{table};
     $self->read_table() if defined $self->{table};
@@ -380,7 +391,8 @@ sub parseEntry
 
     @uv = _getHexArray($e);
     return if !@uv;
-
+    return if @uv > 1 && $self->{suppressHash} &&
+		  exists $self->{suppressHash}{$uv[0]};
     $entry = join(CODE_SEP, @uv); # in JCPS
 
     if (defined $self->{undefChar} || defined $self->{ignoreChar}) {
@@ -423,7 +435,7 @@ sub parseEntry
 
 
 ##
-## VCE = _varCE(variable term, VCE)
+## VCE = _varCE(variable, VCE)
 ##
 sub _varCE
 {
@@ -590,6 +602,22 @@ sub splitEnt
     return \@buf;
 }
 
+##
+## VCE = _pack_override(input, codepoint, derivCode)
+##
+sub _pack_override ($$$) {
+    my $r = shift;
+    my $u = shift;
+    my $der = shift;
+
+    if (ref $r) {
+	return pack(VCE_TEMPLATE, NON_VAR, @$r);
+    } elsif (defined $r) {
+	return pack(VCE_TEMPLATE, NON_VAR, $r, Min2Wt, Min3Wt, $u);
+    } else {
+	return $der->($u);
+    }
+}
 
 ##
 ## list of VCE = getWt(JCPS)
@@ -611,12 +639,10 @@ sub getWt
 	my $hang = $self->{overrideHangul};
 	my @hangulCE;
 	if ($hang) {
-	    @hangulCE = map(pack(VCE_TEMPLATE, NON_VAR, @$_), &$hang($u));
-	}
-	elsif (!defined $hang) {
+	    @hangulCE = map _pack_override($_, $u, $der), $hang->($u);
+	} elsif (!defined $hang) {
 	    @hangulCE = $der->($u);
-	}
-	else {
+	} else {
 	    my $max  = $self->{maxlength};
 	    my @decH = _decompHangul($u);
 
@@ -646,17 +672,16 @@ sub getWt
 		} @decH);
 	}
 	return map _varCE($vbl, $_), @hangulCE;
-    }
-    elsif (_isUIdeo($u, $self->{UCA_Version})) {
+    } else {
 	my $cjk  = $self->{overrideCJK};
-	return map _varCE($vbl, $_),
-	    $cjk
-		? map(pack(VCE_TEMPLATE, NON_VAR, @$_), &$cjk($u))
-		: defined $cjk && $self->{UCA_Version} <= 8 && $u < 0x10000
-		    ? _uideoCE_8($u)
-		    : $der->($u);
-    }
-    else {
+	my $vers = $self->{UCA_Version};
+	if ($cjk && _isUIdeo($u, $vers)) {
+	    my @cjkCE = map _pack_override($_, $u, $der), $cjk->($u);
+	    return map _varCE($vbl, $_), @cjkCE;
+	}
+	if ($vers == 8 && defined $cjk && _isUIdeo($u, 0)) {
+	    return map _varCE($vbl, $_), _uideoCE_8($u);
+	}
 	return map _varCE($vbl, $_), $der->($u);
     }
 }
@@ -671,32 +696,28 @@ sub getSortKey
     my $lev  = $self->{level};
     my $rEnt = $self->splitEnt(shift); # get an arrayref of JCPS
     my $vers = $self->{UCA_Version};
-    my $v2i  = $vers >= 9 && $self->{variable} ne 'non-ignorable';
+    my $vbl  = $self->{variable};
+    my $term = $self->{hangul_terminator};
+    my $v2i  = $vers >= 9 && $vbl ne 'non-ignorable';
 
     my @buf; # weight arrays
-    if ($self->{hangul_terminator}) {
+    if ($term) {
 	my $preHST = '';
+	my $termCE = _varCE($vbl, pack(VCE_TEMPLATE, NON_VAR, $term, 0,0,0));
 	foreach my $jcps (@$rEnt) {
 	    # weird things like VL, TL-contraction are not considered!
-	    my $curHST = '';
-	    foreach my $u (split /;/, $jcps) {
-		$curHST .= getHST($u, $vers);
-	    }
+	    my $curHST = join '', map getHST($_, $vers), split /;/, $jcps;
 	    if ($preHST && !$curHST || # hangul before non-hangul
 		$preHST =~ /L\z/ && $curHST =~ /^T/ ||
 		$preHST =~ /V\z/ && $curHST =~ /^L/ ||
 		$preHST =~ /T\z/ && $curHST =~ /^[LV]/) {
-
-		push @buf, $self->getWtHangulTerm();
+		push @buf, $termCE;
 	    }
 	    $preHST = $curHST;
-
 	    push @buf, $self->getWt($jcps);
 	}
-	$preHST # end at hangul
-	    and push @buf, $self->getWtHangulTerm();
-    }
-    else {
+	push @buf, $termCE if $preHST; # end at hangul
+    } else {
 	foreach my $jcps (@$rEnt) {
 	    push @buf, $self->getWt($jcps);
 	}
@@ -713,11 +734,9 @@ sub getSortKey
 	if ($v2i) {
 	    if ($var) {
 		$last_is_variable = TRUE;
-	    }
-	    elsif (!$wt[0]) { # ignorable
+	    } elsif (!$wt[0]) { # ignorable
 		next if $last_is_variable;
-	    }
-	    else {
+	    } else {
 		$last_is_variable = FALSE;
 	    }
 	}
@@ -779,11 +798,13 @@ sub sort {
 
 sub _derivCE_20 {
     my $u = shift;
-    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF52) ? 0xFB40 : # CJK
+    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF52 || $CompatUI{$u})
+		? 0xFB40 : # CJK
 	       (CJK_ExtAIni <= $u && $u <= CJK_ExtAFin ||
 		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin ||
-		CJK_ExtCIni <= $u && $u <= CJK_ExtCFin) ? 0xFB80  # CJK ext.
-							: 0xFBC0; # others
+		CJK_ExtCIni <= $u && $u <= CJK_ExtCFin)
+		? 0xFB80  # CJK ext.
+		: 0xFBC0; # others
     my $aaaa = $base + ($u >> 15);
     my $bbbb = ($u & 0x7FFF) | 0x8000;
     return pack(VCE_TEMPLATE, NON_VAR, $aaaa, Min2Wt, Min3Wt, $u),
@@ -792,10 +813,12 @@ sub _derivCE_20 {
 
 sub _derivCE_18 {
     my $u = shift;
-    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF51) ? 0xFB40 : # CJK
+    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF51 || $CompatUI{$u})
+		? 0xFB40 : # CJK
 	       (CJK_ExtAIni <= $u && $u <= CJK_ExtAFin ||
-		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin) ? 0xFB80  # CJK ext.
-							: 0xFBC0; # others
+		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin)
+		? 0xFB80  # CJK ext.
+		: 0xFBC0; # others
     my $aaaa = $base + ($u >> 15);
     my $bbbb = ($u & 0x7FFF) | 0x8000;
     return pack(VCE_TEMPLATE, NON_VAR, $aaaa, Min2Wt, Min3Wt, $u),
@@ -804,10 +827,12 @@ sub _derivCE_18 {
 
 sub _derivCE_14 {
     my $u = shift;
-    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF41) ? 0xFB40 : # CJK
+    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidF41 || $CompatUI{$u})
+		? 0xFB40 : # CJK
 	       (CJK_ExtAIni <= $u && $u <= CJK_ExtAFin ||
-		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin) ? 0xFB80  # CJK ext.
-							: 0xFBC0; # others
+		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin)
+		? 0xFB80  # CJK ext.
+		: 0xFBC0; # others
     my $aaaa = $base + ($u >> 15);
     my $bbbb = ($u & 0x7FFF) | 0x8000;
     return pack(VCE_TEMPLATE, NON_VAR, $aaaa, Min2Wt, Min3Wt, $u),
@@ -816,10 +841,12 @@ sub _derivCE_14 {
 
 sub _derivCE_9 {
     my $u = shift;
-    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidFin) ? 0xFB40 : # CJK
+    my $base = (CJK_UidIni  <= $u && $u <= CJK_UidFin || $CompatUI{$u})
+		? 0xFB40 : # CJK
 	       (CJK_ExtAIni <= $u && $u <= CJK_ExtAFin ||
-		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin) ? 0xFB80  # CJK ext.
-							: 0xFBC0; # others
+		CJK_ExtBIni <= $u && $u <= CJK_ExtBFin)
+		? 0xFB80  # CJK ext.
+		: 0xFBC0; # others
     my $aaaa = $base + ($u >> 15);
     my $bbbb = ($u & 0x7FFF) | 0x8000;
     return pack(VCE_TEMPLATE, NON_VAR, $aaaa, Min2Wt, Min3Wt, $u),
@@ -830,9 +857,8 @@ sub _derivCE_8 {
     my $code = shift;
     my $aaaa =  0xFF80 + ($code >> 15);
     my $bbbb = ($code & 0x7FFF) | 0x8000;
-    return
-	pack(VCE_TEMPLATE, NON_VAR, $aaaa, 2, 1, $code),
-	pack(VCE_TEMPLATE, NON_VAR, $bbbb, 0, 0, $code);
+    return pack(VCE_TEMPLATE, NON_VAR, $aaaa, 2, 1, $code),
+	   pack(VCE_TEMPLATE, NON_VAR, $bbbb, 0, 0, $code);
 }
 
 sub _uideoCE_8 {
@@ -841,27 +867,20 @@ sub _uideoCE_8 {
 }
 
 sub _isUIdeo {
+    # $uca_vers = 0 for _uideoCE_8()
     my ($u, $uca_vers) = @_;
     return((CJK_UidIni <= $u && (
 	    $uca_vers >= 20 ? ($u <= CJK_UidF52) :
 	    $uca_vers >= 18 ? ($u <= CJK_UidF51) :
 	    $uca_vers >= 14 ? ($u <= CJK_UidF41) :
-			      ($u <= CJK_UidFin)))
+			      ($u <= CJK_UidFin))) || $CompatUI{$u}
 		||
 	(CJK_ExtAIni <= $u && $u <= CJK_ExtAFin)
 		||
-	(CJK_ExtBIni <= $u && $u <= CJK_ExtBFin)
+	($uca_vers >=  8 && CJK_ExtBIni <= $u && $u <= CJK_ExtBFin)
 		||
-	($uca_vers >= 20 &&
-	 CJK_ExtCIni <= $u && $u <= CJK_ExtCFin)
+	($uca_vers >= 20 && CJK_ExtCIni <= $u && $u <= CJK_ExtCFin)
     );
-}
-
-
-sub getWtHangulTerm {
-    my $self = shift;
-    return _varCE($self->{variable},
-	pack(VCE_TEMPLATE, NON_VAR, $self->{hangul_terminator}, 0,0,0));
 }
 
 
@@ -1185,8 +1204,10 @@ Unicode::Collate - Unicode Collation Algorithm
   #compare
   $result = $Collator->cmp($a, $b); # returns 1, 0, or -1.
 
-  # If %tailoring is false (i.e. empty),
-  # $Collator should do the default collation.
+B<Note:> Strings in C<@not_sorted>, C<$a> and C<$b> are interpreted
+according to Perl's Unicode support. See L<perlunicode>,
+L<perluniintro>, L<perlunitut>, L<perlunifaq>, L<utf8>.
+Otherwise you can use C<preprocess> or should decode them before.
 
 =head1 DESCRIPTION
 
@@ -1195,11 +1216,12 @@ This module is an implementation of Unicode Technical Standard #10
 
 =head2 Constructor and Tailoring
 
-The C<new> method returns a collator object.
+The C<new> method returns a collator object. If new() is called
+with no parameters, the collator should do the default collation.
 
    $Collator = Unicode::Collate->new(
       UCA_Version => $UCA_Version,
-      alternate => $alternate, # deprecated: use of 'variable' is recommended.
+      alternate => $alternate, # alias for 'variable'
       backwards => $levelNumber, # or \@levelNumbers
       entry => $element,
       hangul_terminator => $term_primary_weight,
@@ -1212,6 +1234,7 @@ The C<new> method returns a collator object.
       overrideHangul => \&overrideHangul,
       preprocess => \&preprocess,
       rearrange => \@charList,
+      suppress => \@charList,
       table => $filename,
       undefName => qr/$undefName/,
       undefChar => qr/$undefChar/,
@@ -1425,23 +1448,24 @@ B<Unicode::Normalize> is required (see also B<CAVEAT>).
 
 -- see 7.1 Derived Collation Elements, UTS #10.
 
-By default, CJK Unified Ideographs are ordered in Unicode codepoint
-order but C<CJK Unified Ideographs> are lesser than
-C<CJK Unified Ideographs Extension>.
+By default, CJK unified ideographs are ordered in Unicode codepoint
+order, but those in the CJK Unified Ideographs block are lesser than
+those in the CJK Unified Ideographs Extension A etc.
 
-    CJK Unified Ideographs:
+    In CJK Unified Ideographs block:
     U+4E00..U+9FA5 if UCA_Version is 8 to 11;
     U+4E00..U+9FBB if UCA_Version is 14 to 16;
     U+4E00..U+9FC3 if UCA_Version is 18;
-    U+4E00..U+9FCB if UCA_Version> is 20.
+    U+4E00..U+9FCB if UCA_Version is 20.
 
-    CJK Unified Ideographs Extension:
-    Ext.A (U+3400..U+4DB5) and Ext.B (U+20000..U+2A6D6) if UCA_Version < 20;
-    Ext.A, Ext.B and Ext.C (U+2A700..U+2B734) if UCA_Version is 20.
+    In CJK Unified Ideographs Extension blocks:
+    Ext.A (U+3400..U+4DB5) and Ext.B (U+20000..U+2A6D6) in any UCA_Version;
+    Ext.C (U+2A700..U+2B734) if UCA_Version is 20.
 
-Through C<overrideCJK>, ordering of CJK Unified Ideographs can be overrided.
+Through C<overrideCJK>, ordering of CJK unified ideographs (including
+extensions) can be overrided.
 
-ex. CJK Unified Ideographs in the JIS code point order.
+ex. CJK unified ideographs in the JIS code point order.
 
   overrideCJK => sub {
       my $u = shift;             # get a Unicode codepoint
@@ -1451,37 +1475,61 @@ ex. CJK Unified Ideographs in the JIS code point order.
       [ $n, 0x20, 0x2, $u ];     # return the collation element
   },
 
-ex. ignores all CJK Unified Ideographs.
+The return value may be an arrayref of 1st to 4th weights as shown
+above. The return value may be an integer as the primary weight
+as shown below.  If C<undef> is returned, the default derived
+collation element will be used.
+
+  overrideCJK => sub {
+      my $u = shift;             # get a Unicode codepoint
+      my $b = pack('n', $u);     # to UTF-16BE
+      my $s = your_unicode_to_sjis_converter($b); # convert
+      my $n = unpack('n', $s);   # convert sjis to short
+      return $n;                 # return the primary weight
+  },
+
+The return value may be a list containing zero or more of
+an arrayref, an integer, or C<undef>.
+
+ex. ignores all CJK unified ideographs.
 
   overrideCJK => sub {()}, # CODEREF returning empty list
 
    # where ->eq("Pe\x{4E00}rl", "Perl") is true
-   # as U+4E00 is a CJK Unified Ideograph and to be ignorable.
+   # as U+4E00 is a CJK unified ideograph and to be ignorable.
 
 If C<undef> is passed explicitly as the value for this key,
-weights for CJK Unified Ideographs are treated as undefined.
-But assignment of weight for CJK Unified Ideographs
-in table or C<entry> is still valid.
+weights for CJK unified ideographs are treated as undefined.
+But assignment of weight for CJK unified ideographs
+in C<table> or C<entry> is still valid.
+
+B<Note:> In addition to them, 12 CJK compatibility ideographs (C<U+FA0E>,
+C<U+FA0F>, C<U+FA11>, C<U+FA13>, C<U+FA14>, C<U+FA1F>, C<U+FA21>, C<U+FA23>,
+C<U+FA24>, C<U+FA27>, C<U+FA28>, C<U+FA29>) are also treated as CJK unified
+ideographs. But they can't be overrided via C<overrideCJK> when you use
+DUCET, as the table includes weights for them. C<table> or C<entry> has
+priority over C<overrideCJK>.
 
 =item overrideHangul
 
 -- see 7.1 Derived Collation Elements, UTS #10.
 
-By default, Hangul Syllables are decomposed into Hangul Jamo,
+By default, Hangul syllables are decomposed into Hangul Jamo,
 even if C<(normalization =E<gt> undef)>.
-But the mapping of Hangul Syllables may be overrided.
+But the mapping of Hangul syllables may be overrided.
 
 This parameter works like C<overrideCJK>, so see there for examples.
 
-If you want to override the mapping of Hangul Syllables,
-NFD, NFKD, and FCD are not appropriate,
-since they will decompose Hangul Syllables before overriding.
+If you want to override the mapping of Hangul syllables,
+NFD and NFKD are not appropriate, since NFD and NFKD will decompose
+Hangul syllables before overriding. FCD may decompose Hangul syllables
+as the case may be.
 
 If C<undef> is passed explicitly as the value for this key,
-weight for Hangul Syllables is treated as undefined
+weight for Hangul syllables is treated as undefined
 without decomposition into Hangul Jamo.
-But definition of weight for Hangul Syllables
-in table or C<entry> is still valid.
+But definition of weight for Hangul syllables
+in C<table> or C<entry> is still valid.
 
 =item preprocess
 
@@ -1501,6 +1549,17 @@ Then, "the pen" is before "a pencil".
 
 C<preprocess> is performed before C<normalization> (if defined).
 
+ex. decoding strings in a legacy encoding such as shift-jis:
+
+    $sjis_collator = Unicode::Collate->new(
+        preprocess => \&your_shiftjis_to_unicode_decoder,
+    );
+    @result = $sjis_collator->sort(@shiftjis_strings);
+
+B<Note:> Strings returned from the coderef will be interpreted
+according to Perl's Unicode support. See L<perlunicode>,
+L<perluniintro>, L<perlunitut>, L<perlunifaq>, L<utf8>.
+
 =item rearrange
 
 -- see 3.1.3 Rearrangement, UTS #10.
@@ -1518,6 +1577,20 @@ If C<UCA_Version> is equal to or greater than 14, default is C<[]>
 
 B<According to the version 9 of UCA, this parameter shall not be used;
 but it is not warned at present.>
+
+=item suppress
+
+-- see suppress contractions in 5.14.11 Special-Purpose Commands,
+UTS #35 (LDML).
+
+Contractions beginning with the specified characters are suppressed,
+even if those contractions are defined in C<table> or C<entry>.
+
+An example for Russian and some languages using the Cyrillic script:
+
+    suppress => [0x0400..0x0417, 0x041A..0x0437, 0x043A..0x045F],
+
+where 0x0400 stands for C<U+0400>, CYRILLIC CAPITAL LETTER IE WITH GRAVE.
 
 =item table
 
@@ -1566,7 +1639,7 @@ specified as a comment (following C<#>) on each line.
 
 -- see 6.3.4 Reducing the Repertoire, UTS #10.
 
-Undefines the collation element as if it were unassigned in the table.
+Undefines the collation element as if it were unassigned in the C<table>.
 This reduces the size of the table.
 If an unassigned character appears in the string to be collated,
 the sort key is made from its codepoint
@@ -1944,6 +2017,10 @@ L<http://www.unicode.org/Public/UNIDATA/HangulSyllableType.txt>
 =item Unicode Normalization Forms - UAX #15
 
 L<http://www.unicode.org/reports/tr15/>
+
+=item Unicode Locale Data Markup Language (LDML) - UTS #35
+
+L<http://www.unicode.org/reports/tr35/>
 
 =back
 

@@ -1421,6 +1421,9 @@ Returns a pointer to the string in the SV, or a stringified form of
 the SV if the SV does not contain a string.  The SV may cache the
 stringified form becoming C<SvPOK>.  Handles 'get' magic.
 
+=for apidoc Am|char*|SvPV_nomg_nolen|SV* sv
+Like C<SvPV_nolen> but doesn't process magic.
+
 =for apidoc Am|IV|SvIV|SV* sv
 Coerces the given SV to an integer and returns it. See C<SvIVx> for a
 version which guarantees to evaluate sv only once.
@@ -1517,6 +1520,9 @@ scalar.
 =for apidoc Am|void|sv_catpvn_nomg|SV* sv|const char* ptr|STRLEN len
 Like C<sv_catpvn> but doesn't process magic.
 
+=for apidoc Am|void|sv_catpv_nomg|SV* sv|const char* ptr
+Like C<sv_catpv> but doesn't process magic.
+
 =for apidoc Am|void|sv_setsv_nomg|SV* dsv|SV* ssv
 Like C<sv_setsv> but doesn't process magic.
 
@@ -1582,6 +1588,10 @@ Like sv_utf8_upgrade, but doesn't do magic on C<sv>
 #define SvPV_nolen(sv) \
     ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
      ? SvPVX(sv) : sv_2pv_flags(sv, 0, SV_GMAGIC))
+
+#define SvPV_nomg_nolen(sv) \
+    ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
+     ? SvPVX(sv) : sv_2pv_flags(sv, 0, 0))
 
 #define SvPV_nolen_const(sv) \
     ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
@@ -1817,6 +1827,7 @@ mg.c:1024: warning: left-hand operand of comma expression has no effect
 #define sv_utf8_upgrade_flags(sv, flags) sv_utf8_upgrade_flags_grow(sv, flags, 0)
 #define sv_utf8_upgrade_nomg(sv) sv_utf8_upgrade_flags(sv, 0)
 #define sv_catpvn_nomg(dsv, sstr, slen) sv_catpvn_flags(dsv, sstr, slen, 0)
+#define sv_catpv_nomg(dsv, sstr) sv_catpv_flags(dsv, sstr, 0)
 #define sv_setsv(dsv, ssv) \
 	sv_setsv_flags(dsv, ssv, SV_GMAGIC|SV_DO_COW_SVSETSV)
 #define sv_setsv_nomg(dsv, ssv) sv_setsv_flags(dsv, ssv, SV_DO_COW_SVSETSV)

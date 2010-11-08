@@ -126,8 +126,7 @@ called by visit() for each SV]):
     sv_clean_objs() / do_clean_objs(),do_clean_named_objs(),
 		      do_clean_named_io_objs()
 			Attempt to free all objects pointed to by RVs,
-			and, unless DISABLE_DESTRUCTOR_KLUDGE is defined,
-			try to do the same for all objects indirectly
+			and try to do the same for all objects indirectly
 			referenced by typeglobs too.  Called once from
 			perl_destruct(), prior to calling sv_clean_all()
 			below.
@@ -476,8 +475,6 @@ do_clean_objs(pTHX_ SV *const ref)
 }
 
 
-#ifndef DISABLE_DESTRUCTOR_KLUDGE
-
 /* clear any slots in a GV which hold objects - except IO;
  * called by sv_clean_objs() for each live GV */
 
@@ -544,7 +541,6 @@ do_clean_named_io_objs(pTHX_ SV *const sv)
     }
     SvREFCNT_dec(sv); /* undo the inc above */
 }
-#endif
 
 /*
 =for apidoc sv_clean_objs
@@ -561,7 +557,6 @@ Perl_sv_clean_objs(pTHX)
     GV *olddef, *olderr;
     PL_in_clean_objs = TRUE;
     visit(do_clean_objs, SVf_ROK, SVf_ROK);
-#ifndef DISABLE_DESTRUCTOR_KLUDGE
     /* Some barnacles may yet remain, clinging to typeglobs.
      * Run the non-IO destructors first: they may want to output
      * error messages, close files etc */
@@ -576,7 +571,6 @@ Perl_sv_clean_objs(pTHX)
     if (olderr && isGV_with_GP(olderr))
 	do_clean_named_io_objs(aTHX_ MUTABLE_SV(olderr));
     SvREFCNT_dec(olddef);
-#endif
     PL_in_clean_objs = FALSE;
 }
 
@@ -2733,6 +2727,10 @@ Perl_sv_2pv_flags(pTHX_ register SV *const sv, STRLEN *const lp, const I32 flags
 		len = SvIsUV(sv)
 		    ? my_snprintf(tbuf, sizeof(tbuf), "%"UVuf, (UV)SvUVX(sv))
 		    : my_snprintf(tbuf, sizeof(tbuf), "%"IVdf, (IV)SvIVX(sv));
+	    } else if(SvNVX(sv) == 0.0) {
+		    tbuf[0] = '0';
+		    tbuf[1] = 0;
+		    len = 1;
 	    } else {
 		Gconvert(SvNVX(sv), NV_DIG, 0, tbuf);
 		len = strlen(tbuf);
@@ -2741,13 +2739,6 @@ Perl_sv_2pv_flags(pTHX_ register SV *const sv, STRLEN *const lp, const I32 flags
 	    {
 		dVAR;
 
-#ifdef FIXNEGATIVEZERO
-		if (len == 2 && tbuf[0] == '-' && tbuf[1] == '0') {
-		    tbuf[0] = '0';
-		    tbuf[1] = 0;
-		    len = 1;
-		}
-#endif
 		SvUPGRADE(sv, SVt_PV);
 		if (lp)
 		    *lp = len;
@@ -2919,28 +2910,21 @@ Perl_sv_2pv_flags(pTHX_ register SV *const sv, STRLEN *const lp, const I32 flags
 	*s = '\0';
     }
     else if (SvNOKp(sv)) {
-	dSAVE_ERRNO;
 	if (SvTYPE(sv) < SVt_PVNV)
 	    sv_upgrade(sv, SVt_PVNV);
-	/* The +20 is pure guesswork.  Configure test needed. --jhi */
-	s = SvGROW_mutable(sv, NV_DIG + 20);
-	/* some Xenix systems wipe out errno here */
-#ifdef apollo
-	if (SvNVX(sv) == 0.0)
-	    my_strlcpy(s, "0", SvLEN(sv));
-	else
-#endif /*apollo*/
-	{
+	if (SvNVX(sv) == 0.0) {
+	    s = SvGROW_mutable(sv, 2);
+	    *s++ = '0';
+	    *s = '\0';
+	} else {
+	    dSAVE_ERRNO;
+	    /* The +20 is pure guesswork.  Configure test needed. --jhi */
+	    s = SvGROW_mutable(sv, NV_DIG + 20);
+	    /* some Xenix systems wipe out errno here */
 	    Gconvert(SvNVX(sv), NV_DIG, 0, s);
+	    RESTORE_ERRNO;
+	    while (*s) s++;
 	}
-	RESTORE_ERRNO;
-#ifdef FIXNEGATIVEZERO
-        if (*s == '-' && s[1] == '0' && !s[2]) {
-	    s[0] = '0';
-	    s[1] = 0;
-	}
-#endif
-	while (*s) s++;
 #ifdef hcx
 	if (s[-1] == '.')
 	    *--s = '\0';
@@ -3044,8 +3028,9 @@ Perl_sv_2pvbyte(pTHX_ register SV *const sv, STRLEN *const lp)
 {
     PERL_ARGS_ASSERT_SV_2PVBYTE;
 
+    SvGETMAGIC(sv);
     sv_utf8_downgrade(sv,0);
-    return lp ? SvPV(sv,*lp) : SvPV_nolen(sv);
+    return lp ? SvPV_nomg(sv,*lp) : SvPV_nomg_nolen(sv);
 }
 
 /*
@@ -3585,7 +3570,8 @@ copy-ish functions and macros use this underneath.
 static void
 S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
 {
-    I32 mro_changes = 0; /* 1 = method, 2 = isa */
+    I32 mro_changes = 0; /* 1 = method, 2 = isa, 3 = recursive isa */
+    HV *old_stash = NULL;
 
     PERL_ARGS_ASSERT_GLOB_ASSIGN_GLOB;
 
@@ -3621,18 +3607,47 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
         }
         /* If source has a real method, then a method is
            going to change */
-        else if(GvCV((const GV *)sstr)) {
+        else if(
+         GvCV((const GV *)sstr) && GvSTASH(dstr) && HvENAME(GvSTASH(dstr))
+        ) {
             mro_changes = 1;
         }
     }
 
     /* If dest already had a real method, that's a change as well */
-    if(!mro_changes && GvGP(MUTABLE_GV(dstr)) && GvCVu((const GV *)dstr)) {
+    if(
+        !mro_changes && GvGP(MUTABLE_GV(dstr)) && GvCVu((const GV *)dstr)
+     && GvSTASH(dstr) && HvENAME(GvSTASH(dstr))
+    ) {
         mro_changes = 1;
     }
 
-    if(strEQ(GvNAME((const GV *)dstr),"ISA"))
-        mro_changes = 2;
+    /* We don’t need to check the name of the destination if it was not a
+       glob to begin with. */
+    if(dtype == SVt_PVGV) {
+        const char * const name = GvNAME((const GV *)dstr);
+        if(
+            strEQ(name,"ISA")
+         /* The stash may have been detached from the symbol table, so
+            check its name. */
+         && GvSTASH(dstr) && HvENAME(GvSTASH(dstr))
+        )
+            mro_changes = 2;
+        else {
+            const STRLEN len = GvNAMELEN(dstr);
+            if (len > 1 && name[len-2] == ':' && name[len-1] == ':') {
+                mro_changes = 3;
+
+                /* Set aside the old stash, so we can reset isa caches on
+                   its subclasses. */
+                if((old_stash = GvHV(dstr)))
+                    /* Make sure we do not lose it early. */
+                    SvREFCNT_inc_simple_void_NN(
+                     sv_2mortal((SV *)old_stash)
+                    );
+            }
+        }
+    }
 
     gp_free(MUTABLE_GV(dstr));
     isGV_with_GP_off(dstr);
@@ -3649,6 +3664,14 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
 	}
     GvMULTI_on(dstr);
     if(mro_changes == 2) mro_isa_changed_in(GvSTASH(dstr));
+    else if(mro_changes == 3) {
+	HV * const stash = GvHV(dstr);
+	if(old_stash ? (HV *)HvENAME_get(old_stash) : stash)
+	    mro_package_moved(
+		stash, old_stash,
+		(GV *)dstr, NULL, 0
+	    );
+    }
     else if(mro_changes) mro_method_changed_in(GvSTASH(dstr));
     return;
 }
@@ -3755,7 +3778,25 @@ S_glob_assign_ref(pTHX_ SV *const dstr, SV *const sstr)
 	    && CopSTASH_ne(PL_curcop, GvSTASH(dstr))) {
 	    GvFLAGS(dstr) |= import_flag;
 	}
-	if (stype == SVt_PVAV && strEQ(GvNAME((GV*)dstr), "ISA")) {
+	if (stype == SVt_PVHV) {
+	    const char * const name = GvNAME((GV*)dstr);
+	    const STRLEN len = GvNAMELEN(dstr);
+	    if (
+	        len > 1 && name[len-2] == ':' && name[len-1] == ':'
+	     && (!dref || HvENAME_get(dref))
+	    ) {
+		mro_package_moved(
+		    (HV *)sref, (HV *)dref,
+		    (GV *)dstr, NULL, 0
+		);
+	    }
+	}
+	else if (
+	    stype == SVt_PVAV && strEQ(GvNAME((GV*)dstr), "ISA")
+	 /* The stash may have been detached from the symbol table, so
+	    check its name before doing anything. */
+	 && GvSTASH(dstr) && HvENAME(GvSTASH(dstr))
+	) {
 	    sv_magic(sref, dstr, PERL_MAGIC_isa, NULL, 0);
 	    mro_isa_changed_in(GvSTASH(dstr));
 	}
@@ -3907,22 +3948,17 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
 	/* case SVt_BIND: */
     case SVt_PVLV:
     case SVt_PVGV:
-	if (isGV_with_GP(sstr) && dtype <= SVt_PVLV) {
-	    glob_assign_glob(dstr, sstr, dtype);
-	    return;
-	}
 	/* SvVALID means that this PVGV is playing at being an FBM.  */
-	/*FALLTHROUGH*/
 
     case SVt_PVMG:
 	if (SvGMAGICAL(sstr) && (flags & SV_GMAGIC)) {
 	    mg_get(sstr);
 	    if (SvTYPE(sstr) != stype)
 		stype = SvTYPE(sstr);
-	    if (isGV_with_GP(sstr) && dtype <= SVt_PVLV) {
+	}
+	if (isGV_with_GP(sstr) && dtype <= SVt_PVLV) {
 		    glob_assign_glob(dstr, sstr, dtype);
 		    return;
-	    }
 	}
 	if (stype == SVt_PVLV)
 	    SvUPGRADE(dstr, SVt_PVNV);
@@ -3999,9 +4035,36 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
 	else {
 	    GV *gv = gv_fetchsv(sstr, GV_ADD, SVt_PVGV);
 	    if (dstr != (const SV *)gv) {
+		const char * const name = GvNAME((const GV *)dstr);
+		const STRLEN len = GvNAMELEN(dstr);
+		HV *old_stash = NULL;
+		bool reset_isa = FALSE;
+		if (len > 1 && name[len-2] == ':' && name[len-1] == ':') {
+		    /* Set aside the old stash, so we can reset isa caches
+		       on its subclasses. */
+		    if((old_stash = GvHV(dstr))) {
+			/* Make sure we do not lose it early. */
+			SvREFCNT_inc_simple_void_NN(
+			 sv_2mortal((SV *)old_stash)
+			);
+		    }
+		    reset_isa = TRUE;
+		}
+
 		if (GvGP(dstr))
 		    gp_free(MUTABLE_GV(dstr));
 		GvGP(dstr) = gp_ref(GvGP(gv));
+
+		if (reset_isa) {
+		    HV * const stash = GvHV(dstr);
+		    if(
+		        old_stash ? (HV *)HvENAME_get(old_stash) : stash
+		    )
+			mro_package_moved(
+			 stash, old_stash,
+			 (GV *)dstr, NULL, 0
+			);
+		}
 	    }
 	}
     }
@@ -4858,6 +4921,24 @@ Perl_sv_catpv(pTHX_ register SV *const sv, register const char *ptr)
 }
 
 /*
+=for apidoc sv_catpv_flags
+
+Concatenates the string onto the end of the string which is in the SV.
+If the SV has the UTF-8 status set, then the bytes appended should
+be valid UTF-8.  If C<flags> has C<SV_GMAGIC> bit set, will C<mg_get>
+on the SVs if appropriate, else not.
+
+=cut
+*/
+
+void
+Perl_sv_catpv_flags(pTHX_ SV *dstr, const char *sstr, const I32 flags)
+{
+    PERL_ARGS_ASSERT_SV_CATPV_FLAGS;
+    sv_catpvn_flags(dstr, sstr, strlen(sstr), flags);
+}
+
+/*
 =for apidoc sv_catpv_mg
 
 Like C<sv_catpv>, but also handles 'set' magic.
@@ -5142,6 +5223,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
     case PERL_MAGIC_rhash:
     case PERL_MAGIC_symtab:
     case PERL_MAGIC_vstring:
+    case PERL_MAGIC_checkcall:
 	vtable = NULL;
 	break;
     case PERL_MAGIC_utf8:
@@ -5391,7 +5473,6 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 {
     dVAR;
     SV **svp = NULL;
-    I32 i;
 
     PERL_ARGS_ASSERT_SV_DEL_BACKREF;
 
@@ -5408,30 +5489,54 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 	Perl_croak(aTHX_ "panic: del_backref");
 
     if (SvTYPE(*svp) == SVt_PVAV) {
-	int count = 0;
-	AV * const av = (AV*)*svp;
-	assert(!SvIS_FREED(av));
-	svp = AvARRAY(av);
-	for (i = AvFILLp(av); i >= 0; i--) {
-	    if (svp[i] == sv) {
-		const SSize_t fill = AvFILLp(av);
-		if (i != fill) {
-		    /* We weren't the last entry.
-		       An unordered list has this property that you can take the
-		       last element off the end to fill the hole, and it's still
-		       an unordered list :-)
-		    */
-		    svp[i] = svp[fill];
-		}
-		svp[fill] = NULL;
-		AvFILLp(av) = fill - 1;
-		count++;
-#ifndef DEBUGGING
-		break; /* should only be one */
+#ifdef DEBUGGING
+	int count = 1;
 #endif
+	AV * const av = (AV*)*svp;
+	SSize_t fill;
+	assert(!SvIS_FREED(av));
+	fill = AvFILLp(av);
+	assert(fill > -1);
+	svp = AvARRAY(av);
+	/* for an SV with N weak references to it, if all those
+	 * weak refs are deleted, then sv_del_backref will be called
+	 * N times and O(N^2) compares will be done within the backref
+	 * array. To ameliorate this potential slowness, we:
+	 * 1) make sure this code is as tight as possible;
+	 * 2) when looking for SV, look for it at both the head and tail of the
+	 *    array first before searching the rest, since some create/destroy
+	 *    patterns will cause the backrefs to be freed in order.
+	 */
+	if (*svp == sv) {
+	    AvARRAY(av)++;
+	    AvMAX(av)--;
+	}
+	else {
+	    SV **p = &svp[fill];
+	    SV *const topsv = *p;
+	    if (topsv != sv) {
+#ifdef DEBUGGING
+		count = 0;
+#endif
+		while (--p > svp) {
+		    if (*p == sv) {
+			/* We weren't the last entry.
+			   An unordered list has this property that you
+			   can take the last element off the end to fill
+			   the hole, and it's still an unordered list :-)
+			*/
+			*p = topsv;
+#ifdef DEBUGGING
+			count++;
+#else
+			break; /* should only be one */
+#endif
+		    }
+		}
 	    }
 	}
-	assert(count == 1);
+	assert(count ==1);
+	AvFILLp(av) = fill-1;
     }
     else {
 	/* optimisation: only a single backref, stored directly */
@@ -5491,7 +5596,7 @@ Perl_sv_kill_backrefs(pTHX_ SV *const sv, AV *const av)
 			/* You lookin' at me?  */
 			assert(CvSTASH(referrer));
 			assert(CvSTASH(referrer) == (const HV *)sv);
-			CvSTASH(referrer) = 0;
+			SvANY(MUTABLE_CV(referrer))->xcv_stash = 0;
 		    }
 		    else {
 			assert(SvTYPE(sv) == SVt_PVGV);
@@ -5753,231 +5858,323 @@ instead.
 */
 
 void
-Perl_sv_clear(pTHX_ register SV *const sv)
+Perl_sv_clear(pTHX_ SV *const orig_sv)
 {
     dVAR;
-    const U32 type = SvTYPE(sv);
-    const struct body_details *const sv_type_details
-	= bodies_by_type + type;
     HV *stash;
+    U32 type;
+    const struct body_details *sv_type_details;
+    SV* iter_sv = NULL;
+    SV* next_sv = NULL;
+    register SV *sv = orig_sv;
 
     PERL_ARGS_ASSERT_SV_CLEAR;
-    assert(SvREFCNT(sv) == 0);
-    assert(SvTYPE(sv) != SVTYPEMASK);
 
-    if (type <= SVt_IV) {
-	/* See the comment in sv.h about the collusion between this early
-	   return and the overloading of the NULL slots in the size table.  */
-	if (SvROK(sv))
-	    goto free_rv;
-	SvFLAGS(sv) &= SVf_BREAK;
-	SvFLAGS(sv) |= SVTYPEMASK;
-	return;
-    }
+    /* within this loop, sv is the SV currently being freed, and
+     * iter_sv is the most recent AV or whatever that's being iterated
+     * over to provide more SVs */
 
-    if (SvOBJECT(sv)) {
-	if (PL_defstash &&	/* Still have a symbol table? */
-	    SvDESTROYABLE(sv))
-	{
-	    dSP;
-	    HV* stash;
-	    do {	
-		CV* destructor;
-		stash = SvSTASH(sv);
-		destructor = StashHANDLER(stash,DESTROY);
-		if (destructor
+    while (sv) {
+
+	type = SvTYPE(sv);
+
+	assert(SvREFCNT(sv) == 0);
+	assert(SvTYPE(sv) != SVTYPEMASK);
+
+	if (type <= SVt_IV) {
+	    /* See the comment in sv.h about the collusion between this
+	     * early return and the overloading of the NULL slots in the
+	     * size table.  */
+	    if (SvROK(sv))
+		goto free_rv;
+	    SvFLAGS(sv) &= SVf_BREAK;
+	    SvFLAGS(sv) |= SVTYPEMASK;
+	    goto free_head;
+	}
+
+	if (SvOBJECT(sv)) {
+	    if (PL_defstash &&	/* Still have a symbol table? */
+		SvDESTROYABLE(sv))
+	    {
+		dSP;
+		HV* stash;
+		do {
+		    CV* destructor;
+		    stash = SvSTASH(sv);
+		    destructor = StashHANDLER(stash,DESTROY);
+		    if (destructor
 			/* A constant subroutine can have no side effects, so
 			   don't bother calling it.  */
 			&& !CvCONST(destructor)
 			/* Don't bother calling an empty destructor */
 			&& (CvISXSUB(destructor)
 			|| (CvSTART(destructor)
-			    && (CvSTART(destructor)->op_next->op_type != OP_LEAVESUB))))
-		{
-		    SV* const tmpref = newRV(sv);
-	            SvREADONLY_on(tmpref);   /* DESTROY() could be naughty */
-		    ENTER;
-		    PUSHSTACKi(PERLSI_DESTROY);
-		    EXTEND(SP, 2);
-		    PUSHMARK(SP);
-		    PUSHs(tmpref);
-		    PUTBACK;
-		    call_sv(MUTABLE_SV(destructor), G_DISCARD|G_EVAL|G_KEEPERR|G_VOID);
-		
-		
-		    POPSTACK;
-		    SPAGAIN;
-		    LEAVE;
-		    if(SvREFCNT(tmpref) < 2) {
-		        /* tmpref is not kept alive! */
-		        SvREFCNT(sv)--;
-			SvRV_set(tmpref, NULL);
-			SvROK_off(tmpref);
+			    && (CvSTART(destructor)->op_next->op_type
+						!= OP_LEAVESUB))))
+		    {
+			SV* const tmpref = newRV(sv);
+			SvREADONLY_on(tmpref); /* DESTROY() could be naughty */
+			ENTER;
+			PUSHSTACKi(PERLSI_DESTROY);
+			EXTEND(SP, 2);
+			PUSHMARK(SP);
+			PUSHs(tmpref);
+			PUTBACK;
+			call_sv(MUTABLE_SV(destructor),
+				    G_DISCARD|G_EVAL|G_KEEPERR|G_VOID);
+			POPSTACK;
+			SPAGAIN;
+			LEAVE;
+			if(SvREFCNT(tmpref) < 2) {
+			    /* tmpref is not kept alive! */
+			    SvREFCNT(sv)--;
+			    SvRV_set(tmpref, NULL);
+			    SvROK_off(tmpref);
+			}
+			SvREFCNT_dec(tmpref);
 		    }
-		    SvREFCNT_dec(tmpref);
+		} while (SvOBJECT(sv) && SvSTASH(sv) != stash);
+
+
+		if (SvREFCNT(sv)) {
+		    if (PL_in_clean_objs)
+			Perl_croak(aTHX_
+			    "DESTROY created new reference to dead object '%s'",
+			    HvNAME_get(stash));
+		    /* DESTROY gave object new lease on life */
+		    goto get_next_sv;
 		}
-	    } while (SvOBJECT(sv) && SvSTASH(sv) != stash);
+	    }
 
-
-	    if (SvREFCNT(sv)) {
-		if (PL_in_clean_objs)
-		    Perl_croak(aTHX_ "DESTROY created new reference to dead object '%s'",
-			  HvNAME_get(stash));
-		/* DESTROY gave object new lease on life */
-		return;
+	    if (SvOBJECT(sv)) {
+		SvREFCNT_dec(SvSTASH(sv)); /* possibly of changed persuasion */
+		SvOBJECT_off(sv);	/* Curse the object. */
+		if (type != SVt_PVIO)
+		    --PL_sv_objcount;/* XXX Might want something more general */
 	    }
 	}
-
-	if (SvOBJECT(sv)) {
-	    SvREFCNT_dec(SvSTASH(sv));	/* possibly of changed persuasion */
-	    SvOBJECT_off(sv);	/* Curse the object. */
-	    if (type != SVt_PVIO)
-		--PL_sv_objcount;	/* XXX Might want something more general */
+	if (type >= SVt_PVMG) {
+	    if (type == SVt_PVMG && SvPAD_OUR(sv)) {
+		SvREFCNT_dec(SvOURSTASH(sv));
+	    } else if (SvMAGIC(sv))
+		mg_free(sv);
+	    if (type == SVt_PVMG && SvPAD_TYPED(sv))
+		SvREFCNT_dec(SvSTASH(sv));
 	}
-    }
-    if (type >= SVt_PVMG) {
-	if (type == SVt_PVMG && SvPAD_OUR(sv)) {
-	    SvREFCNT_dec(SvOURSTASH(sv));
-	} else if (SvMAGIC(sv))
-	    mg_free(sv);
-	if (type == SVt_PVMG && SvPAD_TYPED(sv))
-	    SvREFCNT_dec(SvSTASH(sv));
-    }
-    switch (type) {
-	/* case SVt_BIND: */
-    case SVt_PVIO:
-	if (IoIFP(sv) &&
-	    IoIFP(sv) != PerlIO_stdin() &&
-	    IoIFP(sv) != PerlIO_stdout() &&
-	    IoIFP(sv) != PerlIO_stderr() &&
-	    !(IoFLAGS(sv) & IOf_FAKE_DIRP))
-	{
-	    io_close(MUTABLE_IO(sv), FALSE);
-	}
-	if (IoDIRP(sv) && !(IoFLAGS(sv) & IOf_FAKE_DIRP))
-	    PerlDir_close(IoDIRP(sv));
-	IoDIRP(sv) = (DIR*)NULL;
-	Safefree(IoTOP_NAME(sv));
-	Safefree(IoFMT_NAME(sv));
-	Safefree(IoBOTTOM_NAME(sv));
-	goto freescalar;
-    case SVt_REGEXP:
-	/* FIXME for plugins */
-	pregfree2((REGEXP*) sv);
-	goto freescalar;
-    case SVt_PVCV:
-    case SVt_PVFM:
-	cv_undef(MUTABLE_CV(sv));
-	/* If we're in a stash, we don't own a reference to it. However it does
-	   have a back reference to us, which needs to be cleared.  */
-	if ((stash = CvSTASH(sv)))
-	    sv_del_backref(MUTABLE_SV(stash), sv);
-	goto freescalar;
-    case SVt_PVHV:
-	if (PL_last_swash_hv == (const HV *)sv) {
-	    PL_last_swash_hv = NULL;
-	}
-	Perl_hv_kill_backrefs(aTHX_ MUTABLE_HV(sv));
-	hv_undef(MUTABLE_HV(sv));
-	break;
-    case SVt_PVAV:
-	if (PL_comppad == MUTABLE_AV(sv)) {
-	    PL_comppad = NULL;
-	    PL_curpad = NULL;
-	}
-	av_undef(MUTABLE_AV(sv));
-	break;
-    case SVt_PVLV:
-	if (LvTYPE(sv) == 'T') { /* for tie: return HE to pool */
-	    SvREFCNT_dec(HeKEY_sv((HE*)LvTARG(sv)));
-	    HeNEXT((HE*)LvTARG(sv)) = PL_hv_fetch_ent_mh;
-	    PL_hv_fetch_ent_mh = (HE*)LvTARG(sv);
-	}
-	else if (LvTYPE(sv) != 't') /* unless tie: unrefcnted fake SV**  */
-	    SvREFCNT_dec(LvTARG(sv));
-    case SVt_PVGV:
-	if (isGV_with_GP(sv)) {
-            if(GvCVu((const GV *)sv) && (stash = GvSTASH(MUTABLE_GV(sv)))
-	       && HvNAME_get(stash))
-                mro_method_changed_in(stash);
-	    gp_free(MUTABLE_GV(sv));
-	    if (GvNAME_HEK(sv))
-		unshare_hek(GvNAME_HEK(sv));
-	    /* If we're in a stash, we don't own a reference to it. However it does
-	       have a back reference to us, which needs to be cleared.  */
-	    if (!SvVALID(sv) && (stash = GvSTASH(sv)))
-		    sv_del_backref(MUTABLE_SV(stash), sv);
-	}
-	/* FIXME. There are probably more unreferenced pointers to SVs in the
-	   interpreter struct that we should check and tidy in a similar
-	   fashion to this:  */
-	if ((const GV *)sv == PL_last_in_gv)
-	    PL_last_in_gv = NULL;
-    case SVt_PVMG:
-    case SVt_PVNV:
-    case SVt_PVIV:
-    case SVt_PV:
-      freescalar:
-	/* Don't bother with SvOOK_off(sv); as we're only going to free it.  */
-	if (SvOOK(sv)) {
-	    STRLEN offset;
-	    SvOOK_offset(sv, offset);
-	    SvPV_set(sv, SvPVX_mutable(sv) - offset);
-	    /* Don't even bother with turning off the OOK flag.  */
-	}
-	if (SvROK(sv)) {
-	free_rv:
+	switch (type) {
+	    /* case SVt_BIND: */
+	case SVt_PVIO:
+	    if (IoIFP(sv) &&
+		IoIFP(sv) != PerlIO_stdin() &&
+		IoIFP(sv) != PerlIO_stdout() &&
+		IoIFP(sv) != PerlIO_stderr() &&
+		!(IoFLAGS(sv) & IOf_FAKE_DIRP))
 	    {
-		SV * const target = SvRV(sv);
-		if (SvWEAKREF(sv))
-		    sv_del_backref(target, sv);
-		else
-		    SvREFCNT_dec(target);
+		io_close(MUTABLE_IO(sv), FALSE);
 	    }
-	}
-#ifdef PERL_OLD_COPY_ON_WRITE
-	else if (SvPVX_const(sv)
-		 && !(SvTYPE(sv) == SVt_PVIO && !(IoFLAGS(sv) & IOf_FAKE_DIRP))) {
-            if (SvIsCOW(sv)) {
-                if (DEBUG_C_TEST) {
-                    PerlIO_printf(Perl_debug_log, "Copy on write: clear\n");
-                    sv_dump(sv);
-                }
-		if (SvLEN(sv)) {
-		    sv_release_COW(sv, SvPVX_const(sv), SV_COW_NEXT_SV(sv));
-		} else {
-		    unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
+	    if (IoDIRP(sv) && !(IoFLAGS(sv) & IOf_FAKE_DIRP))
+		PerlDir_close(IoDIRP(sv));
+	    IoDIRP(sv) = (DIR*)NULL;
+	    Safefree(IoTOP_NAME(sv));
+	    Safefree(IoFMT_NAME(sv));
+	    Safefree(IoBOTTOM_NAME(sv));
+	    goto freescalar;
+	case SVt_REGEXP:
+	    /* FIXME for plugins */
+	    pregfree2((REGEXP*) sv);
+	    goto freescalar;
+	case SVt_PVCV:
+	case SVt_PVFM:
+	    cv_undef(MUTABLE_CV(sv));
+	    /* If we're in a stash, we don't own a reference to it.
+	     * However it does have a back reference to us, which needs to
+	     * be cleared.  */
+	    if ((stash = CvSTASH(sv)))
+		sv_del_backref(MUTABLE_SV(stash), sv);
+	    goto freescalar;
+	case SVt_PVHV:
+	    if (PL_last_swash_hv == (const HV *)sv) {
+		PL_last_swash_hv = NULL;
+	    }
+	    Perl_hv_kill_backrefs(aTHX_ MUTABLE_HV(sv));
+	    hv_undef(MUTABLE_HV(sv));
+	    break;
+	case SVt_PVAV:
+	    {
+		AV* av = MUTABLE_AV(sv);
+		if (PL_comppad == av) {
+		    PL_comppad = NULL;
+		    PL_curpad = NULL;
 		}
+		if (AvREAL(av) && AvFILLp(av) > -1) {
+		    next_sv = AvARRAY(av)[AvFILLp(av)--];
+		    /* save old iter_sv in top-most slot of AV,
+		     * and pray that it doesn't get wiped in the meantime */
+		    AvARRAY(av)[AvMAX(av)] = iter_sv;
+		    iter_sv = sv;
+		    goto get_next_sv; /* process this new sv */
+		}
+		Safefree(AvALLOC(av));
+	    }
 
-                SvFAKE_off(sv);
-            } else if (SvLEN(sv)) {
-                Safefree(SvPVX_const(sv));
-            }
-	}
+	    break;
+	case SVt_PVLV:
+	    if (LvTYPE(sv) == 'T') { /* for tie: return HE to pool */
+		SvREFCNT_dec(HeKEY_sv((HE*)LvTARG(sv)));
+		HeNEXT((HE*)LvTARG(sv)) = PL_hv_fetch_ent_mh;
+		PL_hv_fetch_ent_mh = (HE*)LvTARG(sv);
+	    }
+	    else if (LvTYPE(sv) != 't') /* unless tie: unrefcnted fake SV**  */
+		SvREFCNT_dec(LvTARG(sv));
+	case SVt_PVGV:
+	    if (isGV_with_GP(sv)) {
+		if(GvCVu((const GV *)sv) && (stash = GvSTASH(MUTABLE_GV(sv)))
+		   && HvENAME_get(stash))
+		    mro_method_changed_in(stash);
+		gp_free(MUTABLE_GV(sv));
+		if (GvNAME_HEK(sv))
+		    unshare_hek(GvNAME_HEK(sv));
+		/* If we're in a stash, we don't own a reference to it.
+		 * However it does have a back reference to us, which
+		 * needs to be cleared.  */
+		if (!SvVALID(sv) && (stash = GvSTASH(sv)))
+			sv_del_backref(MUTABLE_SV(stash), sv);
+	    }
+	    /* FIXME. There are probably more unreferenced pointers to SVs
+	     * in the interpreter struct that we should check and tidy in
+	     * a similar fashion to this:  */
+	    if ((const GV *)sv == PL_last_in_gv)
+		PL_last_in_gv = NULL;
+	case SVt_PVMG:
+	case SVt_PVNV:
+	case SVt_PVIV:
+	case SVt_PV:
+	  freescalar:
+	    /* Don't bother with SvOOK_off(sv); as we're only going to
+	     * free it.  */
+	    if (SvOOK(sv)) {
+		STRLEN offset;
+		SvOOK_offset(sv, offset);
+		SvPV_set(sv, SvPVX_mutable(sv) - offset);
+		/* Don't even bother with turning off the OOK flag.  */
+	    }
+	    if (SvROK(sv)) {
+	    free_rv:
+		{
+		    SV * const target = SvRV(sv);
+		    if (SvWEAKREF(sv))
+			sv_del_backref(target, sv);
+		    else
+			next_sv = target;
+		}
+	    }
+#ifdef PERL_OLD_COPY_ON_WRITE
+	    else if (SvPVX_const(sv)
+		     && !(SvTYPE(sv) == SVt_PVIO
+		     && !(IoFLAGS(sv) & IOf_FAKE_DIRP)))
+	    {
+		if (SvIsCOW(sv)) {
+		    if (DEBUG_C_TEST) {
+			PerlIO_printf(Perl_debug_log, "Copy on write: clear\n");
+			sv_dump(sv);
+		    }
+		    if (SvLEN(sv)) {
+			sv_release_COW(sv, SvPVX_const(sv), SV_COW_NEXT_SV(sv));
+		    } else {
+			unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
+		    }
+
+		    SvFAKE_off(sv);
+		} else if (SvLEN(sv)) {
+		    Safefree(SvPVX_const(sv));
+		}
+	    }
 #else
-	else if (SvPVX_const(sv) && SvLEN(sv)
-		 && !(SvTYPE(sv) == SVt_PVIO && !(IoFLAGS(sv) & IOf_FAKE_DIRP)))
-	    Safefree(SvPVX_mutable(sv));
-	else if (SvPVX_const(sv) && SvREADONLY(sv) && SvFAKE(sv)) {
-	    unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
-	    SvFAKE_off(sv);
-	}
+	    else if (SvPVX_const(sv) && SvLEN(sv)
+		     && !(SvTYPE(sv) == SVt_PVIO
+		     && !(IoFLAGS(sv) & IOf_FAKE_DIRP)))
+		Safefree(SvPVX_mutable(sv));
+	    else if (SvPVX_const(sv) && SvREADONLY(sv) && SvFAKE(sv)) {
+		unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
+		SvFAKE_off(sv);
+	    }
 #endif
-	break;
-    case SVt_NV:
-	break;
-    }
+	    break;
+	case SVt_NV:
+	    break;
+	}
 
-    SvFLAGS(sv) &= SVf_BREAK;
-    SvFLAGS(sv) |= SVTYPEMASK;
+      free_body:
 
-    if (sv_type_details->arena) {
-	del_body(((char *)SvANY(sv) + sv_type_details->offset),
-		 &PL_body_roots[type]);
-    }
-    else if (sv_type_details->body_size) {
-	safefree(SvANY(sv));
-    }
+	SvFLAGS(sv) &= SVf_BREAK;
+	SvFLAGS(sv) |= SVTYPEMASK;
+
+	sv_type_details = bodies_by_type + type;
+	if (sv_type_details->arena) {
+	    del_body(((char *)SvANY(sv) + sv_type_details->offset),
+		     &PL_body_roots[type]);
+	}
+	else if (sv_type_details->body_size) {
+	    safefree(SvANY(sv));
+	}
+
+      free_head:
+	/* caller is responsible for freeing the head of the original sv */
+	if (sv != orig_sv && !SvREFCNT(sv))
+	    del_SV(sv);
+
+	/* grab and free next sv, if any */
+      get_next_sv:
+	while (1) {
+	    sv = NULL;
+	    if (next_sv) {
+		sv = next_sv;
+		next_sv = NULL;
+	    }
+	    else if (!iter_sv) {
+		break;
+	    } else if (SvTYPE(iter_sv) == SVt_PVAV) {
+		AV *const av = (AV*)iter_sv;
+		if (AvFILLp(av) > -1) {
+		    sv = AvARRAY(av)[AvFILLp(av)--];
+		}
+		else { /* no more elements of current AV to free */
+		    sv = iter_sv;
+		    type = SvTYPE(sv);
+		    /* restore previous value, squirrelled away */
+		    iter_sv = AvARRAY(av)[AvMAX(av)];
+		    Safefree(AvALLOC(av));
+		    goto free_body;
+		}
+	    }
+
+	    /* unrolled SvREFCNT_dec and sv_free2 follows: */
+
+	    if (!sv)
+		continue;
+	    if (!SvREFCNT(sv)) {
+		sv_free(sv);
+		continue;
+	    }
+	    if (--(SvREFCNT(sv)))
+		continue;
+#ifdef DEBUGGING
+	    if (SvTEMP(sv)) {
+		Perl_ck_warner_d(aTHX_ packWARN(WARN_DEBUGGING),
+			 "Attempt to free temp prematurely: SV 0x%"UVxf
+			 pTHX__FORMAT, PTR2UV(sv) pTHX__VALUE);
+		continue;
+	    }
+#endif
+	    if (SvREADONLY(sv) && SvIMMORTAL(sv)) {
+		/* make sure SvREFCNT(sv)==0 happens very seldom */
+		SvREFCNT(sv) = (~(U32)0)/2;
+		continue;
+	    }
+	    break;
+	} /* while 1 */
+
+    } /* while sv */
 }
 
 /*
@@ -7164,11 +7361,13 @@ Perl_sv_gets(pTHX_ register SV *const sv, register PerlIO *const fp, I32 append)
 	    }
 	} else if (SvUTF8(sv)) {
 	    SV * const tsv = newSV(0);
+	    ENTER;
+	    SAVEFREESV(tsv);
 	    sv_gets(tsv, fp, 0);
 	    sv_utf8_upgrade_nomg(tsv);
 	    SvCUR_set(sv,append);
 	    sv_catsv(sv,tsv);
-	    sv_free(tsv);
+	    LEAVE;
 	    goto return_string_or_null;
 	}
     }
@@ -8112,6 +8311,20 @@ Perl_newSVpvn_share(pTHX_ const char *src, I32 len, U32 hash)
     return sv;
 }
 
+/*
+=for apidoc newSVpv_share
+
+Like C<newSVpvn_share>, but takes a nul-terminated string instead of a
+string/length pair.
+
+=cut
+*/
+
+SV *
+Perl_newSVpv_share(pTHX_ const char *src, U32 hash)
+{
+    return newSVpvn_share(src, strlen(src), hash);
+}
 
 #if defined(PERL_IMPLICIT_CONTEXT)
 
@@ -8516,9 +8729,10 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 
     default:
 	if (SvROK(sv)) {
-	    SV * const *sp = &sv;	/* Used in tryAMAGICunDEREF macro. */
 	    SvGETMAGIC(sv);
-	    tryAMAGICunDEREF(to_cv);
+	    sv = amagic_deref_call(sv, to_cv_amg);
+	    /* At this point I'd like to do SPAGAIN, but really I need to
+	       force it upon my callers. Hmmm. This is a mess... */
 
 	    sv = SvRV(sv);
 	    if (SvTYPE(sv) == SVt_PVCV) {
@@ -10836,10 +11050,11 @@ Perl_fp_dup(pTHX_ PerlIO *const fp, const char type, CLONE_PARAMS *const param)
 /* duplicate a directory handle */
 
 DIR *
-Perl_dirp_dup(pTHX_ DIR *const dp)
+Perl_dirp_dup(pTHX_ DIR *const dp, CLONE_PARAMS *const param)
 {
-#ifdef HAS_FCHDIR
     DIR *ret;
+
+#ifdef HAS_FCHDIR
     DIR *pwd;
     register const Direntry_t *dirent;
     char smallbuf[256];
@@ -10849,14 +11064,19 @@ Perl_dirp_dup(pTHX_ DIR *const dp)
 #endif
 
     PERL_UNUSED_CONTEXT;
+    PERL_ARGS_ASSERT_DIRP_DUP;
 
-#ifdef HAS_FCHDIR
     if (!dp)
 	return (DIR*)NULL;
+
     /* look for it in the table first */
     ret = (DIR*)ptr_table_fetch(PL_ptr_table, dp);
     if (ret)
 	return ret;
+
+#ifdef HAS_FCHDIR
+
+    PERL_UNUSED_ARG(param);
 
     /* create anew */
 
@@ -10925,14 +11145,17 @@ Perl_dirp_dup(pTHX_ DIR *const dp)
 
     if (name && name != smallbuf)
 	Safefree(name);
+#endif
+
+#ifdef WIN32
+    ret = win32_dirp_dup(dp, param);
+#endif
 
     /* pop it in the pointer table */
-    ptr_table_store(PL_ptr_table, dp, ret);
+    if (ret)
+	ptr_table_store(PL_ptr_table, dp, ret);
 
     return ret;
-#else
-    return (DIR*)NULL;
-#endif
 }
 
 /* duplicate a typeglob */
@@ -11329,6 +11552,7 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
     dstr->sv_debug_line = sstr->sv_debug_line;
     dstr->sv_debug_inpad = sstr->sv_debug_inpad;
     dstr->sv_debug_parent = (SV*)sstr;
+    FREE_SV_DEBUG_FILE(dstr);
     dstr->sv_debug_file = savepv(sstr->sv_debug_file);
 #endif
 
@@ -11487,7 +11711,7 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
 		    IoFMT_GV(dstr)      = gv_dup(IoFMT_GV(dstr), param);
 		    IoBOTTOM_GV(dstr)   = gv_dup(IoBOTTOM_GV(dstr), param);
 		    if (IoDIRP(dstr)) {
-			IoDIRP(dstr)	= dirp_dup(IoDIRP(dstr));
+			IoDIRP(dstr)	= dirp_dup(IoDIRP(dstr), param);
 		    } else {
 			NOOP;
 			/* IoDIRP(dstr) is already a copy of IoDIRP(sstr)  */
@@ -11559,7 +11783,23 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
 			SvFLAGS(dstr) |= SVf_OOK;
 
 			hvname = saux->xhv_name;
-			daux->xhv_name = hek_dup(hvname, param);
+			if (saux->xhv_name_count) {
+			    HEK ** const sname = (HEK **)saux->xhv_name;
+			    const I32 count
+			     = saux->xhv_name_count < 0
+			        ? -saux->xhv_name_count
+			        :  saux->xhv_name_count;
+			    HEK **shekp = sname + count;
+			    HEK **dhekp;
+			    Newxc(daux->xhv_name, count, HEK *, HEK);
+			    dhekp = (HEK **)daux->xhv_name + count;
+			    while (shekp-- > sname) {
+				dhekp--;
+				*dhekp = hek_dup(*shekp, param);
+			    }
+			}
+			else daux->xhv_name = hek_dup(hvname, param);
+			daux->xhv_name_count = saux->xhv_name_count;
 
 			daux->xhv_riter = saux->xhv_riter;
 			daux->xhv_eiter = saux->xhv_eiter
@@ -11604,7 +11844,8 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
 		/*FALLTHROUGH*/
 	    case SVt_PVFM:
 		/* NOTE: not refcounted */
-		CvSTASH(dstr)	= hv_dup(CvSTASH(dstr), param);
+		SvANY(MUTABLE_CV(dstr))->xcv_stash =
+		    hv_dup(CvSTASH(dstr), param);
 		if ((param->flags & CLONEf_JOIN_IN) && CvSTASH(dstr))
 		    Perl_sv_add_backref(aTHX_ MUTABLE_SV(CvSTASH(dstr)), dstr);
 		OP_REFCNT_LOCK;
@@ -12009,6 +12250,10 @@ Perl_ss_dup(pTHX_ PerlInterpreter *proto_perl, CLONE_PARAMS* param)
 	    else
 		TOPPTR(nss,ix) = NULL;
 	    break;
+	case SAVEt_FREECOPHH:
+	    ptr = POPPTR(ss,ix);
+	    TOPPTR(nss,ix) = cophh_copy((COPHH *)ptr);
+	    break;
 	case SAVEt_DELETE:
 	    hv = (const HV *)POPPTR(ss,ix);
 	    TOPPTR(nss,ix) = hv_dup_inc(hv, param);
@@ -12057,11 +12302,7 @@ Perl_ss_dup(pTHX_ PerlInterpreter *proto_perl, CLONE_PARAMS* param)
 	    break;
 	case SAVEt_HINTS:
 	    ptr = POPPTR(ss,ix);
-	    if (ptr) {
-		HINTS_REFCNT_LOCK;
-		((struct refcounted_he *)ptr)->refcounted_he_refcnt++;
-		HINTS_REFCNT_UNLOCK;
-	    }
+	    ptr = cophh_copy((COPHH*)ptr);
 	    TOPPTR(nss,ix) = ptr;
 	    i = POPINT(ss,ix);
 	    TOPINT(nss,ix) = i;
@@ -12337,7 +12578,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     param->proto_perl = proto_perl;
     /* Likely nothing will use this, but it is initialised to be consistent
        with Perl_clone_params_new().  */
-    param->proto_perl = my_perl;
+    param->new_perl = my_perl;
     param->unreferenced = NULL;
 
     INIT_TRACK_MEMPOOL(my_perl->Imemory_debug_header, my_perl);
@@ -12414,11 +12655,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
     ptr_table_store(PL_ptr_table, &proto_perl->Icompiling, &PL_compiling);
     PL_compiling.cop_warnings = DUP_WARNINGS(PL_compiling.cop_warnings);
-    if (PL_compiling.cop_hints_hash) {
-	HINTS_REFCNT_LOCK;
-	PL_compiling.cop_hints_hash->refcounted_he_refcnt++;
-	HINTS_REFCNT_UNLOCK;
-    }
+    CopHINTHASH_set(&PL_compiling, cophh_copy(CopHINTHASH_get(&PL_compiling)));
     PL_curcop		= (COP*)any_dup(proto_perl->Icurcop, proto_perl);
 #ifdef PERL_DEBUG_READONLY_OPS
     PL_slabs = NULL;
@@ -12472,7 +12709,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_minus_F		= proto_perl->Iminus_F;
     PL_doswitches	= proto_perl->Idoswitches;
     PL_dowarn		= proto_perl->Idowarn;
-    PL_doextract	= proto_perl->Idoextract;
     PL_sawampersand	= proto_perl->Isawampersand;
     PL_unsafe		= proto_perl->Iunsafe;
     PL_inplace		= SAVEPV(proto_perl->Iinplace);
@@ -12921,6 +13157,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
     PL_registered_mros  = hv_dup_inc(proto_perl->Iregistered_mros, param);
     PL_blockhooks	= av_dup_inc(proto_perl->Iblockhooks, param);
+    PL_utf8_foldclosures = hv_dup_inc(proto_perl->Iutf8_foldclosures, param);
 
     /* Call the ->CLONE method, if it exists, for each of the stashes
        identified by sv_dup() above.

@@ -12,7 +12,7 @@ BEGIN {
 
 use warnings;
 
-plan( tests => 219 );
+plan( tests => 230 );
 
 # type coersion on assignment
 $foo = 'foo';
@@ -31,6 +31,34 @@ is(ref(\$foo), 'GLOB');
 
 is($foo, '*main::bar');
 is(ref(\$foo), 'GLOB');
+
+{
+ no warnings;
+ ${\*$foo} = undef;
+ is(ref(\$foo), 'GLOB', 'no type coersion when assigning to *{} retval');
+ $::{phake} = *bar;
+ is(
+   \$::{phake}, \*{"phake"},
+   'symbolic *{} returns symtab entry when FAKE'
+ );
+ ${\*{"phake"}} = undef;
+ is(
+   ref(\$::{phake}), 'GLOB',
+  'no type coersion when assigning to retval of symbolic *{}'
+ );
+ $::{phaque} = *bar;
+ eval '
+   is(
+     \$::{phaque}, \*phaque,
+     "compile-time *{} returns symtab entry when FAKE"
+   );
+   ${\*phaque} = undef;
+ ';
+ is(
+   ref(\$::{phaque}), 'GLOB',
+  'no type coersion when assigning to retval of compile-time *{}'
+ );
+}
 
 # type coersion on substitutions that match
 $a = *main::foo;
@@ -629,6 +657,7 @@ is (scalar $::{fake}, "*main::sym",
 	"Localized FAKE glob's value was correctly restored");
 
 # [perl #1804] *$x assignment when $x is a copy of another glob
+# And [perl #77508] (same thing with list assignment)
 {
     no warnings 'once';
     my $x = *_random::glob_that_is_not_used_elsewhere;
@@ -637,6 +666,12 @@ is (scalar $::{fake}, "*main::sym",
       "$x", '*_random::glob_that_is_not_used_elsewhere',
       '[perl #1804] *$x assignment when $x is FAKE',
     );
+    $x = *_random::glob_that_is_not_used_elsewhere;
+    (my $dummy, *$x) = (undef,[]);
+    is(
+      "$x", '*_random::glob_that_is_not_used_elsewhere',
+      '[perl #77508] *$x list assignment when $x is FAKE',
+    ) or require Devel::Peek, Devel::Peek::Dump($x);
 }
 
 # [perl #76540]
@@ -683,21 +718,13 @@ EOF
     'PVLV: assigning undef to the glob warns';
   }
 
-  # Neither should number assignment...
-  *$_ = 1;
-  is $_, "*main::1", "PVLV: integer-to-glob assignment assigns a glob";
-  *$_ = 2.0;
-  is $_, "*main::2", "PVLV: float-to-glob assignment assigns a glob";
-
-  # Nor reference assignment.
-  *$_ = \*thit;
-  is $_, "*main::thit", "PVLV: globref-to-glob assignment assigns a glob";
+  # Neither should reference assignment.
   *$_ = [];
-  is $_, "*main::thit", "PVLV: arrayref assignment assigns to the AV slot";
+  is $_, "*main::hon", "PVLV: arrayref assignment assigns to the AV slot";
 
   # Concatenation should still work.
   ok eval { $_ .= 'thlew' }, 'PVLV concatenation does not die' or diag $@;
-  is $_, '*main::thitthlew', 'PVLV concatenation works';
+  is $_, '*main::honthlew', 'PVLV concatenation works';
 
   # And we should be able to overwrite it with a string, number, or refer-
   # ence, too, if we omit the *.
@@ -782,6 +809,54 @@ EOF
 
  }}->($h{k});
 }
+
+*aieee = 4;
+pass('Can assign integers to typeglobs');
+*aieee = 3.14;
+pass('Can assign floats to typeglobs');
+*aieee = 'pi';
+pass('Can assign strings to typeglobs');
+
+{
+  package thrext;
+  sub TIESCALAR{bless[]}
+  sub STORE{ die "No!"}
+  sub FETCH{ no warnings 'once'; *thrit }
+  tie my $a, "thrext";
+  () = "$a"; # do a fetch; now $a holds a glob
+  eval { *$a = sub{} };
+  untie $a;
+  eval { $a = "bar" };
+  ::is $a, "bar",
+    "[perl #77812] Globs in tied scalars can be reified if STORE dies"
+}
+
+# These two crashed prior to 5.13.6. In 5.13.6 they were fatal errors. They
+# were fixed in 5.13.7.
+ok eval {
+  my $glob = \*heen::ISA;
+  delete $::{"heen::"};
+  *$glob = *bar; 
+}, "glob-to-*ISA assignment works when *ISA has lost its stash";
+ok eval {
+  my $glob = \*slare::ISA;
+  delete $::{"slare::"};
+  *$glob = []; 
+}, "array-to-*ISA assignment works when *ISA has lost its stash";
+# These two crashed in 5.13.6. They were likewise fixed in 5.13.7.
+ok eval {
+  sub greck;
+  my $glob = do { no warnings "once"; \*phing::foo};
+  delete $::{"phing::"};
+  *$glob = *greck; 
+}, "Assigning a glob-with-sub to a glob that has lost its stash warks";
+ok eval {
+  sub pon::foo;
+  my $glob = \*pon::foo;
+  delete $::{"pon::"};
+  *$glob = *foo; 
+}, "Assigning a glob to a glob-with-sub that has lost its stash warks";
+
 
 __END__
 Perl
