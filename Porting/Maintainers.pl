@@ -299,7 +299,7 @@ use File::Glob qw(:case);
     'CGI' =>
 	{
 	'MAINTAINER'	=> 'lstein',
-	'DISTRIBUTION'	=> 'LDS/CGI.pm-3.49.tar.gz',
+	'DISTRIBUTION'	=> 'LDS/CGI.pm-3.50.tar.gz',
 	'FILES'		=> q[cpan/CGI],
 	'EXCLUDED'	=> [ qr{^t/lib/Test},
 				qw( cgi-lib_porting.html
@@ -534,15 +534,15 @@ use File::Glob qw(:case);
 
     'ExtUtils::Command' =>
 	{
-	'MAINTAINER'	=> 'rkobes',
+	'MAINTAINER'	=> 'p5p',
 	'DISTRIBUTION'	=> 'RKOBES/ExtUtils-Command-1.16.tar.gz',
-	'FILES'		=> q[cpan/ExtUtils-Command],
+	'FILES'		=> q[dist/ExtUtils-Command],
 	'EXCLUDED'	=> [ qw{ t/shell_command.t
 				 t/shell_exit.t
 				 lib/Shell/Command.pm
 			       },
 			   ],
-	'UPSTREAM'	=> undef,
+	'UPSTREAM'	=> 'blead',
 	},
 
     'ExtUtils::Constant' =>
@@ -590,10 +590,10 @@ use File::Glob qw(:case);
 
     'ExtUtils::Manifest' =>
 	{
-	'MAINTAINER'	=> 'rkobes',
+	'MAINTAINER'	=> 'p5p',
 	'DISTRIBUTION'	=> 'RKOBES/ExtUtils-Manifest-1.58.tar.gz',
-	'FILES'		=> q[cpan/ExtUtils-Manifest],
-	'UPSTREAM'	=> 'cpan',
+	'FILES'		=> q[dist/ExtUtils-Manifest],
+	'UPSTREAM'	=> 'blead',
 	},
 
     'ExtUtils::ParseXS' =>

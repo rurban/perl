@@ -270,6 +270,16 @@ L<[perl #33752]|http://rt.perl.org/rt3/Public/Bug/Display.html?id=33752>.
 
 =item *
 
+C<CGI> has been upgraded from 3.49 to 3.50
+
+This provides the following security fixes: the MIME boundary in 
+multipart_init is now random and improvements to the handling of 
+newlines embedded in header values.
+
+The documentation for param_fetch() has been corrected and clarified.
+
+=item *
+
 C<CPAN> has been upgraded from 1.94_61 to 1.94_62
 
 =item *
@@ -835,6 +845,11 @@ XXX
 
 XXX If any significant core contributor has died, we've added a short obituary
 here.
+
+Randy Kobes, creator of the kobesearch alternative to search.cpan.org and
+contributor/maintainer to several core Perl toolchain modules, passed away
+on September 18, 2010 after a battle with lung cancer.  His contributions
+to the Perl community will be missed.
 
 =head1 Acknowledgements
 

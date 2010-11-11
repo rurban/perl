@@ -4960,7 +4960,7 @@ STATIC int	S_sv_2iuv_non_preserve(pTHX_ SV *const sv, I32 numtype)
 #endif
 #if !defined(PERL_DISABLE_PMC)
 #  if defined(PERL_IN_PP_CTL_C)
-STATIC PerlIO *	S_doopen_pm(pTHX_ const char *name, const STRLEN namelen)
+STATIC PerlIO *	S_doopen_pm(pTHX_ SV *name)
 			__attribute__warn_unused_result__
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_DOOPEN_PM	\
@@ -5659,6 +5659,18 @@ STATIC void	S_save_magic(pTHX_ I32 mgs_ix, SV *sv)
 STATIC void	S_unwind_handler_stack(pTHX_ const void *p);
 #endif
 #if defined(PERL_IN_MRO_C)
+STATIC void	S_mro_clean_isarev(pTHX_ HV * const isa, const char * const name, const STRLEN len, HV * const exceptions)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT_MRO_CLEAN_ISAREV	\
+	assert(isa); assert(name)
+
+STATIC void	S_mro_gather_and_rename(pTHX_ HV * const stashes, HV *stash, HV *oldstash, const char *name, I32 namlen)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_4);
+#define PERL_ARGS_ASSERT_MRO_GATHER_AND_RENAME	\
+	assert(stashes); assert(name)
+
 STATIC AV*	S_mro_get_linear_isa_dfs(pTHX_ HV* stash, U32 level)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_MRO_GET_LINEAR_ISA_DFS	\
@@ -5932,7 +5944,7 @@ PERL_CALLCONV GV*	Perl_softref2xv(pTHX_ SV *const sv, const char *const what, co
 
 #endif
 #if defined(PERL_IN_PP_CTL_C)
-STATIC PerlIO *	S_check_type_and_open(pTHX_ const char *name)
+STATIC PerlIO *	S_check_type_and_open(pTHX_ SV *name)
 			__attribute__warn_unused_result__
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_CHECK_TYPE_AND_OPEN	\

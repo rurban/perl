@@ -1661,9 +1661,9 @@ sR	|I32	|dopoptosub_at	|NN const PERL_CONTEXT* cxstk|I32 startingblock
 sR	|I32	|dopoptowhen	|I32 startingblock
 s	|void	|save_lines	|NULLOK AV *array|NN SV *sv
 s	|bool	|doeval		|int gimme|NULLOK OP** startop|NULLOK CV* outside|U32 seq
-sR	|PerlIO *|check_type_and_open|NN const char *name
+sR	|PerlIO *|check_type_and_open|NN SV *name
 #ifndef PERL_DISABLE_PMC
-sR	|PerlIO *|doopen_pm	|NN const char *name|const STRLEN namelen
+sR	|PerlIO *|doopen_pm	|NN SV *name
 #endif
 sRn	|bool	|path_is_absolute|NN const char *name
 sR	|I32	|run_user_filter|int idx|NN SV *buf_sv|int maxlen
@@ -2354,6 +2354,14 @@ p	|struct mro_meta*	|mro_meta_dup	|NN struct mro_meta* smeta|NN CLONE_PARAMS* pa
 Apd	|AV*	|mro_get_linear_isa|NN HV* stash
 #if defined(PERL_IN_MRO_C)
 sd	|AV*	|mro_get_linear_isa_dfs|NN HV* stash|U32 level
+s	|void	|mro_clean_isarev|NN HV * const isa   \
+				 |NN const char * const name \
+				 |const STRLEN len \
+				 |NULLOK HV * const exceptions
+s	|void	|mro_gather_and_rename|NN HV * const stashes \
+				      |NULLOK HV *stash \
+				      |NULLOK HV *oldstash \
+				      |NN const char *name|I32 namlen
 #endif
 : Used in hv.c, mg.c, pp.c, sv.c
 md	|void   |mro_isa_changed_in|NN HV* stash

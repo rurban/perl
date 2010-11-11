@@ -1522,7 +1522,7 @@
 #  endif
 #  if !defined(PERL_DISABLE_PMC)
 #    if defined(PERL_IN_PP_CTL_C)
-#define doopen_pm(a,b)		S_doopen_pm(aTHX_ a,b)
+#define doopen_pm(a)		S_doopen_pm(aTHX_ a)
 #    endif
 #  endif
 #  if !defined(PERL_NO_UTF16_FILTER)
@@ -1639,6 +1639,8 @@
 #define unwind_handler_stack(a)	S_unwind_handler_stack(aTHX_ a)
 #  endif
 #  if defined(PERL_IN_MRO_C)
+#define mro_clean_isarev(a,b,c,d)	S_mro_clean_isarev(aTHX_ a,b,c,d)
+#define mro_gather_and_rename(a,b,c,d,e)	S_mro_gather_and_rename(aTHX_ a,b,c,d,e)
 #define mro_get_linear_isa_dfs(a,b)	S_mro_get_linear_isa_dfs(aTHX_ a,b)
 #  endif
 #  if defined(PERL_IN_NUMERIC_C)
