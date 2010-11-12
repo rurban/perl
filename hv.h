@@ -67,7 +67,6 @@ struct mro_meta {
     (((smeta)->mro_which && (which) == (smeta)->mro_which) \
      ? (smeta)->mro_linear_current			   \
      : Perl_mro_get_private_data(aTHX_ (smeta), (which)))
-#define mro_isa_changed_in(stash) mro_isa_changed_in3(stash, NULL, 0)
 
 /* Subject to change.
    Don't access this directly.
@@ -590,6 +589,7 @@ a string/length pair, and no precomputed hash.
 #define HV_FETCH_LVALUE		0x10
 #define HV_FETCH_JUST_SV	0x20
 #define HV_DELETE		0x40
+#define HV_FETCH_EMPTY_HE	0x80 /* Leave HeVAL null. */
 
 /*
 =for apidoc newHV

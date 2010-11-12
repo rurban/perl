@@ -187,6 +187,12 @@ PERL_CALLCONV void	Perl_blockhook_register(pTHX_ BHK *hk)
 PERL_CALLCONV void	Perl_boot_core_PerlIO(pTHX);
 PERL_CALLCONV void	Perl_boot_core_UNIVERSAL(pTHX);
 PERL_CALLCONV void	Perl_boot_core_mro(pTHX);
+PERL_CALLCONV int	Perl_bytes_cmp_utf8(pTHX_ const U8 *b, STRLEN blen, const U8 *u, STRLEN ulen)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_3);
+#define PERL_ARGS_ASSERT_BYTES_CMP_UTF8	\
+	assert(b); assert(u)
+
 PERL_CALLCONV U8*	Perl_bytes_from_utf8(pTHX_ const U8 *s, STRLEN *len, bool *is_utf8)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2);
@@ -2251,10 +2257,11 @@ PERL_CALLCONV SV*	Perl_mro_get_private_data(pTHX_ struct mro_meta *const smeta, 
 #define PERL_ARGS_ASSERT_MRO_GET_PRIVATE_DATA	\
 	assert(smeta); assert(which)
 
-/* PERL_CALLCONV void	mro_isa_changed_in(pTHX_ HV* stash)
-			__attribute__nonnull__(pTHX_1); */
+PERL_CALLCONV void	Perl_mro_isa_changed_in(pTHX_ HV* stash)
+			__attribute__nonnull__(pTHX_1);
+#define PERL_ARGS_ASSERT_MRO_ISA_CHANGED_IN	\
+	assert(stash)
 
-PERL_CALLCONV void	Perl_mro_isa_changed_in3(pTHX_ HV* stash, const char *stashname, STRLEN stashname_len);
 PERL_CALLCONV struct mro_meta*	Perl_mro_meta_init(pTHX_ HV* stash)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_MRO_META_INIT	\
@@ -3997,9 +4004,9 @@ PERL_CALLCONV void	Perl_sv_clear(pTHX_ SV *const orig_sv)
 	assert(orig_sv)
 
 PERL_CALLCONV I32	Perl_sv_cmp(pTHX_ SV *const sv1, SV *const sv2);
-PERL_CALLCONV I32	Perl_sv_cmp_flags(pTHX_ SV *const sv1, SV *const sv2, const I32 flags);
+PERL_CALLCONV I32	Perl_sv_cmp_flags(pTHX_ SV *const sv1, SV *const sv2, const U32 flags);
 PERL_CALLCONV I32	Perl_sv_cmp_locale(pTHX_ SV *const sv1, SV *const sv2);
-PERL_CALLCONV I32	Perl_sv_cmp_locale_flags(pTHX_ SV *const sv1, SV *const sv2, const I32 flags);
+PERL_CALLCONV I32	Perl_sv_cmp_locale_flags(pTHX_ SV *const sv1, SV *const sv2, const U32 flags);
 PERL_CALLCONV OP*	Perl_sv_compile_2op(pTHX_ SV *sv, OP **startop, const char *code, PAD **padp)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2)
@@ -4043,7 +4050,7 @@ PERL_CALLCONV void	Perl_sv_dump(pTHX_ SV* sv)
 	assert(sv)
 
 /* PERL_CALLCONV I32	sv_eq(pTHX_ SV* sv1, SV* sv2); */
-PERL_CALLCONV I32	Perl_sv_eq_flags(pTHX_ SV* sv1, SV* sv2, const I32 flags);
+PERL_CALLCONV I32	Perl_sv_eq_flags(pTHX_ SV* sv1, SV* sv2, const U32 flags);
 /* PERL_CALLCONV void	Perl_sv_force_normal(pTHX_ SV *sv)
 			__attribute__nonnull__(pTHX_1); */
 #define PERL_ARGS_ASSERT_SV_FORCE_NORMAL	\
@@ -5665,11 +5672,12 @@ STATIC void	S_mro_clean_isarev(pTHX_ HV * const isa, const char * const name, co
 #define PERL_ARGS_ASSERT_MRO_CLEAN_ISAREV	\
 	assert(isa); assert(name)
 
-STATIC void	S_mro_gather_and_rename(pTHX_ HV * const stashes, HV *stash, HV *oldstash, const char *name, I32 namlen)
+STATIC void	S_mro_gather_and_rename(pTHX_ HV * const stashes, HV * const seen_stashes, HV *stash, HV *oldstash, const char *name, I32 namlen)
 			__attribute__nonnull__(pTHX_1)
-			__attribute__nonnull__(pTHX_4);
+			__attribute__nonnull__(pTHX_2)
+			__attribute__nonnull__(pTHX_5);
 #define PERL_ARGS_ASSERT_MRO_GATHER_AND_RENAME	\
-	assert(stashes); assert(name)
+	assert(stashes); assert(seen_stashes); assert(name)
 
 STATIC AV*	S_mro_get_linear_isa_dfs(pTHX_ HV* stash, U32 level)
 			__attribute__nonnull__(pTHX_1);

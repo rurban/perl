@@ -1162,10 +1162,12 @@ pd	|I32	|sv_clean_all
 : Used only in perl.c
 pd	|void	|sv_clean_objs
 Apd	|void	|sv_clear	|NN SV *const orig_sv
-Apd	|I32	|sv_cmp		|NULLOK SV *const sv1|NULLOK SV *const sv2
-Apd	|I32	|sv_cmp_flags	|NULLOK SV *const sv1|NULLOK SV *const sv2|const I32 flags
-Apd	|I32	|sv_cmp_locale	|NULLOK SV *const sv1|NULLOK SV *const sv2
-Apd	|I32	|sv_cmp_locale_flags	|NULLOK SV *const sv1|NULLOK SV *const sv2|const I32 flags
+Aopd	|I32	|sv_cmp		|NULLOK SV *const sv1|NULLOK SV *const sv2
+Apd	|I32	|sv_cmp_flags	|NULLOK SV *const sv1|NULLOK SV *const sv2 \
+				|const U32 flags
+Aopd	|I32	|sv_cmp_locale	|NULLOK SV *const sv1|NULLOK SV *const sv2
+Apd	|I32	|sv_cmp_locale_flags	|NULLOK SV *const sv1 \
+				|NULLOK SV *const sv2|const U32 flags
 #if defined(USE_LOCALE_COLLATE)
 Amd	|char*	|sv_collxfrm	|NN SV *const sv|NN STRLEN *const nxp
 Apd	|char*	|sv_collxfrm_flags	|NN SV *const sv|NN STRLEN *const nxp|I32 const flags
@@ -1179,7 +1181,7 @@ Ap	|void	|sv_dump	|NN SV* sv
 ApdR	|bool	|sv_derived_from|NN SV* sv|NN const char *const name
 ApdR	|bool	|sv_does	|NN SV* sv|NN const char *const name
 Amd	|I32	|sv_eq		|NULLOK SV* sv1|NULLOK SV* sv2
-Apd	|I32	|sv_eq_flags	|NULLOK SV* sv1|NULLOK SV* sv2|const I32 flags
+Apd	|I32	|sv_eq_flags	|NULLOK SV* sv1|NULLOK SV* sv2|const U32 flags
 Apd	|void	|sv_free	|NULLOK SV *const sv
 : FIXME Used in SvREFCNT_dec() but only
 : if defined(__GNUC__) && !defined(PERL_GCC_BRACE_GROUPS_FORBIDDEN)
@@ -1290,6 +1292,8 @@ AdpPR	|STRLEN	|utf8_length	|NN const U8* s|NN const U8 *e
 ApdPR	|IV	|utf8_distance	|NN const U8 *a|NN const U8 *b
 ApdPR	|U8*	|utf8_hop	|NN const U8 *s|I32 off
 ApMd	|U8*	|utf8_to_bytes	|NN U8 *s|NN STRLEN *len
+Apd	|int	|bytes_cmp_utf8	|NN const U8 *b|STRLEN blen|NN const U8 *u \
+				|STRLEN ulen
 ApMd	|U8*	|bytes_from_utf8|NN const U8 *s|NN STRLEN *len|NULLOK bool *is_utf8
 ApMd	|U8*	|bytes_to_utf8	|NN const U8 *s|NN STRLEN *len
 Apd	|UV	|utf8_to_uvchr	|NN const U8 *s|NULLOK STRLEN *retlen
@@ -2359,13 +2363,13 @@ s	|void	|mro_clean_isarev|NN HV * const isa   \
 				 |const STRLEN len \
 				 |NULLOK HV * const exceptions
 s	|void	|mro_gather_and_rename|NN HV * const stashes \
+				      |NN HV * const seen_stashes \
 				      |NULLOK HV *stash \
 				      |NULLOK HV *oldstash \
 				      |NN const char *name|I32 namlen
 #endif
 : Used in hv.c, mg.c, pp.c, sv.c
-md	|void   |mro_isa_changed_in|NN HV* stash
-pd	|void   |mro_isa_changed_in3|NULLOK HV* stash|NULLOK const char *stashname|STRLEN stashname_len
+pd	|void   |mro_isa_changed_in|NN HV* stash
 Apd	|void	|mro_method_changed_in	|NN HV* stash
 pdx	|void	|mro_package_moved	|NULLOK HV * const stash|NULLOK HV * const oldstash|NULLOK const GV *gv|NULLOK const char *newname|I32 newname_len
 : Only used in perl.c

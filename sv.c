@@ -6989,7 +6989,7 @@ if necessary. If the flags include SV_GMAGIC, it handles get-magic, too.
 */
 
 I32
-Perl_sv_eq_flags(pTHX_ register SV *sv1, register SV *sv2, const I32 flags)
+Perl_sv_eq_flags(pTHX_ register SV *sv1, register SV *sv2, const U32 flags)
 {
     dVAR;
     const char *pv1;
@@ -7044,28 +7044,15 @@ Perl_sv_eq_flags(pTHX_ register SV *sv1, register SV *sv2, const I32 flags)
 	      }
 	 }
 	 else {
-	      bool is_utf8 = TRUE;
-
 	      if (SvUTF8(sv1)) {
-		   /* sv1 is the UTF-8 one,
-		    * if is equal it must be downgrade-able */
-		   char * const pv = (char*)bytes_from_utf8((const U8*)pv1,
-						     &cur1, &is_utf8);
-		   if (pv != pv1)
-			pv1 = tpv = pv;
+		  /* sv1 is the UTF-8 one  */
+		  return bytes_cmp_utf8((const U8*)pv2, cur2,
+					(const U8*)pv1, cur1) == 0;
 	      }
 	      else {
-		   /* sv2 is the UTF-8 one,
-		    * if is equal it must be downgrade-able */
-		   char * const pv = (char *)bytes_from_utf8((const U8*)pv2,
-						      &cur2, &is_utf8);
-		   if (pv != pv2)
-			pv2 = tpv = pv;
-	      }
-	      if (is_utf8) {
-		   /* Downgrade not possible - cannot be eq */
-		   assert (tpv == 0);
-		   return FALSE;
+		  /* sv2 is the UTF-8 one  */
+		  return bytes_cmp_utf8((const U8*)pv1, cur1,
+					(const U8*)pv2, cur2) == 0;
 	      }
 	 }
     }
@@ -7106,7 +7093,8 @@ Perl_sv_cmp(pTHX_ register SV *const sv1, register SV *const sv2)
 }
 
 I32
-Perl_sv_cmp_flags(pTHX_ register SV *const sv1, register SV *const sv2, const I32 flags)
+Perl_sv_cmp_flags(pTHX_ register SV *const sv1, register SV *const sv2,
+		  const U32 flags)
 {
     dVAR;
     STRLEN cur1, cur2;
@@ -7139,7 +7127,9 @@ Perl_sv_cmp_flags(pTHX_ register SV *const sv1, register SV *const sv2, const I3
 		 pv2 = SvPV_const(svrecode, cur2);
 	    }
 	    else {
-		 pv2 = tpv = (char*)bytes_to_utf8((const U8*)pv2, &cur2);
+		const int retval = -bytes_cmp_utf8((const U8*)pv2, cur2,
+						   (const U8*)pv1, cur1);
+		return retval ? retval < 0 ? -1 : +1 : 0;
 	    }
 	}
 	else {
@@ -7149,7 +7139,9 @@ Perl_sv_cmp_flags(pTHX_ register SV *const sv1, register SV *const sv2, const I3
 		 pv1 = SvPV_const(svrecode, cur1);
 	    }
 	    else {
-		 pv1 = tpv = (char*)bytes_to_utf8((const U8*)pv1, &cur1);
+		const int retval = bytes_cmp_utf8((const U8*)pv1, cur1,
+						  (const U8*)pv2, cur2);
+		return retval ? retval < 0 ? -1 : +1 : 0;
 	    }
 	}
     }
@@ -7200,7 +7192,8 @@ Perl_sv_cmp_locale(pTHX_ register SV *const sv1, register SV *const sv2)
 }
 
 I32
-Perl_sv_cmp_locale_flags(pTHX_ register SV *const sv1, register SV *const sv2, const I32 flags)
+Perl_sv_cmp_locale_flags(pTHX_ register SV *const sv1, register SV *const sv2,
+			 const U32 flags)
 {
     dVAR;
 #ifdef USE_LOCALE_COLLATE
@@ -8221,11 +8214,11 @@ Perl_newSVhek(pTHX_ const HEK *const hek)
 	       Andreas would like keys he put in as utf8 to come back as utf8
 	    */
 	    STRLEN utf8_len = HEK_LEN(hek);
-	    const U8 *as_utf8 = bytes_to_utf8 ((U8*)HEK_KEY(hek), &utf8_len);
-	    SV * const sv = newSVpvn ((const char*)as_utf8, utf8_len);
-
+	    SV * const sv = newSV_type(SVt_PV);
+	    char *as_utf8 = (char *)bytes_to_utf8 ((U8*)HEK_KEY(hek), &utf8_len);
+	    /* bytes_to_utf8() allocates a new string, which we can repurpose: */
+	    sv_usepvn_flags(sv, as_utf8, utf8_len, SV_HAS_TRAILING_NUL);
 	    SvUTF8_on (sv);
-	    Safefree (as_utf8); /* bytes_to_utf8() allocates a new string */
 	    return sv;
 	} else if (flags & (HVhek_REHASH|HVhek_UNSHARED)) {
 	    /* We don't have a pointer to the hv, so we have to replicate the
