@@ -504,7 +504,7 @@ PP(pp_formline)
     NV value;
     bool gotsome = FALSE;
     STRLEN len;
-    const STRLEN fudge = SvPOK(tmpForm)
+    const STRLEN fudge = SvPOKp(tmpForm)
 			? (SvCUR(tmpForm) * (IN_BYTES ? 1 : 3) + 1) : 0;
     bool item_is_utf8 = FALSE;
     bool targ_is_utf8 = FALSE;
@@ -524,6 +524,8 @@ PP(pp_formline)
 	    return parseres;
     }
     SvPV_force(PL_formtarget, len);
+    if (SvTAINTED(tmpForm))
+	SvTAINTED_on(PL_formtarget);
     if (DO_UTF8(PL_formtarget))
 	targ_is_utf8 = TRUE;
     t = SvGROW(PL_formtarget, len + fudge + 1);  /* XXX SvCUR bad */
@@ -605,6 +607,8 @@ PP(pp_formline)
 		sv = &PL_sv_no;
 		Perl_ck_warner(aTHX_ packWARN(WARN_SYNTAX), "Not enough format arguments");
 	    }
+	    if (SvTAINTED(sv))
+		SvTAINTED_on(PL_formtarget);
 	    break;
 
 	case FF_CHECKNL:
@@ -1640,6 +1644,40 @@ Perl_die_unwind(pTHX_ SV *msv)
     if (in_eval) {
 	I32 cxix;
 	I32 gimme;
+
+	/*
+	 * Historically, perl used to set ERRSV ($@) early in the die
+	 * process and rely on it not getting clobbered during unwinding.
+	 * That sucked, because it was liable to get clobbered, so the
+	 * setting of ERRSV used to emit the exception from eval{} has
+	 * been moved to much later, after unwinding (see just before
+	 * JMPENV_JUMP below).	However, some modules were relying on the
+	 * early setting, by examining $@ during unwinding to use it as
+	 * a flag indicating whether the current unwinding was caused by
+	 * an exception.  It was never a reliable flag for that purpose,
+	 * being totally open to false positives even without actual
+	 * clobberage, but was useful enough for production code to
+	 * semantically rely on it.
+	 *
+	 * We'd like to have a proper introspective interface that
+	 * explicitly describes the reason for whatever unwinding
+	 * operations are currently in progress, so that those modules
+	 * work reliably and $@ isn't further overloaded.  But we don't
+	 * have one yet.  In its absence, as a stopgap measure, ERRSV is
+	 * now *additionally* set here, before unwinding, to serve as the
+	 * (unreliable) flag that it used to.
+	 *
+	 * This behaviour is temporary, and should be removed when a
+	 * proper way to detect exceptional unwinding has been developed.
+	 * As of 2010-12, the authors of modules relying on the hack
+	 * are aware of the issue, because the modules failed on
+	 * perls 5.13.{1..7} which had late setting of $@ without this
+	 * early-setting hack.
+	 */
+	if (!(in_eval & EVAL_KEEPERR)) {
+	    SvTEMP_off(exceptsv);
+	    sv_setsv(ERRSV, exceptsv);
+	}
 
 	while ((cxix = dopoptoeval(cxstack_ix)) < 0
 	       && PL_curstackinfo->si_prev)
@@ -2978,12 +3016,24 @@ S_docatch(pTHX_ OP *o)
    called more than once, and is only used by regcomp.c, for (?{}) blocks.
 
    Currently it is not used outside the core code. Best if it stays that way.
+
+   Hence it's now deprecated, and will be removed.
 */
 OP *
 Perl_sv_compile_2op(pTHX_ SV *sv, OP** startop, const char *code, PAD** padp)
 /* sv Text to convert to OP tree. */
 /* startop op_free() this to undo. */
 /* code Short string id of the caller. */
+{
+    PERL_ARGS_ASSERT_SV_COMPILE_2OP;
+    return Perl_sv_compile_2op_is_broken(aTHX_ sv, startop, code, padp);
+}
+
+/* Don't use this. It will go away without warning once the regexp engine is
+   refactored not to use it.  */
+OP *
+Perl_sv_compile_2op_is_broken(pTHX_ SV *sv, OP **startop, const char *code,
+			      PAD **padp)
 {
     dVAR; dSP;				/* Make POPBLOCK work. */
     PERL_CONTEXT *cx;
@@ -2999,7 +3049,7 @@ Perl_sv_compile_2op(pTHX_ SV *sv, OP** startop, const char *code, PAD** padp)
     STRLEN len;
     bool need_catch;
 
-    PERL_ARGS_ASSERT_SV_COMPILE_2OP;
+    PERL_ARGS_ASSERT_SV_COMPILE_2OP_IS_BROKEN;
 
     ENTER_with_name("eval");
     lex_start(sv, NULL, 0);
@@ -3042,7 +3092,26 @@ Perl_sv_compile_2op(pTHX_ SV *sv, OP** startop, const char *code, PAD** padp)
     /* we get here either during compilation, or via pp_regcomp at runtime */
     runtime = IN_PERL_RUNTIME;
     if (runtime)
+    {
 	runcv = find_runcv(NULL);
+
+	/* At run time, we have to fetch the hints from PL_curcop. */
+	PL_hints = PL_curcop->cop_hints;
+	if (PL_hints & HINT_LOCALIZE_HH) {
+	    /* SAVEHINTS created a new HV in PL_hintgv, which we
+	       need to GC */
+	    SvREFCNT_dec(GvHV(PL_hintgv));
+	    GvHV(PL_hintgv) =
+	     refcounted_he_chain_2hv(PL_curcop->cop_hints_hash, 0);
+	    hv_magic(GvHV(PL_hintgv), NULL, PERL_MAGIC_hints);
+	}
+	SAVECOMPILEWARNINGS();
+	PL_compiling.cop_warnings = DUP_WARNINGS(PL_curcop->cop_warnings);
+	cophh_free(CopHINTHASH_get(&PL_compiling));
+	/* XXX Does this need to avoid copying a label? */
+	PL_compiling.cop_hints_hash
+	 = cophh_copy(PL_curcop->cop_hints_hash);
+    }
 
     PL_op = &dummy;
     PL_op->op_type = OP_ENTEREVAL;
@@ -3406,7 +3475,9 @@ PP(pp_require)
 	if (cUNOP->op_first->op_type == OP_CONST && cUNOP->op_first->op_private & OPpCONST_NOVER) {
 	    if ( vcmp(sv,PL_patchlevel) <= 0 )
 		DIE(aTHX_ "Perls since %"SVf" too modern--this is %"SVf", stopped",
-		    SVfARG(vnormal(sv)), SVfARG(vnormal(PL_patchlevel)));
+		    SVfARG(sv_2mortal(vnormal(sv))),
+		    SVfARG(sv_2mortal(vnormal(PL_patchlevel)))
+		);
 	}
 	else {
 	    if ( vcmp(sv,PL_patchlevel) > 0 ) {
@@ -3425,8 +3496,10 @@ PP(pp_require)
 		    || strstr(SvPVX(pv),".0")        /* FP with leading 0 */
 		   ) {
 		    DIE(aTHX_ "Perl %"SVf" required--this is only "
-		    	"%"SVf", stopped", SVfARG(vnormal(req)),
-			SVfARG(vnormal(PL_patchlevel)));
+		    	"%"SVf", stopped",
+			SVfARG(sv_2mortal(vnormal(req))),
+			SVfARG(sv_2mortal(vnormal(PL_patchlevel)))
+		    );
 		}
 		else { /* probably 'use 5.10' or 'use 5.8' */
 		    SV *hintsv;
@@ -3442,27 +3515,11 @@ PP(pp_require)
 
 		    DIE(aTHX_ "Perl %"SVf" required (did you mean %"SVf"?)"
 		    	"--this is only %"SVf", stopped",
-			SVfARG(vnormal(req)),
-			SVfARG(vnormal(sv_2mortal(hintsv))),
-			SVfARG(vnormal(PL_patchlevel)));
+			SVfARG(sv_2mortal(vnormal(req))),
+			SVfARG(sv_2mortal(vnormal(sv_2mortal(hintsv)))),
+			SVfARG(sv_2mortal(vnormal(PL_patchlevel)))
+		    );
 		}
-	    }
-	}
-
-	/* We do this only with "use", not "require" or "no". */
-	if (PL_compcv && !(cUNOP->op_first->op_private & OPpCONST_NOVER)) {
-	    /* If we request a version >= 5.9.5, load feature.pm with the
-	     * feature bundle that corresponds to the required version. */
-	    if (vcmp(sv, sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
-		SV *const importsv = vnormal(sv);
-		*SvPVX_mutable(importsv) = ':';
-		ENTER_with_name("load_feature");
-		Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
-		LEAVE_with_name("load_feature");
-	    }
-	    /* If a version >= 5.11.0 is requested, strictures are on by default! */
-	    if (vcmp(sv, sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
-		PL_hints |= (HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
 	    }
 	}
 
@@ -3713,11 +3770,7 @@ PP(pp_require)
 	    }
 	}
     }
-    if (tryrsfp) {
-	SAVECOPFILE_FREE(&PL_compiling);
-	CopFILE_set(&PL_compiling, tryname);
-    }
-    SvREFCNT_dec(namesv);
+    sv_2mortal(namesv);
     if (!tryrsfp) {
 	if (PL_op->op_type == OP_REQUIRE) {
 	    if(errno == EMFILE) {
@@ -3758,7 +3811,7 @@ PP(pp_require)
     /* Check whether a hook in @INC has already filled %INC */
     if (!hook_sv) {
 	(void)hv_store(GvHVn(PL_incgv),
-		       unixname, unixlen, newSVpv(CopFILE(&PL_compiling),0),0);
+		       unixname, unixlen, newSVpv(tryname,0),0);
     } else {
 	SV** const svp = hv_fetch(GvHVn(PL_incgv), unixname, unixlen, 0);
 	if (!svp)
@@ -3768,6 +3821,8 @@ PP(pp_require)
 
     ENTER_with_name("eval");
     SAVETMPS;
+    SAVECOPFILE_FREE(&PL_compiling);
+    CopFILE_set(&PL_compiling, tryname);
     lex_start(NULL, tryrsfp, 0);
 
     SAVEHINTS();
@@ -3839,6 +3894,7 @@ PP(pp_entereval)
     const I32 gimme = GIMME_V;
     const U32 was = PL_breakable_sub_gen;
     char tbuf[TYPE_DIGITS(long) + 12];
+    bool saved_delete = FALSE;
     char *tmpbuf = tbuf;
     STRLEN len;
     CV* runcv;
@@ -3923,6 +3979,12 @@ PP(pp_entereval)
 
     if ((PERLDB_LINE || PERLDB_SAVESRC) && PL_curstash != PL_debstash)
 	save_lines(CopFILEAV(&PL_compiling), PL_parser->linestr);
+    else {
+	char *const safestr = savepvn(tmpbuf, len);
+	SAVEDELETE(PL_defstash, safestr, len);
+	saved_delete = TRUE;
+    }
+    
     PUTBACK;
 
     if (doeval(gimme, NULL, runcv, seq)) {
@@ -3930,7 +3992,7 @@ PP(pp_entereval)
 	    ? (PERLDB_LINE || PERLDB_SAVESRC)
 	    :  PERLDB_SAVESRC_NOSUBS) {
 	    /* Retain the filegv we created.  */
-	} else {
+	} else if (!saved_delete) {
 	    char *const safestr = savepvn(tmpbuf, len);
 	    SAVEDELETE(PL_defstash, safestr, len);
 	}
@@ -3942,7 +4004,7 @@ PP(pp_entereval)
 	    ? (PERLDB_LINE || PERLDB_SAVESRC)
 	    :  PERLDB_SAVESRC_INVALID) {
 	    /* Retain the filegv we created.  */
-	} else {
+	} else if (!saved_delete) {
 	    (void)hv_delete(PL_defstash, tmpbuf, len, G_DISCARD);
 	}
 	return PL_op->op_next;

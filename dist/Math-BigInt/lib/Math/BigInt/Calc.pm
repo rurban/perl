@@ -4,7 +4,7 @@ use 5.006002;
 use strict;
 # use warnings;	# dont use warnings for older Perls
 
-our $VERSION = '0.57';
+our $VERSION = '1.99_01';
 
 # Package to store unsigned big integers in decimal and do math with them
 
@@ -2377,17 +2377,23 @@ sub _modpow
   # modulus of power ($x ** $y) % $z
   my ($c,$num,$exp,$mod) = @_;
 
-  # in the trivial case,
+  # a^b (mod 1) = 0 for all a and b
   if (_is_one($c,$mod))
     {
-    splice @$num,0,1; $num->[0] = 0;
-    return $num;
+        @$num = 0;
+        return $num;
     }
-  if ((scalar @$num == 1) && (($num->[0] == 0) || ($num->[0] == 1)))
-    {
-    $num->[0] = 1;
-    return $num;
-    }
+
+  # 0^a (mod m) = 0 if m != 0, a != 0
+  # 0^0 (mod m) = 1 if m != 0
+  if (_is_one($c, $num)) {
+      if (_is_zero($c, $exp)) {
+          @$num = 1;
+      } else {
+          @$num = 0;
+      }
+      return $num;
+  }
 
 #  $num = _mod($c,$num,$mod);	# this does not make it faster
 

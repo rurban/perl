@@ -930,6 +930,27 @@ Perl_foldEQ(const char *s1, const char *s2, register I32 len)
     }
     return 1;
 }
+I32
+Perl_foldEQ_latin1(const char *s1, const char *s2, register I32 len)
+{
+    /* Compare non-utf8 using Unicode (Latin1) semantics.  Does not work on
+     * MICRO_SIGN, LATIN_SMALL_LETTER_SHARP_S, nor
+     * LATIN_SMALL_LETTER_Y_WITH_DIAERESIS, and does not check for these.  Nor
+     * does it check that the strings each have at least 'len' characters */
+
+    register const U8 *a = (const U8 *)s1;
+    register const U8 *b = (const U8 *)s2;
+
+    PERL_ARGS_ASSERT_FOLDEQ_LATIN1;
+
+    while (len--) {
+	if (*a != *b && *a != PL_fold_latin1[*b]) {
+	    return 0;
+	}
+	a++, b++;
+    }
+    return 1;
+}
 
 /*
 =for apidoc foldEQ_locale
@@ -1116,7 +1137,7 @@ S_mess_alloc(pTHX)
     SV *sv;
     XPVMG *any;
 
-    if (!PL_dirty)
+    if (PL_phase != PERL_PHASE_DESTRUCT)
 	return newSVpvs_flags("", SVs_TEMP);
 
     if (PL_mess_sv)
@@ -1343,7 +1364,7 @@ Perl_mess_sv(pTHX_ SV *basemsg, bool consume)
 			   line_mode ? "line" : "chunk",
 			   (IV)IoLINES(GvIOp(PL_last_in_gv)));
 	}
-	if (PL_dirty)
+	if (PL_phase == PERL_PHASE_DESTRUCT)
 	    sv_catpvs(sv, " during global destruction");
 	sv_catpvs(sv, ".\n");
     }
@@ -4534,6 +4555,11 @@ Perl_getcwd_sv(pTHX_ register SV *sv)
 /*
 =for apidoc prescan_version
 
+Validate that a given string can be parsed as a version object, but doesn't
+actually perform the parsing.  Can use either strict or lax validation rules.
+Can optionally set a number of hint variables to save the parsing code
+some time when tokenizing.
+
 =cut
 */
 const char *
@@ -5067,29 +5093,35 @@ Perl_upg_version(pTHX_ SV *ver, bool qv)
 #ifndef SvVOK
 #  if PERL_VERSION > 5
 	/* This will only be executed for 5.6.0 - 5.8.0 inclusive */
-	if ( len >= 3 && !instr(version,".") && !instr(version,"_")
-	    && !(*version == 'u' && strEQ(version, "undef"))
-	    && (*version < '0' || *version > '9') ) {
+	if ( len >= 3 && !instr(version,".") && !instr(version,"_")) {
 	    /* may be a v-string */
-	    SV * const nsv = sv_newmortal();
-	    const char *nver;
-	    const char *pos;
-	    int saw_decimal = 0;
-	    sv_setpvf(nsv,"v%vd",ver);
-	    pos = nver = savepv(SvPV_nolen(nsv));
+	    char *testv = (char *)version;
+	    STRLEN tlen = len;
+	    for (tlen=0; tlen < len; tlen++, testv++) {
+		/* if one of the characters is non-text assume v-string */
+		if (testv[0] < ' ') {
+		    SV * const nsv = sv_newmortal();
+		    const char *nver;
+		    const char *pos;
+		    int saw_decimal = 0;
+		    sv_setpvf(nsv,"v%vd",ver);
+		    pos = nver = savepv(SvPV_nolen(nsv));
 
-	    /* scan the resulting formatted string */
-	    pos++; /* skip the leading 'v' */
-	    while ( *pos == '.' || isDIGIT(*pos) ) {
-		if ( *pos == '.' )
-		    saw_decimal++ ;
-		pos++;
-	    }
+		    /* scan the resulting formatted string */
+		    pos++; /* skip the leading 'v' */
+		    while ( *pos == '.' || isDIGIT(*pos) ) {
+			if ( *pos == '.' )
+			    saw_decimal++ ;
+			pos++;
+		    }
 
-	    /* is definitely a v-string */
-	    if ( saw_decimal >= 2 ) {
-		Safefree(version);
-		version = nver;
+		    /* is definitely a v-string */
+		    if ( saw_decimal >= 2 ) {	
+			Safefree(version);
+			version = nver;
+		    }
+		    break;
+		}
 	    }
 	}
 #  endif
@@ -5161,6 +5193,8 @@ point representation.  Call like:
 
 NOTE: you can pass either the object directly or the SV
 contained within the RV.
+
+The SV returned has a refcount of 1.
 
 =cut
 */
@@ -5241,6 +5275,8 @@ representation.  Call like:
 NOTE: you can pass either the object directly or the SV
 contained within the RV.
 
+The SV returned has a refcount of 1.
+
 =cut
 */
 
@@ -5298,7 +5334,9 @@ Perl_vnormal(pTHX_ SV *vs)
 In order to maintain maximum compatibility with earlier versions
 of Perl, this function will return either the floating point
 notation or the multiple dotted notation, depending on whether
-the original version contained 1 or more dots, respectively
+the original version contained 1 or more dots, respectively.
+
+The SV returned has a refcount of 1.
 
 =cut
 */

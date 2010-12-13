@@ -113,6 +113,8 @@ START_MY_CXT
 static opclass
 cc_opclass(pTHX_ const OP *o)
 {
+    bool custom = 0;
+
     if (!o)
 	return OPc_NULL;
 
@@ -139,7 +141,10 @@ cc_opclass(pTHX_ const OP *o)
 	return OPc_PADOP;
 #endif
 
-    switch (PL_opargs[o->op_type] & OA_CLASS_MASK) {
+    if (o->op_type == OP_CUSTOM)
+        custom = 1;
+
+    switch (OP_CLASS(o)) {
     case OA_BASEOP:
 	return OPc_BASEOP;
 
@@ -173,7 +178,9 @@ cc_opclass(pTHX_ const OP *o)
          * and the SV is a reference to a swash
          * (i.e., an RV pointing to an HV).
          */
-	return (o->op_private & (OPpTRANS_TO_UTF|OPpTRANS_FROM_UTF))
+	return (!custom &&
+		   (o->op_private & (OPpTRANS_TO_UTF|OPpTRANS_FROM_UTF))
+	       )
 #if  defined(USE_ITHREADS) \
   && (PERL_VERSION > 8 || (PERL_VERSION == 8 && PERL_SUBVERSION >= 9))
 		? OPc_PADOP : OPc_PVOP;
@@ -231,7 +238,7 @@ cc_opclass(pTHX_ const OP *o)
 	    return OPc_PVOP;
     }
     warn("can't determine class of operator %s, assuming BASEOP\n",
-	 PL_op_name[o->op_type]);
+	 OP_NAME(o));
     return OPc_BASEOP;
 }
 
@@ -251,7 +258,7 @@ make_sv_object(pTHX_ SV *sv)
     IV iv;
     dMY_CXT;
 
-    for (iv = 0; iv < sizeof(specialsv_list)/sizeof(SV*); iv++) {
+    for (iv = 0; iv < (IV)(sizeof(specialsv_list)/sizeof(SV*)); iv++) {
 	if (sv == specialsv_list[iv]) {
 	    type = "B::SPECIAL";
 	    break;
@@ -599,7 +606,7 @@ typedef HE      *B__HE;
 typedef struct refcounted_he	*B__RHE;
 #endif
 
-#ifdef USE_ITHREADS
+#ifdef MULTIPLICITY
 #  define ASSIGN_COMMON_ALIAS(var) \
     STMT_START { XSANY.any_i32 = offsetof(struct interpreter, var); } STMT_END
 #else
@@ -617,7 +624,7 @@ static XSPROTO(intrpvar_sv_common)
     SV *ret;
     if (items != 0)
        croak_xs_usage(cv,  "");
-#ifdef USE_ITHREADS
+#ifdef MULTIPLICITY
     ret = *(SV **)(XSANY.any_i32 + (char *)my_perl);
 #else
     ret = *(SV **)(XSANY.any_ptr);
@@ -805,14 +812,14 @@ minus_c()
 	else
 	    PL_minus_c = TRUE;
 
-SV *
+void
 cstring(sv)
 	SV *	sv
     ALIAS:
 	perlstring = 1
 	cchar = 2
     PPCODE:
-	PUSHs(ix == 2 ? cchar(aTHX_ sv) : cstring(aTHX_ sv, ix));
+	PUSHs(ix == 2 ? cchar(aTHX_ sv) : cstring(aTHX_ sv, (bool)ix));
 
 void
 threadsv_names()
@@ -952,6 +959,9 @@ next(o)
 	    ret = sv_2mortal(newSVpv(*((char **)ptr), 0));
 	    break;
 #endif
+	default:
+	    croak("Illegal alias 0x%08x for B::*next", (unsigned)ix);
+
 	}
 	ST(0) = ret;
 	XSRETURN(1);
@@ -962,7 +972,7 @@ name(o)
     ALIAS:
 	desc = 1
     CODE:
-	RETVAL = (char *)(ix ? PL_op_desc : PL_op_name)[o->op_type];
+	RETVAL = (char *)(ix ? OP_DESC(o) : OP_NAME(o));
     OUTPUT:
 	RETVAL
 
@@ -1509,6 +1519,8 @@ IVX(sv)
 	case (U8)(sv_U16p >> 16):
 	    ret = sv_2mortal(newSVuv(*((U16 *)ptr)));
 	    break;
+	default:
+	    croak("Illegal alias 0x%08x for B::*IVX", (unsigned)ix);
 	}
 	ST(0) = ret;
 	XSRETURN(1);
@@ -1801,6 +1813,8 @@ SV(gv)
 	case (U8)(line_tp >> 16):
 	    ret = sv_2mortal(newSVuv(*((line_t *)ptr)));
 	    break;
+	default:
+	    croak("Illegal alias 0x%08x for B::*SV", (unsigned)ix);
 	}
 	ST(0) = ret;
 	XSRETURN(1);

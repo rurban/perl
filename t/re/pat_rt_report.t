@@ -21,7 +21,7 @@ BEGIN {
 }
 
 
-plan tests => 2512;  # Update this when adding/deleting tests.
+plan tests => 2514;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -228,7 +228,7 @@ sub run_tests {
         my $num = 123;
         $num =~ /\d/;
         for (0 .. 1) {
-            my $match = ?? + 0;
+            my $match = m?? + 0;
             ok $match != $_, $Message, 
                 sprintf "'match one' %s on %s iteration" =>
                                $match ? 'succeeded' : 'failed',
@@ -461,19 +461,8 @@ sub run_tests {
         func "standalone";
         $_ = "x"; s/x/func "in subst"/e;
         $_ = "x"; s/x/func "in multiline subst"/em;
-
-        #
-        # Next two give 'panic: malloc'.
-        # Outcommented, using two TODOs.
-        #
-        local $TODO    = 'panic: malloc';
-        local $Message = 'Postponed regexp and propaged modifier';
-      # ok 0 for 1 .. 2;
-      SKIP: {
-            skip "panic: malloc", 2;
-            $_ = "x"; /x(?{func "in regexp"})/;
-            $_ = "x"; /x(?{func "in multiline regexp"})/m;
-        }
+        $_ = "x"; /x(?{func "in regexp"})/;
+        $_ = "x"; /x(?{func "in multiline regexp"})/m;
     }
 
 

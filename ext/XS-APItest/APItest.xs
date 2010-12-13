@@ -25,9 +25,12 @@ typedef struct {
     int peep_recording;
     AV *peep_recorder;
     AV *rpeep_recorder;
+    AV *xop_record;
 } my_cxt_t;
 
 START_MY_CXT
+
+MGVTBL vtbl_foo, vtbl_bar;
 
 /* indirect functions to test the [pa]MY_CXT macros */
 
@@ -92,8 +95,8 @@ test_freeent(freeent_function *f) {
 #else
     /* Storing then deleting something should ensure that a hash entry is
        available.  */
-    hv_store(test_hash, "", 0, &PL_sv_yes, 0);
-    hv_delete(test_hash, "", 0, 0);
+    (void) hv_store(test_hash, "", 0, &PL_sv_yes, 0);
+    (void) hv_delete(test_hash, "", 0, 0);
 
     /* We need to "inline" new_he here as it's static, and the functions we
        test expect to be able to call del_HE on the HE  */
@@ -121,7 +124,7 @@ test_freeent(freeent_function *f) {
     i = 0;
     do {
 	mPUSHu(results[i]);
-    } while (++i < sizeof(results)/sizeof(results[0]));
+    } while (++i < (int)(sizeof(results)/sizeof(results[0])));
 
     /* Goodbye to our extra reference.  */
     SvREFCNT_dec(test_scalar);
@@ -132,6 +135,7 @@ static I32
 bitflip_key(pTHX_ IV action, SV *field) {
     MAGIC *mg = mg_find(field, PERL_MAGIC_uvar);
     SV *keysv;
+    PERL_UNUSED_ARG(action);
     if (mg && (keysv = mg->mg_obj)) {
 	STRLEN len;
 	const char *p = SvPV(keysv, len);
@@ -167,6 +171,7 @@ static I32
 rot13_key(pTHX_ IV action, SV *field) {
     MAGIC *mg = mg_find(field, PERL_MAGIC_uvar);
     SV *keysv;
+    PERL_UNUSED_ARG(action);
     if (mg && (keysv = mg->mg_obj)) {
 	STRLEN len;
 	const char *p = SvPV(keysv, len);
@@ -249,6 +254,8 @@ rot13_key(pTHX_ IV action, SV *field) {
 
 STATIC I32
 rmagical_a_dummy(pTHX_ IV idx, SV *sv) {
+    PERL_UNUSED_ARG(idx);
+    PERL_UNUSED_ARG(sv);
     return 0;
 }
 
@@ -260,6 +267,7 @@ blockhook_csc_start(pTHX_ int full)
     dMY_CXT;
     AV *const cur = GvAV(MY_CXT.cscgv);
 
+    PERL_UNUSED_ARG(full);
     SAVEGENERICSV(GvAV(MY_CXT.cscgv));
 
     if (cur) {
@@ -279,6 +287,7 @@ blockhook_csc_pre_end(pTHX_ OP **o)
 {
     dMY_CXT;
 
+    PERL_UNUSED_ARG(o);
     /* if we hit the end of a scope we missed the start of, we need to
      * unconditionally clear @CSC */
     if (GvAV(MY_CXT.cscgv) == MY_CXT.cscav && MY_CXT.cscav) {
@@ -306,6 +315,7 @@ blockhook_test_pre_end(pTHX_ OP **o)
 {
     dMY_CXT;
 
+    PERL_UNUSED_ARG(o);
     if (MY_CXT.bhk_record)
         av_push(MY_CXT.bhkav, newSVpvs("pre_end"));
 }
@@ -315,6 +325,7 @@ blockhook_test_post_end(pTHX_ OP **o)
 {
     dMY_CXT;
 
+    PERL_UNUSED_ARG(o);
     if (MY_CXT.bhk_record)
         av_push(MY_CXT.bhkav, newSVpvs("post_end"));
 }
@@ -378,6 +389,8 @@ my_rpeep (pTHX_ OP *o)
 STATIC OP *
 THX_ck_entersub_args_lists(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 {
+    PERL_UNUSED_ARG(namegv);
+    PERL_UNUSED_ARG(ckobj);
     return ck_entersub_args_list(entersubop);
 }
 
@@ -385,6 +398,8 @@ STATIC OP *
 THX_ck_entersub_args_scalars(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 {
     OP *aop = cUNOPx(entersubop)->op_first;
+    PERL_UNUSED_ARG(namegv);
+    PERL_UNUSED_ARG(ckobj);
     if (!aop->op_sibling)
 	aop = cUNOPx(aop)->op_first;
     for (aop = aop->op_sibling; aop->op_sibling; aop = aop->op_sibling) {
@@ -398,6 +413,8 @@ THX_ck_entersub_multi_sum(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 {
     OP *sumop = NULL;
     OP *pushop = cUNOPx(entersubop)->op_first;
+    PERL_UNUSED_ARG(namegv);
+    PERL_UNUSED_ARG(ckobj);
     if (!pushop->op_sibling)
 	pushop = cUNOPx(pushop)->op_first;
     while (1) {
@@ -558,7 +575,7 @@ THX_ck_entersub_establish_cleanup(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 STATIC OP *
 THX_ck_entersub_postinc(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
 {
-    OP *pushop, *argop, *estop;
+    OP *pushop, *argop;
     ck_entersub_args_proto(entersubop, namegv, ckobj);
     pushop = cUNOPx(entersubop)->op_first;
     if(!pushop->op_sibling) pushop = cUNOPx(pushop)->op_first;
@@ -584,6 +601,9 @@ static SV *hintkey_scopelessblock_sv;
 static SV *hintkey_stmtasexpr_sv, *hintkey_stmtsasexpr_sv;
 static SV *hintkey_loopblock_sv, *hintkey_blockasexpr_sv;
 static SV *hintkey_swaplabel_sv, *hintkey_labelconst_sv;
+static SV *hintkey_arrayfullexpr_sv, *hintkey_arraylistexpr_sv;
+static SV *hintkey_arraytermexpr_sv, *hintkey_arrayarithexpr_sv;
+static SV *hintkey_arrayexprflags_sv;
 static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
 
 /* low-level parser helpers */
@@ -832,6 +852,45 @@ static OP *THX_parse_keyword_labelconst(pTHX)
     return newSVOP(OP_CONST, 0, parse_label(0));
 }
 
+#define parse_keyword_arrayfullexpr() THX_parse_keyword_arrayfullexpr(aTHX)
+static OP *THX_parse_keyword_arrayfullexpr(pTHX)
+{
+    return newANONLIST(parse_fullexpr(0));
+}
+
+#define parse_keyword_arraylistexpr() THX_parse_keyword_arraylistexpr(aTHX)
+static OP *THX_parse_keyword_arraylistexpr(pTHX)
+{
+    return newANONLIST(parse_listexpr(0));
+}
+
+#define parse_keyword_arraytermexpr() THX_parse_keyword_arraytermexpr(aTHX)
+static OP *THX_parse_keyword_arraytermexpr(pTHX)
+{
+    return newANONLIST(parse_termexpr(0));
+}
+
+#define parse_keyword_arrayarithexpr() THX_parse_keyword_arrayarithexpr(aTHX)
+static OP *THX_parse_keyword_arrayarithexpr(pTHX)
+{
+    return newANONLIST(parse_arithexpr(0));
+}
+
+#define parse_keyword_arrayexprflags() THX_parse_keyword_arrayexprflags(aTHX)
+static OP *THX_parse_keyword_arrayexprflags(pTHX)
+{
+    U32 flags = 0;
+    I32 c;
+    OP *o;
+    lex_read_space(0);
+    c = lex_peek_unichar(0);
+    if (c != '!' && c != '?') croak("syntax error");
+    lex_read_unichar(0);
+    if (c == '?') flags |= PARSE_OPTIONAL;
+    o = parse_listexpr(flags);
+    return o ? newANONLIST(o) : newANONHASH(newOP(OP_STUB, 0));
+}
+
 /* plugin glue */
 
 #define keyword_active(hintkey_sv) THX_keyword_active(aTHX_ hintkey_sv)
@@ -896,9 +955,45 @@ static int my_keyword_plugin(pTHX_
 		    keyword_active(hintkey_labelconst_sv)) {
 	*op_ptr = parse_keyword_labelconst();
 	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 13 && strnEQ(keyword_ptr, "arrayfullexpr", 13) &&
+		    keyword_active(hintkey_arrayfullexpr_sv)) {
+	*op_ptr = parse_keyword_arrayfullexpr();
+	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 13 && strnEQ(keyword_ptr, "arraylistexpr", 13) &&
+		    keyword_active(hintkey_arraylistexpr_sv)) {
+	*op_ptr = parse_keyword_arraylistexpr();
+	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 13 && strnEQ(keyword_ptr, "arraytermexpr", 13) &&
+		    keyword_active(hintkey_arraytermexpr_sv)) {
+	*op_ptr = parse_keyword_arraytermexpr();
+	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 14 && strnEQ(keyword_ptr, "arrayarithexpr", 14) &&
+		    keyword_active(hintkey_arrayarithexpr_sv)) {
+	*op_ptr = parse_keyword_arrayarithexpr();
+	return KEYWORD_PLUGIN_EXPR;
+    } else if(keyword_len == 14 && strnEQ(keyword_ptr, "arrayexprflags", 14) &&
+		    keyword_active(hintkey_arrayexprflags_sv)) {
+	*op_ptr = parse_keyword_arrayexprflags();
+	return KEYWORD_PLUGIN_EXPR;
     } else {
 	return next_keyword_plugin(aTHX_ keyword_ptr, keyword_len, op_ptr);
     }
+}
+
+static XOP my_xop;
+
+static OP *
+pp_xop(pTHX)
+{
+    return PL_op->op_next;
+}
+
+static void
+peep_xop(pTHX_ OP *o, OP *oldop)
+{
+    dMY_CXT;
+    av_push(MY_CXT.xop_record, newSVpvf("peep:%"UVxf, PTR2UV(o)));
+    av_push(MY_CXT.xop_record, newSVpvf("oldop:%"UVxf, PTR2UV(oldop)));
 }
 
 XS(XS_XS__APItest__XSUB_XS_VERSION_undef);
@@ -933,7 +1028,7 @@ bytes_cmp_utf8(bytes, utf8)
 
 MODULE = XS::APItest:Overload	PACKAGE = XS::APItest::Overload
 
-SV *
+void
 amagic_deref_call(sv, what)
 	SV *sv
 	int what
@@ -944,7 +1039,7 @@ amagic_deref_call(sv, what)
 # I'd certainly like to discourage the use of this macro, given that we now
 # have amagic_deref_call
 
-SV *
+void
 tryAMAGICunDEREF_var(sv, what)
 	SV *sv
 	int what
@@ -1358,6 +1453,104 @@ MODULE = XS::APItest		PACKAGE = XS::APItest
 
 PROTOTYPES: DISABLE
 
+HV *
+xop_custom_ops ()
+    CODE:
+        RETVAL = PL_custom_ops;
+    OUTPUT:
+        RETVAL
+
+HV *
+xop_custom_op_names ()
+    CODE:
+        PL_custom_op_names = newHV();
+        RETVAL = PL_custom_op_names;
+    OUTPUT:
+        RETVAL
+
+HV *
+xop_custom_op_descs ()
+    CODE:
+        PL_custom_op_descs = newHV();
+        RETVAL = PL_custom_op_descs;
+    OUTPUT:
+        RETVAL
+
+void
+xop_register ()
+    CODE:
+        XopENTRY_set(&my_xop, xop_name, "my_xop");
+        XopENTRY_set(&my_xop, xop_desc, "XOP for testing");
+        XopENTRY_set(&my_xop, xop_class, OA_UNOP);
+        XopENTRY_set(&my_xop, xop_peep, peep_xop);
+        Perl_custom_op_register(aTHX_ pp_xop, &my_xop);
+
+void
+xop_clear ()
+    CODE:
+        XopDISABLE(&my_xop, xop_name);
+        XopDISABLE(&my_xop, xop_desc);
+        XopDISABLE(&my_xop, xop_class);
+        XopDISABLE(&my_xop, xop_peep);
+
+IV
+xop_my_xop ()
+    CODE:
+        RETVAL = PTR2IV(&my_xop);
+    OUTPUT:
+        RETVAL
+
+IV
+xop_ppaddr ()
+    CODE:
+        RETVAL = PTR2IV(pp_xop);
+    OUTPUT:
+        RETVAL
+
+IV
+xop_OA_UNOP ()
+    CODE:
+        RETVAL = OA_UNOP;
+    OUTPUT:
+        RETVAL
+
+AV *
+xop_build_optree ()
+    CODE:
+        dMY_CXT;
+        UNOP *unop;
+        OP *kid;
+
+        MY_CXT.xop_record = newAV();
+
+        kid = newSVOP(OP_CONST, 0, newSViv(42));
+        
+        NewOp(1102, unop, 1, UNOP);
+        unop->op_type       = OP_CUSTOM;
+        unop->op_ppaddr     = pp_xop;
+        unop->op_flags      = OPf_KIDS;
+        unop->op_private    = 0;
+        unop->op_first      = kid;
+        unop->op_next       = NULL;
+        kid->op_next        = (OP*)unop;
+
+        av_push(MY_CXT.xop_record, newSVpvf("unop:%"UVxf, PTR2UV(unop)));
+        av_push(MY_CXT.xop_record, newSVpvf("kid:%"UVxf, PTR2UV(kid)));
+
+        av_push(MY_CXT.xop_record, newSVpvf("NAME:%s", OP_NAME((OP*)unop)));
+        av_push(MY_CXT.xop_record, newSVpvf("DESC:%s", OP_DESC((OP*)unop)));
+        av_push(MY_CXT.xop_record, newSVpvf("CLASS:%d", (int)OP_CLASS((OP*)unop)));
+
+        PL_rpeepp(aTHX_ kid);
+
+        FreeOp(kid);
+        FreeOp(unop);
+
+        RETVAL = MY_CXT.xop_record;
+        MY_CXT.xop_record = NULL;
+    OUTPUT:
+        RETVAL
+
 BOOT:
 {
     MY_CXT_INIT;
@@ -1395,6 +1588,7 @@ void
 CLONE(...)
     CODE:
     MY_CXT_CLONE;
+    PERL_UNUSED_VAR(items);
     MY_CXT.sv = newSVpv("initial_clone",0);
     MY_CXT.cscgv = gv_fetchpvs("XS::APItest::COMPILE_SCOPE_CONTAINER",
         GV_ADDMULTI, SVt_PVAV);
@@ -2469,6 +2663,36 @@ CODE:
 }
 
 
+SV*
+take_svref(SVREF sv)
+CODE:
+    RETVAL = newRV_inc(sv);
+OUTPUT:
+    RETVAL
+
+SV*
+take_avref(AV* av)
+CODE:
+    RETVAL = newRV_inc((SV*)av);
+OUTPUT:
+    RETVAL
+
+SV*
+take_hvref(HV* hv)
+CODE:
+    RETVAL = newRV_inc((SV*)hv);
+OUTPUT:
+    RETVAL
+
+
+SV*
+take_cvref(CV* cv)
+CODE:
+    RETVAL = newRV_inc((SV*)cv);
+OUTPUT:
+    RETVAL
+
+
 BOOT:
 	{
 	HV* stash;
@@ -2497,6 +2721,11 @@ BOOT:
     hintkey_blockasexpr_sv = newSVpvs_share("XS::APItest/blockasexpr");
     hintkey_swaplabel_sv = newSVpvs_share("XS::APItest/swaplabel");
     hintkey_labelconst_sv = newSVpvs_share("XS::APItest/labelconst");
+    hintkey_arrayfullexpr_sv = newSVpvs_share("XS::APItest/arrayfullexpr");
+    hintkey_arraylistexpr_sv = newSVpvs_share("XS::APItest/arraylistexpr");
+    hintkey_arraytermexpr_sv = newSVpvs_share("XS::APItest/arraytermexpr");
+    hintkey_arrayarithexpr_sv = newSVpvs_share("XS::APItest/arrayarithexpr");
+    hintkey_arrayexprflags_sv = newSVpvs_share("XS::APItest/arrayexprflags");
     next_keyword_plugin = PL_keyword_plugin;
     PL_keyword_plugin = my_keyword_plugin;
 }
@@ -2505,6 +2734,7 @@ void
 establish_cleanup(...)
 PROTOTYPE: $
 CODE:
+    PERL_UNUSED_VAR(items);
     croak("establish_cleanup called as a function");
 
 BOOT:
@@ -2517,6 +2747,7 @@ void
 postinc(...)
 PROTOTYPE: $
 CODE:
+    PERL_UNUSED_VAR(items);
     croak("postinc called as a function");
 
 BOOT:
@@ -2524,3 +2755,31 @@ BOOT:
     CV *asscv = get_cv("XS::APItest::postinc", 0);
     cv_set_call_checker(asscv, THX_ck_entersub_postinc, (SV*)asscv);
 }
+
+MODULE = XS::APItest		PACKAGE = XS::APItest::Magic
+
+PROTOTYPES: DISABLE
+
+void
+sv_magic_foo(SV *sv, SV *thingy)
+ALIAS:
+    sv_magic_bar = 1
+CODE:
+    sv_magicext(SvRV(sv), NULL, PERL_MAGIC_ext, ix ? &vtbl_bar : &vtbl_foo, (const char *)thingy, 0);
+
+SV *
+mg_find_foo(SV *sv)
+ALIAS:
+    mg_find_bar = 1
+CODE:
+    MAGIC *mg = mg_findext(SvRV(sv), PERL_MAGIC_ext, ix ? &vtbl_bar : &vtbl_foo);
+    RETVAL = mg ? SvREFCNT_inc((SV *)mg->mg_ptr) : &PL_sv_undef;
+OUTPUT:
+    RETVAL
+
+void
+sv_unmagic_foo(SV *sv)
+ALIAS:
+    sv_unmagic_bar = 1
+CODE:
+    sv_unmagicext(SvRV(sv), PERL_MAGIC_ext, ix ? &vtbl_bar : &vtbl_foo);

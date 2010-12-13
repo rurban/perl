@@ -23,7 +23,7 @@ BEGIN {
 }
 
 
-plan tests => 408;  # Update this when adding/deleting tests.
+plan tests => 411;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -93,7 +93,7 @@ sub run_tests {
         our @XXX = ('ok 1','not ok 1', 'ok 2','not ok 2','not ok 3');
         while ($_ = shift(@XXX)) {
             my $f = index ($_, 'not') >= 0 ? \&nok : \&ok;
-            my $r = ?(.*)?;
+            my $r = m?(.*)?;
             &$f ($r, "?(.*)?");
             /not/ && reset;
             if (/not ok 2/) {
@@ -1072,8 +1072,11 @@ sub run_tests {
 
     }
 
-    {   # Some constructs with Latin1 characters cause a utf8 string not to
-        # match itself in non-utf8
+    SKIP: {   # Some constructs with Latin1 characters cause a utf8 string not
+              # to match itself in non-utf8
+        if ($IS_EBCDIC) {
+            skip "Needs to be customized to run on EBCDIC", 6;
+        }
         my $c = "\xc0";
         my $pattern = my $utf8_pattern = qr/((\xc0)+,?)/;
         utf8::upgrade($utf8_pattern);
@@ -1130,6 +1133,29 @@ sub run_tests {
         iseq( eval q#my $c = 0; my $r; my $t = "a"; $r = $t =~ s/a//until $c++;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by until");
         iseq( eval q#my $r; my $t = "a"; $r = $t =~ s/a//for 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by for");
         iseq( eval q#my $r; my $t = "a"; $r = $t =~ s/a//for 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by foreach");
+    }
+
+    {
+        my $str= "\x{100}";
+        chop $str;
+        my $qr= qr/$str/;
+        iseq( "$qr", "(?^:)", "Empty pattern qr// stringifies to (?^:) with unicode flag enabled - Bug #80212" );
+        $str= "";
+        $qr= qr/$str/;
+        iseq( "$qr", "(?^:)", "Empty pattern qr// stringifies to (?^:) with unicode flag disabled - Bug #80212" )
+
+    }
+
+    {
+        local $TODO = "[perl #38133]";
+
+        "A" =~ /(((?:A))?)+/;
+        my $first = $2;
+
+        "A" =~ /(((A))?)+/;
+        my $second = $2;
+
+        iseq($first, $second);
     }
 
 } # End of sub run_tests

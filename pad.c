@@ -160,6 +160,7 @@ Perl_pad_new(pTHX_ int flags)
 {
     dVAR;
     AV *padlist, *padname, *pad;
+    SV **ary;
 
     ASSERT_CURPAD_LEGAL("pad_new");
 
@@ -209,14 +210,23 @@ Perl_pad_new(pTHX_ int flags)
     }
 
     AvREAL_off(padlist);
-    av_store(padlist, 0, MUTABLE_SV(padname));
-    av_store(padlist, 1, MUTABLE_SV(pad));
+    /* Most subroutines never recurse, hence only need 2 entries in the padlist
+       array - names, and depth=1.  The default for av_store() is to allocate
+       0..3, and even an explicit call to av_extend() with <3 will be rounded
+       up, so we inline the allocation of the array here.  */
+    Newx(ary, 2, SV*);
+    AvFILLp(padlist) = 1;
+    AvMAX(padlist) = 1;
+    AvALLOC(padlist) = ary;
+    AvARRAY(padlist) = ary;
+    ary[0] = MUTABLE_SV(padname);
+    ary[1] = MUTABLE_SV(pad);
 
     /* ... then update state variables */
 
-    PL_comppad_name	= MUTABLE_AV((*av_fetch(padlist, 0, FALSE)));
-    PL_comppad		= MUTABLE_AV((*av_fetch(padlist, 1, FALSE)));
-    PL_curpad		= AvARRAY(PL_comppad);
+    PL_comppad_name	= padname;
+    PL_comppad		= pad;
+    PL_curpad		= AvARRAY(pad);
 
     if (! (flags & padnew_CLONE)) {
 	PL_comppad_name_fill = 0;
@@ -236,108 +246,161 @@ Perl_pad_new(pTHX_ int flags)
     return (PADLIST*)padlist;
 }
 
+
 /*
-=for apidoc pad_undef
+=head1 Embedding Functions
 
-Free the padlist associated with a CV.
-If parts of it happen to be current, we null the relevant
-PL_*pad* global vars so that we don't have any dangling references left.
-We also repoint the CvOUTSIDE of any about-to-be-orphaned
-inner subs to the outer of this cv.
+=for apidoc cv_undef
 
-(This function should really be called pad_free, but the name was already
-taken)
+Clear out all the active components of a CV. This can happen either
+by an explicit C<undef &foo>, or by the reference count going to zero.
+In the former case, we keep the CvOUTSIDE pointer, so that any anonymous
+children can still follow the full lexical scope chain.
 
 =cut
 */
 
 void
-Perl_pad_undef(pTHX_ CV* cv)
+Perl_cv_undef(pTHX_ CV *cv)
 {
     dVAR;
-    I32 ix;
-    const PADLIST * const padlist = CvPADLIST(cv);
+    const PADLIST *padlist = CvPADLIST(cv);
 
-    PERL_ARGS_ASSERT_PAD_UNDEF;
-
-    pad_peg("pad_undef");
-    if (!padlist)
-	return;
-    if (SvIS_FREED(padlist)) /* may be during global destruction */
-	return;
+    PERL_ARGS_ASSERT_CV_UNDEF;
 
     DEBUG_X(PerlIO_printf(Perl_debug_log,
-	  "Pad undef: cv=0x%"UVxf" padlist=0x%"UVxf" comppad=0x%"UVxf"\n",
-	    PTR2UV(cv), PTR2UV(padlist), PTR2UV(PL_comppad))
+	  "CV undef: cv=0x%"UVxf" comppad=0x%"UVxf"\n",
+	    PTR2UV(cv), PTR2UV(PL_comppad))
     );
 
-    /* detach any '&' anon children in the pad; if afterwards they
-     * are still live, fix up their CvOUTSIDEs to point to our outside,
-     * bypassing us. */
-    /* XXX DAPM for efficiency, we should only do this if we know we have
-     * children, or integrate this loop with general cleanup */
+#ifdef USE_ITHREADS
+    if (CvFILE(cv) && !CvISXSUB(cv)) {
+	/* for XSUBs CvFILE point directly to static memory; __FILE__ */
+	Safefree(CvFILE(cv));
+    }
+    CvFILE(cv) = NULL;
+#endif
 
-    if (!PL_dirty) { /* don't bother during global destruction */
-	CV * const outercv = CvOUTSIDE(cv);
-        const U32 seq = CvOUTSIDE_SEQ(cv);
-	AV *  const comppad_name = MUTABLE_AV(AvARRAY(padlist)[0]);
-	SV ** const namepad = AvARRAY(comppad_name);
-	AV *  const comppad = MUTABLE_AV(AvARRAY(padlist)[1]);
-	SV ** const curpad = AvARRAY(comppad);
-	for (ix = AvFILLp(comppad_name); ix > 0; ix--) {
-	    SV * const namesv = namepad[ix];
-	    if (namesv && namesv != &PL_sv_undef
-		&& *SvPVX_const(namesv) == '&')
-	    {
-		CV * const innercv = MUTABLE_CV(curpad[ix]);
-		U32 inner_rc = SvREFCNT(innercv);
-		assert(inner_rc);
-		namepad[ix] = NULL;
-		SvREFCNT_dec(namesv);
+    if (!CvISXSUB(cv) && CvROOT(cv)) {
+	if (SvTYPE(cv) == SVt_PVCV && CvDEPTH(cv))
+	    Perl_croak(aTHX_ "Can't undef active subroutine");
+	ENTER;
 
-		if (SvREFCNT(comppad) < 2) { /* allow for /(?{ sub{} })/  */
-		    curpad[ix] = NULL;
-		    SvREFCNT_dec(innercv);
-		    inner_rc--;
-		}
+	PAD_SAVE_SETNULLPAD();
 
-		/* in use, not just a prototype */
-		if (inner_rc && (CvOUTSIDE(innercv) == cv)) {
-		    assert(CvWEAKOUTSIDE(innercv));
-		    /* don't relink to grandfather if he's being freed */
-		    if (outercv && SvREFCNT(outercv)) {
-			CvWEAKOUTSIDE_off(innercv);
-			CvOUTSIDE(innercv) = outercv;
-			CvOUTSIDE_SEQ(innercv) = seq;
-			SvREFCNT_inc_simple_void_NN(outercv);
+	op_free(CvROOT(cv));
+	CvROOT(cv) = NULL;
+	CvSTART(cv) = NULL;
+	LEAVE;
+    }
+    SvPOK_off(MUTABLE_SV(cv));		/* forget prototype */
+    CvGV_set(cv, NULL);
+
+    /* This statement and the subsequence if block was pad_undef().  */
+    pad_peg("pad_undef");
+
+    if (padlist && !SvIS_FREED(padlist) /* may be during global destruction */
+	) {
+	I32 ix;
+
+	/* Free the padlist associated with a CV.
+	   If parts of it happen to be current, we null the relevant PL_*pad*
+	   global vars so that we don't have any dangling references left.
+	   We also repoint the CvOUTSIDE of any about-to-be-orphaned inner
+	   subs to the outer of this cv.  */
+
+	DEBUG_X(PerlIO_printf(Perl_debug_log,
+			      "Pad undef: cv=0x%"UVxf" padlist=0x%"UVxf" comppad=0x%"UVxf"\n",
+			      PTR2UV(cv), PTR2UV(padlist), PTR2UV(PL_comppad))
+		);
+
+	/* detach any '&' anon children in the pad; if afterwards they
+	 * are still live, fix up their CvOUTSIDEs to point to our outside,
+	 * bypassing us. */
+	/* XXX DAPM for efficiency, we should only do this if we know we have
+	 * children, or integrate this loop with general cleanup */
+
+	if (PL_phase != PERL_PHASE_DESTRUCT) { /* don't bother during global destruction */
+	    CV * const outercv = CvOUTSIDE(cv);
+	    const U32 seq = CvOUTSIDE_SEQ(cv);
+	    AV *  const comppad_name = MUTABLE_AV(AvARRAY(padlist)[0]);
+	    SV ** const namepad = AvARRAY(comppad_name);
+	    AV *  const comppad = MUTABLE_AV(AvARRAY(padlist)[1]);
+	    SV ** const curpad = AvARRAY(comppad);
+	    for (ix = AvFILLp(comppad_name); ix > 0; ix--) {
+		SV * const namesv = namepad[ix];
+		if (namesv && namesv != &PL_sv_undef
+		    && *SvPVX_const(namesv) == '&')
+		    {
+			CV * const innercv = MUTABLE_CV(curpad[ix]);
+			U32 inner_rc = SvREFCNT(innercv);
+			assert(inner_rc);
+			namepad[ix] = NULL;
+			SvREFCNT_dec(namesv);
+
+			if (SvREFCNT(comppad) < 2) { /* allow for /(?{ sub{} })/  */
+			    curpad[ix] = NULL;
+			    SvREFCNT_dec(innercv);
+			    inner_rc--;
+			}
+
+			/* in use, not just a prototype */
+			if (inner_rc && (CvOUTSIDE(innercv) == cv)) {
+			    assert(CvWEAKOUTSIDE(innercv));
+			    /* don't relink to grandfather if he's being freed */
+			    if (outercv && SvREFCNT(outercv)) {
+				CvWEAKOUTSIDE_off(innercv);
+				CvOUTSIDE(innercv) = outercv;
+				CvOUTSIDE_SEQ(innercv) = seq;
+				SvREFCNT_inc_simple_void_NN(outercv);
+			    }
+			    else {
+				CvOUTSIDE(innercv) = NULL;
+			    }
+			}
 		    }
-		    else {
-			CvOUTSIDE(innercv) = NULL;
-		    }
-		}
 	    }
 	}
-    }
 
-    ix = AvFILLp(padlist);
-    while (ix >= 0) {
-	SV* const sv = AvARRAY(padlist)[ix--];
-	if (sv) {
+	ix = AvFILLp(padlist);
+	while (ix > 0) {
+	    SV* const sv = AvARRAY(padlist)[ix--];
+	    if (sv) {
+		if (sv == (const SV *)PL_comppad) {
+		    PL_comppad = NULL;
+		    PL_curpad = NULL;
+		}
+		SvREFCNT_dec(sv);
+	    }
+	}
+	{
+	    SV *const sv = AvARRAY(padlist)[0];
 	    if (sv == (const SV *)PL_comppad_name)
 		PL_comppad_name = NULL;
-	    else if (sv == (const SV *)PL_comppad) {
-		PL_comppad = NULL;
-		PL_curpad = NULL;
-	    }
+	    SvREFCNT_dec(sv);
 	}
-	SvREFCNT_dec(sv);
+	SvREFCNT_dec(MUTABLE_SV(CvPADLIST(cv)));
+	CvPADLIST(cv) = NULL;
     }
-    SvREFCNT_dec(MUTABLE_SV(CvPADLIST(cv)));
-    CvPADLIST(cv) = NULL;
+
+
+    /* remove CvOUTSIDE unless this is an undef rather than a free */
+    if (!SvREFCNT(cv) && CvOUTSIDE(cv)) {
+	if (!CvWEAKOUTSIDE(cv))
+	    SvREFCNT_dec(CvOUTSIDE(cv));
+	CvOUTSIDE(cv) = NULL;
+    }
+    if (CvCONST(cv)) {
+	SvREFCNT_dec(MUTABLE_SV(CvXSUBANY(cv).any_ptr));
+	CvCONST_off(cv);
+    }
+    if (CvISXSUB(cv) && CvXSUB(cv)) {
+	CvXSUB(cv) = NULL;
+    }
+    /* delete all flags except WEAKOUTSIDE and CVGV_RC, which indicate the
+     * ref status of CvOUTSIDE and CvGV */
+    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC);
 }
-
-
-
 
 static PADOFFSET
 S_pad_add_name_sv(pTHX_ SV *namesv, const U32 flags, HV *typestash,
@@ -603,7 +666,7 @@ S_pad_check_dup(pTHX_ SV *name, const U32 flags, const HV *ourstash)
     }
     /* check the rest of the pad */
     if (is_our) {
-	do {
+	while (off > 0) {
 	    SV * const sv = svp[off];
 	    if (sv
 		&& sv != &PL_sv_undef
@@ -619,7 +682,8 @@ S_pad_check_dup(pTHX_ SV *name, const U32 flags, const HV *ourstash)
 			"\t(Did you mean \"local\" instead of \"our\"?)\n");
 		break;
 	    }
-	} while ( off-- > 0 );
+	    --off;
+	}
     }
 }
 
@@ -1386,11 +1450,6 @@ Perl_pad_free(pTHX_ PADOFFSET po)
 
     if (PL_curpad[po] && PL_curpad[po] != &PL_sv_undef) {
 	SvPADTMP_off(PL_curpad[po]);
-#ifdef USE_ITHREADS
-	/* SV could be a shared hash key (eg bugid #19022) */
-	if (!SvIsCOW(PL_curpad[po]))
-	    SvREADONLY_off(PL_curpad[po]);	/* could be a freed constant */
-#endif
     }
     if ((I32)po < PL_padix)
 	PL_padix = po - 1;
@@ -1587,7 +1646,7 @@ Perl_cv_clone(pTHX_ CV *proto)
     CvPADLIST(cv) = pad_new(padnew_CLONE|padnew_SAVE);
 
     av_fill(PL_comppad, fpad);
-    for (ix = fname; ix >= 0; ix--)
+    for (ix = fname; ix > 0; ix--)
 	av_store(PL_comppad_name, ix, SvREFCNT_inc(pname[ix]));
 
     PL_curpad = AvARRAY(PL_comppad);

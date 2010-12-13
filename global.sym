@@ -70,6 +70,8 @@ Perl_croak_sv
 Perl_croak_xs_usage
 Perl_custom_op_desc
 Perl_custom_op_name
+Perl_custom_op_register
+Perl_custom_op_xop
 Perl_cv_const_sv
 Perl_cv_get_call_checker
 Perl_cv_set_call_checker
@@ -126,6 +128,7 @@ Perl_find_runcv
 Perl_find_rundefsv
 Perl_find_rundefsvoffset
 Perl_foldEQ
+Perl_foldEQ_latin1
 Perl_foldEQ_locale
 Perl_foldEQ_utf8
 Perl_form
@@ -217,7 +220,7 @@ Perl_hv_scalar
 Perl_hv_store
 Perl_hv_store_ent
 Perl_hv_store_flags
-Perl_hv_undef
+Perl_hv_undef_flags
 Perl_init_i18nl10n
 Perl_init_i18nl14n
 Perl_init_stacks
@@ -308,6 +311,7 @@ Perl_mfree
 Perl_mg_clear
 Perl_mg_copy
 Perl_mg_find
+Perl_mg_findext
 Perl_mg_free
 Perl_mg_free_type
 Perl_mg_get
@@ -316,6 +320,7 @@ Perl_mg_magical
 Perl_mg_set
 Perl_mg_size
 Perl_mini_mktime
+Perl_mod
 Perl_moreswitches
 Perl_mro_get_from_name
 Perl_mro_get_linear_isa
@@ -426,11 +431,15 @@ Perl_pack_cat
 Perl_packlist
 Perl_pad_findmy
 Perl_pad_push
+Perl_parse_arithexpr
 Perl_parse_barestmt
 Perl_parse_block
+Perl_parse_fullexpr
 Perl_parse_fullstmt
 Perl_parse_label
+Perl_parse_listexpr
 Perl_parse_stmtseq
+Perl_parse_termexpr
 perl_alloc
 perl_construct
 perl_destruct
@@ -611,6 +620,7 @@ Perl_sv_cmp_flags
 Perl_sv_cmp_locale
 Perl_sv_cmp_locale_flags
 Perl_sv_compile_2op
+Perl_sv_compile_2op_is_broken
 Perl_sv_copypv
 Perl_sv_dec
 Perl_sv_dec_nomg
@@ -691,6 +701,7 @@ Perl_sv_tainted
 Perl_sv_true
 Perl_sv_uni_display
 Perl_sv_unmagic
+Perl_sv_unmagicext
 Perl_sv_unref
 Perl_sv_unref_flags
 Perl_sv_untaint

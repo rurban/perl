@@ -145,6 +145,7 @@ Deprecated.  Use C<GIMME_V> instead.
 				    operand of a logical or conditional
 				    that was optimised away, so it should
 				    not be bound via =~ */
+				/*  On OP_CONST, from a constant CV */
 
 /* old names; don't use in new code, but don't break them, either */
 #define OPf_LIST	OPf_WANT_LIST
@@ -759,6 +760,100 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define RV2CVOPCV_MARK_EARLY     0x00000001
 #define RV2CVOPCV_RETURN_NAME_GV 0x00000002
+
+/*
+=head1 Custom Operators
+
+=for apidoc Am|U32|XopFLAGS|XOP *xop
+Return the XOP's flags.
+
+=for apidoc Am||XopENTRY|XOP *xop|which
+Return a member of the XOP structure. I<which> is a cpp token indicating
+which entry to return. If the member is not set this will return a
+default value. The return type depends on I<which>.
+
+=for apidoc Am|void|XopENTRY_set|XOP *xop|which|value
+Set a member of the XOP structure. I<which> is a cpp token indicating
+which entry to set. See L<perlguts/"Custom Operators"> for details about
+the available members and how they are used.
+
+=for apidoc Am|void|XopDISABLE|XOP *xop|which
+Temporarily disable a member of the XOP, by clearing the appropriate flag.
+
+=for apidoc Am|void|XopENABLE|XOP *xop|which
+Reenable a member of the XOP which has been disabled.
+
+=cut
+*/
+
+struct custom_op {
+    U32		    xop_flags;    
+    const char	   *xop_name;
+    const char	   *xop_desc;
+    U32		    xop_class;
+    void	  (*xop_peep)(pTHX_ OP *o, OP *oldop);
+};
+
+#define XopFLAGS(xop) ((xop)->xop_flags)
+
+#define XOPf_xop_name	0x01
+#define XOPf_xop_desc	0x02
+#define XOPf_xop_class	0x04
+#define XOPf_xop_peep	0x08
+
+#define XOPd_xop_name	PL_op_name[OP_CUSTOM]
+#define XOPd_xop_desc	PL_op_desc[OP_CUSTOM]
+#define XOPd_xop_class	OA_BASEOP
+#define XOPd_xop_peep	((Perl_cpeep_t)0)
+
+#define XopENTRY_set(xop, which, to) \
+    STMT_START { \
+	(xop)->which = (to); \
+	(xop)->xop_flags |= XOPf_ ## which; \
+    } STMT_END
+
+#define XopENTRY(xop, which) \
+    ((XopFLAGS(xop) & XOPf_ ## which) ? (xop)->which : XOPd_ ## which)
+
+#define XopDISABLE(xop, which) ((xop)->xop_flags &= ~XOPf_ ## which)
+#define XopENABLE(xop, which) \
+    STMT_START { \
+	(xop)->xop_flags |= XOPf_ ## which; \
+	assert(XopENTRY(xop, which)); \
+    } STMT_END
+
+/*
+=head1 Optree Manipulation Functions
+
+=for apidoc Am|const char *|OP_NAME|OP *o
+Return the name of the provided OP. For core ops this looks up the name
+from the op_type; for custom ops from the op_ppaddr.
+
+=for apidoc Am|const char *|OP_DESC|OP *o
+Return a short description of the provided OP.
+
+=for apidoc Am|U32|OP_CLASS|OP *o
+Return the class of the provided OP: that is, which of the *OP
+structures it uses. For core ops this currently gets the information out
+of PL_opargs, which does not always accurately reflect the type used.
+For custom ops the type is returned from the registration, and it is up
+to the registree to ensure it is accurate. The value returned will be
+one of the OA_* constants from op.h.
+
+=cut
+*/
+
+#define OP_NAME(o) ((o)->op_type == OP_CUSTOM \
+		    ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_name) \
+		    : PL_op_name[(o)->op_type])
+#define OP_DESC(o) ((o)->op_type == OP_CUSTOM \
+		    ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_desc) \
+		    : PL_op_desc[(o)->op_type])
+#define OP_CLASS(o) ((o)->op_type == OP_CUSTOM \
+		     ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_class) \
+		     : (PL_opargs[(o)->op_type] & OA_CLASS_MASK))
+
+#define newSUB(f, o, p, b)	Perl_newATTRSUB(aTHX_ (f), (o), (p), NULL, (b))
 
 #ifdef PERL_MAD
 #  define MAD_NULL 1

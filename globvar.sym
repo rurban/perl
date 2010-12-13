@@ -7,6 +7,7 @@ bincompat_options
 block_type
 check
 fold
+fold_latin1
 fold_locale
 freq
 keyword_plugin
@@ -27,6 +28,7 @@ no_wrongref
 op_desc
 op_name
 opargs
+phase_names
 ppaddr
 regkind
 reg_name

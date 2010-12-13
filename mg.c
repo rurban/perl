@@ -416,6 +416,26 @@ Perl_mg_clear(pTHX_ SV *sv)
     return 0;
 }
 
+MAGIC*
+S_mg_findext_flags(pTHX_ const SV *sv, int type, const MGVTBL *vtbl, U32 flags)
+{
+    PERL_UNUSED_CONTEXT;
+
+    assert(flags <= 1);
+
+    if (sv) {
+	MAGIC *mg;
+
+	for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
+	    if (mg->mg_type == type && (!flags || mg->mg_virtual == vtbl)) {
+		return mg;
+	    }
+	}
+    }
+
+    return NULL;
+}
+
 /*
 =for apidoc mg_find
 
@@ -427,15 +447,22 @@ Finds the magic pointer for type matching the SV.  See C<sv_magic>.
 MAGIC*
 Perl_mg_find(pTHX_ const SV *sv, int type)
 {
-    PERL_UNUSED_CONTEXT;
-    if (sv) {
-        MAGIC *mg;
-        for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
-            if (mg->mg_type == type)
-                return mg;
-        }
-    }
-    return NULL;
+    return S_mg_findext_flags(aTHX_ sv, type, NULL, 0);
+}
+
+/*
+=for apidoc mg_findext
+
+Finds the magic pointer of C<type> with the given C<vtbl> for the C<SV>.  See
+C<sv_magicext>.
+
+=cut
+*/
+
+MAGIC*
+Perl_mg_findext(pTHX_ const SV *sv, int type, const MGVTBL *vtbl)
+{
+    return S_mg_findext_flags(aTHX_ sv, type, vtbl, 1);
 }
 
 /*
@@ -809,6 +836,8 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
     switch (*mg->mg_ptr) {
     case '\001':		/* ^A */
 	sv_setsv(sv, PL_bodytarget);
+	if (SvTAINTED(PL_bodytarget))
+	    SvTAINTED_on(sv);
 	break;
     case '\003':		/* ^C, ^CHILD_ERROR_NATIVE */
 	if (nextchar == '\0') {
@@ -877,6 +906,12 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
     case '\006':		/* ^F */
 	sv_setiv(sv, (IV)PL_maxsysfd);
 	break;
+    case '\007':		/* ^GLOBAL_PHASE */
+	if (strEQ(remaining, "LOBAL_PHASE")) {
+	    sv_setpvn(sv, PL_phase_names[PL_phase],
+		      strlen(PL_phase_names[PL_phase]));
+	}
+	break;
     case '\010':		/* ^H */
 	sv_setiv(sv, (IV)PL_hints);
 	break;
@@ -892,7 +927,7 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
 	    Perl_emulate_cop_io(aTHX_ &PL_compiling, sv);
 	}
 	break;
-    case '\020':		
+    case '\020':
 	if (nextchar == '\0') {       /* ^P */
 	    sv_setiv(sv, (IV)PL_perldb);
 	} else if (strEQ(remaining, "REMATCH")) { /* $^PREMATCH */
@@ -1174,7 +1209,6 @@ Perl_magic_setenv(pTHX_ SV *sv, MAGIC *mg)
 #ifdef VMS
 	if (s && klen == 8 && strEQ(ptr, "DCL$PATH")) {
 	    char pathbuf[256], eltbuf[256], *cp, *elt;
-	    Stat_t sbuf;
 	    int i = 0, j = 0;
 
 	    my_strlcpy(eltbuf, s, sizeof(eltbuf));
@@ -1611,23 +1645,29 @@ Perl_magic_clearisa(pTHX_ SV *sv, MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_CLEARISA;
 
     /* Bail out if destruction is going on */
-    if(PL_dirty) return 0;
+    if(PL_phase == PERL_PHASE_DESTRUCT) return 0;
 
     if (sv)
 	av_clear(MUTABLE_AV(sv));
 
-    /* XXX Once it's possible, we need to
-       detect that our @ISA is aliased in
-       other stashes, and act on the stashes
-       of all of the aliases */
+    if (SvTYPE(mg->mg_obj) != SVt_PVGV && SvSMAGICAL(mg->mg_obj))
+	/* This occurs with setisa_elem magic, which calls this
+	   same function. */
+	mg = mg_find(mg->mg_obj, PERL_MAGIC_isa);
 
-    /* The first case occurs via setisa,
-       the second via setisa_elem, which
-       calls this same magic */
+    if (SvTYPE(mg->mg_obj) == SVt_PVAV) { /* multiple stashes */
+	SV **svp = AvARRAY((AV *)mg->mg_obj);
+	I32 items = AvFILLp((AV *)mg->mg_obj) + 1;
+	while (items--) {
+	    stash = GvSTASH((GV *)*svp++);
+	    if (stash && HvENAME(stash)) mro_isa_changed_in(stash);
+	}
+
+	return 0;
+    }
+
     stash = GvSTASH(
-        SvTYPE(mg->mg_obj) == SVt_PVGV
-            ? (const GV *)mg->mg_obj
-            : (const GV *)mg_find(mg->mg_obj, PERL_MAGIC_isa)->mg_obj
+        (const GV *)mg->mg_obj
     );
 
     /* The stash may have been detached from the symbol table, so check its
@@ -2383,6 +2423,7 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
     const char * const remaining = mg->mg_ptr + 1;
     I32 i;
     STRLEN len;
+    MAGIC *tmg;
 
     PERL_ARGS_ASSERT_MAGIC_SET;
 
@@ -2419,6 +2460,13 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
         break;
     case '\001':	/* ^A */
 	sv_setsv(PL_bodytarget, sv);
+	/* mg_set() has temporarily made sv non-magical */
+	if (PL_tainting) {
+	    if ((tmg = mg_find(sv,PERL_MAGIC_taint)) && tmg->mg_len & 1)
+		SvTAINTED_on(PL_bodytarget);
+	    else
+		SvTAINTED_off(PL_bodytarget);
+	}
 	break;
     case '\003':	/* ^C */
 	PL_minus_c = cBOOL(SvIV(sv));

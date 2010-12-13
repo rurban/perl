@@ -505,7 +505,8 @@ Abmd	|HE*	|hv_store_ent	|NULLOK HV *hv|NULLOK SV *key|NULLOK SV *val\
 				|U32 hash
 AbmM	|SV**	|hv_store_flags	|NULLOK HV *hv|NULLOK const char *key \
 				|I32 klen|NULLOK SV *val|U32 hash|int flags
-Apd	|void	|hv_undef	|NULLOK HV *hv
+Amd	|void	|hv_undef	|NULLOK HV *hv
+poX	|void	|hv_undef_flags	|NULLOK HV *hv|U32 flags
 Am	|I32	|ibcmp		|NN const char* a|NN const char* b|I32 len
 AnpP	|I32	|foldEQ		|NN const char* a|NN const char* b|I32 len
 Am	|I32	|ibcmp_locale	|NN const char* a|NN const char* b|I32 len
@@ -516,6 +517,7 @@ Am	|I32	|ibcmp_utf8	|NN const char *s1|NULLOK char **pe1|UV l1 \
 Apd	|I32	|foldEQ_utf8	|NN const char *s1|NULLOK char **pe1|UV l1 \
 				|bool u1|NN const char *s2|NULLOK char **pe2 \
 				|UV l2|bool u2
+AnpP	|I32	|foldEQ_latin1	|NN const char* a|NN const char* b|I32 len
 #if defined(PERL_IN_DOIO_C)
 sR	|bool	|ingroup	|Gid_t testgid|bool effective
 #endif
@@ -625,6 +627,10 @@ AMpd	|I32	|lex_peek_unichar|U32 flags
 AMpd	|I32	|lex_read_unichar|U32 flags
 AMpd	|void	|lex_read_space	|U32 flags
 : Public parser API
+AMpd	|OP*	|parse_arithexpr|U32 flags
+AMpd	|OP*	|parse_termexpr	|U32 flags
+AMpd	|OP*	|parse_listexpr	|U32 flags
+AMpd	|OP*	|parse_fullexpr	|U32 flags
 AMpd	|OP*	|parse_block	|U32 flags
 AMpd	|OP*	|parse_barestmt	|U32 flags
 AMpd	|SV*	|parse_label	|U32 flags
@@ -725,6 +731,7 @@ Apd	|int	|mg_copy	|NN SV *sv|NN SV *nsv|NULLOK const char *key \
 : Defined in mg.c, used only in scope.c
 pd	|void	|mg_localize	|NN SV* sv|NN SV* nsv|bool setmagic
 ApdR	|MAGIC*	|mg_find	|NULLOK const SV* sv|int type
+ApdR	|MAGIC*	|mg_findext	|NULLOK const SV* sv|int type|NULLOK const MGVTBL *vtbl
 Apd	|int	|mg_free	|NN SV* sv
 Apd	|void	|mg_free_type	|NN SV* sv|int how
 Apd	|int	|mg_get		|NN SV* sv
@@ -734,6 +741,8 @@ Apd	|int	|mg_set		|NN SV* sv
 Ap	|I32	|mg_size	|NN SV* sv
 Ap	|void	|mini_mktime	|NN struct tm *ptm
 AMpd	|OP*	|op_lvalue	|NULLOK OP* o|I32 type
+: To be removed after 5.14 (see [perl #78908]):
+EXp	|OP*	|mod		|NULLOK OP* o|I32 type
 : Used in op.c and pp_sys.c
 p	|int	|mode_from_discipline|NULLOK const char* s|STRLEN len
 Ap	|const char*	|moreswitches	|NN const char* s
@@ -794,7 +803,8 @@ Ap	|void	|newPROG	|NN OP* o
 Apda	|OP*	|newRANGE	|I32 flags|NN OP* left|NN OP* right
 Apda	|OP*	|newSLICEOP	|I32 flags|NULLOK OP* subscript|NULLOK OP* listop
 Apda	|OP*	|newSTATEOP	|I32 flags|NULLOK char* label|NULLOK OP* o
-Ap	|CV*	|newSUB		|I32 floor|NULLOK OP* o|NULLOK OP* proto|NULLOK OP* block
+Abm	|CV*	|newSUB		|I32 floor|NULLOK OP* o|NULLOK OP* proto \
+				|NULLOK OP* block
 ApM	|CV *	|newXS_flags	|NULLOK const char *name|NN XSUBADDR_t subaddr\
 				|NN const char *const filename \
 				|NULLOK const char *const proto|U32 flags
@@ -1172,7 +1182,12 @@ Apd	|I32	|sv_cmp_locale_flags	|NULLOK SV *const sv1 \
 Amd	|char*	|sv_collxfrm	|NN SV *const sv|NN STRLEN *const nxp
 Apd	|char*	|sv_collxfrm_flags	|NN SV *const sv|NN STRLEN *const nxp|I32 const flags
 #endif
-Ap	|OP*	|sv_compile_2op	|NN SV *sv|NN OP **startop \
+: Frustratingly, because regcomp.c is also compiled as ext/re/re_comp.c,
+: anything it needs has to be exported. So this has to be X. I'd rather it
+: wasn't.
+Xpo	|OP*	|sv_compile_2op_is_broken|NN SV *sv|NN OP **startop \
+				|NN const char *code|NN PAD **padp
+ApD	|OP*	|sv_compile_2op	|NN SV *sv|NN OP **startop \
 				|NN const char *code|NN PAD **padp
 Apd	|int	|getcwd_sv	|NN SV* sv
 Apd	|void	|sv_dec		|NULLOK SV *const sv
@@ -1243,6 +1258,7 @@ Amdb	|void	|sv_setsv	|NN SV *dstr|NULLOK SV *sstr
 Amdb	|void	|sv_taint	|NN SV* sv
 ApdR	|bool	|sv_tainted	|NN SV *const sv
 Apd	|int	|sv_unmagic	|NN SV *const sv|const int type
+Apd	|int	|sv_unmagicext	|NN SV *const sv|const int type|NULLOK MGVTBL *vtbl
 Apdmb	|void	|sv_unref	|NN SV* sv
 Apd	|void	|sv_unref_flags	|NN SV *const ref|const U32 flags
 Apd	|void	|sv_untaint	|NN SV *const sv
@@ -1489,8 +1505,11 @@ Ap	|void	|sys_intern_clear
 Ap	|void	|sys_intern_init
 #endif
 
+AopP	|const XOP *	|custom_op_xop	|NN const OP *o
 ApR	|const char *	|custom_op_name	|NN const OP *o
 ApR	|const char *	|custom_op_desc	|NN const OP *o
+Aop	|void	|custom_op_register	|NN Perl_ppaddr_t ppaddr \
+			|NN const XOP *xop
 
 Adp	|void	|sv_nosharing	|NULLOK SV *sv
 Adpbm	|void	|sv_nolocking	|NULLOK SV *sv
@@ -2053,8 +2072,6 @@ s	|void	|deb_stack_n	|NN SV** stack_base|I32 stack_min \
 : Used in perl.c, pp_ctl.c, toke.c
 pda	|PADLIST*|pad_new	|int flags
 : Only used in op.c
-pd	|void	|pad_undef	|NN CV* cv
-: Only used in op.c
 Mpd	|PADOFFSET|pad_add_name	|NN const char *name|const STRLEN len\
 				|const U32 flags|NULLOK HV *typestash\
 				|NULLOK HV *ourstash
@@ -2115,8 +2132,10 @@ ApoR	|HE**	|hv_eiter_p	|NN HV *hv
 Apo	|void	|hv_riter_set	|NN HV *hv|I32 riter
 Apo	|void	|hv_eiter_set	|NN HV *hv|NULLOK HE *eiter
 Ap	|void	|hv_name_set	|NN HV *hv|NULLOK const char *name|U32 len|U32 flags
-p	|void	|hv_ename_add	|NN HV *hv|NN const char *name|U32 len
-p	|void	|hv_ename_delete|NN HV *hv|NN const char *name|U32 len
+p	|void	|hv_ename_add	|NN HV *hv|NN const char *name|U32 len \
+				|U32 flags
+p	|void	|hv_ename_delete|NN HV *hv|NN const char *name|U32 len \
+				|U32 flags
 : Used in dump.c and hv.c
 poM	|AV**	|hv_backreferences_p	|NN HV *hv
 #if defined(PERL_IN_DUMP_C) || defined(PERL_IN_HV_C) || defined(PERL_IN_SV_C)
@@ -2366,12 +2385,12 @@ s	|void	|mro_gather_and_rename|NN HV * const stashes \
 				      |NN HV * const seen_stashes \
 				      |NULLOK HV *stash \
 				      |NULLOK HV *oldstash \
-				      |NN const char *name|I32 namlen
+				      |NN SV *namesv
 #endif
 : Used in hv.c, mg.c, pp.c, sv.c
 pd	|void   |mro_isa_changed_in|NN HV* stash
 Apd	|void	|mro_method_changed_in	|NN HV* stash
-pdx	|void	|mro_package_moved	|NULLOK HV * const stash|NULLOK HV * const oldstash|NULLOK const GV *gv|NULLOK const char *newname|I32 newname_len
+pdx	|void	|mro_package_moved	|NULLOK HV * const stash|NULLOK HV * const oldstash|NN const GV * const gv|U32 flags
 : Only used in perl.c
 p	|void   |boot_core_mro
 Apon	|void	|sys_init	|NN int* argc|NN char*** argv

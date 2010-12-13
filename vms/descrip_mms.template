@@ -367,7 +367,7 @@ utils1 = [.lib.pods]perldoc.com [.lib.ExtUtils]Miniperl.pm [.utils]c2ph.com [.ut
 utils2 = [.utils]h2xs.com [.utils]libnetcfg.com [.lib]perlbug.com [.utils]dprofpp.com 
 utils3 = [.utils]perlivp.com [.lib]splain.com [.utils]pl2pm.com [.utils]xsubpp.com [.utils]instmodsh.com
 utils4 = [.utils]enc2xs.com [.utils]piconv.com [.utils]cpan.com [.utils]prove.com [.utils]ptar.com [.utils]ptardiff.com [.utils]shasum.com
-utils5 = [.utils]corelist.com [.utils]config_data.com [.utils]cpanp.com [.utils]cpan2dist.com [.utils]cpanp-run-perl.com
+utils5 = [.utils]corelist.com [.utils]config_data.com [.utils]cpanp.com [.utils]cpan2dist.com [.utils]cpanp-run-perl.com [.utils]ptargrep.com
 
 .ifdef NOX2P
 all : base extras archcorefiles preplibrary [.pod]perltoc.pod
@@ -403,14 +403,14 @@ pod0 = [.lib.pods]perl.pod [.lib.pods]perl5004delta.pod [.lib.pods]perl5005delta
 pod1 = [.lib.pods]perl5110delta.pod [.lib.pods]perl5111delta.pod [.lib.pods]perl5112delta.pod [.lib.pods]perl5113delta.pod [.lib.pods]perl5114delta.pod
 pod2 = [.lib.pods]perl5115delta.pod [.lib.pods]perl5120delta.pod [.lib.pods]perl5121delta.pod [.lib.pods]perl5122delta.pod [.lib.pods]perl5130delta.pod
 pod3 = [.lib.pods]perl5131delta.pod [.lib.pods]perl5132delta.pod [.lib.pods]perl5133delta.pod [.lib.pods]perl5134delta.pod [.lib.pods]perl5135delta.pod
-pod4 = [.lib.pods]perl5136delta.pod [.lib.pods]perl5137delta.pod [.lib.pods]perl561delta.pod [.lib.pods]perl56delta.pod [.lib.pods]perl570delta.pod
-pod5 = [.lib.pods]perl571delta.pod [.lib.pods]perl572delta.pod [.lib.pods]perl573delta.pod [.lib.pods]perl581delta.pod [.lib.pods]perl582delta.pod
-pod6 = [.lib.pods]perl583delta.pod [.lib.pods]perl584delta.pod [.lib.pods]perl585delta.pod [.lib.pods]perl586delta.pod [.lib.pods]perl587delta.pod
-pod7 = [.lib.pods]perl588delta.pod [.lib.pods]perl589delta.pod [.lib.pods]perl58delta.pod [.lib.pods]perl590delta.pod [.lib.pods]perl591delta.pod
-pod8 = [.lib.pods]perl592delta.pod [.lib.pods]perl593delta.pod [.lib.pods]perl594delta.pod [.lib.pods]perl595delta.pod [.lib.pods]perlaix.pod
-pod9 = [.lib.pods]perlamiga.pod [.lib.pods]perlapi.pod [.lib.pods]perlapio.pod [.lib.pods]perlapollo.pod [.lib.pods]perlartistic.pod [.lib.pods]perlbeos.pod
-pod10 = [.lib.pods]perlbook.pod [.lib.pods]perlboot.pod [.lib.pods]perlbot.pod [.lib.pods]perlbs2000.pod [.lib.pods]perlcall.pod [.lib.pods]perlce.pod
-pod11 = [.lib.pods]perlcheat.pod [.lib.pods]perlclib.pod [.lib.pods]perlcn.pod [.lib.pods]perlcommunity.pod [.lib.pods]perlcompile.pod
+pod4 = [.lib.pods]perl5136delta.pod [.lib.pods]perl5137delta.pod [.lib.pods]perl5138delta.pod [.lib.pods]perl561delta.pod [.lib.pods]perl56delta.pod
+pod5 = [.lib.pods]perl570delta.pod [.lib.pods]perl571delta.pod [.lib.pods]perl572delta.pod [.lib.pods]perl573delta.pod [.lib.pods]perl581delta.pod
+pod6 = [.lib.pods]perl582delta.pod [.lib.pods]perl583delta.pod [.lib.pods]perl584delta.pod [.lib.pods]perl585delta.pod [.lib.pods]perl586delta.pod
+pod7 = [.lib.pods]perl587delta.pod [.lib.pods]perl588delta.pod [.lib.pods]perl589delta.pod [.lib.pods]perl58delta.pod [.lib.pods]perl590delta.pod
+pod8 = [.lib.pods]perl591delta.pod [.lib.pods]perl592delta.pod [.lib.pods]perl593delta.pod [.lib.pods]perl594delta.pod [.lib.pods]perl595delta.pod
+pod9 = [.lib.pods]perlaix.pod [.lib.pods]perlamiga.pod [.lib.pods]perlapi.pod [.lib.pods]perlapio.pod [.lib.pods]perlapollo.pod [.lib.pods]perlartistic.pod
+pod10 = [.lib.pods]perlbeos.pod [.lib.pods]perlbook.pod [.lib.pods]perlboot.pod [.lib.pods]perlbot.pod [.lib.pods]perlbs2000.pod [.lib.pods]perlcall.pod
+pod11 = [.lib.pods]perlce.pod [.lib.pods]perlcheat.pod [.lib.pods]perlclib.pod [.lib.pods]perlcn.pod [.lib.pods]perlcommunity.pod [.lib.pods]perlcompile.pod
 pod12 = [.lib.pods]perlcygwin.pod [.lib.pods]perldata.pod [.lib.pods]perldbmfilter.pod [.lib.pods]perldebguts.pod [.lib.pods]perldebtut.pod
 pod13 = [.lib.pods]perldebug.pod [.lib.pods]perldelta.pod [.lib.pods]perldgux.pod [.lib.pods]perldiag.pod [.lib.pods]perldoc.pod [.lib.pods]perldos.pod
 pod14 = [.lib.pods]perldsc.pod [.lib.pods]perlebcdic.pod [.lib.pods]perlembed.pod [.lib.pods]perlepoc.pod [.lib.pods]perlfaq.pod [.lib.pods]perlfaq1.pod
@@ -437,7 +437,7 @@ pod = $(pod0) $(pod1) $(pod2) $(pod3) $(pod4) $(pod5) $(pod6) $(pod7) $(pod8) $(
 
 # Would be useful to automate the generation of this rule from pod/buildtoc
 # Plus its corresponding delete in the clean target.
-[.pod]perl5137delta.pod : [.pod]perldelta.pod
+[.pod]perl5138delta.pod : [.pod]perldelta.pod
 	Copy/NoConfirm/Log $(MMS$SOURCE) $(MMS$TARGET)
 
 [.pod]perlapi.pod : embed.fnc autodoc.pl $(MINIPERL_EXE)
@@ -477,8 +477,8 @@ $(DBG)libperlmini$(OLB) : $(mini_obj)
 	@ If F$Search("$(MMS$TARGET)").eqs."" Then Library/Object/Create $(MMS$TARGET)
 	Library/Object/Replace $(MMS$TARGET) $(MMS$SOURCE_LIST)
 
-perlmain.c : miniperlmain.c $(MINIPERL_EXE) [.vms]writemain.pl
-	$(MINIPERL) [.vms]Writemain.pl "$(EXT)"
+perlmain.c : miniperlmain.c $(MINIPERL_EXE) [.lib.ExtUtils]Miniperl.pm
+	$(MINIPERL) -"MExtUtils::Miniperl" -e "writemain(@ARGV)" "$(EXT)" > perlmain.c
 
 .ifdef __DEBUG__
 # Link an extra perl that doesn't invoke the debugger
@@ -608,6 +608,9 @@ nonxsext : $(LIBPREREQ) preplibrary $(MINIPERL_EXE)
 	$(MINIPERL) -"I[-.lib]" $(MMS$SOURCE)
 
 [.utils]ptardiff.com : [.utils]ptardiff.PL $(ARCHDIR)Config.pm
+	$(MINIPERL) -"I[-.lib]" $(MMS$SOURCE)
+
+[.utils]ptargrep.com : [.utils]ptargrep.PL $(ARCHDIR)Config.pm
 	$(MINIPERL) -"I[-.lib]" $(MMS$SOURCE)
 
 [.utils]shasum.com : [.utils]shasum.PL $(ARCHDIR)Config.pm
@@ -782,6 +785,10 @@ makeppport : $(MINIPERL_EXE) $(ARCHDIR)Config.pm nonxsext
 	Copy/NoConfirm/Log $(MMS$SOURCE) [.lib.pods]
 
 [.lib.pods]perl5137delta.pod : [.pod]perl5137delta.pod
+	@ If F$Search("[.lib]pods.dir").eqs."" Then Create/Directory [.lib.pods]
+	Copy/NoConfirm/Log $(MMS$SOURCE) [.lib.pods]
+
+[.lib.pods]perl5138delta.pod : [.pod]perl5138delta.pod
 	@ If F$Search("[.lib]pods.dir").eqs."" Then Create/Directory [.lib.pods]
 	Copy/NoConfirm/Log $(MMS$SOURCE) [.lib.pods]
 
@@ -1882,11 +1889,7 @@ clean : tidy cleantest
 	- If F$Search("[.vms.ext...]*.C").nes."" Then Delete/NoConfirm/Log [.vms.ext...]*.C;*
 	- If F$Search("[.vms.ext...]*$(O)").nes."" Then Delete/NoConfirm/Log [.vms.ext...]*$(O);*
 	- If F$Search("[.pod]*.com").nes."" Then Delete/NoConfirm/Log [.pod]*.com;*
-	- If F$Search("[.pod]perl5136delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5136delta.pod;*
-	- If F$Search("[.pod]perl5136delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5136delta.pod;*
-	- If F$Search("[.pod]perl5136delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5136delta.pod;*
-	- If F$Search("[.pod]perl5136delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5136delta.pod;*
-	- If F$Search("[.pod]perl5137delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5137delta.pod;*
+	- If F$Search("[.pod]perl5138delta.pod").nes."" Then Delete/NoConfirm/Log [.pod]perl5138delta.pod;*
 	- If F$Search("[.pod]perlapi.pod").nes."" Then Delete/NoConfirm/Log [.pod]perlapi.pod;*
 	- If F$Search("[.pod]perlintern.pod").nes."" Then Delete/NoConfirm/Log [.pod]perlintern.pod;*
 	- If F$Search("[.pod]perlmodlib.pod").nes."" Then Delete/NoConfirm/Log [.pod]perlmodlib.pod;*

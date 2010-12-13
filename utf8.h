@@ -163,6 +163,15 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 
 #define UTF8_ACCUMULATE(old, new)	(((old) << UTF_ACCUMULATION_SHIFT) | (((U8)new) & UTF_CONTINUATION_MASK))
 
+/* Convert a two (not one) byte utf8 character to a unicode code point value.
+ * Needs just one iteration of accumulate.  Should not be used unless it is
+ * known that the two bytes are legal: 1) two-byte start, and 2) continuation.
+ * Note that the result can be larger than 255 if the input character is not
+ * downgradable */
+#define TWO_BYTE_UTF8_TO_UNI(HI, LO) \
+		    UTF8_ACCUMULATE((NATIVE_TO_UTF(HI) & UTF_START_MASK(2)), \
+				     NATIVE_TO_UTF(LO))
+
 #define UTF8SKIP(s) PL_utf8skip[*(const U8*)(s)]
 
 #define UTF8_IS_INVARIANT(c)		UNI_IS_INVARIANT(NATIVE_TO_UTF(c))
@@ -174,8 +183,8 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  * bytes from an ordinal that is known to fit into two bytes; it must be less
  * than 0x3FF to work across both encodings. */
 /* Nocast allows these to be used in the case label of a switch statement */
-#define UTF8_TWO_BYTE_HI_nocast(c)	UTF_TO_NATIVE(((c)>>UTF_ACCUMULATION_SHIFT)|UTF_START_MARK(2))
-#define UTF8_TWO_BYTE_LO_nocast(c)	UTF_TO_NATIVE(((c)&UTF_CONTINUATION_MASK)|UTF_CONTINUATION_MARK)
+#define UTF8_TWO_BYTE_HI_nocast(c)	UTF_TO_NATIVE(((c) >> UTF_ACCUMULATION_SHIFT) | (0xFF & UTF_START_MARK(2)))
+#define UTF8_TWO_BYTE_LO_nocast(c)	UTF_TO_NATIVE(((c) & UTF_CONTINUATION_MASK) | UTF_CONTINUATION_MARK)
 
 #define UTF8_TWO_BYTE_HI(c)	((U8) (UTF8_TWO_BYTE_HI_nocast(c)))
 #define UTF8_TWO_BYTE_LO(c)	((U8) (UTF8_TWO_BYTE_LO_nocast(c)))
@@ -266,6 +275,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define UNICODE_GREEK_CAPITAL_LETTER_SIGMA	0x03A3
 #define UNICODE_GREEK_SMALL_LETTER_FINAL_SIGMA	0x03C2
 #define UNICODE_GREEK_SMALL_LETTER_SIGMA	0x03C3
+#define GREEK_SMALL_LETTER_MU                   0x03BC
 
 #define UNI_DISPLAY_ISPRINT	0x0001
 #define UNI_DISPLAY_BACKSLASH	0x0002
@@ -280,7 +290,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 
 #define ANYOF_FOLD_SHARP_S(node, input, end)	\
 	(ANYOF_BITMAP_TEST(node, LATIN_SMALL_LETTER_SHARP_S) && \
-	 (ANYOF_FLAGS(node) & ANYOF_UNICODE) && \
+	 (ANYOF_FLAGS(node) & ANYOF_NONBITMAP) && \
 	 (ANYOF_FLAGS(node) & ANYOF_FOLD) && \
 	 ((end) > (input) + 1) && \
 	 toLOWER((input)[0]) == 's' && \

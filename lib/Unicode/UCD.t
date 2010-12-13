@@ -18,7 +18,7 @@ use strict;
 use Unicode::UCD;
 use Test::More;
 
-BEGIN { plan tests => 256 };
+BEGIN { plan tests => 258 };
 
 use Unicode::UCD 'charinfo';
 
@@ -296,11 +296,13 @@ is($bt->{AL}, 'Right-to-Left Arabic', 'AL is Right-to-Left Arabic');
 
 # If this fails, then maybe one should look at the Unicode changes to see
 # what else might need to be updated.
-is(Unicode::UCD::UnicodeVersion, '5.2.0', 'UnicodeVersion');
+is(Unicode::UCD::UnicodeVersion, '6.0.0', 'UnicodeVersion');
 
 use Unicode::UCD qw(compexcl);
 
 ok(!compexcl(0x0100), 'compexcl');
+ok(!compexcl(0xD801), 'compexcl of surrogate');
+ok(!compexcl(0x110000), 'compexcl of non-Unicode code point');
 ok( compexcl(0x0958));
 
 use Unicode::UCD qw(casefold);
@@ -422,7 +424,7 @@ is(Unicode::UCD::_getcode('U+123x'),  undef, "_getcode(x123)");
 {
     my $r1 = charscript('Latin');
     my $n1 = @$r1;
-    is($n1, 42, "number of ranges in Latin script (Unicode 5.1.0)");
+    is($n1, 45, "number of ranges in Latin script (Unicode 6.0.0)");
     shift @$r1 while @$r1;
     my $r2 = charscript('Latin');
     is(@$r2, $n1, "modifying results should not mess up internal caches");

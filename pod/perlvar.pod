@@ -445,10 +445,11 @@ is package-specific, and must be declared or given a full package name
 if not in package main when running under C<strict 'vars'>.
 
 =item ${^GLOBAL_PHASE}
+X<${^GLOBAL_PHASE}>
 
 The current phase of the perl interpreter.
 
-Possible values include:
+Possible values are:
 
 =over 8
 
@@ -503,10 +504,51 @@ Not every program has to go through each of the possible phases, but
 transition from one phase to another can only happen in the order
 described in the above list.
 
-The patch also includes some basic tests, if you prefer actual working
-examples of how C<${^GLOBAL_PHASE}> behaves.
+An example of all of the phases Perl code can see:
 
-This variable was added in Perl 5.13.7.
+    BEGIN { print "compile-time: ${^GLOBAL_PHASE}\n" }
+
+    INIT  { print "init-time: ${^GLOBAL_PHASE}\n" }
+
+    CHECK { print "check-time: ${^GLOBAL_PHASE}\n" }
+
+    {
+        package Print::Phase;
+
+        sub new {
+            my ($class, $time) = @_;
+            return bless \$time, $class;
+        }
+
+        sub DESTROY {
+            my $self = shift;
+            print "$$self: ${^GLOBAL_PHASE}\n";
+        }
+    }
+
+    print "run-time: ${^GLOBAL_PHASE}\n";
+
+    my $runtime = Print::Phase->new(
+        "lexical variables are garbage collected before END"
+    );
+
+    END   { print "end-time: ${^GLOBAL_PHASE}\n" }
+
+    our $destruct = Print::Phase->new(
+        "package variables are garbage collected after END"
+    );
+
+This will print out
+
+    compile-time: START
+    check-time: CHECK
+    init-time: INIT
+    run-time: RUN
+    lexical variables are garbage collected before END: RUN
+    end-time: END
+    package variables are garbage collected after END: DESTRUCT
+
+This variable was added in Perl 5.14.0.
 
 =item $^H
 X<$^H>
@@ -1623,7 +1665,7 @@ output is to the terminal and block buffered otherwise. Setting this
 variable is useful primarily when you are outputting to a pipe or
 socket, such as when you are running a Perl program under B<rsh> and
 want to see the output as it's happening. This has no effect on input
-buffering. See L<perlfunc/getc> for that. See L<perldoc/select> on
+buffering. See L<perlfunc/getc> for that. See L<perlfunc/select> on
 how to select the output channel. See also L<IO::Handle>.
 
 Mnemonic: when you want your pipes to be piping hot.

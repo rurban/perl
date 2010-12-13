@@ -4,7 +4,7 @@ package re;
 use strict;
 use warnings;
 
-our $VERSION     = "0.14";
+our $VERSION     = "0.15";
 our @ISA         = qw(Exporter);
 our @EXPORT_OK   = ('regmust',
                     qw(is_regexp regexp_pattern
@@ -142,10 +142,19 @@ sub bits {
 	    re->export_to_level(2, 're', $s);
 	} elsif ($s =~ s/^\///) {
 	    my $reflags = $^H{reflags} || 0;
+	    my $seen_dul;
 	    for(split//, $s) {
 		if (/[dul]/) {
 		    if ($on) {
+			if ($seen_dul && $seen_dul ne $_) {
+			    require Carp;
+			    Carp::carp(
+			      qq 'The "$seen_dul" and "$_" flags '
+			     .qq 'are exclusive'
+			    );
+			}
 			$^H{reflags_dul} = $reflags{$_};
+			$seen_dul = $_;
 		    }
 		    else {
 			delete $^H{reflags_dul}
@@ -479,7 +488,7 @@ by C<qr//>, false if it is not.
 
 This function will not be confused by overloading or blessing. In
 internals terms, this extracts the regexp pointer out of the
-PERL_MAGIC_qr structure so it it cannot be fooled.
+PERL_MAGIC_qr structure so it cannot be fooled.
 
 =item regexp_pattern($ref)
 

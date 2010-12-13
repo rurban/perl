@@ -3,6 +3,7 @@ use strict;
 
 use Pod::Usage;
 use Getopt::Std;
+use Config;
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
 my $trysource = "try.c";
@@ -50,6 +51,13 @@ while (<>) {
 }
 die "$macro not found\n" unless defined $header;
 
+if ($^O =~ /MSWin(32|64)/) {
+    # The Win32 (and Win64) build process expects to be run from
+    # bleadperl/Win32
+    chdir "Win32"
+	or die "Couldn't chdir to win32: $!";
+};
+
 open my $out, '>', $trysource or die "Can't open $trysource: $!";
 
 my $sentinel = "$macro expands to";
@@ -80,8 +88,10 @@ EOF
 
 close $out or die "Can't close $trysource: $!";
 
-print "doing: make $tryout\n" if $opt{v};
-system "make $tryout" and die;
+print "doing: $Config{make} $tryout\n" if $opt{v};
+my $cmd = "$Config{make} $tryout";
+system( $cmd ) == 0
+    or die "Couldn't launch [$cmd]: $! / $?";
 
 # if user wants 'indent' formatting ..
 my $out_fh;
@@ -104,15 +114,17 @@ if ($opt{f} || $opt{F}) {
     $out_fh = \*STDOUT;
 }
 
-open my $fh, '<', $tryout or die "Can't open $tryout: $!";
+{
+    open my $fh, '<', $tryout or die "Can't open $tryout: $!";
 
-while (<$fh>) {
-    print $out_fh $_ if /$sentinel/o .. 1;
-}
+    while (<$fh>) {
+	print $out_fh $_ if /$sentinel/o .. 1;
+    }
+};
 
 unless ($opt{k}) {
     foreach($trysource, $tryout) {
-	die "Can't unlink $_" unless unlink $_;
+	die "Can't unlink $_: $!" unless unlink $_;
     }
 }
 

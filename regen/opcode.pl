@@ -181,11 +181,6 @@ print $on "#define OP_phoney_OUTPUT_ONLY -2\n\n";
 print <<END;
 START_EXTERN_C
 
-#define OP_NAME(o) ((o)->op_type == OP_CUSTOM ? custom_op_name(o) : \\
-                    PL_op_name[(o)->op_type])
-#define OP_DESC(o) ((o)->op_type == OP_CUSTOM ? custom_op_desc(o) : \\
-                    PL_op_desc[(o)->op_type])
-
 #ifndef DOINIT
 EXTCONST char* const PL_op_name[];
 #else
@@ -1054,7 +1049,7 @@ hintseval	eval hints		ck_svconst	s$
 entereval	eval "string"		ck_eval		d%	S
 leaveeval	eval "string" exit	ck_null		1	S
 #evalonce	eval constant string	ck_null		d1	S
-entertry	eval {block}		ck_eval		d%	
+entertry	eval {block}		ck_eval		d|	
 leavetry	eval {block} exit	ck_null		@	
 
 # Get system info.

@@ -510,10 +510,11 @@ Although it has no direct equivalent in C, Perl's C<//> operator is related
 to its C-style or.  In fact, it's exactly the same as C<||>, except that it
 tests the left hand side's definedness instead of its truth.  Thus, C<$a // $b>
 is similar to C<defined($a) || $b> (except that it returns the value of C<$a>
-rather than the value of C<defined($a)>) and is exactly equivalent to
-C<defined($a) ? $a : $b>.  This is very useful for providing default values
-for variables.  If you actually want to test if at least one of C<$a> and
-C<$b> is defined, use C<defined($a // $b)>.
+rather than the value of C<defined($a)>) and yields the same result as
+C<defined($a) ? $a : $b> (except that the ternary-operator form can be
+used as a lvalue, while C<$a // $b> cannot).  This is very useful for
+providing default values for variables.  If you actually want to test if
+at least one of C<$a> and C<$b> is defined, use C<defined($a // $b)>.
 
 The C<||>, C<//> and C<&&> operators return the last value evaluated
 (unlike C's C<||> and C<&&>, which return 0 or 1). Thus, a reasonably
@@ -1141,7 +1142,7 @@ example, see L<perlrebackslash/Octal escapes>.)  Starting in Perl 5.14, you may
 use C<\o{}> instead which avoids all these problems.  Otherwise, it is best to
 use this construct only for ordinals C<\077> and below, remembering to pad to
 the left with zeros to make three digits.  For larger ordinals, either use
-C<\o{}> , or convert to someething else, such as to hex and use C<\x{}>
+C<\o{}> , or convert to something else, such as to hex and use C<\x{}>
 instead.
 
 Having fewer than 3 digits may lead to a misleading warning message that says
@@ -1360,7 +1361,8 @@ If "/" is the delimiter then the initial C<m> is optional.  With the C<m>
 you can use any pair of non-whitespace characters
 as delimiters.  This is particularly useful for matching path names
 that contain "/", to avoid LTS (leaning toothpick syndrome).  If "?" is
-the delimiter, then the match-only-once rule of C<?PATTERN?> applies.
+the delimiter, then a match-only-once rule applies,
+described in C<m?PATTERN?> below.
 If "'" is the delimiter, no interpolation is performed on the PATTERN.
 When using a character valid in an identifier, whitespace is required
 after the C<m>.
@@ -1524,26 +1526,32 @@ Here is the output (split into several lines):
 	lowercase line-noise lowercase lowercase line-noise lowercase
 	lowercase line-noise MiXeD line-noise. That's all!
 
-=item ?PATTERN?
-X<?>
+=item m?PATTERN?
+X<?> X<operator, match-once>
 
-This is just like the C</pattern/> search, except that it matches only
-once between calls to the reset() operator.  This is a useful
+=item ?PATTERN?
+
+This is just like the C<m/PATTERN/> search, except that it matches
+only once between calls to the reset() operator.  This is a useful
 optimization when you want to see only the first occurrence of
-something in each file of a set of files, for instance.  Only C<??>
+something in each file of a set of files, for instance.  Only C<m??>
 patterns local to the current package are reset.
 
     while (<>) {
-	if (?^$?) {
+	if (m?^$?) {
 			    # blank line between header and body
 	}
     } continue {
-	reset if eof;	    # clear ?? status for next file
+	reset if eof;	    # clear m?? status for next file
     }
 
-This usage is vaguely deprecated, which means it just might possibly
-be removed in some distant future version of Perl, perhaps somewhere
-around the year 2168.
+The match-once behaviour is controlled by the match delimiter being
+C<?>; with any other delimiter this is the normal C<m//> operator.  
+
+For historical reasons, the leading C<m> in C<m?PATTERN?> is optional,
+but the resulting C<?PATTERN?> syntax is deprecated, will warn on
+usage and may be removed from a future stable release of Perl without
+further notice.
 
 =item s/PATTERN/REPLACEMENT/msixpogcer
 X<substitute> X<substitution> X<replace> X<regexp, replace>

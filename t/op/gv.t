@@ -12,7 +12,7 @@ BEGIN {
 
 use warnings;
 
-plan( tests => 230 );
+plan( tests => 231 );
 
 # type coersion on assignment
 $foo = 'foo';
@@ -825,6 +825,7 @@ pass('Can assign strings to typeglobs');
   tie my $a, "thrext";
   () = "$a"; # do a fetch; now $a holds a glob
   eval { *$a = sub{} };
+  eval { $a = undef }; # workaround for untie($handle) bug
   untie $a;
   eval { $a = "bar" };
   ::is $a, "bar",
@@ -857,6 +858,21 @@ ok eval {
   *$glob = *foo; 
 }, "Assigning a glob to a glob-with-sub that has lost its stash warks";
 
+{
+  package Tie::Alias;
+  sub TIESCALAR{ bless \\pop }
+  sub FETCH { $${$_[0]} }
+  sub STORE { $${$_[0]} = $_[1] }
+  package main;
+  tie my $alias, 'Tie::Alias', my $var;
+  no warnings 'once';
+  $var = *galobbe;
+  {
+    local *$alias = [];
+    $var = 3;
+    is $alias, 3, "[perl #77926] Glob reification during localisation";
+  }
+}
 
 __END__
 Perl

@@ -386,6 +386,7 @@ typedef struct stcxt {
 	SV *(**retrieve_vtbl)(pTHX_ struct stcxt *, const char *);	/* retrieve dispatch table */
 	SV *prev;		/* contexts chained backwards in real recursion */
 	SV *my_sv;		/* the blessed scalar who's SvPVX() I am */
+	int in_retrieve_overloaded; /* performance hack for retrieving overloaded objects */
 } stcxt_t;
 
 #define NEW_STORABLE_CXT_OBJ(cxt)					\
@@ -846,7 +847,7 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 #endif
 
 #define STORABLE_BIN_MAJOR	2		/* Binary major "version" */
-#define STORABLE_BIN_MINOR	7		/* Binary minor "version" */
+#define STORABLE_BIN_MINOR	8		/* Binary minor "version" */
 
 #if (PATCHLEVEL <= 5)
 #define STORABLE_BIN_WRITE_MINOR	4
@@ -854,7 +855,7 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 /*
  * Perl 5.6.0 onwards can do weak references.
 */
-#define STORABLE_BIN_WRITE_MINOR	7
+#define STORABLE_BIN_WRITE_MINOR	8
 #endif /* (PATCHLEVEL <= 5) */
 
 #if (PATCHLEVEL < 8 || (PATCHLEVEL == 8 && SUBVERSION < 1))
@@ -1045,6 +1046,8 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 
 /*
  * Bless `s' in `p', via a temporary reference, required by sv_bless().
+ * "A" magic is added before the sv_bless for overloaded classes, this avoids
+ * an expensive call to S_reset_amagic in sv_bless.
  */
 #define BLESS(s,p) 							\
   STMT_START {								\
@@ -1053,6 +1056,11 @@ static const char byteorderstr_56[] = {BYTEORDER_BYTES_56, 0};
 	TRACEME(("blessing 0x%"UVxf" in %s", PTR2UV(s), (p))); \
 	stash = gv_stashpv((p), GV_ADD);			\
 	ref = newRV_noinc(s);					\
+	if (cxt->in_retrieve_overloaded && Gv_AMG(stash)) \
+	{ \
+	    cxt->in_retrieve_overloaded = 0; \
+		SvAMAGIC_on(ref);                            \
+	} \
 	(void) sv_bless(ref, stash);			\
 	SvRV_set(ref, NULL);						\
 	SvREFCNT_dec(ref);						\
@@ -1500,6 +1508,7 @@ static void init_retrieve_context(pTHX_ stcxt_t *cxt, int optype, int is_tainted
         cxt->use_bytes = -1;		/* Fetched from perl if needed */
 #endif
         cxt->accept_future_minor = -1;	/* Fetched from perl if needed */
+	cxt->in_retrieve_overloaded = 0;
 }
 
 /*
@@ -1550,6 +1559,7 @@ static void clean_retrieve_context(pTHX_ stcxt_t *cxt)
 #endif
         cxt->accept_future_minor = -1;	/* Fetched from perl if needed */
 
+	cxt->in_retrieve_overloaded = 0;
 	reset_context(cxt);
 }
 
@@ -1726,6 +1736,7 @@ static void pkg_hide(
 	const char *method)
 {
 	const char *hvname = HvNAME_get(pkg);
+	PERL_UNUSED_ARG(method);
 	(void) hv_store(cache,
 		hvname, strlen(hvname), newSVsv(&PL_sv_undef), 0);
 }
@@ -1742,6 +1753,7 @@ static void pkg_uncache(
 	const char *method)
 {
 	const char *hvname = HvNAME_get(pkg);
+	PERL_UNUSED_ARG(method);
 	(void) hv_delete(cache, hvname, strlen(hvname), G_DISCARD);
 }
 
@@ -2357,7 +2369,7 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
 			SV *key;
 
 			if (!he)
-				CROAK(("Hash %p inconsistent - expected %d keys, %dth is NULL", hv, len, i));
+				CROAK(("Hash %p inconsistent - expected %d keys, %dth is NULL", hv, (int)len, (int)i));
 			key = hv_iterkeysv(he);
 			av_store(av, AvFILLp(av)+1, key);	/* av_push(), really */
 		}
@@ -2688,7 +2700,10 @@ static int store_code(pTHX_ stcxt_t *cxt, CV *cv)
 	 * Now store the source code.
 	 */
 
-	STORE_SCALAR(SvPV_nolen(text), len);
+	if(SvUTF8 (text))
+		STORE_UTF8STR(SvPV_nolen(text), len);
+	else
+		STORE_SCALAR(SvPV_nolen(text), len);
 
 	FREETMPS;
 	LEAVE;
@@ -3869,6 +3884,7 @@ static SV *mbuf2sv(pTHX)
  */
 static SV *retrieve_other(pTHX_ stcxt_t *cxt, const char *cname)
 {
+	PERL_UNUSED_ARG(cname);
 	if (
 		cxt->ver_major != STORABLE_BIN_MAJOR &&
 		cxt->ver_minor != STORABLE_BIN_MINOR
@@ -3899,6 +3915,7 @@ static SV *retrieve_idx_blessed(pTHX_ stcxt_t *cxt, const char *cname)
 	SV **sva;
 	SV *sv;
 
+	PERL_UNUSED_ARG(cname);
 	TRACEME(("retrieve_idx_blessed (#%d)", cxt->tagnum));
 	ASSERT(!cname, ("no bless-into class given here, got %s", cname));
 
@@ -3941,6 +3958,7 @@ static SV *retrieve_blessed(pTHX_ stcxt_t *cxt, const char *cname)
 	char *classname = buf;
 	char *malloced_classname = NULL;
 
+	PERL_UNUSED_ARG(cname);
 	TRACEME(("retrieve_blessed (#%d)", cxt->tagnum));
 	ASSERT(!cname, ("no bless-into class given here, got %s", cname));
 
@@ -4022,6 +4040,7 @@ static SV *retrieve_hook(pTHX_ stcxt_t *cxt, const char *cname)
 	char mtype = '\0';
 	unsigned int extra_type = 0;
 
+	PERL_UNUSED_ARG(cname);
 	TRACEME(("retrieve_hook (#%d)", cxt->tagnum));
 	ASSERT(!cname, ("no bless-into class given here, got %s", cname));
 
@@ -4499,7 +4518,9 @@ static SV *retrieve_overloaded(pTHX_ stcxt_t *cxt, const char *cname)
 
 	rv = NEWSV(10002, 0);
 	SEEN(rv, cname, 0);		/* Will return if rv is null */
+	cxt->in_retrieve_overloaded = 1; /* so sv_bless doesn't call S_reset_amagic */
 	sv = retrieve(aTHX_ cxt, 0);	/* Retrieve <object> */
+	cxt->in_retrieve_overloaded = 0;
 	if (!sv)
 		return (SV *) 0;	/* Failed */
 
@@ -5338,7 +5359,7 @@ static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname)
 	dSP;
 	int type, count, tagnum;
 	SV *cv;
-	SV *sv, *text, *sub;
+	SV *sv, *text, *sub, *errsv;
 
 	TRACEME(("retrieve_code (#%d)", cxt->tagnum));
 
@@ -5366,6 +5387,12 @@ static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname)
 	case SX_LSCALAR:
 		text = retrieve_lscalar(aTHX_ cxt, cname);
 		break;
+	case SX_UTF8STR:
+		text = retrieve_utf8str(aTHX_ cxt, cname);
+		break;
+	case SX_LUTF8STR:
+		text = retrieve_lutf8str(aTHX_ cxt, cname);
+		break;
 	default:
 		CROAK(("Unexpected type %d in retrieve_code\n", type));
 	}
@@ -5375,6 +5402,8 @@ static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname)
 	 */
 
 	sub = newSVpvn("sub ", 4);
+	if (SvUTF8(text))
+		SvUTF8_on(sub);
 	sv_catpv(sub, SvPV_nolen(text)); /* XXX no sv_catsv! */
 	SvREFCNT_dec(text);
 
@@ -5404,25 +5433,27 @@ static SV *retrieve_code(pTHX_ stcxt_t *cxt, const char *cname)
 	ENTER;
 	SAVETMPS;
 
+	errsv = get_sv("@", GV_ADD);
+	sv_setpvn(errsv, "", 0);	/* clear $@ */
 	if (SvROK(cxt->eval) && SvTYPE(SvRV(cxt->eval)) == SVt_PVCV) {
-		SV* errsv = get_sv("@", GV_ADD);
-		sv_setpvn(errsv, "", 0);	/* clear $@ */
 		PUSHMARK(sp);
 		XPUSHs(sv_2mortal(newSVsv(sub)));
 		PUTBACK;
 		count = call_sv(cxt->eval, G_SCALAR);
-		SPAGAIN;
 		if (count != 1)
 			CROAK(("Unexpected return value from $Storable::Eval callback\n"));
-		cv = POPs;
-		if (SvTRUE(errsv)) {
-			CROAK(("code %s caused an error: %s",
-				SvPV_nolen(sub), SvPV_nolen(errsv)));
-		}
-		PUTBACK;
 	} else {
-		cv = eval_pv(SvPV_nolen(sub), TRUE);
+		eval_sv(sub, G_SCALAR);
 	}
+	SPAGAIN;
+	cv = POPs;
+	PUTBACK;
+
+	if (SvTRUE(errsv)) {
+		CROAK(("code %s caused an error: %s",
+			SvPV_nolen(sub), SvPV_nolen(errsv)));
+	}
+
 	if (cv && SvROK(cv) && SvTYPE(SvRV(cv)) == SVt_PVCV) {
 	    sv = SvRV(cv);
 	} else {
@@ -5459,6 +5490,7 @@ static SV *old_retrieve_array(pTHX_ stcxt_t *cxt, const char *cname)
 	SV *sv;
 	int c;
 
+	PERL_UNUSED_ARG(cname);
 	TRACEME(("old_retrieve_array (#%d)", cxt->tagnum));
 
 	/*
@@ -5521,6 +5553,7 @@ static SV *old_retrieve_hash(pTHX_ stcxt_t *cxt, const char *cname)
 	int c;
 	SV *sv_h_undef = (SV *) 0;		/* hv_store() bug */
 
+	PERL_UNUSED_ARG(cname);
 	TRACEME(("old_retrieve_hash (#%d)", cxt->tagnum));
 
 	/*
@@ -6361,14 +6394,17 @@ init_perinterp()
 # Same as pstore(), but network order is used for integers and doubles are
 # emitted as strings.
 
-void
+SV *
 pstore(f,obj)
 OutputStream	f
 SV *	obj
  ALIAS:
   net_pstore = 1
  PPCODE:
-  ST(0) = do_store(aTHX_ f, obj, 0, ix, (SV **)0) ? &PL_sv_yes : &PL_sv_undef;
+  RETVAL = do_store(aTHX_ f, obj, 0, ix, (SV **)0) ? &PL_sv_yes : &PL_sv_undef;
+  /* do_store() can reallocate the stack, so need a sequence point to ensure
+     that ST(0) knows about it. Hence using two statements.  */
+  ST(0) = RETVAL;
   XSRETURN(1);
 
 # mstore

@@ -557,8 +557,10 @@ perl_destruct(pTHXx)
 
         JMPENV_PUSH(x);
 	PERL_UNUSED_VAR(x);
-        if (PL_endav && !PL_minus_c)
+        if (PL_endav && !PL_minus_c) {
+	    PL_phase = PERL_PHASE_END;
             call_list(PL_scopestack_ix, PL_endav);
+	}
         JMPENV_POP;
     }
     LEAVE;
@@ -751,7 +753,7 @@ perl_destruct(pTHXx)
      * destruct_level > 0 */
     SvREFCNT_dec(PL_main_cv);
     PL_main_cv = NULL;
-    PL_dirty = TRUE;
+    PL_phase = PERL_PHASE_DESTRUCT;
 
     /* Tell PerlIO we are about to tear things apart in case
        we have layers which are using resources that should
@@ -1605,10 +1607,13 @@ perl_parse(pTHXx_ XSINIT_t xsinit, int argc, char **argv, char **env)
     switch (ret) {
     case 0:
 	parse_body(env,xsinit);
-	if (PL_unitcheckav)
+	if (PL_unitcheckav) {
 	    call_list(oldscope, PL_unitcheckav);
-	if (PL_checkav)
+	}
+	if (PL_checkav) {
+	    PL_phase = PERL_PHASE_CHECK;
 	    call_list(oldscope, PL_checkav);
+	}
 	ret = 0;
 	break;
     case 1:
@@ -1620,10 +1625,13 @@ perl_parse(pTHXx_ XSINIT_t xsinit, int argc, char **argv, char **env)
 	    LEAVE;
 	FREETMPS;
 	PL_curstash = PL_defstash;
-	if (PL_unitcheckav)
+	if (PL_unitcheckav) {
 	    call_list(oldscope, PL_unitcheckav);
-	if (PL_checkav)
+	}
+	if (PL_checkav) {
+	    PL_phase = PERL_PHASE_CHECK;
 	    call_list(oldscope, PL_checkav);
+	}
 	ret = STATUS_EXIT;
 	break;
     case 3:
@@ -1754,6 +1762,8 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 #endif
     SV *linestr_sv = newSV_type(SVt_PVIV);
     bool add_read_e_script = FALSE;
+
+    PL_phase = PERL_PHASE_START;
 
     SvGROW(linestr_sv, 80);
     sv_setpvs(linestr_sv,"");
@@ -2245,8 +2255,10 @@ perl_run(pTHXx)
 	FREETMPS;
 	PL_curstash = PL_defstash;
 	if (!(PL_exit_flags & PERL_EXIT_DESTRUCT_END) &&
-	    PL_endav && !PL_minus_c)
+	    PL_endav && !PL_minus_c) {
+	    PL_phase = PERL_PHASE_END;
 	    call_list(oldscope, PL_endav);
+	}
 #ifdef MYMALLOC
 	if (PerlEnv_getenv("PERL_DEBUG_MSTATS"))
 	    dump_mstats("after execution:  ");
@@ -2295,14 +2307,18 @@ S_run_body(pTHX_ I32 oldscope)
 	}
 	if (PERLDB_SINGLE && PL_DBsingle)
 	    sv_setiv(PL_DBsingle, 1);
-	if (PL_initav)
+	if (PL_initav) {
+	    PL_phase = PERL_PHASE_INIT;
 	    call_list(oldscope, PL_initav);
+	}
 #ifdef PERL_DEBUG_READONLY_OPS
 	Perl_pending_Slabs_to_ro(aTHX);
 #endif
     }
 
     /* do it */
+
+    PL_phase = PERL_PHASE_RUN;
 
     if (PL_restartop) {
 	PL_restartjmpenv = NULL;
@@ -3032,11 +3048,21 @@ Perl_moreswitches(pTHX_ const char *s)
 	/* The following permits -d:Mod to accepts arguments following an =
 	   in the fashion that -MSome::Mod does. */
 	if (*s == ':' || *s == '=') {
-	    const char *start = ++s;
-	    const char *const end = s + strlen(s);
-	    SV * const sv = newSVpvs("use Devel::");
+	    const char *start;
+	    const char *end;
+	    SV *sv;
 
-	    /* We now allow -d:Module=Foo,Bar */
+	    if (*++s == '-') {
+		++s;
+		sv = newSVpvs("no Devel::");
+	    } else {
+		sv = newSVpvs("use Devel::");
+	    }
+
+	    start = s;
+	    end = s + strlen(s);
+
+	    /* We now allow -d:Module=Foo,Bar and -d:-Module */
 	    while(isALNUM(*s) || *s==':') ++s;
 	    if (*s != '=')
 		sv_catpvn(sv, start, end - start);

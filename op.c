@@ -910,7 +910,8 @@ S_scalarboolean(pTHX_ OP *o)
 
     PERL_ARGS_ASSERT_SCALARBOOLEAN;
 
-    if (o->op_type == OP_SASSIGN && cBINOPo->op_first->op_type == OP_CONST) {
+    if (o->op_type == OP_SASSIGN && cBINOPo->op_first->op_type == OP_CONST
+     && !(cBINOPo->op_first->op_flags & OPf_SPECIAL)) {
 	if (ckWARN(WARN_SYNTAX)) {
 	    const line_t oldline = CopLINE(PL_curcop);
 
@@ -1420,10 +1421,14 @@ Propagate lvalue ("modifiable") context to an op and its children.
 I<type> represents the context type, roughly based on the type of op that
 would do the modifying, although C<local()> is represented by OP_NULL,
 because it has no op type of its own (it is signalled by a flag on
-the lvalue op).  This function detects things that can't be modified,
-such as C<$x+1>, and generates errors for them.  It also flags things
-that need to behave specially in an lvalue context, such as C<$$x>
-which might have to vivify a reference in C<$x>.
+the lvalue op).
+
+This function detects things that can't be modified, such as C<$x+1>, and
+generates errors for them. For example, C<$x+1 = 2> would cause it to be
+called with an op of type OP_ADD and a C<type> argument of OP_SASSIGN.
+
+It also flags things that need to behave specially in an lvalue context,
+such as C<$$x = 5> which might have to vivify a reference in C<$x>.
 
 =cut
 */
@@ -1780,6 +1785,14 @@ Perl_op_lvalue(pTHX_ OP *o, I32 type)
     return o;
 }
 
+/* Do not use this. It will be removed after 5.14. */
+OP *
+Perl_mod(pTHX_ OP *o, I32 type)
+{
+    return op_lvalue(o,type);
+}
+
+
 STATIC bool
 S_scalar_mod_type(const OP *o, I32 type)
 {
@@ -2130,6 +2143,7 @@ S_my_kid(pTHX_ OP *o, OP *attrs, OP **imopsp)
 {
     dVAR;
     I32 type;
+    const bool stately = PL_parser && PL_parser->in_my == KEY_state;
 
     PERL_ARGS_ASSERT_MY_KID;
 
@@ -2200,7 +2214,7 @@ S_my_kid(pTHX_ OP *o, OP *attrs, OP **imopsp)
     }
     o->op_flags |= OPf_MOD;
     o->op_private |= OPpLVAL_INTRO;
-    if (PL_parser->in_my == KEY_state)
+    if (stately)
 	o->op_private |= OPpPAD_STATE;
     return o;
 }
@@ -3917,7 +3931,7 @@ Perl_pmruntime(pTHX_ OP *o, OP *expr, bool isreg)
 	    rcop->op_targ = pad_alloc(rcop->op_type, SVs_PADTMP);
 
 	/* /$x/ may cause an eval, since $x might be qr/(?{..})/  */
-	PL_cv_has_eval = 1;
+	if (PL_hints & HINT_RE_EVAL) PL_cv_has_eval = 1;
 
 	/* establish postfix order */
 	if (pm->op_pmflags & PMf_KEEP || !(PL_hints & HINT_RE_EVAL)) {
@@ -4222,6 +4236,7 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 #ifdef PERL_MAD
     OP *pegop = newOP(OP_NULL,0);
 #endif
+    SV *use_version = NULL;
 
     PERL_ARGS_ASSERT_UTILIZE;
 
@@ -4268,7 +4283,9 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
     }
     else if (SvNIOKp(((SVOP*)idop)->op_sv)) {
 	imop = NULL;		/* use 5.0; */
-	if (!aver)
+	if (aver)
+	    use_version = ((SVOP*)idop)->op_sv;
+	else
 	    idop->op_private |= OPpCONST_NOVER;
     }
     else {
@@ -4299,6 +4316,26 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	        newSTATEOP(0, NULL, newUNOP(OP_REQUIRE, 0, idop)),
 	        newSTATEOP(0, NULL, veop)),
 	    newSTATEOP(0, NULL, imop) ));
+
+    if (use_version) {
+	/* If we request a version >= 5.9.5, load feature.pm with the
+	 * feature bundle that corresponds to the required version. */
+	use_version = sv_2mortal(new_version(use_version));
+
+	if (vcmp(use_version,
+		 sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
+	    SV *const importsv = vnormal(use_version);
+	    *SvPVX_mutable(importsv) = ':';
+	    ENTER_with_name("load_feature");
+	    Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
+	    LEAVE_with_name("load_feature");
+	}
+	/* If a version >= 5.11.0 is requested, strictures are on by default! */
+	if (vcmp(use_version,
+		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
+	    PL_hints |= (HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
+	}
+    }
 
     /* The "did you use incorrect case?" warning used to be here.
      * The problem is that on case-insensitive filesystems one
@@ -5887,74 +5924,6 @@ Perl_newWHENOP(pTHX_ OP *cond, OP *block)
 	OP_ENTERWHEN, OP_LEAVEWHEN, 0);
 }
 
-/*
-=head1 Embedding Functions
-
-=for apidoc cv_undef
-
-Clear out all the active components of a CV. This can happen either
-by an explicit C<undef &foo>, or by the reference count going to zero.
-In the former case, we keep the CvOUTSIDE pointer, so that any anonymous
-children can still follow the full lexical scope chain.
-
-=cut
-*/
-
-void
-Perl_cv_undef(pTHX_ CV *cv)
-{
-    dVAR;
-
-    PERL_ARGS_ASSERT_CV_UNDEF;
-
-    DEBUG_X(PerlIO_printf(Perl_debug_log,
-	  "CV undef: cv=0x%"UVxf" comppad=0x%"UVxf"\n",
-	    PTR2UV(cv), PTR2UV(PL_comppad))
-    );
-
-#ifdef USE_ITHREADS
-    if (CvFILE(cv) && !CvISXSUB(cv)) {
-	/* for XSUBs CvFILE point directly to static memory; __FILE__ */
-	Safefree(CvFILE(cv));
-    }
-    CvFILE(cv) = NULL;
-#endif
-
-    if (!CvISXSUB(cv) && CvROOT(cv)) {
-	if (SvTYPE(cv) == SVt_PVCV && CvDEPTH(cv))
-	    Perl_croak(aTHX_ "Can't undef active subroutine");
-	ENTER;
-
-	PAD_SAVE_SETNULLPAD();
-
-	op_free(CvROOT(cv));
-	CvROOT(cv) = NULL;
-	CvSTART(cv) = NULL;
-	LEAVE;
-    }
-    SvPOK_off(MUTABLE_SV(cv));		/* forget prototype */
-    CvGV_set(cv, NULL);
-
-    pad_undef(cv);
-
-    /* remove CvOUTSIDE unless this is an undef rather than a free */
-    if (!SvREFCNT(cv) && CvOUTSIDE(cv)) {
-	if (!CvWEAKOUTSIDE(cv))
-	    SvREFCNT_dec(CvOUTSIDE(cv));
-	CvOUTSIDE(cv) = NULL;
-    }
-    if (CvCONST(cv)) {
-	SvREFCNT_dec(MUTABLE_SV(CvXSUBANY(cv).any_ptr));
-	CvCONST_off(cv);
-    }
-    if (CvISXSUB(cv) && CvXSUB(cv)) {
-	CvXSUB(cv) = NULL;
-    }
-    /* delete all flags except WEAKOUTSIDE and CVGV_RC, which indicate the
-     * ref status of CvOUTSIDE and CvGV */
-    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC);
-}
-
 void
 Perl_cv_ckproto_len(pTHX_ const CV *cv, const GV *gv, const char *p,
 		    const STRLEN len)
@@ -6056,7 +6025,9 @@ Perl_op_const_sv(pTHX_ const OP *o, CV *cv)
 	if (sv && o->op_next == o)
 	    return sv;
 	if (o->op_next != o) {
-	    if (type == OP_NEXTSTATE || type == OP_NULL || type == OP_PUSHMARK)
+	    if (type == OP_NEXTSTATE
+	     || (type == OP_NULL && !(o->op_flags & OPf_KIDS))
+	     || type == OP_PUSHMARK)
 		continue;
 	    if (type == OP_DBSTATE)
 		continue;
@@ -6121,12 +6092,6 @@ Perl_newMYSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 #ifdef PERL_MAD
     NORETURN_FUNCTION_END;
 #endif
-}
-
-CV *
-Perl_newSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *block)
-{
-    return Perl_newATTRSUB(aTHX_ floor, o, proto, NULL, block);
 }
 
 CV *
@@ -6306,15 +6271,30 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 #endif
 	) {
 	    cv_flags_t existing_builtin_attrs = CvFLAGS(cv) & CVf_BUILTIN_ATTRS;
-	    cv_undef(cv);
+	    AV *const temp_av = CvPADLIST(cv);
+	    CV *const temp_cv = CvOUTSIDE(cv);
+
+	    assert(!CvWEAKOUTSIDE(cv));
+	    assert(!CvCVGV_RC(cv));
+	    assert(CvGV(cv) == gv);
+
+	    SvPOK_off(cv);
 	    CvFLAGS(cv) = CvFLAGS(PL_compcv) | existing_builtin_attrs;
-	    if (!CvWEAKOUTSIDE(cv))
-		SvREFCNT_dec(CvOUTSIDE(cv));
 	    CvOUTSIDE(cv) = CvOUTSIDE(PL_compcv);
 	    CvOUTSIDE_SEQ(cv) = CvOUTSIDE_SEQ(PL_compcv);
-	    CvOUTSIDE(PL_compcv) = 0;
 	    CvPADLIST(cv) = CvPADLIST(PL_compcv);
-	    CvPADLIST(PL_compcv) = 0;
+	    CvOUTSIDE(PL_compcv) = temp_cv;
+	    CvPADLIST(PL_compcv) = temp_av;
+
+#ifdef USE_ITHREADS
+	    if (CvFILE(cv) && !CvISXSUB(cv)) {
+		/* for XSUBs CvFILE point directly to static memory; __FILE__ */
+		Safefree(CvFILE(cv));
+    }
+#endif
+	    CvFILE_set_from_cop(cv, PL_curcop);
+	    CvSTASH_set(cv, PL_curstash);
+
 	    /* inner references to PL_compcv must be fixed up ... */
 	    pad_fixup_inner_anons(CvPADLIST(cv), PL_compcv, cv);
 	    if (PERLDB_INTER)/* Advice debugger on the new sub. */
@@ -7958,7 +7938,13 @@ Perl_ck_sassign(pTHX_ OP *o)
     }
     if (kid->op_sibling) {
 	OP *kkid = kid->op_sibling;
-	if (kkid->op_type == OP_PADSV
+	/* For state variable assignment, kkid is a list op whose op_last
+	   is a padsv. */
+	if ((kkid->op_type == OP_PADSV ||
+	     (kkid->op_type == OP_LIST &&
+	      (kkid = cLISTOPx(kkid)->op_last)->op_type == OP_PADSV
+	     )
+	    )
 		&& (kkid->op_private & OPpLVAL_INTRO)
 		&& SvPAD_STATE(*av_fetch(PL_comppad_name, kkid->op_targ, FALSE))) {
 	    const PADOFFSET target = kkid->op_targ;
@@ -9353,7 +9339,7 @@ Perl_rpeep(pTHX_ register OP *o)
 	    /* Two NEXTSTATEs in a row serve no purpose. Except if they happen
 	       to carry two labels. For now, take the easier option, and skip
 	       this optimisation if the first NEXTSTATE has a label.  */
-	    if (!CopLABEL((COP*)o)) {
+	    if (!CopLABEL((COP*)o) && !PERLDB_NOOPT) {
 		OP *nextop = o->op_next;
 		while (nextop && nextop->op_type == OP_NULL)
 		    nextop = nextop->op_next;
@@ -9685,7 +9671,8 @@ Perl_rpeep(pTHX_ register OP *o)
 
 	    /* Make the CONST have a shared SV */
 	    svp = cSVOPx_svp(((BINOP*)o)->op_last);
-	    if (!SvFAKE(sv = *svp) || !SvREADONLY(sv)) {
+	    if ((!SvFAKE(sv = *svp) || !SvREADONLY(sv))
+	     && SvTYPE(sv) < SVt_PVMG && !SvROK(sv)) {
 		key = SvPV_const(sv, keylen);
 		lexname = newSVpvn_share(key,
 					 SvUTF8(sv) ? -(I32)keylen : (I32)keylen,
@@ -10020,6 +10007,15 @@ Perl_rpeep(pTHX_ register OP *o)
 		assert (!cPMOP->op_pmstashstartu.op_pmreplstart);
 	    }
 	    break;
+
+	case OP_CUSTOM: {
+	    Perl_cpeep_t cpeep = 
+		XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_peep);
+	    if (cpeep)
+		cpeep(aTHX_ o, oldop);
+	    break;
+	}
+	    
 	}
 	oldop = o;
     }
@@ -10032,48 +10028,88 @@ Perl_peep(pTHX_ register OP *o)
     CALL_RPEEP(o);
 }
 
-const char*
-Perl_custom_op_name(pTHX_ const OP* o)
+/*
+=head1 Custom Operators
+
+=for apidoc Ao||custom_op_xop
+Return the XOP structure for a given custom op. This function should be
+considered internal to OP_NAME and the other access macros: use them instead.
+
+=cut
+*/
+
+const XOP *
+Perl_custom_op_xop(pTHX_ const OP *o)
 {
-    dVAR;
-    const IV index = PTR2IV(o->op_ppaddr);
-    SV* keysv;
-    HE* he;
+    SV *keysv;
+    HE *he = NULL;
+    XOP *xop;
 
-    PERL_ARGS_ASSERT_CUSTOM_OP_NAME;
+    static const XOP xop_null = { 0, 0, 0, 0, 0 };
 
-    if (!PL_custom_op_names) /* This probably shouldn't happen */
-        return (char *)PL_op_name[OP_CUSTOM];
+    PERL_ARGS_ASSERT_CUSTOM_OP_XOP;
+    assert(o->op_type == OP_CUSTOM);
 
-    keysv = sv_2mortal(newSViv(index));
+    /* This is wrong. It assumes a function pointer can be cast to IV,
+     * which isn't guaranteed, but this is what the old custom OP code
+     * did. In principle it should be safer to Copy the bytes of the
+     * pointer into a PV: since the new interface is hidden behind
+     * functions, this can be changed later if necessary.  */
+    /* Change custom_op_xop if this ever happens */
+    keysv = sv_2mortal(newSViv(PTR2IV(o->op_ppaddr)));
 
-    he = hv_fetch_ent(PL_custom_op_names, keysv, 0, 0);
-    if (!he)
-        return (char *)PL_op_name[OP_CUSTOM]; /* Don't know who you are */
+    if (PL_custom_ops)
+	he = hv_fetch_ent(PL_custom_ops, keysv, 0, 0);
 
-    return SvPV_nolen(HeVAL(he));
+    /* assume noone will have just registered a desc */
+    if (!he && PL_custom_op_names &&
+	(he = hv_fetch_ent(PL_custom_op_names, keysv, 0, 0))
+    ) {
+	const char *pv;
+	STRLEN l;
+
+	/* XXX does all this need to be shared mem? */
+	Newxz(xop, 1, XOP);
+	pv = SvPV(HeVAL(he), l);
+	XopENTRY_set(xop, xop_name, savepvn(pv, l));
+	if (PL_custom_op_descs &&
+	    (he = hv_fetch_ent(PL_custom_op_descs, keysv, 0, 0))
+	) {
+	    pv = SvPV(HeVAL(he), l);
+	    XopENTRY_set(xop, xop_desc, savepvn(pv, l));
+	}
+	Perl_custom_op_register(aTHX_ o->op_ppaddr, xop);
+	return xop;
+    }
+
+    if (!he) return &xop_null;
+
+    xop = INT2PTR(XOP *, SvIV(HeVAL(he)));
+    return xop;
 }
 
-const char*
-Perl_custom_op_desc(pTHX_ const OP* o)
+/*
+=for apidoc Ao||custom_op_register
+Register a custom op. See L<perlguts/"Custom Operators">.
+
+=cut
+*/
+
+void
+Perl_custom_op_register(pTHX_ Perl_ppaddr_t ppaddr, const XOP *xop)
 {
-    dVAR;
-    const IV index = PTR2IV(o->op_ppaddr);
-    SV* keysv;
-    HE* he;
+    SV *keysv;
 
-    PERL_ARGS_ASSERT_CUSTOM_OP_DESC;
+    PERL_ARGS_ASSERT_CUSTOM_OP_REGISTER;
 
-    if (!PL_custom_op_descs)
-        return (char *)PL_op_desc[OP_CUSTOM];
+    /* see the comment in custom_op_xop */
+    keysv = sv_2mortal(newSViv(PTR2IV(ppaddr)));
 
-    keysv = sv_2mortal(newSViv(index));
+    if (!PL_custom_ops)
+	PL_custom_ops = newHV();
 
-    he = hv_fetch_ent(PL_custom_op_descs, keysv, 0, 0);
-    if (!he)
-        return (char *)PL_op_desc[OP_CUSTOM];
-
-    return SvPV_nolen(HeVAL(he));
+    if (!hv_store_ent(PL_custom_ops, keysv, newSViv(PTR2IV(xop)), 0))
+	Perl_croak(aTHX_ "panic: can't register custom OP %s", xop->xop_name);
 }
 
 #include "XSUB.h"

@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.13.6
+#INST_VER	= \5.13.7
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -111,6 +111,10 @@ CCTYPE		= MSVC60
 #CCTYPE		= MSVC90FREE
 # Visual C++ 2008 (aka Visual C++ 9.x) (full version)
 #CCTYPE		= MSVC90
+# Visual C++ 2010 Express Edition (aka Visual C++ 10.x) (free version)
+#CCTYPE		= MSVC100FREE
+# Visual C++ 2010 (aka Visual C++ 10.x) (full version)
+#CCTYPE		= MSVC100
 
 #
 # uncomment next line if you want debug version of perl (big,slow)
@@ -127,20 +131,6 @@ CCTYPE		= MSVC60
 # Visual C.
 #
 #USE_SETARGV	= define
-
-#
-# if you want to have the crypt() builtin function implemented, leave this or
-# CRYPT_LIB uncommented.  The fcrypt.c file named here contains a suitable
-# version of des_fcrypt().
-#
-CRYPT_SRC	= fcrypt.c
-
-#
-# if you didn't set CRYPT_SRC and if you have des_fcrypt() available in a
-# library, uncomment this, and make sure the library exists (see README.win32)
-# Specify the full pathname of the library.
-#
-#CRYPT_LIB	= fcrypt.lib
 
 #
 # set this if you wish to use perl's malloc
@@ -194,16 +184,6 @@ CCLIBDIR	= $(CCHOME)\lib
 BUILDOPT	= $(BUILDOPTEXTRA)
 
 #
-# Adding -DPERL_HASH_SEED_EXPLICIT will disable randomization of Perl's
-# internal hash function unless the PERL_HASH_SEED environment variable is set.
-# Alternatively, adding -DNO_HASH_SEED will completely disable the
-# randomization feature. 
-# The latter is required to maintain binary compatibility with Perl 5.8.0.
-#
-#BUILDOPT	= $(BUILDOPT) -DPERL_HASH_SEED_EXPLICIT
-#BUILDOPT	= $(BUILDOPT) -DNO_HASH_SEED
-
-#
 # This should normally be disabled.  Enabling it will disable the File::Glob
 # implementation of CORE::glob.
 #
@@ -232,13 +212,6 @@ EXTRALIBDIRS	=
 ##
 
 ##################### CHANGE THESE ONLY IF YOU MUST #####################
-
-!IF "$(CRYPT_SRC)$(CRYPT_LIB)" == ""
-D_CRYPT		= undef
-!ELSE
-D_CRYPT		= define
-CRYPT_FLAG	= -DHAVE_DES_FCRYPT
-!ENDIF
 
 !IF "$(USE_IMP_SYS)" == "define"
 PERL_MALLOC	= undef
@@ -355,13 +328,14 @@ BUILDOPT	= $(BUILDOPT) -DUSE_PERLIO
 ARCHNAME	= $(ARCHNAME)-thread
 !ENDIF
 
-# Visual C++ 98, .NET 2003, 2005 and 2008 specific.
-# VC++ 6.x, 7.x, 8.x and 9.x can load DLL's on demand.  Makes the test suite run
+# Visual C++ 98, .NET 2003, 2005/2008/2010 specific.
+# VC++ 6/7/8/9/10.x can load DLLs on demand.  Makes the test suite run
 # in about 10% less time.  (The free version of 7.x can't do this, but the free
-# versions of 8.x and 9.x can.)
+# versions of 8/9/10.x can.)
 !IF "$(CCTYPE)" == "MSVC60" || "$(CCTYPE)" == "MSVC70"     || \
     "$(CCTYPE)" == "MSVC80" || "$(CCTYPE)" == "MSVC80FREE" || \
-    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE"
+    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE" || \
+    "$(CCTYPE)" == "MSVC100" || "$(CCTYPE)" == "MSVC100FREE"
 DELAYLOAD	= -DELAYLOAD:ws2_32.dll delayimp.lib
 !ENDIF
 
@@ -409,7 +383,7 @@ RSC		= rc
 
 INCLUDES	= -I$(COREDIR) -I.\include -I. -I..
 #PCHFLAGS	= -Fpc:\temp\vcmoduls.pch -YX
-DEFINES		= -DWIN32 -D_CONSOLE -DNO_STRICT $(CRYPT_FLAG)
+DEFINES		= -DWIN32 -D_CONSOLE -DNO_STRICT
 LOCDEFS		= -DPERLDLL -DPERL_CORE
 SUBSYS		= console
 CXX_FLAG	= -TP -EHsc
@@ -445,10 +419,11 @@ DEFINES		= $(DEFINES) -DWIN64 -DCONSERVATIVE
 OPTIMIZE	= $(OPTIMIZE) -fp:precise
 !ENDIF
 
-# For now, silence VC++ 8.x's and 9.x's warnings about "unsafe" CRT functions
+# For now, silence VC++ 8/9/10.x's warnings about "unsafe" CRT functions
 # and POSIX CRT function names being deprecated.
 !IF "$(CCTYPE)" == "MSVC80" || "$(CCTYPE)" == "MSVC80FREE" || \
-    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE"
+    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE" || \
+    "$(CCTYPE)" == "MSVC100" || "$(CCTYPE)" == "MSVC100FREE"
 DEFINES		= $(DEFINES) -D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE
 !ENDIF
 
@@ -467,14 +442,7 @@ BUILDOPT	= $(BUILDOPT) -D_USE_32BIT_TIME_T
 !  ENDIF
 !ENDIF
 
-# Use the MSVCRT read() fix only when using VC++ 6.x or earlier. Later
-# versions use MSVCR70.dll, MSVCR71.dll, etc, which do not require the
-# fix.
-!IF "$(CCTYPE)" == "MSVC60" 
-BUILDOPT	= $(BUILDOPT) -DPERL_MSVCRT_READFIX
-!ENDIF
-
-LIBBASEFILES	= $(CRYPT_LIB) \
+LIBBASEFILES	= \
 		oldnames.lib kernel32.lib user32.lib gdi32.lib winspool.lib \
 		comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib \
 		netapi32.lib uuid.lib ws2_32.lib mpr.lib winmm.lib \
@@ -504,7 +472,8 @@ EXEOUT_FLAG	= -Fe
 CFLAGS_O	= $(CFLAGS) $(BUILDOPT)
 
 !IF "$(CCTYPE)" == "MSVC80" || "$(CCTYPE)" == "MSVC80FREE" || \
-    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE"
+    "$(CCTYPE)" == "MSVC90" || "$(CCTYPE)" == "MSVC90FREE" || \
+    "$(CCTYPE)" == "MSVC100" || "$(CCTYPE)" == "MSVC100FREE"
 LINK_FLAGS	= $(LINK_FLAGS) "/manifestdependency:type='Win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
 !ELSE
 RSC_FLAGS	= -DINCLUDE_MANIFEST
@@ -607,6 +576,7 @@ UTILS		=			\
 		..\utils\prove		\
 		..\utils\ptar		\
 		..\utils\ptardiff	\
+		..\utils\ptargrep	\
 		..\utils\cpanp-run-perl	\
 		..\utils\cpanp	\
 		..\utils\cpan2dist	\
@@ -687,7 +657,8 @@ EXTRACORE_SRC	= $(EXTRACORE_SRC) ..\perlio.c
 WIN32_SRC	=		\
 		.\win32.c	\
 		.\win32sck.c	\
-		.\win32thread.c
+		.\win32thread.c	\
+		.\fcrypt.c
 
 # We need this for miniperl build unless we override canned 
 # config.h #define building mini\*
@@ -695,9 +666,6 @@ WIN32_SRC	=		\
 WIN32_SRC	= $(WIN32_SRC) .\win32io.c
 #!ENDIF
 
-!IF "$(CRYPT_SRC)" != ""
-WIN32_SRC	= $(WIN32_SRC) .\$(CRYPT_SRC)
-!ENDIF
 
 X2P_SRC		=		\
 		..\x2p\a2p.c	\
@@ -797,7 +765,6 @@ CFG_VARS	=					\
 		"ld=$(LINK32)"				\
 		"ccflags=$(EXTRACFLAGS) $(OPTIMIZE:"=\") $(DEFINES) $(BUILDOPT)"	\
 		"cf_email=$(EMAIL)"	 		\
-		"d_crypt=$(D_CRYPT)"			\
 		"d_mymalloc=$(PERL_MALLOC)"		\
 		"libs=$(LIBFILES)"			\
 		"incpath=$(CCINCDIR:"=\")"		\
@@ -861,7 +828,7 @@ config.w32 : $(CFGSH_TMPL)
 # make sure that we recompile perl.c if the git version changes
 ..\perl$(o) : ..\git_version.h
 
-..\config.sh : config.w32 $(MINIPERL) config_sh.PL
+..\config.sh : config.w32 $(MINIPERL) config_sh.PL FindExt.pm
 	$(MINIPERL) -I..\lib config_sh.PL $(CFG_VARS) config.w32 > ..\config.sh
 
 # this target is for when changes to the main config.sh happen.
@@ -996,14 +963,14 @@ perlmainst$(o) : perlmainst.c
 	$(CC) $(CFLAGS_O) $(OBJOUT_FLAG)$@ -c perlmainst.c
 
 $(PERLEXE): $(PERLDLL) $(CONFIGPM) $(PERLEXE_OBJ) $(PERLEXE_RES)
-	$(LINK32) -subsystem:console -out:$@ -stack:0x1000000 $(LINK_FLAGS) \
+	$(LINK32) -subsystem:console -out:$@ $(LINK_FLAGS) \
 	    $(LIBFILES) $(PERLEXE_OBJ) $(SETARGV_OBJ) $(PERLIMPLIB) $(PERLEXE_RES)
 	$(EMBED_EXE_MANI)
 	copy $(PERLEXE) $(WPERLEXE)
 	$(MINIPERL) -I..\lib bin\exetype.pl $(WPERLEXE) WINDOWS
 
 $(PERLEXESTATIC): $(PERLSTATICLIB) $(CONFIGPM) $(PERLEXEST_OBJ) $(PERLEXE_RES)
-	$(LINK32) -subsystem:console -out:$@ -stack:0x1000000 $(LINK_FLAGS) \
+	$(LINK32) -subsystem:console -out:$@ $(LINK_FLAGS) \
 	    @Extensions_static $(PERLSTATICLIB) /PDB:NONE \
 	    $(LIBFILES) $(PERLEXEST_OBJ) $(SETARGV_OBJ) $(PERLEXE_RES)
 	$(EMBED_EXE_MANI)
@@ -1093,7 +1060,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5137delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5138delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
@@ -1185,7 +1152,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5137delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5138delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlapollo.pod perlbeos.pod perlbs2000.pod perlce.pod \
 	    perlcn.pod perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
@@ -1198,7 +1165,7 @@ distclean: realclean
 	    perlvos.pod perlwin32.pod
 	-cd ..\utils && del /f h2ph splain perlbug pl2pm c2ph pstruct h2xs \
 	    perldoc perlivp dprofpp libnetcfg enc2xs piconv cpan *.bat \
-	    xsubpp instmodsh prove ptar ptardiff cpanp-run-perl cpanp cpan2dist shasum corelist config_data
+	    xsubpp instmodsh prove ptar ptardiff ptargrep cpanp-run-perl cpanp cpan2dist shasum corelist config_data
 	-cd ..\x2p && del /f find2perl s2p psed *.bat
 	-del /f ..\config.sh perlmain.c dlutils.c config.h.new \
 	        perlmainst.c
@@ -1252,6 +1219,7 @@ test-prep : all utils
 	$(XCOPY) $(PERLEXE) ..\t\$(NULL)
 	$(XCOPY) $(PERLDLL) ..\t\$(NULL)
 	$(XCOPY) $(GLOBEXE) ..\t\$(NULL)
+	set PERL_STATIC_EXT=$(STATIC_EXT)
 
 test : test-prep
 	cd ..\t

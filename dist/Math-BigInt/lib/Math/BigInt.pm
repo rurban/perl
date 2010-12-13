@@ -18,7 +18,7 @@ package Math::BigInt;
 my $class = "Math::BigInt";
 use 5.006002;
 
-$VERSION = '1.98';
+$VERSION = '1.99_01';
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(objectify bgcd blcm); 
@@ -1653,7 +1653,7 @@ sub _div_inf
    if (($x->is_nan() || $y->is_nan())   ||
        ($x->is_zero() && $y->is_zero()));
  
-  # +-inf / +-inf == NaN, reminder also NaN
+  # +-inf / +-inf == NaN, remainder also NaN
   if (($x->{sign} =~ /^[+-]inf$/) && ($y->{sign} =~ /^[+-]inf$/))
     {
     return wantarray ? ($x->bnan(),$self->bnan()) : $x->bnan();

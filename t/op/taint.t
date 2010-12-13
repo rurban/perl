@@ -17,7 +17,7 @@ use Config;
 use File::Spec::Functions;
 
 BEGIN { require './test.pl'; }
-plan tests => 325;
+plan tests => 338;
 
 $| = 1;
 
@@ -1396,6 +1396,54 @@ foreach my $ord (78, 163, 256) {
     ok(!tainted($untainted), '$untainted should yet still be untainted');
 }
 
+{
+    # On Windows we can't spawn a fresh Perl interpreter unless at
+    # least the Windows system directory (usually C:\Windows\System32)
+    # is still on the PATH.  There is however no way to determine the
+    # actual path on the current system without loading the Win32
+    # module, so we just restore the original $ENV{PATH} here.
+    local $ENV{PATH} = $ENV{PATH};
+    $ENV{PATH} = $old_env_path if $Is_MSWin32;
+
+    fresh_perl_is(<<'end', "ok", { switches => [ '-T' ] },
+    $TAINT = substr($^X, 0, 0);
+    formline('@'.('<'x("2000".$TAINT)).' | @*', 'hallo', 'welt');
+    print "ok";
+end
+    "formline survives a tainted dynamic picture");
+}
+
+{
+    ok(!tainted($^A), "format accumulator not tainted yet");
+    formline('@ | @*', 'hallo' . $TAINT, 'welt');
+    ok(tainted($^A), "tainted formline argument makes a tainted accumulator");
+    $^A = "";
+    ok(!tainted($^A), "accumulator can be explicitly untainted");
+    formline('@' .('<'*5) . ' | @*', 'hallo', 'welt');
+    ok(!tainted($^A), "accumulator still untainted");
+    $^A = "" . $TAINT;
+    ok(tainted($^A), "accumulator can be explicitly tainted");
+    formline('@' .('<'*5) . ' | @*', 'hallo', 'welt');
+    ok(tainted($^A), "accumulator still tainted");
+    $^A = "";
+    ok(!tainted($^A), "accumulator untainted again");
+    formline('@' .('<'*5) . ' | @*', 'hallo', 'welt');
+    ok(!tainted($^A), "accumulator still untainted");
+    formline('@' .('<'*(5+$TAINT0)) . ' | @*', 'hallo', 'welt');
+    TODO: {
+        local $::TODO = "get magic handled too late?";
+        ok(tainted($^A), "the accumulator should be tainted already");
+    }
+    ok(tainted($^A), "tainted formline picture makes a tainted accumulator");
+}
+
+{   # Bug #80610
+    "Constant(1)" =~ / ^ ([a-z_]\w*) (?: [(] (.*) [)] )? $ /xi;
+    my $a = $1;
+    my $b = $2;
+    ok(! tainted($a), "regex optimization of single char /[]/i doesn't taint");
+    ok(! tainted($b), "regex optimization of single char /[]/i doesn't taint");
+}
 
 # This may bomb out with the alarm signal so keep it last
 SKIP: {

@@ -314,17 +314,29 @@ struct regnode_charclass_class {
 
 /* Flags for node->flags of ANYOF */
 
-#define ANYOF_CLASS		0x08	/* has runtime \d, \w, [:posix:], ... */
-#define ANYOF_LARGE      ANYOF_CLASS    /* Same; name retained for back compat */
-#define ANYOF_INVERT		0x04
-#define ANYOF_FOLD		0x02
 #define ANYOF_LOCALE		0x01
+#define ANYOF_FOLD		0x02
+#define ANYOF_INVERT		0x04
+
+/* CLASS is never set unless LOCALE is too: has runtime \d, \w, [:posix:], ... */
+#define ANYOF_CLASS	 0x08
+#define ANYOF_LARGE      ANYOF_CLASS    /* Same; name retained for back compat */
+
+/* Can match something outside the bitmap that is expressible only in utf8 */
+#define ANYOF_UTF8		0x10
+
+/* Can match something outside the bitmap that isn't in utf8 */
+#define ANYOF_NONBITMAP_NON_UTF8 0x20
+
+/* Set if the bitmap doesn't fully represent what this node can match */
+#define ANYOF_NONBITMAP		(ANYOF_UTF8|ANYOF_NONBITMAP_NON_UTF8)
+#define ANYOF_UNICODE		ANYOF_NONBITMAP	/* old name, for back compat */
+
+/* Matches every code point 0x100 and above*/
+#define ANYOF_UNICODE_ALL	0x40
 
 /* EOS used for regstclass only */
-#define ANYOF_EOS		0x10	/* Can match an empty string too */
-
-#define ANYOF_UNICODE		0x20	/* Matches >= one thing past 0xff */
-#define ANYOF_UNICODE_ALL	0x40	/* Matches 0x100 - infinity */
+#define ANYOF_EOS		0x80	/* Can match an empty string too */
 
 #define ANYOF_FLAGS_ALL		0xff
 
@@ -408,12 +420,34 @@ struct regnode_charclass_class {
 #define ANYOF_BITMAP_CLEARALL(p)	\
 	Zero (ANYOF_BITMAP(p), ANYOF_BITMAP_SIZE)
 /* Check that all 256 bits are all set.  Used in S_cl_is_anything()  */
-#define ANYOF_BITMAP_TESTALLSET(p)	\
+#define ANYOF_BITMAP_TESTALLSET(p)	/* Assumes sizeof(p) == 32 */     \
 	memEQ (ANYOF_BITMAP(p), "\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377", ANYOF_BITMAP_SIZE)
 
 #define ANYOF_SKIP		((ANYOF_SIZE - 1)/sizeof(regnode))
 #define ANYOF_CLASS_SKIP	((ANYOF_CLASS_SIZE - 1)/sizeof(regnode))
-#define ANYOF_CLASS_ADD_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+
+/* The class bit can be set to the locale one if necessary to save bits at the
+ * expense of having locale ANYOF nodes always have a class bit map, and hence
+ * take up extra space.  This allows convenient changing it as development
+ * proceeds on this */
+#if ANYOF_CLASS == ANYOF_LOCALE
+#   undef ANYOF_CLASS_ADD_SKIP
+#   define ANYOF_ADD_LOC_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+
+    /* Quicker way to see if there are actually any tests.  This is because
+     * currently the set of tests can be empty even when the class bitmap is
+     * allocated */
+#   if ANYOF_CLASSBITMAP_SIZE != 4
+#	error ANYOF_CLASSBITMAP_SIZE is expected to be 4
+#   endif
+#   define ANYOF_CLASS_TEST_ANY_SET(p)	/* assumes sizeof(p) = 4 */       \
+	memNE (((struct regnode_charclass_class*)(p))->classflags,	  \
+		"\0\0\0\0", ANYOF_CLASSBITMAP_SIZE)
+#else
+#   define ANYOF_CLASS_ADD_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+#   undef ANYOF_ADD_LOC_SKIP
+#   define ANYOF_CLASS_TEST_ANY_SET(p) (ANYOF_FLAGS(p) & ANYOF_CLASS)
+#endif
 
 
 /*

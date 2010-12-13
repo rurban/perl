@@ -27,12 +27,14 @@ require 5.010_001;
 use strict;
 use warnings;
 use Carp;
+use Config;
 use File::Find;
 use File::Path;
 use File::Spec;
 use Text::Tabs;
 
 sub DEBUG () { 0 }  # Set to 0 for production; 1 for development
+my $debugging_build = $Config{"ccflags"} =~ /-DDEBUGGING/;
 
 ##########################################################################
 #
@@ -50,7 +52,7 @@ sub DEBUG () { 0 }  # Set to 0 for production; 1 for development
 #   the small actual loop to process the input files and finish up; then
 #   a __DATA__ section, for the .t tests
 #
-# This program works on all releases of Unicode through at least 5.2.  The
+# This program works on all releases of Unicode through at least 6.0.  The
 # outputs have been scrutinized most intently for release 5.1.  The others
 # have been checked for somewhat more than just sanity.  It can handle all
 # existing Unicode character properties in those releases.
@@ -162,7 +164,10 @@ my $map_directory = 'To';        # Where map files go.
 # out.  But all the ones which can be used in regular expression \p{} and \P{}
 # constructs will.  Generally a property will have either its map table or its
 # match tables written but not both.  Again, what gets written is controlled
-# by lists which can easily be changed.
+# by lists which can easily be changed.  Properties have a 'Type', like
+# binary, or string, or enum depending on how many match tables there are and
+# the content of the maps.  This 'Type' is different than a range 'Type', so
+# don't get confused by the two concepts having the same name.
 #
 # For information about the Unicode properties, see Unicode's UAX44 document:
 
@@ -183,11 +188,11 @@ my $unicode_reference_url = 'http://www.unicode.org/reports/tr44/';
 # More information on Unicode version glitches is further down in these
 # introductory comments.
 #
-# This program works on all properties as of 5.2, though the files for some
-# are suppressed from apparent lack of demand for them.  You can change which
-# are output by changing lists in this program.
+# This program works on all non-provisional properties as of 6.0, though the
+# files for some are suppressed from apparent lack of demand for them.  You
+# can change which are output by changing lists in this program.
 #
-# The old version of mktables emphasized the term "Fuzzy" to mean Unocde's
+# The old version of mktables emphasized the term "Fuzzy" to mean Unicode's
 # loose matchings rules (from Unicode TR18):
 #
 #    The recommended names for UCD properties and property values are in
@@ -418,7 +423,7 @@ my $unicode_reference_url = 'http://www.unicode.org/reports/tr44/';
 # Unicode_Radical_Stroke was listed in those files, so if the Unihan database
 # is present in the directory, a table will be generated for that property.
 # In 5.2, several more properties were added.  For your convenience, the two
-# arrays are initialized with all the 5.2 listed properties that are also in
+# arrays are initialized with all the 6.0 listed properties that are also in
 # earlier releases.  But these are commented out.  You can just uncomment the
 # ones you want, or use them as a template for adding entries for other
 # properties.
@@ -633,8 +638,9 @@ my $make_list = 1;             # ? Should we write $file_list.  Set to always
                                # special things
 my $glob_list = 0;             # ? Should we try to include unknown .txt files
                                # in the input.
-my $output_range_counts = 1;   # ? Should we include the number of code points
-                               # in ranges in the output
+my $output_range_counts = $debugging_build;   # ? Should we include the number
+                                              # of code points in ranges in
+                                              # the output
 my $annotate = 0;              # ? Should character names be in the output
 
 # Verbosity levels; 0 is quiet
@@ -694,6 +700,8 @@ while (@ARGV) {
     }
     elsif ($arg eq '-annotate') {
         $annotate = 1;
+        $debugging_build = 1;
+        $output_range_counts = 1;
     }
     else {
         my $with_c = 'with';
@@ -805,7 +813,7 @@ if ($v_version gt v3.2.0) {
                                 'Canonical_Combining_Class=Attached_Below_Left'
 }
 
-# These are listed in the Property aliases file in 5.2, but Unihan is ignored
+# These are listed in the Property aliases file in 6.0, but Unihan is ignored
 # unless explicitly added.
 if ($v_version ge v5.2.0) {
     my $unihan = 'Unihan; remove from list if using Unihan';
@@ -848,10 +856,10 @@ my %why_obsolete;    # Documentation only
 
     my $other_properties = 'other properties';
     my $contributory = "Used by Unicode internally for generating $other_properties and not intended to be used stand-alone";
-    my $why_no_expand  = "Easily computed, and yet doesn't cover the common encoding forms (UTF-16/8)",
+    my $why_no_expand  = "Deprecated by Unicode: less useful than UTF-specific calculations",
 
     %why_deprecated = (
-        'Grapheme_Link' => 'Deprecated by Unicode.  Use ccc=vr (Canonical_Combining_Class=Virama) instead',
+        'Grapheme_Link' => 'Deprecated by Unicode:  Duplicates ccc=vr (Canonical_Combining_Class=Virama)',
         'Jamo_Short_Name' => $contributory,
         'Line_Break=Surrogate' => 'Deprecated by Unicode because surrogates should never appear in well-formed text, and therefore shouldn\'t be the basis for line breaking',
         'Other_Alphabetic' => $contributory,
@@ -865,7 +873,7 @@ my %why_obsolete;    # Documentation only
     );
 
     %why_suppressed = (
-        # There is a lib/unicore/Decomposition.pl (used by normalize.pm) which
+        # There is a lib/unicore/Decomposition.pl (used by Normalize.pm) which
         # contains the same information, but without the algorithmically
         # determinable Hangul syllables'.  This file is not published, so it's
         # existence is not noted in the comment.
@@ -882,10 +890,7 @@ my %why_obsolete;    # Documentation only
         'Name' => "Accessible via 'use charnames;'",
         'Name_Alias' => "Accessible via 'use charnames;'",
 
-        # These are sort of jumping the gun; deprecation is proposed for
-        # Unicode version 6.0, but they have never been exposed by Perl, and
-        # likely are soon to be deprecated, so best not to expose them.
-        FC_NFKC_Closure => 'Use NFKC_Casefold instead',
+        FC_NFKC_Closure => 'Supplanted in usage by NFKC_Casefold; otherwise not useful',
         Expands_On_NFC => $why_no_expand,
         Expands_On_NFD => $why_no_expand,
         Expands_On_NFKC => $why_no_expand,
@@ -907,9 +912,15 @@ my %why_obsolete;    # Documentation only
 
 if ($v_version ge 4.0.0) {
     $why_stabilized{'Hyphen'} = 'Use the Line_Break property instead; see www.unicode.org/reports/tr14';
+    if ($v_version ge 6.0.0) {
+        $why_deprecated{'Hyphen'} = 'Supplanted by Line_Break property values; see www.unicode.org/reports/tr14';
+    }
 }
-if ($v_version ge 5.2.0) {
+if ($v_version ge 5.2.0 && $v_version lt 6.0.0) {
     $why_obsolete{'ISO_Comment'} = 'Code points for it have been removed';
+    if ($v_version ge 6.0.0) {
+        $why_deprecated{'ISO_Comment'} = 'No longer needed for chart generation; otherwise not useful, and code points for it have been removed';
+    }
 }
 
 # Probably obsolete forever
@@ -928,7 +939,7 @@ END
 
 # If you are using the Unihan database, you need to add the properties that
 # you want to extract from it to this table.  For your convenience, the
-# properties in the 5.2 PropertyAliases.txt file are listed, commented out
+# properties in the 6.0 PropertyAliases.txt file are listed, commented out
 my @cjk_properties = split "\n", <<'END';
 #cjkAccountingNumeric; kAccountingNumeric
 #cjkOtherNumeric; kOtherNumeric
@@ -947,7 +958,7 @@ my @cjk_properties = split "\n", <<'END';
 END
 
 # Similarly for the property values.  For your convenience, the lines in the
-# 5.2 PropertyAliases.txt file are listed.  Just remove the first BUT NOT both
+# 6.0 PropertyAliases.txt file are listed.  Just remove the first BUT NOT both
 # '#' marks
 my @cjk_property_values = split "\n", <<'END';
 ## @missing: 0000..10FFFF; cjkAccountingNumeric; NaN
@@ -1030,6 +1041,10 @@ my %ignored_files = (
     'ReadMe.txt' => 'Just comments',
     'README.TXT' => 'Just comments',
     'StandardizedVariants.txt' => 'Only for glyph changes, not a Unicode character property.  Does not fit into current scheme where one code point is mapped',
+    'EmojiSources.txt' => 'Not of general utility: for Japanese legacy cell-phone applications',
+    'IndicMatraCategory.txt' => 'Provisional',
+    'IndicSyllabicCategory.txt' => 'Provisional',
+    'ScriptExtensions.txt' => 'Provisional',
 );
 
 ### End of externally interesting definitions, except for @input_file_objects
@@ -1367,10 +1382,11 @@ sub populate_char_info ($) {
             $end = min($block->containing_range($i)->end,
                        $unassigned_sans_noncharacters-> containing_range($i)->
                                                                          end);
-        } else {
-            my_carp_bug("Can't figure out how to annotate"
-                        . sprintf("U+%04X", $i)
-                        . "Proceeding anyway.");
+        }
+        else {
+            Carp::my_carp_bug("Can't figure out how to annotate "
+                              . sprintf("U+%04X", $i)
+                              . ".  Proceeding anyway.");
             $viacode[$i] = 'UNKNOWN';
             $annotate_char_type[$i] = $UNKNOWN_TYPE;
             $printable[$i] = 0;
@@ -3677,7 +3693,7 @@ sub trace { return main::trace(@_); }
             $extends_above = ($j+1 < $range_list_size
                             && $r->[$j+1]->start == $end +1
                             && $r->[$j+1]->standard_form eq $standard_form
-                            && $r->[$j-1]->type == $type);
+                            && $r->[$j+1]->type == $type);
         }
         if ($extends_below && $extends_above) { # Adds to both
             $splice_start--;     # start replace at element below
@@ -4793,6 +4809,8 @@ sub trace { return main::trace(@_); }
 
     sub add_comment { # Adds the parameter as a comment.
 
+        return unless $debugging_build;
+
         my $self = shift;
         my $comment = shift;
         Carp::carp_extra_args(\@_) if main::DEBUG && @_;
@@ -4952,7 +4970,8 @@ sub trace { return main::trace(@_); }
                 # If there is a range and doesn't need a single point range
                 # output
                 if ($start != $end && ! $range_size_1) {
-                    push @OUT, sprintf "%04X\t%04X\t%s", $start, $end, $value;
+                    push @OUT, sprintf "%04X\t%04X", $start, $end;
+                    $OUT[-1] .= "\t$value" if $value ne "";
 
                     # Add a comment with the size of the range, if requested.
                     # Expand Tabs to make sure they all start in the same
@@ -5559,6 +5578,8 @@ sub trace { return main::trace(@_); }
     sub set_final_comment {
         # Just before output, create the comment that heads the file
         # containing this table.
+
+        return unless $debugging_build;
 
         my $self = shift;
         Carp::carp_extra_args(\@_) if main::DEBUG && @_;
@@ -6642,6 +6663,8 @@ sub trace { return main::trace(@_); }
         # This should be called only with the leader match table of all the
         # ones that share the same file.  It lists all such tables, ordered so
         # that related ones are together.
+
+        return unless $debugging_build;
 
         my $leader = shift;   # Should only be called on the leader table of
                               # an equivalent group
@@ -8229,7 +8252,7 @@ sub finish_property_setup {
         }
     }
 
-    # This entry is still missing as of 5.2, perhaps because no short name for
+    # This entry is still missing as of 6.0, perhaps because no short name for
     # it.
     if (-e 'NameAliases.txt') {
         my $aliases = property_ref('Name_Alias');
@@ -10138,6 +10161,32 @@ END
         }
         return;
     }
+
+    sub filter_v6_ucd {
+
+        # Unicode 6.0 co-opted the name BELL for U+1F514, so change the input
+        # to pretend that U+0007 is ALERT instead, and for Perl 5.14, don't
+        # allow the BELL name for U+1F514, so that the old usage can be
+        # deprecated for one cycle.
+
+        return if $_ !~ /^(?:0007|1F514|070F);/;
+
+        my ($code_point, @fields) = split /\s*;\s*/, $_, -1;
+        if ($code_point eq '0007') {
+            $fields[$CHARNAME] = "ALERT";
+        }
+        elsif ($code_point eq '070F') { # Unicode Corrigendum #8; see
+                            # http://www.unicode.org/versions/corrigendum8.html
+            $fields[$BIDI] = "AL";
+        }
+        elsif ($^V lt v5.15.0) { # For 5.16 will convert to use Unicode's name
+            $fields[$CHARNAME] = "";
+        }
+
+        $_ = join ';', $code_point, @fields;
+
+        return;
+    }
 } # End closure for UnicodeData
 
 sub process_GCB_test {
@@ -10308,7 +10357,7 @@ sub filter_special_casing_line {
     # implemented, it would be by hard-coding in the casing functions in the
     # Perl core, not through tables.  But if there is a new condition we don't
     # know about, output a warning.  We know about all the conditions through
-    # 5.2
+    # 6.0
     if ($fields[4] ne "") {
         my @conditions = split ' ', $fields[4];
         if ($conditions[0] ne 'tr'  # We know that these languages have
@@ -12866,7 +12915,7 @@ both single and compound forms.
 B<Compound forms> consist of two components, separated by an equals sign or a
 colon.  The first component is the property name, and the second component is
 the particular value of the property to match against, for example,
-'\\p{Script: Greek}' or '\\p{Script=Greek}' both mean to match characters
+'\\p{Script: Greek}' and '\\p{Script=Greek}' both mean to match characters
 whose Script property is Greek.
 
 B<Single forms>, like '\\p{Greek}', are mostly Perl-defined shortcuts for
@@ -12925,22 +12974,21 @@ several varieties of obsolesence:
 =item Obsolete
 
 Properties marked with $a_bold_obsolete in the table are considered
-obsolete.  At the time of this writing (Unicode version 5.2) there is no
-information in the Unicode standard about the implications of a property being
 obsolete.
 
 =item Stabilized
 
-Obsolete properties may be stabilized.  This means that they are not actively
-maintained by Unicode, and will not be extended as new characters are added to
-the standard.  Such properties are marked with $a_bold_stabilized in the
-table.  At the time of this writing (Unicode version 5.2) there is no further
-information in the Unicode standard about the implications of a property being
-stabilized.
+Obsolete properties may be stabilized.  Such a determination does not indicate
+that the property should or should not be used; instead it is a declaration
+that the property will not be maintained nor extended for newly encoded
+characters.  Such properties are marked with $a_bold_stabilized in the
+table.
 
 =item Deprecated
 
-Obsolete properties may be deprecated.  This means that their use is strongly
+An obsolete property may be deprecated, perhaps because its original intent
+has been replaced by another property or because its specification was somehow
+defective.  This means that its use is strongly
 discouraged, so much so that a warning will be issued if used, unless the
 regular expression is in the scope of a C<S<no warnings 'deprecated'>>
 statement.  $A_bold_deprecated flags each such entry in the table, and
@@ -13065,8 +13113,9 @@ the properties are listed enclosed in (parentheses).
 =back
 
 An installation can choose to allow any of these to be matched by changing the
-controlling lists contained in the program C<\$Config{privlib}>/F<unicore/$0>
-and then re-running F<$0>.  (C<\%Config> is available from the Config module).
+controlling lists contained in the program
+C<\$Config{privlib}>/F<unicore/mktables> and then re-running F<mktables>.
+(C<\%Config> is available from the Config module).
 
 =head1 Files in the I<To> directory (for serious hackers only)
 
@@ -13095,8 +13144,8 @@ names in parentheses), and any flags or comments about them, are:
 @map_tables_actually_output
 
 An installation can choose to change which files are generated by changing the
-controlling lists contained in the program C<\$Config{privlib}>/F<unicore/$0>
-and then re-running F<$0>.
+controlling lists contained in the program
+C<\$Config{privlib}>/F<unicore/mktables> and then re-running F<mktables>.
 
 Each of these files defines two hash entries to help reading programs decipher
 it.  One of them looks like this:
@@ -14066,7 +14115,12 @@ my @input_file_objects = (
                                             ? \&filter_v1_ucd
                                             : ($v_version eq v2.1.5)
                                                 ? \&filter_v2_1_5_ucd
-                                                : undef),
+
+                                                # And for 5.14 Perls with 6.0,
+                                                # have to also make changes
+                                                : ($v_version ge v6.0.0)
+                                                    ? \&filter_v6_ucd
+                                                    : undef),
 
                                             # And the main filter
                                             \&filter_UnicodeData_line,

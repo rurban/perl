@@ -2410,6 +2410,7 @@ typedef struct pvop PVOP;
 typedef struct loop LOOP;
 
 typedef struct block_hooks BHK;
+typedef struct custom_op XOP;
 
 typedef struct interpreter PerlInterpreter;
 
@@ -3698,6 +3699,7 @@ Gid_t getegid (void);
 #  define DEBUG_B_TEST_ (PL_debug & DEBUG_B_FLAG)
 #  define DEBUG_Xv_TEST_ (DEBUG_X_TEST_ && DEBUG_v_TEST_)
 #  define DEBUG_Uv_TEST_ (DEBUG_U_TEST_ && DEBUG_v_TEST_)
+#  define DEBUG_Pv_TEST_ (DEBUG_P_TEST_ && DEBUG_v_TEST_)
 
 #ifdef DEBUGGING
 
@@ -3728,6 +3730,7 @@ Gid_t getegid (void);
 #  define DEBUG_B_TEST DEBUG_B_TEST_
 #  define DEBUG_Xv_TEST DEBUG_Xv_TEST_
 #  define DEBUG_Uv_TEST DEBUG_Uv_TEST_
+#  define DEBUG_Pv_TEST DEBUG_Pv_TEST_
 
 #  define PERL_DEB(a)                  a
 #  define PERL_DEBUG(a) if (PL_debug)  a
@@ -3765,6 +3768,7 @@ Gid_t getegid (void);
 #  define DEBUG_D(a) DEBUG__(DEBUG_D_TEST, a)
 #  define DEBUG_Xv(a) DEBUG__(DEBUG_Xv_TEST, a)
 #  define DEBUG_Uv(a) DEBUG__(DEBUG_Uv_TEST, a)
+#  define DEBUG_Pv(a) DEBUG__(DEBUG_Pv_TEST, a)
 
 #  define DEBUG_T(a) DEBUG__(DEBUG_T_TEST, a)
 #  define DEBUG_R(a) DEBUG__(DEBUG_R_TEST, a)
@@ -3804,6 +3808,7 @@ Gid_t getegid (void);
 #  define DEBUG_B_TEST (0)
 #  define DEBUG_Xv_TEST (0)
 #  define DEBUG_Uv_TEST (0)
+#  define DEBUG_Pv_TEST (0)
 
 #  define PERL_DEB(a)
 #  define PERL_DEBUG(a)
@@ -3833,6 +3838,7 @@ Gid_t getegid (void);
 #  define DEBUG_B(a)
 #  define DEBUG_Xv(a)
 #  define DEBUG_Uv(a)
+#  define DEBUG_Pv(a)
 #endif /* DEBUGGING */
 
 
@@ -4312,45 +4318,16 @@ EXTCONST char* const PL_sig_name[];
 EXTCONST int         PL_sig_num[];
 #endif
 
-/* fast conversion and case folding tables */
+/* fast conversion and case folding tables.  The folding tables complement the
+ * fold, so that 'a' maps to 'A' and 'A' maps to 'a', ignoring more complicated
+ * folds such as outside the range or to multiple characters. */
 
 #ifdef DOINIT
-#ifdef EBCDIC
-EXTCONST unsigned char PL_fold[] = { /* fast EBCDIC case folding table */
-    0,      1,      2,      3,      4,      5,      6,      7,
-    8,      9,      10,     11,     12,     13,     14,     15,
-    16,     17,     18,     19,     20,     21,     22,     23,
-    24,     25,     26,     27,     28,     29,     30,     31,
-    32,     33,     34,     35,     36,     37,     38,     39,
-    40,     41,     42,     43,     44,     45,     46,     47,
-    48,     49,     50,     51,     52,     53,     54,     55,
-    56,     57,     58,     59,     60,     61,     62,     63,
-    64,     65,     66,     67,     68,     69,     70,     71,
-    72,     73,     74,     75,     76,     77,     78,     79,
-    80,     81,     82,     83,     84,     85,     86,     87,
-    88,     89,     90,     91,     92,     93,     94,     95,
-    96,     97,     98,     99,     100,    101,    102,    103,
-    104,    105,    106,    107,    108,    109,    110,    111,
-    112,    113,    114,    115,    116,    117,    118,    119,
-    120,    121,    122,    123,    124,    125,    126,    127,
-    128,    'A',    'B',    'C',    'D',    'E',    'F',    'G',
-    'H',    'I',    138,    139,    140,    141,    142,    143,
-    144,    'J',    'K',    'L',    'M',    'N',    'O',    'P',
-    'Q',    'R',    154,    155,    156,    157,    158,    159,
-    160,    161,    'S',    'T',    'U',    'V',    'W',    'X',
-    'Y',    'Z',    170,    171,    172,    173,    174,    175,
-    176,    177,    178,    179,    180,    181,    182,    183,
-    184,    185,    186,    187,    188,    189,    190,    191,
-    192,    'a',    'b',    'c',    'd',    'e',    'f',    'g',
-    'h',    'i',    202,    203,    204,    205,    206,    207,
-    208,    'j',    'k',    'l',    'm',    'n',    'o',    'p',
-    'q',    'r',    218,    219,    220,    221,    222,    223,
-    224,    225,    's',    't',    'u',    'v',    'w',    'x',
-    'y',    'z',    234,    235,    236,    237,    238,    239,
-    240,    241,    242,    243,    244,    245,    246,    247,
-    248,    249,    250,    251,    252,    253,    254,    255
-};
-#else   /* ascii rather than ebcdic */
+#ifndef EBCDIC
+
+/* The EBCDIC fold table depends on the code page, and hence is found in
+ * utfebcdic.h */
+
 EXTCONST  unsigned char PL_fold[] = {
 	0,	1,	2,	3,	4,	5,	6,	7,
 	8,	9,	10,	11,	12,	13,	14,	15,
@@ -4384,6 +4361,49 @@ EXTCONST  unsigned char PL_fold[] = {
 	232,	233,	234,	235,	236,	237,	238,	239,
 	240,	241,	242,	243,	244,	245,	246,	247,
 	248,	249,	250,	251,	252,	253,	254,	255
+};
+EXTCONST  unsigned char PL_fold_latin1[] = {
+    /* Full latin1 complement folding, except for three problematic code points:
+     *	Micro sign (181 = 0xB5) and y with diearesis (255 = 0xFF) have their
+     *	fold complements outside the Latin1 range, so can't match something
+     *	that isn't in utf8.
+     *	German lower case sharp s (223 = 0xDF) folds to two characters, 'ss',
+     *	not one, so can't be represented in this table.
+     *
+     * All have to be specially handled */
+	0,	1,	2,	3,	4,	5,	6,	7,
+	8,	9,	10,	11,	12,	13,	14,	15,
+	16,	17,	18,	19,	20,	21,	22,	23,
+	24,	25,	26,	27,	28,	29,	30,	31,
+	32,	33,	34,	35,	36,	37,	38,	39,
+	40,	41,	42,	43,	44,	45,	46,	47,
+	48,	49,	50,	51,	52,	53,	54,	55,
+	56,	57,	58,	59,	60,	61,	62,	63,
+	64,	'a',	'b',	'c',	'd',	'e',	'f',	'g',
+	'h',	'i',	'j',	'k',	'l',	'm',	'n',	'o',
+	'p',	'q',	'r',	's',	't',	'u',	'v',	'w',
+	'x',	'y',	'z',	91,	92,	93,	94,	95,
+	96,	'A',	'B',	'C',	'D',	'E',	'F',	'G',
+	'H',	'I',	'J',	'K',	'L',	'M',	'N',	'O',
+	'P',	'Q',	'R',	'S',	'T',	'U',	'V',	'W',
+	'X',	'Y',	'Z',	123,	124,	125,	126,	127,
+	128,	129,	130,	131,	132,	133,	134,	135,
+	136,	137,	138,	139,	140,	141,	142,	143,
+	144,	145,	146,	147,	148,	149,	150,	151,
+	152,	153,	154,	155,	156,	157,	158,	159,
+	160,	161,	162,	163,	164,	165,	166,	167,
+	168,	169,	170,	171,	172,	173,	174,	175,
+	176,	177,	178,	179,	180,	181 /*micro */,	182,	183,
+	184,	185,	186,	187,	188,	189,	190,	191,
+	192+32,	193+32,	194+32,	195+32,	196+32,	197+32,	198+32,	199+32,
+	200+32,	201+32,	202+32,	203+32,	204+32,	205+32,	206+32,	207+32,
+	208+32,	209+32,	210+32,	211+32,	212+32,	213+32,	214+32,	215,
+	216+32,	217+32,	218+32,	219+32,	220+32,	221+32,	222+32,	223 /* ss */,
+	224-32,	225-32,	226-32,	227-32,	228-32,	229-32,	230-32,	231-32,
+	232-32,	233-32,	234-32,	235-32,	236-32,	237-32,	238-32,	239-32,
+	240-32,	241-32,	242-32,	243-32,	244-32,	245-32,	246-32,	247,
+	248-32,	249-32,	250-32,	251-32,	252-32,	253-32,	254-32,
+	255 /* y with diaeresis */
 };
 #endif  /* !EBCDIC, but still in DOINIT */
 
@@ -4462,6 +4482,7 @@ EXTCONST  unsigned char PL_mod_latin1_uc[] = {
 };
 #else	/* ! DOINIT */
 EXTCONST unsigned char PL_fold[];
+EXTCONST unsigned char PL_fold_latin1[];
 EXTCONST unsigned char PL_mod_latin1_uc[];
 EXTCONST unsigned char PL_latin1_lc[];
 #endif
@@ -4712,6 +4733,39 @@ EXTCONST char PL_bincompat_options[] =
 EXTCONST char PL_bincompat_options[];
 #endif
 
+/* The interpreter phases. If these ever change, PL_phase_names right below will
+ * need to be updated accordingly. */
+enum perl_phase {
+    PERL_PHASE_CONSTRUCT	= 0,
+    PERL_PHASE_START		= 1,
+    PERL_PHASE_CHECK		= 2,
+    PERL_PHASE_INIT		= 3,
+    PERL_PHASE_RUN		= 4,
+    PERL_PHASE_END		= 5,
+    PERL_PHASE_DESTRUCT		= 6
+};
+
+#ifdef DOINIT
+EXTCONST char *const PL_phase_names[] = {
+    "CONSTRUCT",
+    "START",
+    "CHECK",
+    "INIT",
+    "RUN",
+    "END",
+    "DESTRUCT"
+};
+#else
+EXTCONST char *const PL_phase_names[];
+#endif
+
+#ifndef PERL_CORE
+/* Do not use this macro. It only exists for extensions that rely on PL_dirty
+ * instead of using the newer PL_phase, which provides everything PL_dirty
+ * provided, and more. */
+#  define PL_dirty (PL_phase == PERL_PHASE_DESTRUCT)
+#endif /* !PERL_CORE */
+
 END_EXTERN_C
 
 /*****************************************************************************/
@@ -4856,6 +4910,7 @@ typedef char*   (*re_intuit_start_t) (pTHX_ regexp *prog, SV *sv,
 typedef SV*	(*re_intuit_string_t) (pTHX_ regexp *prog);
 typedef void	(*regfree_t) (pTHX_ struct regexp* r);
 typedef regexp* (*regdupe_t) (pTHX_ const regexp* r, CLONE_PARAMS *param);
+typedef I32     (*re_fold_t)(const char *, char const *, I32);
 
 typedef void (*DESTRUCTORFUNC_NOCONTEXT_t) (void*);
 typedef void (*DESTRUCTORFUNC_t) (pTHX_ void*);
@@ -4876,6 +4931,7 @@ typedef OP* (*Perl_ppaddr_t)(pTHX);
 typedef OP* (*Perl_check_t) (pTHX_ OP*);
 typedef void(*Perl_ophook_t)(pTHX_ OP*);
 typedef int (*Perl_keyword_plugin_t)(pTHX_ char*, STRLEN, OP**);
+typedef void(*Perl_cpeep_t)(pTHX_ OP *, OP *);
 
 #define KEYWORD_PLUGIN_DECLINE 0
 #define KEYWORD_PLUGIN_STMT    1

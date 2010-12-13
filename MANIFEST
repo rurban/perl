@@ -45,6 +45,7 @@ cpan/Archive-Extract/t/src/y.txz		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.zip		Archive::Extract tests
 cpan/Archive-Tar/bin/ptar				the ptar utility
 cpan/Archive-Tar/bin/ptardiff				the ptardiff utility
+cpan/Archive-Tar/bin/ptargrep				the ptardiff utility
 cpan/Archive-Tar/lib/Archive/Tar/Constant.pm		Archive::Tar
 cpan/Archive-Tar/lib/Archive/Tar/File.pm		Archive::Tar
 cpan/Archive-Tar/lib/Archive/Tar.pm			Archive::Tar
@@ -876,6 +877,7 @@ cpan/ExtUtils-CBuilder/t/00-have-compiler.t			ExtUtils::CBuilder tests
 cpan/ExtUtils-CBuilder/t/01-basic.t				tests for ExtUtils::CBuilder
 cpan/ExtUtils-CBuilder/t/02-link.t				tests for ExtUtils::CBuilder
 cpan/ExtUtils-CBuilder/t/03-cplusplus.t				tests for ExtUtils::CBuilder
+cpan/ExtUtils-CBuilder/t/04-base.t				tests for ExtUtils::CBuilder
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant/Base.pm		generate XS code to import C header constants
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant.pm			generate XS code to import C header constants
 cpan/ExtUtils-Constant/lib/ExtUtils/Constant/ProxySubs.pm	generate XS code for proxy constants
@@ -1351,7 +1353,6 @@ cpan/Memoize/Memoize/NDBM_File.pm	Memoize glue layer for NDBM_File
 cpan/Memoize/Memoize.pm			Memoize
 cpan/Memoize/Memoize/SDBM_File.pm	Memoize glue layer for SDBM_File
 cpan/Memoize/Memoize/Storable.pm	Memoize glue layer for Storable
-cpan/Memoize/README			Memoize release notes
 cpan/Memoize/t/array_confusion.t	Memoize ambiguous array return tests
 cpan/Memoize/t/array.t			Memoize array context return tests
 cpan/Memoize/t/correctness.t		Memoize basic correctness tests
@@ -1382,7 +1383,6 @@ cpan/MIME-Base64/t/base64.t		See whether MIME::Base64 works
 cpan/MIME-Base64/t/length.t	See whether MIME::QuotedPrint works
 cpan/MIME-Base64/t/quoted-print.t	See whether MIME::QuotedPrint works
 cpan/MIME-Base64/t/unicode.t		See whether MIME::Base64 works
-cpan/MIME-Base64/t/warn.t		See whether MIME::Base64 works
 cpan/Module-Build/Changes				Module::Build
 cpan/Module-Build/lib/inc/latest.pm			Module::Build
 cpan/Module-Build/lib/inc/latest/private.pm		Module::Build
@@ -2441,7 +2441,14 @@ cpan/Unicode-Collate/Collate/Locale/zh_strk.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate.pm			Unicode::Collate
 cpan/Unicode-Collate/README			Unicode::Collate
 cpan/Unicode-Collate/t/altern.t			Unicode::Collate
+cpan/Unicode-Collate/t/backwds.t			Unicode::Collate
+cpan/Unicode-Collate/t/cjk_b5.t		Unicode::Collate
+cpan/Unicode-Collate/t/cjk_gb.t		Unicode::Collate
+cpan/Unicode-Collate/t/cjk_ja.t		Unicode::Collate
+cpan/Unicode-Collate/t/cjk_ko.t		Unicode::Collate
+cpan/Unicode-Collate/t/cjk_py.t		Unicode::Collate
 cpan/Unicode-Collate/t/cjkrange.t		Unicode::Collate
+cpan/Unicode-Collate/t/cjk_st.t		Unicode::Collate
 cpan/Unicode-Collate/t/compatui.t		Unicode::Collate
 cpan/Unicode-Collate/t/contract.t		Unicode::Collate
 cpan/Unicode-Collate/t/default.t		Unicode::Collate
@@ -2515,6 +2522,7 @@ cpan/Unicode-Collate/t/loc_zhgb.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_zhpy.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_zhst.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_zh.t			Unicode::Collate
+cpan/Unicode-Collate/t/nonchar.t			Unicode::Collate
 cpan/Unicode-Collate/t/normal.t			Unicode::Collate
 cpan/Unicode-Collate/t/overcjk0.t		Unicode::Collate
 cpan/Unicode-Collate/t/overcjk1.t		Unicode::Collate
@@ -2612,6 +2620,9 @@ dist/Attribute-Handlers/t/constants.t			Test constants and Attribute::Handlers
 dist/Attribute-Handlers/t/data_convert.t		Test attribute data conversion
 dist/Attribute-Handlers/t/linerep.t			See if Attribute::Handlers works
 dist/Attribute-Handlers/t/multi.t			See if Attribute::Handlers works
+dist/autouse/lib/autouse.pm		Load and call a function only when it's used
+dist/autouse/t/autouse.t		See if autouse works
+dist/autouse/t/lib/MyTestModule.pm	Test module for autouse
 dist/base/Changes		base.pm changelog
 dist/base/lib/base.pm		Establish IS-A relationship at compile time
 dist/base/lib/fields.pm		Set up object field names for pseudo-hash-using classes
@@ -2694,6 +2705,11 @@ dist/Data-Dumper/t/overload.t	See if Data::Dumper works for overloaded data
 dist/Data-Dumper/t/pair.t	See if Data::Dumper pair separator works
 dist/Data-Dumper/t/perl-74170.t	Regression test for stack reallocation
 dist/Data-Dumper/t/terse.t	See if Data::Dumper terse option works
+dist/Devel-SelfStubber/lib/Devel/SelfStubber.pm	Generate stubs for SelfLoader.pm
+dist/Devel-SelfStubber/t/Devel-SelfStubber.t	See if Devel::SelfStubber works
+dist/Env/lib/Env.pm		Map environment into ordinary variables
+dist/Env/t/array.t		See if Env works for arrays
+dist/Env/t/env.t		See if Env works
 dist/ExtUtils-Command/lib/ExtUtils/Command.pm	Utilities for Make on non-UNIX platforms
 dist/ExtUtils-Command/t/cp.t			See if ExtUtils::Command works
 dist/ExtUtils-Command/t/eu_command.t		See if ExtUtils::Command works
@@ -2728,6 +2744,8 @@ dist/ExtUtils-ParseXS/t/XSTest.pm		Test file for ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/XSTest.xs		Test file for ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/XSUsage.pm		ExtUtils::ParseXS tests
 dist/ExtUtils-ParseXS/t/XSUsage.xs		ExtUtils::ParseXS tests
+dist/File-CheckTree/lib/File/CheckTree.pm	Perl module supporting wholesale file mode validation
+dist/File-CheckTree/t/CheckTree.t		See if File::CheckTree works
 dist/Filter-Simple/lib/Filter/Simple.pm				Simple frontend to Filter::Util::Call
 dist/Filter-Simple/t/data.t					See if Filter::Simple works
 dist/Filter-Simple/t/export.t					See if Filter::Simple works
@@ -2738,6 +2756,8 @@ dist/Filter-Simple/t/lib/Filter/Simple/ExportTest.pm		Helper file for Filter::Si
 dist/Filter-Simple/t/lib/Filter/Simple/FilterOnlyTest.pm	Helper file for Filter::Simple tests
 dist/Filter-Simple/t/lib/Filter/Simple/FilterTest.pm		Helper file for Filter::Simple tests
 dist/Filter-Simple/t/lib/Filter/Simple/ImportTest.pm		Helper file for Filter::Simple tests
+dist/I18N-Collate/lib/I18N/Collate.pm		Routines to do strxfrm-based collation
+dist/I18N-Collate/t/I18N-Collate.t		See if I18N::Collate works
 dist/I18N-LangTags/ChangeLog			I18N::LangTags
 dist/I18N-LangTags/lib/I18N/LangTags/Detect.pm	Detect language preferences
 dist/I18N-LangTags/lib/I18N/LangTags/List.pm	List of tags for human languages
@@ -3091,9 +3111,6 @@ epoc/epoc_stubs.c	EPOC port
 epoc/link.pl		EPOC port link a exe
 ext/attributes/attributes.pm		For "sub foo : attrlist"
 ext/attributes/attributes.xs		For "sub foo : attrlist"
-ext/autouse/lib/autouse.pm	Load and call a function only when it's used
-ext/autouse/t/autouse.t		See if autouse works
-ext/autouse/t/lib/MyTestModule.pm	Test module for autouse
 ext/B/B/Concise.pm	Compiler Concise backend
 ext/B/B.pm		Compiler backend support functions and methods
 ext/B/B/Showlex.pm	Compiler Showlex backend
@@ -3155,8 +3172,6 @@ ext/Devel-Peek/Makefile.PL	Data debugging tool, makefile writer
 ext/Devel-Peek/Peek.pm		Data debugging tool, module and pod
 ext/Devel-Peek/Peek.xs		Data debugging tool, externals
 ext/Devel-Peek/t/Peek.t		See if Devel::Peek works
-ext/Devel-SelfStubber/lib/Devel/SelfStubber.pm	Generate stubs for SelfLoader.pm
-ext/Devel-SelfStubber/t/Devel-SelfStubber.t	See if Devel::SelfStubber works
 ext/DynaLoader/dl_aix.xs	AIX implementation
 ext/DynaLoader/dl_beos.xs	BeOS implementation
 ext/DynaLoader/dl_dld.xs	GNU dld style implementation
@@ -3411,6 +3426,7 @@ ext/XS-APItest/MANIFEST		XS::APItest extension
 ext/XS-APItest/notcore.c	Test API functions when PERL_CORE is not defined
 ext/XS-APItest/numeric.xs	XS::APItest wrappers for numeric.c
 ext/XS-APItest/README		XS::APItest extension
+ext/XS-APItest/t/arrayexpr.t	test recursive descent expression parsing
 ext/XS-APItest/t/BHK.pm		Helper for ./blockhooks.t
 ext/XS-APItest/t/blockasexpr.t	test recursive descent block parsing
 ext/XS-APItest/t/blockhooks-csc.t	XS::APItest: more tests for PL_blockhooks
@@ -3422,6 +3438,7 @@ ext/XS-APItest/t/call.t		XS::APItest extension
 ext/XS-APItest/t/cleanup.t	test stack behaviour on unwinding
 ext/XS-APItest/t/cophh.t	test COPHH API
 ext/XS-APItest/t/copyhints.t	test hv_copy_hints_hv() API
+ext/XS-APItest/t/customop.t	XS::APItest: tests for custom ops
 ext/XS-APItest/t/exception.t	XS::APItest extension
 ext/XS-APItest/t/grok.t		XS::APItest: tests for grok* functions
 ext/XS-APItest/t/hash.t		XS::APItest: tests for hash related APIs
@@ -3432,6 +3449,7 @@ ext/XS-APItest/t/labelconst.t	test recursive descent label parsing
 ext/XS-APItest/t/loopblock.t	test recursive descent block parsing
 ext/XS-APItest/t/looprest.t	test recursive descent statement-sequence parsing
 ext/XS-APItest/t/magic_chain.t	test low-level MAGIC chain handling
+ext/XS-APItest/t/magic.t	test attaching, finding, and removing magic
 ext/XS-APItest/t/Markers.pm	Helper for ./blockhooks.t
 ext/XS-APItest/t/multicall.t	XS::APItest: test MULTICALL macros
 ext/XS-APItest/t/my_cxt.t	XS::APItest: test MY_CXT interface
@@ -3447,6 +3465,7 @@ ext/XS-APItest/t/postinc.t	test op_lvalue()
 ext/XS-APItest/t/printf.t	XS::APItest extension
 ext/XS-APItest/t/ptr_table.t	Test ptr_table_* APIs
 ext/XS-APItest/t/push.t		XS::APItest extension
+ext/XS-APItest/t/refs.t		Test typemap ref handling
 ext/XS-APItest/t/rmagical.t	XS::APItest extension
 ext/XS-APItest/t/rv2cv_op_cv.t	test rv2cv_op_cv() API
 ext/XS-APItest/t/savehints.t	test SAVEHINTS() API
@@ -3670,9 +3689,6 @@ lib/dumpvar.pl			A variable dumper
 lib/dumpvar.t			A variable dumper tester
 lib/English.pm			Readable aliases for short variables
 lib/English.t			See if English works
-lib/Env.pm			Map environment into ordinary variables
-lib/Env/t/array.t		See if Env works for arrays
-lib/Env/t/env.t			See if Env works
 lib/exceptions.pl		catch and throw routines
 lib/Exporter/Heavy.pm		Complicated routines for Exporter
 lib/Exporter.pm			Exporter base class
@@ -3687,8 +3703,6 @@ lib/feature.t			See if features work
 lib/feature/unicode_strings.t	See if feature "unicode_strings" work
 lib/File/Basename.pm		Emulate the basename program
 lib/File/Basename.t		See if File::Basename works
-lib/File/CheckTree.pm		Perl module supporting wholesale file mode validation
-lib/File/CheckTree.t		See if File::CheckTree works
 lib/File/Compare.pm		Emulation of cmp command
 lib/File/Compare.t		See if File::Compare works
 lib/File/Copy.pm		Emulation of cp command
@@ -3717,8 +3731,6 @@ lib/Getopt/Std.t		See if Getopt::Std and Getopt::Long work
 lib/h2ph.t			See if h2ph works like it should
 lib/h2xs.t			See if h2xs produces expected lists of files
 lib/hostname.pl			Old hostname code
-lib/I18N/Collate.pm		Routines to do strxfrm-based collation
-lib/I18N/Collate.t		See if I18N::Collate works
 lib/importenv.pl		Perl routine to get environment into variables
 lib/integer.pm			For "use integer"
 lib/integer.t			For "use integer" testing
@@ -3831,6 +3843,7 @@ lib/unicore/DAge.txt				Unicode character database
 lib/unicore/DCoreProperties.txt			Unicode character database
 lib/unicore/DNormalizationProps.txt		Unicode character database
 lib/unicore/EastAsianWidth.txt			Unicode character database
+lib/unicore/EmojiSources.txt			Unicode character database
 lib/unicore/extracted/DBidiClass.txt		Unicode character database
 lib/unicore/extracted/DBinaryProperties.txt	Unicode character database
 lib/unicore/extracted/DCombiningClass.txt	Unicode character database
@@ -3844,6 +3857,8 @@ lib/unicore/extracted/DNumType.txt		Unicode character database
 lib/unicore/extracted/DNumValues.txt		Unicode character database
 lib/unicore/HangulSyllableType.txt		Unicode character database
 lib/unicore/Index.txt				Unicode character database
+lib/unicore/IndicMatraCategory.txt		Unicode character database
+lib/unicore/IndicSyllabicCategory.txt		Unicode character database
 lib/unicore/Jamo.txt				Unicode character database
 lib/unicore/LineBreak.txt			Unicode character database
 lib/unicore/Makefile				Unicode character database
@@ -3858,6 +3873,7 @@ lib/unicore/PropList.txt			Unicode character database
 lib/unicore/PropValueAliases.txt		Unicode character database
 lib/unicore/README.perl				Unicode character database
 lib/unicore/ReadMe.txt				Unicode character database info
+lib/unicore/ScriptExtensions.txt		Unicode character database
 lib/unicore/Scripts.txt				Unicode character database
 lib/unicore/SpecialCasing.txt			Unicode character database
 lib/unicore/StandardizedVariants.txt		Unicode character database
@@ -3892,7 +3908,6 @@ mad/P5AST.pm			Used by nomad
 mad/P5re.pm			Used by nomad
 mad/PLXML.pm			Used by nomad
 mad/t/p55.t			Test for the Perl 5 to Perl 5 translator
-makeaperl.SH			perl script that produces a new perl binary
 makedef.pl			Create symbol export lists for linking
 makedepend.SH			Precursor to makedepend
 make_ext.pl			Used by Makefile to execute extension Makefiles
@@ -4102,6 +4117,7 @@ pod/perl5133delta.pod		Perl changes in version 5.13.3
 pod/perl5134delta.pod		Perl changes in version 5.13.4
 pod/perl5135delta.pod		Perl changes in version 5.13.5
 pod/perl5136delta.pod		Perl changes in version 5.13.6
+pod/perl5137delta.pod		Perl changes in version 5.13.7
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl570delta.pod		Perl changes in version 5.7.0
@@ -4467,11 +4483,13 @@ t/io/crlf.t			See if :crlf works
 t/io/crlf_through.t		See if pipe passes data intact with :crlf
 t/io/defout.t			See if PL_defoutgv works
 t/io/dup.t			See if >& works right
+t/io/eintr.t			See if code called during EINTR is safe
 t/io/errnosig.t			Test case for restoration $! when leaving signal handlers
 t/io/errno.t			See if $! is correctly set
 t/io/fflush.t			See if auto-flush on fork/exec/system/qx works
 t/io/fs.t			See if directory manipulations work
 t/io/inplace.t			See if inplace editing works
+t/io/iofile.t			See if we can load IO::File on demand
 t/io/iprefix.t			See if inplace editing works with prefixes
 t/io/layers.t			See if PerlIO layers work
 t/io/nargv.t			See if nested ARGV stuff works
@@ -4578,6 +4596,7 @@ t/mro/complex_dfs.t		mro tests
 t/mro/dbic_c3.t			mro tests
 t/mro/dbic_dfs.t		mro tests
 t/mro/inconsistent_c3.t		mro tests
+t/mro/isa_aliases.t		tests for shared @ISA arrays
 t/mro/isa_c3.t			test for optimisatised mro_get_linear_isa_c3
 t/mro/isa_dfs.t			test for optimisatised mro_get_linear_isa_dfs
 t/mro/isarev.t			PL_isarev/mro::get_isarev tests
@@ -4636,6 +4655,7 @@ t/op/die_except.t		See if die/eval avoids $@ clobberage
 t/op/die_exit.t			See if die and exit status interaction works
 t/op/die_keeperr.t		See if G_KEEPERR works for destructors
 t/op/die.t			See if die works
+t/op/die_unwind.t		Check die/eval early-$@ backcompat hack
 t/op/dor.t			See if defined-or (//) works
 t/op/do.t			See if subroutines work
 t/op/each_array.t		See if array iterators work
@@ -4685,6 +4705,7 @@ t/op/localref.t			See if local ${deref} works
 t/op/local.t			See if local works
 t/op/loopctl.t			See if next/last/redo work
 t/op/lop.t			See if logical operators work
+t/op/magic_phase.t		See if ${^GLOBAL_PHASE} works
 t/op/magic.t			See if magic variables work
 t/op/method.t			See if method calls work
 t/op/mkdir.t			See if mkdir works
@@ -4780,12 +4801,14 @@ t/porting/checkcase.t		Check whether we are case-insensitive-fs-friendly
 t/porting/diag.t		Test completeness of perldiag.pod
 t/porting/dual-life.t		Check that dual-life bins are in utils/
 t/porting/exec-bit.t		Check that exec-bit bins are identified
+t/porting/FindExt.t		Test win32/FindExt.pm
 t/porting/maintainers.t		Test that Porting/Maintaners.pl is up to date
 t/porting/manifest.t		Test that this MANIFEST file is well formed
 t/porting/podcheck.t		Test the POD of shipped modules is well formed
 t/porting/regen.t		Check that regen.pl doesn't need running
 t/porting/test_bootstrap.t	Test that the instructions for test bootstrapping aren't accidentally overlooked.
 t/README			Instructions for regression tests
+t/re/fold_grind.t		See if case folding works properly
 t/re/overload.t		Test against string corruption in pattern matches on overloaded objects
 t/re/pat_advanced.t		See if advanced esoteric patterns work
 t/re/pat_advanced_thr.t		See if advanced esoteric patterns work in another thread
@@ -4805,6 +4828,7 @@ t/re/qr.t			See if qr works
 t/re/reg_60508.t		See if bug #60508 is fixed
 t/re/reg_email.t		See if regex recursion works by parsing email addresses
 t/re/reg_email_thr.t		See if regex recursion works by parsing email addresses in another thread
+t/re/reg_eval_scope.t		Test scoping issues with (?{ }) and (??{ })
 t/re/reg_eval.t			Test again regexp state corruption in (?{ }) and (??{ })
 t/re/regexp_noamp.t		See if regular expressions work with optimizations
 t/re/regexp_notrie.t		See if regular expressions work without trie optimisation
@@ -4913,6 +4937,7 @@ utils/piconv.PL			iconv(1), reinvented in perl
 utils/pl2pm.PL			A pl to pm translator
 utils/prove.PL			The prove harness utility
 utils/ptardiff.PL		The ptardiff utility
+utils/ptargrep.PL		The ptargrep utility
 utils/ptar.PL			The ptar utility
 utils/shasum.PL			filter for computing SHA digests (analogous to md5sum)
 utils/splain.PL			Stand-alone version of diagnostics.pm
@@ -4937,7 +4962,6 @@ vms/test.com			DCL driver for regression tests
 vms/vms.c			VMS-specific C code for Perl core
 vms/vmsish.h			VMS-specific C header for Perl core
 vms/vmspipe.com			VMS-specific piped command helper script
-vms/writemain.pl		Generate perlmain.c from miniperlmain.c+extensions
 vos/Changes			Changes made to port Perl to the VOS operating system
 vos/compile_full_perl.cm	VOS command macro to build "full" Perl
 vos/configure_full_perl.sh	VOS shell script to configure "full" perl before building
@@ -4977,7 +5001,6 @@ win32/create_perllibst_h.pl	creates perllibst.h file for inclusion from perllib.
 win32/distclean.bat		Remove _ALL_ files not listed here in MANIFEST
 win32/fcrypt.c			crypt() implementation
 win32/FindExt.pm		Scan for extensions
-win32/FindExt.t			Test FindExt.pm
 win32/genmk95.pl		Perl code to generate command.com-usable makefile.95
 win32/include/arpa/inet.h	Win32 port
 win32/include/dirent.h		Win32 port
@@ -5013,7 +5036,6 @@ win32/win32thread.h		Win32 port mapping to threads
 win32/wince.c			WinCE port
 win32/wince.h			WinCE port
 win32/wincesck.c		WinCE port
-writemain.SH			Generate perlmain.c from miniperlmain.c+extensions
 x2p/a2p.c			Output of a2p.y run through byacc
 x2p/a2p.h			Global declarations
 x2p/a2p.pod			Pod for awk to perl translator

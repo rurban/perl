@@ -1541,7 +1541,7 @@ inf:inf:NaN,NaN
 inf:-inf:NaN,NaN
 8:0:inf,8
 inf:0:inf,inf
-# exceptions to reminder rule
+# exceptions to remainder rule
 -8:0:-inf,-8
 -inf:0:-inf,-inf
 0:0:NaN,NaN
@@ -1725,12 +1725,15 @@ abc:abc:5:NaN
 5:5:abc:NaN
 5:abc:5:NaN
 abc:5:5:NaN
+3:5:0:NaN
 # bmodpow Expected results
 0:0:2:1
 1:0:2:1
 0:0:1:0
+0:3:5:0
 8:7:5032:3840
 8:-1:5033:4404
+1e50:1:1:0
 98436739867439843769485798542749827593285729587325:43698764986460981048259837659386739857456983759328457:6943857329857295827698367:3104744730915914415259518
 # bmodpow Error cases
 8:8:-5:NaN
@@ -1757,7 +1760,7 @@ inf:inf:NaN
 inf:-inf:NaN
 8:0:8
 inf:0:inf
-# exceptions to reminder rule
+# exceptions to remainder rule
 -inf:0:-inf
 -8:0:-8
 0:0:NaN

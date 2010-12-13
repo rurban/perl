@@ -558,8 +558,12 @@ sub runperl {
 	    join $sep, grep { $_ ne "" and $_ ne "." and -d $_ and
 		($is_mswin or $is_vms or !(stat && (stat _)[2]&0022)) }
 		    split quotemeta ($sep), $1;
-	$ENV{PATH} = $ENV{PATH} . "$sep/bin" if $is_cygwin;  # Must have /bin under Cygwin
-
+	if ($is_cygwin) {   # Must have /bin under Cygwin
+	    if (length $ENV{PATH}) {
+		$ENV{PATH} = $ENV{PATH} . $sep;
+	    }
+	    $ENV{PATH} = $ENV{PATH} . '/bin';
+	}
 	$runperl =~ /(.*)/s;
 	$runperl = $1;
 
@@ -626,10 +630,16 @@ sub which_perl {
 }
 
 sub unlink_all {
+    my $count = 0;
     foreach my $file (@_) {
         1 while unlink $file;
-        _print_stderr "# Couldn't unlink '$file': $!\n" if -f $file;
+	if( -f $file ){
+	    _print_stderr "# Couldn't unlink '$file': $!\n";
+	}else{
+	    ++$count;
+	}
     }
+    $count;
 }
 
 my %tmpfiles;
@@ -1123,6 +1133,19 @@ sub latin1_to_native($) {
 
     eval '$string =~ tr/' . $straight . '/' . $$cp . '/';
     return $string;
+}
+
+sub ord_latin1_to_native {
+    # given an input latin1 code point, return the platform's native
+    # equivalent value
+
+    return ord latin1_to_native(chr $_[0]);
+}
+
+sub ord_native_to_latin1 {
+    # given an input platform code point, return the latin1 equivalent value
+
+    return ord native_to_latin1(chr $_[0]);
 }
 
 1;

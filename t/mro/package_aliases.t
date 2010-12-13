@@ -10,7 +10,7 @@ BEGIN {
 
 use strict;
 use warnings;
-plan(tests => 20);
+plan(tests => 27);
 
 {
     package New;
@@ -138,6 +138,8 @@ for(
 #
 # This test assigns outer:: to clone::, making clone::inner an alias to
 # outer::inner.
+#
+# Then we also run the test again, but without outer::inner
 for(
  {
    name => 'assigning a glob to a glob',
@@ -166,6 +168,23 @@ for(
   "ok 1\nok 2\n",
    {},
   "replacing nonexistent nested packages by $$_{name} updates isa caches";
+
+ # Same test but with the subpackage autovivified after the assignment
+ fresh_perl_is
+   q~
+     @left::ISA = 'outer::inner';
+     @right::ISA = 'clone::inner';
+
+    __code__;
+
+     eval q{package outer::inner};
+
+     print "ok 1", "\n" if left->isa("clone::inner");
+     print "ok 2", "\n" if right->isa("outer::inner");
+   ~ =~ s\__code__\$$_{code}\r,
+  "ok 1\nok 2\n",
+   {},
+  "Giving nonexistent packages multiple effective names by $$_{name}";
 }
 
 no warnings; # temporary; there seems to be a scoping bug, as this does not
@@ -271,3 +290,61 @@ watchdog 3;
 *foo:: = \%::;
 *Acme::META::Acme:: = \*Acme::; # indirect self-reference
 pass("mro_package_moved and self-referential packages");
+
+# Deleting a glob whose name does not indicate its location in the symbol
+# table but which nonetheless *is* in the symbol table.
+{
+    no strict refs=>;
+    no warnings;
+    @one::more::ISA = "four";
+    sub four::womp { "aoeaa" }
+    *two:: = *one::;
+    delete $::{"one::"};
+    @Childclass::ISA = 'two::more';
+    my $accum = 'Childclass'->womp . '-';
+    my $life_raft = delete ${"two::"}{"more::"};
+    $accum .= eval { 'Childclass'->womp } // '<undef>';
+    is $accum, 'aoeaa-<undef>',
+     'Deleting globs whose loc in the symtab differs from gv_fullname'
+}
+
+# Pathological test for undeffing a stash that has an alias.
+*Ghelp:: = *Neen::;
+@Subclass::ISA = 'Ghelp';
+undef %Ghelp::;
+sub Frelp::womp { "clumpren" }
+eval '
+  $Neen::whatever++;
+  @Neen::ISA = "Frelp";
+';
+is eval { 'Subclass'->womp }, 'clumpren',
+ 'Changes to @ISA after undef via original name';
+undef %Ghelp::;
+eval '
+  $Ghelp::whatever++;
+  @Ghelp::ISA = "Frelp";
+';
+is eval { 'Subclass'->womp }, 'clumpren',
+ 'Changes to @ISA after undef via alias';
+
+
+# Packages whose containing stashes have aliases must lose all names cor-
+# responding to that container when detached.
+{
+ {package smare::baz} # autovivify
+ *phring:: = *smare::;  # smare::baz now also named phring::baz
+ *bonk:: = delete $smare::{"baz::"};
+ # In 5.13.7, it has now lost its smare::baz name (reverting to phring::baz
+ # as the effective name), and gained bonk as an alias.
+ # In 5.13.8, both smare::baz *and* phring::baz names are deleted.
+
+ # Make some methods
+ no strict 'refs';
+ *{"phring::baz::frump"} = sub { "hello" };
+ sub frumper::frump { "good bye" };
+
+ @brumkin::ISA = qw "bonk frumper"; # now wrongly inherits from phring::baz
+
+ is frump brumkin, "good bye",
+  'detached stashes lose all names corresponding to the containing stash';
+}

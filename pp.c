@@ -218,15 +218,15 @@ PP(pp_rv2gv)
 	    if (sv) SvFAKE_off(sv);
 	}
     }
-    if (PL_op->op_private & OPpLVAL_INTRO)
-	save_gp(MUTABLE_GV(sv), !(PL_op->op_flags & OPf_SPECIAL));
     if (sv && SvFAKE(sv)) {
 	SV *newsv = sv_newmortal();
 	sv_setsv_flags(newsv, sv, 0);
 	SvFAKE_off(newsv);
-	SETs(newsv);
+	sv = newsv;
     }
-    else SETs(sv);
+    if (PL_op->op_private & OPpLVAL_INTRO)
+	save_gp(MUTABLE_GV(sv), !(PL_op->op_flags & OPf_SPECIAL));
+    SETs(sv);
     RETURN;
 }
 
@@ -892,7 +892,7 @@ PP(pp_undef)
 	    GvMULTI_on(sv);
 
             if(stash)
-                mro_package_moved(NULL, stash, (const GV *)sv, NULL, 0);
+                mro_package_moved(NULL, stash, (const GV *)sv, 0);
             stash = NULL;
             /* undef *Foo::ISA */
             if( strEQ(GvNAME((const GV *)sv), "ISA")
@@ -3828,7 +3828,7 @@ PP(pp_ucfirst)
 
 	    /* Convert the two source bytes to a single Unicode code point
 	     * value, change case and save for below */
-	    chr = UTF8_ACCUMULATE(*s, *(s+1));
+	    chr = TWO_BYTE_UTF8_TO_UNI(*s, *(s+1));
 	    if (op_type == OP_LCFIRST) {    /* lower casing is easy */
 		U8 lower = toLOWER_LATIN1(chr);
 		STORE_UNI_TO_UTF8_TWO_BYTE(tmpbuf, lower);
@@ -4153,10 +4153,10 @@ PP(pp_uc)
 
 		/* Likewise, if it fits in a byte, its case change is in our
 		 * table */
-		U8 orig = UTF8_ACCUMULATE(*s, *(s+1));
+		U8 orig = TWO_BYTE_UTF8_TO_UNI(*s, *s++);
 		U8 upper = toUPPER_LATIN1_MOD(orig);
 		CAT_TWO_BYTE_UNI_UPPER_MOD(d, orig, upper);
-		s += 2;
+		s++;
 	    }
 	    else {
 #else
@@ -4391,9 +4391,9 @@ PP(pp_lc)
 	    else if (UTF8_IS_DOWNGRADEABLE_START(*s)) {
 
 		/* As do the ones in the Latin1 range */
-		U8 lower = toLOWER_LATIN1(UTF8_ACCUMULATE(*s, *(s+1)));
+		U8 lower = toLOWER_LATIN1(TWO_BYTE_UTF8_TO_UNI(*s, *s++));
 		CAT_UNI_TO_UTF8_TWO_BYTE(d, lower);
-		s += 2;
+		s++;
 	    }
 	    else {
 #endif
@@ -4712,8 +4712,8 @@ PP(pp_rkeys)
     }
 
     if ( SvTYPE(sv) != SVt_PVHV && SvTYPE(sv) != SVt_PVAV ) {
-	DIE(aTHX_ Perl_form(aTHX_ "Type of argument to %s must be hashref or arrayref",
-	    PL_op_desc[PL_op->op_type] ));
+	DIE(aTHX_ "Type of argument to %s must be hashref or arrayref",
+	    PL_op_desc[PL_op->op_type] );
     }
 
     /* Delegate to correct function for op type */

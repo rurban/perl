@@ -1,7 +1,7 @@
 package Socket;
 
 our($VERSION, @ISA, @EXPORT, @EXPORT_OK, %EXPORT_TAGS);
-$VERSION = "1.91";
+$VERSION = "1.92";
 
 =head1 NAME
 
@@ -112,6 +112,16 @@ Note - does not return a number.
 Returns the 4-byte 'invalid' ip address.  Normally equivalent
 to inet_aton('255.255.255.255').
 
+=item IN6ADDR_ANY
+
+Returns the 16-byte wildcard IPv6 address. Normally equivalent
+to inet_pton(AF_INET6, "::")
+
+=item IN6ADDR_LOOPBACK
+
+Returns the 16-byte loopback IPv6 address. Normally equivalent
+to inet_pton(AF_INET6, "::1")
+
 =item sockaddr_family SOCKADDR
 
 Takes a sockaddr structure (as returned by pack_sockaddr_in(),
@@ -146,6 +156,29 @@ returns an array of two elements: the port and an opaque string
 representing the IP address (you can use inet_ntoa() to convert the
 address to the four-dotted numeric format).  Will croak if the
 structure does not have AF_INET in the right place.
+
+=item sockaddr_in6 PORT, IP6_ADDRESS, [ SCOPE_ID, [ FLOWINFO ] ]
+
+=item sockaddr_in6 SOCKADDR_IN6
+
+In list context, unpacks its SOCKADDR_IN6 argument according to
+unpack_sockaddr_in6(). In scalar context, packs its arguments according to
+pack_sockaddr_in6().
+
+=item pack_sockaddr_in6 PORT, IP6_ADDRESS, [ SCOPE_ID, [ FLOWINFO ] ]
+
+Takes two to four arguments, a port number, an opaque string (as returned by
+inet_pton()), optionally a scope ID number, and optionally a flow label
+number. Returns the sockaddr_in6 structure with those arguments packed in
+with AF_INET6 filled in. IPv6 equivalent of pack_sockaddr_in().
+
+=item unpack_sockaddr_in6 SOCKADDR_IN6
+
+Takes a sockaddr_in6 structure (as returned by pack_sockaddr_in6()) and
+returns an array of four elements: the port number, an opaque string
+representing the IPv6 address, the scope ID, and the flow label. (You can
+use inet_ntop() to convert the address to the usual string format). Will
+croak if the structure does not have AF_INET6 in the right place.
 
 =item sockaddr_un PATHNAME
 
@@ -205,8 +238,10 @@ require XSLoader;
 	sockaddr_family
 	pack_sockaddr_in unpack_sockaddr_in
 	pack_sockaddr_un unpack_sockaddr_un
-	sockaddr_in sockaddr_un
+	pack_sockaddr_in6 unpack_sockaddr_in6
+	sockaddr_in sockaddr_in6 sockaddr_un
 	INADDR_ANY INADDR_BROADCAST INADDR_LOOPBACK INADDR_NONE
+	IN6ADDR_ANY IN6ADDR_LOOPBACK
 	AF_802
 	AF_AAL
 	AF_APPLETALK
@@ -418,6 +453,17 @@ sub sockaddr_in {
     } else {
 	croak "usage:   sin_sv = sockaddr_in(port,iaddr))" unless @_ == 2;
         pack_sockaddr_in(@_);
+    }
+}
+
+sub sockaddr_in6 {
+    if (wantarray) {
+	croak "usage:   (port,in6addr,scope_id,flowinfo) = sockaddr_in6(sin6_sv)" unless @_ == 1;
+	unpack_sockaddr_in6(@_);
+    }
+    else {
+	croak "usage:   sin6_sv = sockaddr_in6(port,in6addr,[scope_id,[flowinfo]])" unless @_ >= 2 and @_ <= 4;
+	pack_sockaddr_in6(@_);
     }
 }
 

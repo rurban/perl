@@ -23,7 +23,7 @@ use AutoLoader;
 use FileHandle;
 use vars qw($canonical $forgive_me $VERSION);
 
-$VERSION = '2.23';
+$VERSION = '2.25';
 *AUTOLOAD = \&AutoLoader::AUTOLOAD;		# Grrr...
 
 #
@@ -151,14 +151,14 @@ sub read_magic {
 	$net_order = 0;
     }
     else {
-	$net_order = ord(substr($buf, 0, 1, ""));
-	my $major = $net_order >> 1;
+	$buf =~ s/(.)//s;
+	my $major = (ord $1) >> 1;
 	return undef if $major > 4; # sanity (assuming we never go that high)
 	$info{major} = $major;
-	$net_order &= 0x01;
+	$net_order = (ord $1) & 0x01;
 	if ($major > 1) {
-	    return undef unless length($buf);
-	    my $minor = ord(substr($buf, 0, 1, ""));
+	    return undef unless $buf =~ s/(.)//s;
+	    my $minor = ord $1;
 	    $info{minor} = $minor;
 	    $info{version} = "$major.$minor";
 	    $info{version_nv} = sprintf "%d.%03d", $major, $minor;
@@ -171,17 +171,16 @@ sub read_magic {
     $info{netorder} = $net_order;
 
     unless ($net_order) {
-	return undef unless length($buf);
-	my $len = ord(substr($buf, 0, 1, ""));
+	return undef unless $buf =~ s/(.)//s;
+	my $len = ord $1;
 	return undef unless length($buf) >= $len;
 	return undef unless $len == 4 || $len == 8;  # sanity
-	$info{byteorder} = substr($buf, 0, $len, "");
-	$info{intsize} = ord(substr($buf, 0, 1, ""));
-	$info{longsize} = ord(substr($buf, 0, 1, ""));
-	$info{ptrsize} = ord(substr($buf, 0, 1, ""));
+	@info{qw(byteorder intsize longsize ptrsize)}
+	    = unpack "a${len}CCC", $buf;
+	(substr $buf, 0, $len + 3) = '';
 	if ($info{version_nv} >= 2.002) {
-	    return undef unless length($buf);
-	    $info{nvsize} = ord(substr($buf, 0, 1, ""));
+	    return undef unless $buf =~ s/(.)//s;
+	    $info{nvsize} = ord $1;
 	}
     }
     $info{hdrsize} = $buflen - length($buf);
@@ -1154,7 +1153,7 @@ Thank you to (in chronological order):
 
 	Jarkko Hietaniemi <jhi@iki.fi>
 	Ulrich Pfeifer <pfeifer@charly.informatik.uni-dortmund.de>
-	Benjamin A. Holzman <bah@ecnvantage.com>
+	Benjamin A. Holzman <bholzman@earthlink.net>
 	Andrew Ford <A.Ford@ford-mason.co.uk>
 	Gisle Aas <gisle@aas.no>
 	Jeff Gresham <gresham_jeffrey@jpmorgan.com>
@@ -1165,6 +1164,7 @@ Thank you to (in chronological order):
 	Salvador Ortiz Garcia <sog@msg.com.mx>
 	Dominic Dunlop <domo@computer.org>
 	Erik Haugan <erik@solbors.no>
+    Benjamin A. Holzman <ben.holzman@grantstreet.com>
 
 for their bug reports, suggestions and contributions.
 
@@ -1176,7 +1176,9 @@ simply counting the objects instead of tagging them (leading to
 a binary incompatibility for the Storable image starting at version
 0.6--older images are, of course, still properly understood).
 Murray Nesbitt made Storable thread-safe.  Marc Lehmann added overloading
-and references to tied items support.
+and references to tied items support.  Benjamin Holzman added a performance
+improvement for overloaded classes; thanks to Grant Street Group for footing
+the bill.
 
 =head1 AUTHOR
 

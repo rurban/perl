@@ -958,10 +958,16 @@ This simply calls C<sv_magic> and coerces the C<gv> argument into an C<SV>.
 
 To remove the magic from an SV, call the function sv_unmagic:
 
-    void sv_unmagic(SV *sv, int type);
+    int sv_unmagic(SV *sv, int type);
 
 The C<type> argument should be equal to the C<how> value when the C<SV>
 was initially made magical.
+
+However, note that C<sv_unmagic> removes all magic of a certain C<type> from the
+C<SV>. If you want to remove only certain magic of a C<type> based on the magic
+virtual table, use C<sv_unmagicext> instead:
+
+    int sv_unmagicext(SV *sv, int type, MGVTBL *vtbl);
 
 =head2 Magic Virtual Tables
 
@@ -1128,16 +1134,16 @@ objects blessed into the same class as the extension is sufficient.
 For C<PERL_MAGIC_ext> magic, it is usually a good idea to define an
 C<MGVTBL>, even if all its fields will be C<0>, so that individual
 C<MAGIC> pointers can be identified as a particular kind of magic
-using their C<mg_virtual> field.
+using their magic virtual table. C<mg_findext> provides an easy way
+to do that:
 
     STATIC MGVTBL my_vtbl = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     MAGIC *mg;
-    for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
-        if (mg->mg_type == PERL_MAGIC_ext && mg->mg_virtual == &my_vtbl) {
-            /* this is really ours, not another module's PERL_MAGIC_ext */
-            my_priv_data_t *priv = (my_priv_data_t *)mg->mg_ptr;
-        }
+    if ((mg = mg_findext(sv, PERL_MAGIC_ext, &my_vtbl))) {
+        /* this is really ours, not another module's PERL_MAGIC_ext */
+        my_priv_data_t *priv = (my_priv_data_t *)mg->mg_ptr;
+        ...
     }
 
 Also note that the C<sv_set*()> and C<sv_cat*()> functions described
@@ -1154,11 +1160,18 @@ since their implementation handles 'get' magic.
 
 =head2 Finding Magic
 
-    MAGIC* mg_find(SV*, int type); /* Finds the magic pointer of that type */
+    MAGIC *mg_find(SV *sv, int type); /* Finds the magic pointer of that type */
 
-This routine returns a pointer to the C<MAGIC> structure stored in the SV.
-If the SV does not have that magical feature, C<NULL> is returned.  Also,
-if the SV is not of type SVt_PVMG, Perl may core dump.
+This routine returns a pointer to a C<MAGIC> structure stored in the SV.
+If the SV does not have that magical feature, C<NULL> is returned. If the
+SV has multiple instances of that magical feature, the first one will be
+returned. C<mg_findext> can be used to find a C<MAGIC> structure of an SV
+based on both it's magic type and it's magic virtual table:
+
+    MAGIC *mg_findext(SV *sv, int type, MGVTBL *vtbl);
+
+Also, if the SV passed to C<mg_find> or C<mg_findext> is not of type
+SVt_PVMG, Perl may core dump.
 
     int mg_copy(SV* sv, SV* nsv, const char* key, STRLEN klen);
 
@@ -1450,6 +1463,8 @@ L</Reference Counts and Mortality>):
     PUSHs(sv_2mortal(newSVuv(an_unsigned_integer)))
     PUSHs(sv_2mortal(newSVnv(a_double)))
     PUSHs(sv_2mortal(newSVpv("Some String",0)))
+    /* Although the last example is better written as the more efficient: */
+    PUSHs(newSVpvs_flags("Some String", SVs_TEMP))
 
 And now the Perl program calling C<tzname>, the two values will be assigned
 as in:
@@ -2765,10 +2780,79 @@ responsible for adding stack marks if necessary.
 You should also "register" your op with the Perl interpreter so that it
 can produce sensible error and warning messages. Since it is possible to
 have multiple custom ops within the one "logical" op type C<OP_CUSTOM>,
-Perl uses the value of C<< o->op_ppaddr >> as a key into the
-C<PL_custom_op_descs> and C<PL_custom_op_names> hashes. This means you
-need to enter a name and description for your op at the appropriate
-place in the C<PL_custom_op_names> and C<PL_custom_op_descs> hashes.
+Perl uses the value of C<< o->op_ppaddr >> to determine which custom op
+it is dealing with. You should create an C<XOP> structure for each
+ppaddr you use, set the properties of the custom op with
+C<XopENTRY_set>, and register the structure against the ppaddr using
+C<Perl_custom_op_register>. A trivial example might look like:
+
+    static XOP my_xop;
+    static OP *my_pp(pTHX);
+
+    BOOT:
+        XopENTRY_set(&my_xop, xop_name, "myxop");
+        XopENTRY_set(&my_xop, xop_desc, "Useless custom op");
+        Perl_custom_op_register(aTHX_ my_pp, &my_xop);
+
+The available fields in the structure are:
+
+=over 4
+
+=item xop_name
+
+A short name for your op. This will be included in some error messages,
+and will also be returned as C<< $op->name >> by the L<B|B> module, so
+it will appear in the output of module like L<B::Concise|B::Concise>.
+
+=item xop_desc
+
+A short description of the function of the op.
+
+=item xop_class
+
+Which of the various C<*OP> structures this op uses. This should be one of
+the C<OA_*> constants from F<op.h>, namely
+
+=over 4
+
+=item OA_BASEOP
+
+=item OA_UNOP
+
+=item OA_BINOP
+
+=item OA_LOGOP
+
+=item OA_LISTOP
+
+=item OA_PMOP
+
+=item OA_SVOP
+
+=item OA_PADOP
+
+=item OA_PVOP_OR_SVOP
+
+This should be interpreted as 'C<PVOP>' only. The C<_OR_SVOP> is because
+the only core C<PVOP>, C<OP_TRANS>, can sometimes be a C<SVOP> instead.
+
+=item OA_LOOP
+
+=item OA_COP
+
+=back
+
+The other C<OA_*> constants should not be used.
+
+=item xop_peep
+
+This member is of type C<Perl_cpeep_t>, which expands to C<void
+(*Perl_cpeep_t)(aTHX_ OP *o, OP *oldop)>. If it is set, this function
+will be called from C<Perl_rpeep> when ops of this type are encountered
+by the peephole optimizer. I<o> is the OP that needs optimizing;
+I<oldop> is the previous OP optimized, whose C<op_next> points to I<o>.
+
+=back
 
 C<B::Generate> directly supports the creation of custom ops by name.
 

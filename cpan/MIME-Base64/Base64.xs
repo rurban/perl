@@ -36,24 +36,6 @@ extern "C" {
 }
 #endif
 
-#ifndef PATCHLEVEL
-#    include <patchlevel.h>
-#    if !(defined(PERL_VERSION) || (SUBVERSION > 0 && defined(PATCHLEVEL)))
-#        include <could_not_find_Perl_patchlevel.h>
-#    endif
-#endif
-
-#if PATCHLEVEL <= 4 && !defined(PL_dowarn)
-   #define PL_dowarn dowarn
-#endif
-
-#ifdef G_WARN_ON
-   #define DOWARN (PL_dowarn & G_WARN_ON)
-#else
-   #define DOWARN PL_dowarn
-#endif
-
-
 #define MAX_LINE  76 /* size of encoded lines */
 
 static const char basis_64[] =
@@ -125,9 +107,11 @@ encode_base64(sv,...)
 	STRLEN rlen;   /* length of result string */
 	unsigned char c1, c2, c3;
 	int chunk;
+	U32 had_utf8;
 
 	CODE:
 #if PERL_REVISION == 5 && PERL_VERSION >= 6
+	had_utf8 = SvUTF8(sv);
 	sv_utf8_downgrade(sv, FALSE);
 #endif
 	str = SvPV(sv, rlen); /* SvPV(sv, len) gives warning for signed len */
@@ -187,6 +171,10 @@ encode_base64(sv,...)
 		*r++ = *c++;
 	}
 	*r = '\0';  /* every SV in perl should be NUL-terminated */
+#if PERL_REVISION == 5 && PERL_VERSION >= 6
+	if (had_utf8)
+	    sv_utf8_upgrade(sv);
+#endif
 
 	OUTPUT:
 	RETVAL
@@ -198,7 +186,7 @@ decode_base64(sv)
 
 	PREINIT:
 	STRLEN len;
-	register unsigned char *str = (unsigned char*)SvPVbyte(sv, len);
+	register unsigned char *str = (unsigned char*)SvPV(sv, len);
 	unsigned char const* end = str + len;
 	char *r;
 	unsigned char c[4];
@@ -221,8 +209,6 @@ decode_base64(sv)
 
 		if (str == end) {
 		    if (i < 4) {
-			if (i && DOWARN)
-			    warn("Premature end of base64 data");
 			if (i < 2) goto thats_it;
 			if (i == 2) c[2] = EQ;
 			c[3] = EQ;
@@ -232,7 +218,6 @@ decode_base64(sv)
             } while (i < 4);
 	
 	    if (c[0] == EQ || c[1] == EQ) {
-		if (DOWARN) warn("Premature padding of base64 data");
 		break;
             }
 	    /* printf("c0=%d,c1=%d,c2=%d,c3=%d\n", c[0],c[1],c[2],c[3]);*/
@@ -263,12 +248,18 @@ encoded_base64_length(sv,...)
 	PREINIT:
 	SSize_t len;   /* length of the string */
 	STRLEN eollen; /* length of the EOL sequence */
+	U32 had_utf8;
 
 	CODE:
 #if PERL_REVISION == 5 && PERL_VERSION >= 6
+	had_utf8 = SvUTF8(sv);
 	sv_utf8_downgrade(sv, FALSE);
 #endif
 	len = SvCUR(sv);
+#if PERL_REVISION == 5 && PERL_VERSION >= 6
+	if (had_utf8)
+	    sv_utf8_upgrade(sv);
+#endif
 
 	if (items > 1 && SvOK(ST(1))) {
 	    eollen = SvCUR(ST(1));
@@ -291,7 +282,7 @@ decoded_base64_length(sv)
 
 	PREINIT:
 	STRLEN len;
-	register unsigned char *str = (unsigned char*)SvPVbyte(sv, len);
+	register unsigned char *str = (unsigned char*)SvPV(sv, len);
 	unsigned char const* end = str + len;
 	int i = 0;
 
@@ -338,9 +329,11 @@ encode_qp(sv,...)
 	char *p;
 	char *p_beg;
 	STRLEN p_len;
+	U32 had_utf8;
 
 	CODE:
 #if PERL_REVISION == 5 && PERL_VERSION >= 6
+        had_utf8 = SvUTF8(sv);
 	sv_utf8_downgrade(sv, FALSE);
 #endif
 	/* set up EOL from the second argument if present, default to "\n" */
@@ -433,6 +426,10 @@ encode_qp(sv,...)
 	    sv_catpvn(RETVAL, "=", 1);
 	    sv_catpvn(RETVAL, eol, eol_len);
 	}
+#if PERL_REVISION == 5 && PERL_VERSION >= 6
+	if (had_utf8)
+	    sv_utf8_upgrade(sv);
+#endif
 
 	OUTPUT:
 	RETVAL
