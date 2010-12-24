@@ -26,6 +26,7 @@ my $Perl;       # Safer version of $^X set by which_perl()
 
 $TODO = 0;
 $NO_ENDING = 0;
+$Tests_Are_Passing = 1;
 
 # Use this instead of print to avoid interference while testing globals.
 sub _print {
@@ -122,7 +123,12 @@ sub _ok {
 	$out = $pass ? "ok $test" : "not ok $test";
     }
 
-    $out = $out . " # TODO $TODO" if $TODO;
+    if ($TODO) {
+	$out = $out . " # TODO $TODO";
+    } else {
+	$Tests_Are_Passing = 0 unless $pass;
+    }
+
     _print "$out\n";
 
     unless ($pass) {
@@ -975,7 +981,7 @@ sub watchdog ($;$)
     # Use a watchdog thread because either 'threads' is loaded,
     #   or fork() failed
     if (eval 'require threads; 1') {
-        threads->create(sub {
+        'threads'->create(sub {
                 # Load POSIX if available
                 eval { require POSIX; };
 
@@ -1136,16 +1142,21 @@ sub latin1_to_native($) {
 }
 
 sub ord_latin1_to_native {
-    # given an input latin1 code point, return the platform's native
-    # equivalent value
+    # given an input code point, return the platform's native
+    # equivalent value.  Anything above latin1 is itself.
 
-    return ord latin1_to_native(chr $_[0]);
+    my $ord = shift;
+    return $ord if $ord > 255;
+    return ord latin1_to_native(chr $ord);
 }
 
 sub ord_native_to_latin1 {
-    # given an input platform code point, return the latin1 equivalent value
+    # given an input platform code point, return the latin1 equivalent value.
+    # Anything above latin1 is itself.
 
-    return ord native_to_latin1(chr $_[0]);
+    my $ord = shift;
+    return $ord if $ord > 255;
+    return ord native_to_latin1(chr $ord);
 }
 
 1;

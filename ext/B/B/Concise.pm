@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.81";
+our $VERSION   = "0.82";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -586,7 +586,7 @@ sub fmt_line {    # generate text-line for op.
     $text = "# $hr->{src}\n$text" if $show_src and $hr->{src};
 
     chomp $text;
-    return "$text\n" if $text ne "";
+    return "$text\n" if $text ne "" and $order ne "tree";
     return $text; # suppress empty lines
 }
 

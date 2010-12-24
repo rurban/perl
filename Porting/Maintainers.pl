@@ -196,7 +196,7 @@ use File::Glob qw(:case);
     'Archive::Tar' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.72.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.74.tar.gz',
 	'FILES'		=> q[cpan/Archive-Tar],
 	'EXCLUDED'	=> [ qw(Makefile.PL) ],
 	'UPSTREAM'	=> 'cpan',
@@ -464,7 +464,7 @@ use File::Glob qw(:case);
     'Devel::SelfStubber' =>
 	{
 	'MAINTAINER'	=> 'p5p',
-	'DISTRIBUTION'	=> 'FLORA/Devel-SelfStubber-1.04.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/Devel-SelfStubber-1.05.tar.gz',
 	'FILES'		=> q[dist/Devel-SelfStubber],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -499,16 +499,24 @@ use File::Glob qw(:case);
     'Digest::SHA' =>
 	{
 	'MAINTAINER'	=> 'mshelor',
-	'DISTRIBUTION'	=> 'MSHELOR/Digest-SHA-5.49.tar.gz',
+	'DISTRIBUTION'	=> 'MSHELOR/Digest-SHA-5.50.tar.gz',
 	'FILES' 	=> q[cpan/Digest-SHA],
 	'EXCLUDED'	=> [ qw{t/pod.t t/podcover.t examples/dups} ],
 	'UPSTREAM'	=> 'cpan',
 	},
 
+    'Dumpvalue' =>
+	{
+	'MAINTAINER'	=> 'p5p',
+	'DISTRIBUTION'	=> 'FLORA/Dumpvalue-1.15.tar.gz',
+	'FILES'		=> q[dist/Dumpvalue],
+	'UPSTREAM'	=> 'blead',
+	},
+
     'Encode' =>
 	{
 	'MAINTAINER'	=> 'dankogai',
-	'DISTRIBUTION'	=> 'DANKOGAI/Encode-2.40.tar.gz',
+	'DISTRIBUTION'	=> 'DANKOGAI/Encode-2.41.tar.gz',
 	'FILES'		=> q[cpan/Encode],
 	'UPSTREAM'	=> 'cpan',
 	},
@@ -528,7 +536,7 @@ use File::Glob qw(:case);
     'Env' =>
 	{
 	'MAINTAINER'	=> 'p5p',
-	'DISTRIBUTION'	=> 'FLORA/Env-1.01.tar.gz',
+	'DISTRIBUTION'	=> 'FLORA/Env-1.02.tar.gz',
 	'FILES'		=> q[dist/Env],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -552,8 +560,8 @@ use File::Glob qw(:case);
 	{
 	'MAINTAINER'	=> 'kwilliams',
 	'DISTRIBUTION'	=> 'DAGOLDEN/ExtUtils-CBuilder-0.2802.tar.gz',
-	'FILES'		=> q[cpan/ExtUtils-CBuilder],
-	'UPSTREAM'	=> 'cpan',
+	'FILES'		=> q[dist/ExtUtils-CBuilder],
+	'UPSTREAM'	=> 'blead',
 	},
 
     'ExtUtils::Command' =>
@@ -1723,7 +1731,6 @@ use File::Glob qw(:case);
 				lib/DBM_Filter.pm
 				lib/DBM_Filter/
 				lib/DirHandle.{pm,t}
-				lib/Dumpvalue.{pm,t}
 				lib/English.{pm,t}
 				lib/ExtUtils/Embed.pm
 				lib/ExtUtils/XSSymSet.pm

@@ -13,6 +13,8 @@ EOF
     }
 }
 
+use strict;
+use warnings;
 no utf8; # Ironic, no?
 
 # NOTE!
@@ -36,8 +38,6 @@ no utf8; # Ironic, no?
 #     is hard -- maybe consider breaking up the complicated test
 #
 #
-
-plan tests => 157;
 
 {
     # bug id 20001009.001
@@ -111,9 +111,6 @@ plan tests => 157;
 }
 
 {
-    use warnings;
-    use strict;
-
     my $show = q(
                  sub show {
                    my $result;
@@ -459,7 +456,32 @@ SKIP: {
    ok( !utf8::is_utf8( 'asd'         ), "Wasteful format - q{}" );
    ok( !utf8::is_utf8( qw(asd)       ), "Wasteful format - qw{}" );
    ok( !utf8::is_utf8( (asd => 1)[0] ), "Wasteful format - =>" );
-   ok( !utf8::is_utf8( asd           ), "Wasteful format - bareword" );
    ok( !utf8::is_utf8( -asd          ), "Wasteful format - -word" );
+   no warnings 'bareword';
    ok( !utf8::is_utf8( asd::         ), "Wasteful format - word::" );
+   no warnings 'reserved';
+   no strict 'subs';
+   ok( !utf8::is_utf8( asd           ), "Wasteful format - bareword" );
 }
+
+{
+    my @highest =
+	(undef, 0x7F, 0x7FF, 0xFFFF, 0x1FFFFF, 0x3FFFFFF, 0x7FFFFFFF);
+    my @step =
+	(undef, undef, 0x40, 0x1000, 0x40000, 0x1000000, 0x40000000);
+
+    foreach my $length (6, 5, 4, 3, 2) {
+	my $high = $highest[$length];
+	while ($high > $highest[$length - 1]) {
+	    my $low = $high - $step[$length] + 1;
+	    $low = $highest[$length - 1] + 1 if $low <= $highest[$length - 1];
+	    ok(utf8::valid(do {no warnings 'utf8'; chr $low}),
+	       sprintf "chr %x, length $length is valid", $low);
+	    ok(utf8::valid(do {no warnings 'utf8'; chr $high}),
+	       sprintf "chr %x, length $length is valid", $high);
+	    $high -= $step[$length];
+	}
+    }
+}
+
+done_testing();

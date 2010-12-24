@@ -20,20 +20,6 @@ case $CROSS_NAME in
 	;;
 esac
 
-# H.Merijn Brand [17 Feb 2004]
-# This comment is just to ensure that Configure will find variables that
-# are removed/replaced in patches on blead, but are still needed in the
-# 5.8.x, 5.6.x and 5.005.x maintainance tracks.
-# metaconfig -m will scan all .SH files on this level (not deeper), and
-# not in x2p and other subfolders. This file is as good as any .SH
-# patch   references
-# #22227 $baserev
-# #22302 $yacc $byacc
-
-# H.Merijn Brand [30 Oct 2004]
-# Mentioned for the same reason for future reference
-# #23434 $d_strlcat $d_strlcpy
-
 : This forces SH files to create target in same directory as SH file.
 : This is so that make depend always knows where to find SH derivatives.
 case "$0" in
@@ -472,7 +458,7 @@ mini_obj =  $(obj1) $(obj2) $(obj3) $(ARCHOBJS) $(DTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5138delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5139delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 
 Icwd = -Idist/Cwd -Idist/Cwd/lib
@@ -1028,8 +1014,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5138delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5138delta.pod
+pod/perl5139delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5139delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`

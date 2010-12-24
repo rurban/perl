@@ -14256,7 +14256,7 @@ S_parse_recdescent(pTHX_ int gramtype, I32 fakeeof)
     SAVEI32(PL_lex_allbrackets);
     PL_lex_allbrackets = 0;
     SAVEI8(PL_lex_fakeeof);
-    PL_lex_fakeeof = fakeeof;
+    PL_lex_fakeeof = (U8)fakeeof;
     if(yyparse(gramtype) && !PL_parser->error_count)
 	qerror(Perl_mess(aTHX_ "Parse error"));
 }
@@ -14579,7 +14579,7 @@ Perl_parse_label(pTHX_ U32 flags)
 
 Parse a single complete Perl statement.  This may be a normal imperative
 statement or a declaration that has compile-time effect, and may include
-an optional label.  It is up to the caller to ensure that the dynamic
+optional labels.  It is up to the caller to ensure that the dynamic
 parser state (L</PL_parser> et al) is correctly set to reflect the source
 of the code to be parsed and the lexical context for the statement.
 

@@ -2071,6 +2071,11 @@ d_sigsetjmp (d_sigsetjmp.U):
 	which indicates that the sigsetjmp() routine is available to
 	call setjmp() and optionally save the process's signal mask.
 
+d_sin6_scope_id (d_socket.U):
+	This variable conditionally defines the HAS_SIN6_SCOPE_ID symbol, which
+	indicates that a struct sockaddr_in6 structure has the sin6_scope_id
+	member.
+
 d_sitearch (sitearch.U):
 	This variable conditionally defines SITEARCH to hold the pathname
 	of architecture-dependent library files for $package.  If

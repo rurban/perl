@@ -142,9 +142,10 @@ PP(pp_rv2gv)
     if (!isGV(sv) || SvFAKE(sv)) SvGETMAGIC(sv);
     if (SvROK(sv)) {
       wasref:
-	sv = amagic_deref_call(sv, to_gv_amg);
-	SPAGAIN;
-
+	if (SvAMAGIC(sv)) {
+	    sv = amagic_deref_call(sv, to_gv_amg);
+	    SPAGAIN;
+	}
 	sv = SvRV(sv);
 	if (SvTYPE(sv) == SVt_PVIO) {
 	    GV * const gv = MUTABLE_GV(sv_newmortal());
@@ -284,8 +285,10 @@ PP(pp_rv2sv)
     if (!(PL_op->op_private & OPpDEREFed))
 	SvGETMAGIC(sv);
     if (SvROK(sv)) {
-	sv = amagic_deref_call(sv, to_sv_amg);
-	SPAGAIN;
+	if (SvAMAGIC(sv)) {
+	    sv = amagic_deref_call(sv, to_sv_amg);
+	    SPAGAIN;
+	}
 
 	sv = SvRV(sv);
 	switch (SvTYPE(sv)) {
@@ -1795,7 +1798,7 @@ PP(pp_subtract)
 PP(pp_left_shift)
 {
     dVAR; dSP; dATARGET; SV *svl, *svr;
-    tryAMAGICbin_MG(lshift_amg, AMGf_assign);
+    tryAMAGICbin_MG(lshift_amg, AMGf_assign|AMGf_numeric);
     svr = POPs;
     svl = TOPs;
     {
@@ -1815,7 +1818,7 @@ PP(pp_left_shift)
 PP(pp_right_shift)
 {
     dVAR; dSP; dATARGET; SV *svl, *svr;
-    tryAMAGICbin_MG(rshift_amg, AMGf_assign);
+    tryAMAGICbin_MG(rshift_amg, AMGf_assign|AMGf_numeric);
     svr = POPs;
     svl = TOPs;
     {
@@ -1835,7 +1838,7 @@ PP(pp_right_shift)
 PP(pp_lt)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(lt_amg, AMGf_set);
+    tryAMAGICbin_MG(lt_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -1918,7 +1921,7 @@ PP(pp_lt)
 PP(pp_gt)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(gt_amg, AMGf_set);
+    tryAMAGICbin_MG(gt_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -2002,7 +2005,7 @@ PP(pp_gt)
 PP(pp_le)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(le_amg, AMGf_set);
+    tryAMAGICbin_MG(le_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -2086,7 +2089,7 @@ PP(pp_le)
 PP(pp_ge)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(ge_amg,AMGf_set);
+    tryAMAGICbin_MG(ge_amg,AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -2170,7 +2173,7 @@ PP(pp_ge)
 PP(pp_ne)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(ne_amg,AMGf_set);
+    tryAMAGICbin_MG(ne_amg,AMGf_set|AMGf_numeric);
 #ifndef NV_PRESERVES_UV
     if (SvROK(TOPs) && !SvAMAGIC(TOPs) && SvROK(TOPm1s) && !SvAMAGIC(TOPm1s)) {
         SP--;
@@ -2247,7 +2250,7 @@ PP(pp_ne)
 PP(pp_ncmp)
 {
     dVAR; dSP; dTARGET;
-    tryAMAGICbin_MG(ncmp_amg, 0);
+    tryAMAGICbin_MG(ncmp_amg, AMGf_numeric);
 #ifndef NV_PRESERVES_UV
     if (SvROK(TOPs) && !SvAMAGIC(TOPs) && SvROK(TOPm1s) && !SvAMAGIC(TOPm1s)) {
 	const UV right = PTR2UV(SvRV(POPs));
@@ -2571,7 +2574,7 @@ PP(pp_not)
 PP(pp_complement)
 {
     dVAR; dSP; dTARGET;
-    tryAMAGICun_MG(compl_amg, 0);
+    tryAMAGICun_MG(compl_amg, AMGf_numeric);
     {
       dTOPss;
       if (SvNIOKp(sv)) {

@@ -234,7 +234,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define UTF8_ALLOW_CONTINUATION		0x0002
 #define UTF8_ALLOW_NON_CONTINUATION	0x0004
 #define UTF8_ALLOW_FE_FF		0x0008 /* Allow FE or FF start bytes, \
-						  yields above 0x7fffFFFF */
+						  yields above 0x7fffFFFF = 31 bits */
 #define UTF8_ALLOW_SHORT		0x0010 /* expecting more bytes */
 #define UTF8_ALLOW_SURROGATE		0x0020
 #define UTF8_ALLOW_FFFF			0x0040 /* Allow UNICODE_ILLEGAL */
@@ -291,7 +291,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define ANYOF_FOLD_SHARP_S(node, input, end)	\
 	(ANYOF_BITMAP_TEST(node, LATIN_SMALL_LETTER_SHARP_S) && \
 	 (ANYOF_FLAGS(node) & ANYOF_NONBITMAP) && \
-	 (ANYOF_FLAGS(node) & ANYOF_FOLD) && \
+	 (ANYOF_FLAGS(node) & ANYOF_LOC_NONBITMAP_FOLD) && \
 	 ((end) > (input) + 1) && \
 	 toLOWER((input)[0]) == 's' && \
 	 toLOWER((input)[1]) == 's')
@@ -343,7 +343,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  * UTF-8, anyway).  The "slow path" in Perl_is_utf8_char()
  * will take care of the "extended UTF-8". */
 #define IS_UTF8_CHAR_4c(p)	\
-	((p)[0] == 0xF4 && (p)[0] <= 0xF7 && \
+	((p)[0] >= 0xF4 && (p)[0] <= 0xF7 && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF && \
 	 (p)[3] >= 0x80 && (p)[3] <= 0xBF)

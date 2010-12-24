@@ -9,7 +9,7 @@ require Exporter;
 use Carp;
 use Symbol qw(gensym qualify);
 
-$VERSION	= 1.07;
+$VERSION	= 1.08;
 @ISA		= qw(Exporter);
 @EXPORT		= qw(open3);
 
@@ -120,8 +120,6 @@ The order of arguments differs from that of open2().
 # fixed for autovivving FHs, tchrist again
 # allow fd numbers to be used, by Frank Tobin
 # allow '-' as command (c.f. open "-|"), by Adam Spiers <perl@adamspiers.org>
-#
-# $Id: open3.pl,v 1.1 1993/11/23 06:26:15 marc Exp $
 #
 # usage: $pid = open3('wtr', 'rdr', 'err' 'some cmd and args', 'optarg', ...);
 #

@@ -980,9 +980,10 @@ Perl_bytes_from_utf8(pTHX_ const U8 *s, STRLEN *len, bool *is_utf8)
 /*
 =for apidoc bytes_to_utf8
 
-Converts a string C<s> of length C<len> from the native encoding into UTF-8.
+Converts a string C<s> of length C<len> bytes from the native encoding into
+UTF-8.
 Returns a pointer to the newly-created string, and sets C<len> to
-reflect the new length.
+reflect the new length in bytes.
 
 A NUL character will be written after the end of the string.
 
@@ -1968,7 +1969,8 @@ Perl_swash_init(pTHX_ const char* pkg, const char* name, SV *listsv, I32 minbits
  * return several Unicode characters for a single Unicode character
  * (see lib/unicore/SpecCase.txt) The SWASHGET in lib/utf8_heavy.pl is
  * the lower-level routine, and it is similarly broken for returning
- * multiple values.  --jhi */
+ * multiple values.  --jhi
+ * For those, you should use to_utf8_case() instead */
 /* Now SWASHGET is recasted into S_swash_get in this file. */
 
 /* Note:

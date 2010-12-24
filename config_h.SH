@@ -31,16 +31,13 @@ already-done) echo "Not re-extracting config.h" ;;
 *)
 echo "Extracting $CONFIG_H (with variable substitutions)"
 sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un-def!#undef!'
-/*
- * This file was produced by running the config_h.SH script, which
+/* This file was produced by running the config_h.SH script, which
  * gets its values from $CONFIG_SH, which is generally produced by
  * running Configure.
  *
  * Feel free to modify any of this as the need arises.  Note, however,
  * that running config_h.SH again will wipe out any changes you've made.
  * For a more permanent change edit $CONFIG_SH and rerun config_h.SH.
- *
- * \$Id: Config_h.U 1 2006-08-24 12:32:52Z rmanfredi $
  */
 
 /*
@@ -2794,6 +2791,10 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
  *	structure has a member called sa_len, indicating the length of
  *	the structure.
  */
+/* HAS_SIN6_SCOPE_ID:
+ *	This symbol, if defined, indicates that the struct sockaddr_in6
+ *	structure has a member called sin6_scope_id.
+ */
 #$d_socket	HAS_SOCKET		/**/
 #$d_sockpair	HAS_SOCKETPAIR	/**/
 #$d_sockaddr_sa_len	HAS_SOCKADDR_SA_LEN	/**/
@@ -2803,6 +2804,7 @@ sed <<!GROK!THIS! >$CONFIG_H -e 's!^#undef\(.*/\)\*!/\*#define\1 \*!' -e 's!^#un
 #$d_msg_peek	HAS_MSG_PEEK	/**/
 #$d_msg_proxy	HAS_MSG_PROXY	/**/
 #$d_scm_rights	HAS_SCM_RIGHTS	/**/
+#$d_sin6_scope_id	HAS_SIN6_SCOPE_ID	/**/
 
 /* USE_STAT_BLOCKS:
  *	This symbol is defined if this system has a stat structure declaring

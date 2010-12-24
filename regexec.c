@@ -3493,7 +3493,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		    ST.nextword,
 		    tmp ? pv_pretty(sv, SvPV_nolen_const(*tmp), SvCUR(*tmp), 0,
 			    PL_colors[0], PL_colors[1],
-			    (SvUTF8(*tmp) ? PERL_PV_ESCAPE_UNI : 0)
+			    (SvUTF8(*tmp) ? PERL_PV_ESCAPE_UNI : 0)|PERL_PV_ESCAPE_NONASCII
 			) 
 		    : "not compiled under -Dr",
 		    PL_colors[5] );
@@ -3936,10 +3936,6 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	    char type;
 	    re_fold_t folder;
 	    const U8 *fold_array;
-
-	    folder = NULL;	/* NULL assumes will be NREF, REF: no
-				   folding */
-	    fold_array = NULL;
 
 	    PL_reg_flags |= RF_tainted;
 	    folder = foldEQ_locale;
@@ -5893,7 +5889,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	    char *tmpeol = loceol;
 	    while (hardcount < max
 		    && foldEQ_utf8(scan, &tmpeol, 0, utf8_target,
-				    STRING(p), NULL, 1, UTF_PATTERN))
+				   STRING(p), NULL, 1, cBOOL(UTF_PATTERN)))
 	    {
 		scan = tmpeol;
 		tmpeol = loceol;
@@ -6343,54 +6339,48 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
     if (c < 256) {
 	if (ANYOF_BITMAP_TEST(n, c))
 	    match = TRUE;
-	else if (flags & ANYOF_FOLD) {
-	    U8 f;
 
-	    if (flags & ANYOF_LOCALE) {
-		PL_reg_flags |= RF_tainted;
-		f = PL_fold_locale[c];
-	    }
-	    else
-		f = PL_fold[c];
-	    if (f != c && ANYOF_BITMAP_TEST(n, f))
-		match = TRUE;
-	}
-	
-	if (!match && ANYOF_CLASS_TEST_ANY_SET(n)) {
-	    PL_reg_flags |= RF_tainted;	    /* CLASS implies LOCALE */
-	    if (
-		(ANYOF_CLASS_TEST(n, ANYOF_ALNUM)   &&  isALNUM_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NALNUM)  && !isALNUM_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_SPACE)   &&  isSPACE_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NSPACE)  && !isSPACE_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_DIGIT)   &&  isDIGIT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NDIGIT)  && !isDIGIT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_ALNUMC)  &&  isALNUMC_LC(c)) ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NALNUMC) && !isALNUMC_LC(c)) ||
-		(ANYOF_CLASS_TEST(n, ANYOF_ALPHA)   &&  isALPHA_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NALPHA)  && !isALPHA_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_ASCII)   &&  isASCII(c))     ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NASCII)  && !isASCII(c))     ||
-		(ANYOF_CLASS_TEST(n, ANYOF_CNTRL)   &&  isCNTRL_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NCNTRL)  && !isCNTRL_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_GRAPH)   &&  isGRAPH_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NGRAPH)  && !isGRAPH_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_LOWER)   &&  isLOWER_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NLOWER)  && !isLOWER_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_PRINT)   &&  isPRINT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NPRINT)  && !isPRINT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_PUNCT)   &&  isPUNCT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NPUNCT)  && !isPUNCT_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_UPPER)   &&  isUPPER_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NUPPER)  && !isUPPER_LC(c))  ||
-		(ANYOF_CLASS_TEST(n, ANYOF_XDIGIT)  &&  isXDIGIT(c))    ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NXDIGIT) && !isXDIGIT(c))    ||
-		(ANYOF_CLASS_TEST(n, ANYOF_PSXSPC)  &&  isPSXSPC(c))    ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NPSXSPC) && !isPSXSPC(c))    ||
-		(ANYOF_CLASS_TEST(n, ANYOF_BLANK)   &&  isBLANK(c))     ||
-		(ANYOF_CLASS_TEST(n, ANYOF_NBLANK)  && !isBLANK(c))
-		) /* How's that for a conditional? */
+	else if (flags & ANYOF_LOCALE) {
+	    PL_reg_flags |= RF_tainted;
+
+	    if ((flags & ANYOF_LOC_NONBITMAP_FOLD)
+		 && ANYOF_BITMAP_TEST(n, PL_fold_locale[c]))
 	    {
+		match = TRUE;
+	    }
+	    else if (ANYOF_CLASS_TEST_ANY_SET(n) &&
+		     ((ANYOF_CLASS_TEST(n, ANYOF_ALNUM)   &&  isALNUM_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NALNUM)  && !isALNUM_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_SPACE)   &&  isSPACE_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NSPACE)  && !isSPACE_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_DIGIT)   &&  isDIGIT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NDIGIT)  && !isDIGIT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_ALNUMC)  &&  isALNUMC_LC(c)) ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NALNUMC) && !isALNUMC_LC(c)) ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_ALPHA)   &&  isALPHA_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NALPHA)  && !isALPHA_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_ASCII)   &&  isASCII(c))     ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NASCII)  && !isASCII(c))     ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_CNTRL)   &&  isCNTRL_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NCNTRL)  && !isCNTRL_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_GRAPH)   &&  isGRAPH_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NGRAPH)  && !isGRAPH_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_LOWER)   &&  isLOWER_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NLOWER)  && !isLOWER_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_PRINT)   &&  isPRINT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NPRINT)  && !isPRINT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_PUNCT)   &&  isPUNCT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NPUNCT)  && !isPUNCT_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_UPPER)   &&  isUPPER_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NUPPER)  && !isUPPER_LC(c))  ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_XDIGIT)  &&  isXDIGIT(c))    ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NXDIGIT) && !isXDIGIT(c))    ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_PSXSPC)  &&  isPSXSPC(c))    ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NPSXSPC) && !isPSXSPC(c))    ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_BLANK)   &&  isBLANK(c))     ||
+		      (ANYOF_CLASS_TEST(n, ANYOF_NBLANK)  && !isBLANK(c))
+		     ) /* How's that for a conditional? */
+	    ) {
 		match = TRUE;
 	    }
 	}
@@ -6401,8 +6391,9 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
     if (!match) {
 	if (utf8_target && (flags & ANYOF_UNICODE_ALL)) {
 	    if (c >= 256
-		|| ((flags & ANYOF_FOLD) /* Latin1 1 that has a non-Latin1 fold
-					    should match */
+		|| ((flags & ANYOF_LOC_NONBITMAP_FOLD) /* Latin1 1 that has a
+							  non-Latin1 fold
+							  should match */
 		    && _HAS_NONLATIN1_FOLD_CLOSURE_ONLY_FOR_USE_BY_REGCOMP_DOT_C_AND_REGEXEC_DOT_C(c)))
 	    {
 		match = TRUE;
@@ -6424,7 +6415,7 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 		}
 		if (swash_fetch(sw, utf8_p, 1))
 		    match = TRUE;
-		else if (flags & ANYOF_FOLD) {
+		else if (flags & ANYOF_LOC_NONBITMAP_FOLD) {
 		    if (!match && lenp && av) {
 		        I32 i;
 			for (i = 0; i <= av_len(av); i++) {
@@ -6438,104 +6429,77 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 			    }
 			}
 		    }
-		    if (!match) {
+		    if (!match) { /* See if the folded version matches */
 		        U8 folded[UTF8_MAXBYTES_CASE+1];
-
-			/* See if the folded version matches */
+			SV** listp;
 			STRLEN foldlen;
+
 			to_utf8_fold(utf8_p, folded, &foldlen);
-			if (swash_fetch(sw, folded, 1)) {   /* 1 => is utf8 */
-			    match = TRUE;
+
+			/* Consider "k" =~ /[K]/i.  The line above would have
+			 * just folded the 'k' to itself, and that isn't going
+			 * to match 'K'.  So we look through the closure of
+			 * everything that folds to 'k'.  That will find the
+			 * 'K'.  Initialize the list, if necessary */
+			if (! PL_utf8_foldclosures) {
+
+			    /* If the folds haven't been read in, call a fold
+			     * function to force that */
+			    if (! PL_utf8_tofold) {
+				U8 dummy[UTF8_MAXBYTES+1];
+				STRLEN dummy_len;
+				to_utf8_fold((U8*) "A", dummy, &dummy_len);
+			    }
+			    PL_utf8_foldclosures =
+				  _swash_inversion_hash(PL_utf8_tofold);
 			}
-			else {
-			    /* The fold in a few cases  of an above Latin1 char
-			     * is in the Latin1 range, and hence may be in the
-			     * bitmap */
-			    if (UTF8_IS_INVARIANT(*folded)
-				&& ANYOF_BITMAP_TEST(n, UNI_TO_NATIVE(*folded)))
-			    {
-				match = TRUE;
-			    }
-			    else if (UTF8_IS_DOWNGRADEABLE_START(*folded)
-				     && ANYOF_BITMAP_TEST(n,
-					  UNI_TO_NATIVE(
-					     TWO_BYTE_UTF8_TO_UNI(folded[0],
-							           folded[1]))))
-			    { /* Since the fold comes from internally
-			       * generated data, we can safely assume it is
-			       * valid utf8 in the test above */
 
-				match = TRUE;
-			    }
-                            if (! match) {
-				SV** listp;
-
-				/* Consider "k" =~ /[K]/i.  The line above
-				 * would have just folded the 'k' to itself,
-				 * and that isn't going to match 'K'.  So we
-				 * look through the closure of everything that
-				 * folds to 'k'.  That will find the 'K'.
-				 * Initialize the list, if necessary */
-				if (! PL_utf8_foldclosures) {
-
-				    /* If the folds haven't been read in, call a
-				    * fold function to force that */
-				    if (! PL_utf8_tofold) {
-					U8 dummy[UTF8_MAXBYTES+1];
-					STRLEN dummy_len;
-					to_utf8_fold((U8*) "A",
-							    dummy, &dummy_len);
-				    }
-				    PL_utf8_foldclosures =
-					  _swash_inversion_hash(PL_utf8_tofold);
+			/* The data structure is a hash with the keys every
+			 * character that is folded to, like 'k', and the
+			 * values each an array of everything that folds to its
+			 * key.  e.g. [ 'k', 'K', KELVIN_SIGN ] */
+			if ((listp = hv_fetch(PL_utf8_foldclosures,
+				      (char *) folded, foldlen, FALSE)))
+			{
+			    AV* list = (AV*) *listp;
+			    IV i;
+			    for (i = 0; i <= av_len(list); i++) {
+				SV** try_p = av_fetch(list, i, FALSE);
+				char* try_c;
+				if (try_p == NULL) {
+				    Perl_croak(aTHX_ "panic: invalid PL_utf8_foldclosures structure");
 				}
+				/* Don't have to worry about embeded nulls
+				 * since NULL isn't folded or foldable */
+				try_c = SvPVX(*try_p);
 
-				/* The data structure is a hash with the keys
-				 * every character that is folded to, like 'k',
-				 * and the values each an array of everything
-				 * that folds to its key.  e.g. [ 'k', 'K',
-				 * KELVIN_SIGN ] */
-				if ((listp = hv_fetch(PL_utf8_foldclosures,
-					      (char *) folded, foldlen, FALSE)))
+				/* The fold in a few cases  of an above Latin1
+				 * char is in the Latin1 range, and hence may
+				 * be in the bitmap */
+				if (UTF8_IS_INVARIANT(*try_c)
+				    && ANYOF_BITMAP_TEST(n,
+						    UNI_TO_NATIVE(*try_c)))
 				{
-				    AV* list = (AV*) *listp;
-				    IV i;
-				    for (i = 0; i <= av_len(list); i++) {
-					SV** try_p = av_fetch(list, i, FALSE);
-					char* try_c;
-					if (try_p == NULL) {
-					    Perl_croak(aTHX_ "panic: invalid PL_utf8_foldclosures structure");
-					}
-					/* Don't have to worry about embeded
-					 * nulls since NULL isn't folded or
-					 * foldable */
-					try_c = SvPVX(*try_p);
-					if (UTF8_IS_INVARIANT(*try_c)
-					    && ANYOF_BITMAP_TEST(n,
-							    UNI_TO_NATIVE(*try_c)))
-					{
-					    match = TRUE;
-					    break;
-					}
-					else if
-					    (UTF8_IS_DOWNGRADEABLE_START(*try_c)
-					     && ANYOF_BITMAP_TEST(n,
-					     UNI_TO_NATIVE(
+				    match = TRUE;
+				    break;
+				}
+				else if
+				    (UTF8_IS_DOWNGRADEABLE_START(*try_c)
+				     && ANYOF_BITMAP_TEST(n, UNI_TO_NATIVE(
 						TWO_BYTE_UTF8_TO_UNI(try_c[0],
-								     try_c[1]))))
-					{
-					    match = TRUE;
-					    break;
-					} else if (swash_fetch(sw,
-								(U8*) try_c, 1))
-					{
-					    match = TRUE;
-					    break;
-					}
-				    }
+								    try_c[1]))))
+				{
+				   /* Since the fold comes from internally
+				    * generated data, we can safely assume it
+				    * is valid utf8 in the test above */
+				    match = TRUE;
+				    break;
+				} else if (swash_fetch(sw, (U8*) try_c, 1)) {
+				    match = TRUE;
+				    break;
 				}
 			    }
-                        }
+			}
 		    }
 		}
 

@@ -8,6 +8,7 @@ BEGIN {
 
 use strict;
 use warnings;
+use POSIX;
 
 use re qw(is_regexp regexp_pattern
           regname regnames regnames_count);
@@ -53,6 +54,49 @@ if ('1234'=~/(?:(?<A>\d)|(?<C>!))(?<B>\d)(?<A>\d)(?<B>\d)/){
     is(regnames_count(),3);
 }
 
+{
+    # tests for new regexp flags
+    my $text = "\xE4";
+    my $check;
+
+    {
+        # check u/d-flag without setting a locale
+        $check = $text =~ /(?u)\w/;
+        ok( $check );
+        $check = $text =~ /(?d)\w/;
+        ok( !$check );
+    }
+
+    SKIP: {
+        my $current_locale = POSIX::setlocale( &POSIX::LC_CTYPE, 'de_DE.ISO-8859-1' );
+        if ( !$current_locale || $current_locale ne 'de_DE.ISO-8859-1' ) {
+            skip( 'cannot use locale de_DE.ISO-8859-1', 3 );
+        }
+
+        $check = $text =~ /(?u)\w/;
+        ok( $check );
+        $check = $text =~ /(?d)\w/;
+        ok( !$check );
+        $check = $text =~ /(?l)\w/;
+        ok( $check );
+    }
+
+    SKIP: {
+        my $current_locale = POSIX::setlocale( &POSIX::LC_CTYPE, 'C' );
+        if ( !$current_locale || $current_locale ne 'C' ) {
+            skip( 'cannot set locale C', 3 );
+        }
+
+        $check = $text =~ /(?u)\w/;
+        ok( $check );
+        $check = $text =~ /(?d)\w/;
+        ok( !$check );
+        $check = $text =~ /(?l)\w/;
+        ok( !$check );
+    }
+}
+
+
     { # Keep these tests last, as whole script will be interrupted if times out
         # Bug #72998; this can loop 
         watchdog(2);
@@ -60,12 +104,11 @@ if ('1234'=~/(?:(?<A>\d)|(?<C>!))(?<B>\d)(?<A>\d)(?<B>\d)/){
         pass("Didn't loop");
 
         # Bug #78058; this can loop
-        watchdog(2);
         no warnings;    # Because the 8 may be warned on
         eval 'qr/\18/';
-        pass("qr/\18/ didn't loop");
+        pass(q"qr/\18/ didn't loop");
     }
 
 # New tests above this line, don't forget to update the test count below!
-BEGIN { plan tests => 20 }
+BEGIN { plan tests => 28 }
 # No tests here!

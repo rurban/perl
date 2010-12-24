@@ -314,9 +314,18 @@ struct regnode_charclass_class {
 
 /* Flags for node->flags of ANYOF */
 
-#define ANYOF_LOCALE		0x01
-#define ANYOF_FOLD		0x02
-#define ANYOF_INVERT		0x04
+#define ANYOF_LOCALE		 0x01
+
+/* The fold is calculated and stored in the bitmap where possible at compile
+ * time.  However there are two cases where it isn't possible.  These share
+ * this bit:  1) under locale, where the actual folding varies depending on
+ * what the locale is at the time of execution; and 2) where the folding is
+ * specified in a swash, not the bitmap, such as characters which aren't
+ * specified in the bitmap, or properties that aren't looked at at compile time
+ */
+#define ANYOF_LOC_NONBITMAP_FOLD 0x02
+
+#define ANYOF_INVERT		 0x04
 
 /* CLASS is never set unless LOCALE is too: has runtime \d, \w, [:posix:], ... */
 #define ANYOF_CLASS	 0x08
@@ -822,20 +831,20 @@ re.pm, especially to the documentation.
     const char * const rpv =                          \
         pv_pretty((dsv), (pv), (l), (m), \
             PL_colors[(c1)],PL_colors[(c2)], \
-            PERL_PV_ESCAPE_RE |((isuni) ? PERL_PV_ESCAPE_UNI : 0) );         \
+            PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII |((isuni) ? PERL_PV_ESCAPE_UNI : 0) );         \
     const int rlen = SvCUR(dsv)
 
 #define RE_SV_ESCAPE(rpv,isuni,dsv,sv,m) \
     const char * const rpv =                          \
         pv_pretty((dsv), (SvPV_nolen_const(sv)), (SvCUR(sv)), (m), \
             PL_colors[(c1)],PL_colors[(c2)], \
-            PERL_PV_ESCAPE_RE |((isuni) ? PERL_PV_ESCAPE_UNI : 0) )
+            PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII |((isuni) ? PERL_PV_ESCAPE_UNI : 0) )
 
 #define RE_PV_QUOTED_DECL(rpv,isuni,dsv,pv,l,m)                    \
     const char * const rpv =                                       \
         pv_pretty((dsv), (pv), (l), (m), \
             PL_colors[0], PL_colors[1], \
-            ( PERL_PV_PRETTY_QUOTE | PERL_PV_ESCAPE_RE | PERL_PV_PRETTY_ELLIPSES | \
+            ( PERL_PV_PRETTY_QUOTE | PERL_PV_ESCAPE_RE | PERL_PV_ESCAPE_NONASCII | PERL_PV_PRETTY_ELLIPSES | \
               ((isuni) ? PERL_PV_ESCAPE_UNI : 0))                  \
         )
 
