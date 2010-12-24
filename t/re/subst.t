@@ -7,7 +7,7 @@ BEGIN {
 }
 
 require './test.pl';
-plan( tests => 170 );
+plan( tests => 174 );
 
 # Stolen from re/ReTest.pl. Can't just use the file since it doesn't support
 # like() and it conflicts with test.pl
@@ -64,7 +64,7 @@ like( $@, qr{Using !~ with s///r doesn't make sense}, 's///r !~ operator gives e
         must_warn sub { $b = $a =~ s/left/right/r }, '^Use of uninitialized value', 's///r Uninitialized warning';
 
         $a = 'david';
-        must_warn 's/david/sucks/r; 1',    '^Useless use of Non-destructive substitution', 's///r void context warning';
+        must_warn 's/david/sucks/r; 1',    '^Useless use of non-destructive substitution', 's///r void context warning';
 }
 
 $a = '';
@@ -87,6 +87,11 @@ ok( defined tied($m), 's///r magic isn\'t lost' );
 
 $b = $m =~ s/xxx/yyy/r;
 ok( ! defined tied($b), 's///r magic isn\'t contagious' );
+
+my $ref = \("aaa" =~ s/aaa/bbb/r);
+is (Internals::SvREFCNT($$ref), 1, 's///r does not leak');
+$ref = \("aaa" =~ s/aaa/bbb/rg);
+is (Internals::SvREFCNT($$ref), 1, 's///rg does not leak');
 
 $x = 'foo';
 $_ = "x";
@@ -677,7 +682,7 @@ is($name, "cis", q[#22351 bug with 'e' substitution modifier]);
 fresh_perl_is( '$_=q(foo);s/(.)\G//g;print' => 'foo', '[perl #69056] positive GPOS regex segfault' );
 fresh_perl_is( '$_="abcef"; s/bc|(.)\G(.)/$1 ? "[$1-$2]" : "XX"/ge; print' => 'aXX[c-e][e-f]f', 'positive GPOS regex substitution failure' );
 
-# [perl #~~~~~] $var =~ s/$qr//e calling get-magic on $_ as well as $var
+# [perl #71470] $var =~ s/$qr//e calling get-magic on $_ as well as $var
 {
  local *_;
  my $scratch;
@@ -723,4 +728,26 @@ fresh_perl_is( '$_="abcef"; s/bc|(.)\G(.)/$1 ? "[$1-$2]" : "XX"/ge; print' => 'a
     is($string, chr 0x180, "Verify that handles s/foo/\\600/");
     $string =~ s/./\777/;
     is($string, chr 0x1FF, "Verify that handles s/foo/\\777/");
+}
+
+# Scoping of s//the RHS/ when there is no /e
+# Tests based on [perl #19078]
+{
+ local *_;
+ my $output = ''; my %a;
+ no warnings 'uninitialized';
+
+ $_="CCCGGG";
+ s!.!<@a{$output .= ("$&"),/[$&]/g}>!g;
+ $output .= $_;
+ is(
+   $output, "CCCGGG<   ><  >< ><   ><  >< >",
+  's/// sets PL_curpm for each iteration even when the RHS has set it'
+ );
+ 
+ s/C/$a{m\G\}/;
+ is(
+  "$&", G =>
+  'Match vars reflect the last match after s/pat/$a{m|pat|}/ without /e'
+ );
 }

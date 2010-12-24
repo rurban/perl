@@ -152,6 +152,230 @@ typedef struct jmpenv JMPENV;
 	PL_top_env->je_mustcatch = (v);					\
     } STMT_END
 
+/*
+=head1 COP Hint Hashes
+*/
+
+typedef struct refcounted_he COPHH;
+
+#define COPHH_KEY_UTF8 REFCOUNTED_HE_KEY_UTF8
+
+/*
+=for apidoc Amx|SV *|cophh_fetch_pvn|const COPHH *cophh|const char *keypv|STRLEN keylen|U32 hash|U32 flags
+
+Look up the entry in the cop hints hash I<cophh> with the key specified by
+I<keypv> and I<keylen>.  If I<flags> has the C<COPHH_KEY_UTF8> bit set,
+the key octets are interpreted as UTF-8, otherwise they are interpreted
+as Latin-1.  I<hash> is a precomputed hash of the key string, or zero if
+it has not been precomputed.  Returns a mortal scalar copy of the value
+associated with the key, or C<&PL_sv_placeholder> if there is no value
+associated with the key.
+
+=cut
+*/
+
+#define cophh_fetch_pvn(cophh, keypv, keylen, hash, flags) \
+    Perl_refcounted_he_fetch_pvn(aTHX_ cophh, keypv, keylen, hash, flags)
+
+/*
+=for apidoc Amx|SV *|cophh_fetch_pvs|const COPHH *cophh|const char *key|U32 flags
+
+Like L</cophh_fetch_pvn>, but takes a literal string instead of a
+string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define cophh_fetch_pvs(cophh, key, flags) \
+    Perl_refcounted_he_fetch_pvn(aTHX_ cophh, STR_WITH_LEN(key), 0, flags)
+
+/*
+=for apidoc Amx|SV *|cophh_fetch_pv|const COPHH *cophh|const char *key|U32 hash|U32 flags
+
+Like L</cophh_fetch_pvn>, but takes a nul-terminated string instead of
+a string/length pair.
+
+=cut
+*/
+
+#define cophh_fetch_pv(cophh, key, hash, flags) \
+    Perl_refcounted_he_fetch_pv(aTHX_ cophh, key, hash, flags)
+
+/*
+=for apidoc Amx|SV *|cophh_fetch_sv|const COPHH *cophh|SV *key|U32 hash|U32 flags
+
+Like L</cophh_fetch_pvn>, but takes a Perl scalar instead of a
+string/length pair.
+
+=cut
+*/
+
+#define cophh_fetch_sv(cophh, key, hash, flags) \
+    Perl_refcounted_he_fetch_sv(aTHX_ cophh, key, hash, flags)
+
+/*
+=for apidoc Amx|HV *|cophh_2hv|const COPHH *cophh|U32 flags
+
+Generates and returns a standard Perl hash representing the full set of
+key/value pairs in the cop hints hash I<cophh>.  I<flags> is currently
+unused and must be zero.
+
+=cut
+*/
+
+#define cophh_2hv(cophh, flags) \
+    Perl_refcounted_he_chain_2hv(aTHX_ cophh, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_copy|COPHH *cophh
+
+Make and return a complete copy of the cop hints hash I<cophh>.
+
+=cut
+*/
+
+#define cophh_copy(cophh) Perl_refcounted_he_inc(aTHX_ cophh)
+
+/*
+=for apidoc Amx|void|cophh_free|COPHH *cophh
+
+Discard the cop hints hash I<cophh>, freeing all resources associated
+with it.
+
+=cut
+*/
+
+#define cophh_free(cophh) Perl_refcounted_he_free(aTHX_ cophh)
+
+/*
+=for apidoc Amx|COPHH *|cophh_new_empty
+
+Generate and return a fresh cop hints hash containing no entries.
+
+=cut
+*/
+
+#define cophh_new_empty() ((COPHH *)NULL)
+
+/*
+=for apidoc Amx|COPHH *|cophh_store_pvn|COPHH *cophh|const char *keypv|STRLEN keylen|U32 hash|SV *value|U32 flags
+
+Stores a value, associated with a key, in the cop hints hash I<cophh>,
+and returns the modified hash.  The returned hash pointer is in general
+not the same as the hash pointer that was passed in.  The input hash is
+consumed by the function, and the pointer to it must not be subsequently
+used.  Use L</cophh_copy> if you need both hashes.
+
+The key is specified by I<keypv> and I<keylen>.  If I<flags> has the
+C<COPHH_KEY_UTF8> bit set, the key octets are interpreted as UTF-8,
+otherwise they are interpreted as Latin-1.  I<hash> is a precomputed
+hash of the key string, or zero if it has not been precomputed.
+
+I<value> is the scalar value to store for this key.  I<value> is copied
+by this function, which thus does not take ownership of any reference
+to it, and later changes to the scalar will not be reflected in the
+value visible in the cop hints hash.  Complex types of scalar will not
+be stored with referential integrity, but will be coerced to strings.
+
+=cut
+*/
+
+#define cophh_store_pvn(cophh, keypv, keylen, hash, value, flags) \
+    Perl_refcounted_he_new_pvn(aTHX_ cophh, keypv, keylen, hash, value, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_store_pvs|const COPHH *cophh|const char *key|SV *value|U32 flags
+
+Like L</cophh_store_pvn>, but takes a literal string instead of a
+string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define cophh_store_pvs(cophh, key, value, flags) \
+    Perl_refcounted_he_new_pvn(aTHX_ cophh, STR_WITH_LEN(key), 0, value, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_store_pv|const COPHH *cophh|const char *key|U32 hash|SV *value|U32 flags
+
+Like L</cophh_store_pvn>, but takes a nul-terminated string instead of
+a string/length pair.
+
+=cut
+*/
+
+#define cophh_store_pv(cophh, key, hash, value, flags) \
+    Perl_refcounted_he_new_pv(aTHX_ cophh, key, hash, value, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_store_sv|const COPHH *cophh|SV *key|U32 hash|SV *value|U32 flags
+
+Like L</cophh_store_pvn>, but takes a Perl scalar instead of a
+string/length pair.
+
+=cut
+*/
+
+#define cophh_store_sv(cophh, key, hash, value, flags) \
+    Perl_refcounted_he_new_sv(aTHX_ cophh, key, hash, value, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_delete_pvn|COPHH *cophh|const char *keypv|STRLEN keylen|U32 hash|U32 flags
+
+Delete a key and its associated value from the cop hints hash I<cophh>,
+and returns the modified hash.  The returned hash pointer is in general
+not the same as the hash pointer that was passed in.  The input hash is
+consumed by the function, and the pointer to it must not be subsequently
+used.  Use L</cophh_copy> if you need both hashes.
+
+The key is specified by I<keypv> and I<keylen>.  If I<flags> has the
+C<COPHH_KEY_UTF8> bit set, the key octets are interpreted as UTF-8,
+otherwise they are interpreted as Latin-1.  I<hash> is a precomputed
+hash of the key string, or zero if it has not been precomputed.
+
+=cut
+*/
+
+#define cophh_delete_pvn(cophh, keypv, keylen, hash, flags) \
+    Perl_refcounted_he_new_pvn(aTHX_ cophh, keypv, keylen, hash, \
+	(SV *)NULL, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_delete_pvs|const COPHH *cophh|const char *key|U32 flags
+
+Like L</cophh_delete_pvn>, but takes a literal string instead of a
+string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define cophh_delete_pvs(cophh, key, flags) \
+    Perl_refcounted_he_new_pvn(aTHX_ cophh, STR_WITH_LEN(key), 0, \
+	(SV *)NULL, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_delete_pv|const COPHH *cophh|const char *key|U32 hash|U32 flags
+
+Like L</cophh_delete_pvn>, but takes a nul-terminated string instead of
+a string/length pair.
+
+=cut
+*/
+
+#define cophh_delete_pv(cophh, key, hash, flags) \
+    Perl_refcounted_he_new_pv(aTHX_ cophh, key, hash, (SV *)NULL, flags)
+
+/*
+=for apidoc Amx|COPHH *|cophh_delete_sv|const COPHH *cophh|SV *key|U32 hash|U32 flags
+
+Like L</cophh_delete_pvn>, but takes a Perl scalar instead of a
+string/length pair.
+
+=cut
+*/
+
+#define cophh_delete_sv(cophh, key, hash, flags) \
+    Perl_refcounted_he_new_sv(aTHX_ cophh, key, hash, (SV *)NULL, flags)
 
 #include "mydtrace.h"
 
@@ -174,7 +398,7 @@ struct cop {
     STRLEN *	cop_warnings;	/* lexical warnings bitmask */
     /* compile time state of %^H.  See the comment in op.c for how this is
        used to recreate a hash to return from caller.  */
-    struct refcounted_he * cop_hints_hash;
+    COPHH *	cop_hints_hash;
 };
 
 #ifdef USE_ITHREADS
@@ -243,7 +467,81 @@ struct cop {
 #  define CopFILE_free(c)	(SvREFCNT_dec(CopFILEGV(c)),(CopFILEGV(c) = NULL))
 
 #endif /* USE_ITHREADS */
-#define CopLABEL(c)  Perl_fetch_cop_label(aTHX_ (c)->cop_hints_hash, NULL, NULL)
+
+#define CopHINTHASH_get(c)	((COPHH*)((c)->cop_hints_hash))
+#define CopHINTHASH_set(c,h)	((c)->cop_hints_hash = (h))
+
+/*
+=head1 COP Hint Reading
+*/
+
+/*
+=for apidoc Am|SV *|cop_hints_fetch_pvn|const COP *cop|const char *keypv|STRLEN keylen|U32 hash|U32 flags
+
+Look up the hint entry in the cop I<cop> with the key specified by
+I<keypv> and I<keylen>.  If I<flags> has the C<COPHH_KEY_UTF8> bit set,
+the key octets are interpreted as UTF-8, otherwise they are interpreted
+as Latin-1.  I<hash> is a precomputed hash of the key string, or zero if
+it has not been precomputed.  Returns a mortal scalar copy of the value
+associated with the key, or C<&PL_sv_placeholder> if there is no value
+associated with the key.
+
+=cut
+*/
+
+#define cop_hints_fetch_pvn(cop, keypv, keylen, hash, flags) \
+    cophh_fetch_pvn(CopHINTHASH_get(cop), keypv, keylen, hash, flags)
+
+/*
+=for apidoc Am|SV *|cop_hints_fetch_pvs|const COP *cop|const char *key|U32 flags
+
+Like L</cop_hints_fetch_pvn>, but takes a literal string instead of a
+string/length pair, and no precomputed hash.
+
+=cut
+*/
+
+#define cop_hints_fetch_pvs(cop, key, flags) \
+    cophh_fetch_pvs(CopHINTHASH_get(cop), key, flags)
+
+/*
+=for apidoc Am|SV *|cop_hints_fetch_pv|const COP *cop|const char *key|U32 hash|U32 flags
+
+Like L</cop_hints_fetch_pvn>, but takes a nul-terminated string instead
+of a string/length pair.
+
+=cut
+*/
+
+#define cop_hints_fetch_pv(cop, key, hash, flags) \
+    cophh_fetch_pv(CopHINTHASH_get(cop), key, hash, flags)
+
+/*
+=for apidoc Am|SV *|cop_hints_fetch_sv|const COP *cop|SV *key|U32 hash|U32 flags
+
+Like L</cop_hints_fetch_pvn>, but takes a Perl scalar instead of a
+string/length pair.
+
+=cut
+*/
+
+#define cop_hints_fetch_sv(cop, key, hash, flags) \
+    cophh_fetch_sv(CopHINTHASH_get(cop), key, hash, flags)
+
+/*
+=for apidoc Am|HV *|cop_hints_2hv|const COP *cop|U32 flags
+
+Generates and returns a standard Perl hash representing the full set of
+hint entries in the cop I<cop>.  I<flags> is currently unused and must
+be zero.
+
+=cut
+*/
+
+#define cop_hints_2hv(cop, flags) \
+    cophh_2hv(CopHINTHASH_get(cop), flags)
+
+#define CopLABEL(c)  Perl_fetch_cop_label(aTHX_ (c), NULL, NULL)
 #define CopLABEL_alloc(pv)	((pv)?savepv(pv):NULL)
 
 #define CopSTASH_ne(c,hv)	(!CopSTASH_eq(c,hv))
@@ -261,8 +559,7 @@ struct cop {
    using $[ is highly discouraged, no sane Perl code will be using it.  */
 #define CopARYBASE_get(c)	\
 	((CopHINTS_get(c) & HINT_ARYBASE)				\
-	 ? SvIV(Perl_refcounted_he_fetch(aTHX_ (c)->cop_hints_hash, 0,	\
-					 "$[", 2, 0, 0))		\
+	 ? SvIV(cop_hints_fetch_pvs((c), "$[", 0))			\
 	 : 0)
 #define CopARYBASE_set(c, b) STMT_START { \
 	if (b || ((c)->cop_hints & HINT_ARYBASE)) {			\
@@ -273,10 +570,9 @@ struct cop {
 		mg_set(val);						\
 		PL_hints |= HINT_ARYBASE;				\
 	    } else {							\
-		(c)->cop_hints_hash					\
-		   = Perl_refcounted_he_new(aTHX_ (c)->cop_hints_hash,	\
-					newSVpvs_flags("$[", SVs_TEMP),	\
-					sv_2mortal(newSViv(b)));	\
+		CopHINTHASH_set((c),					\
+		    cophh_store_pvs(CopHINTHASH_get((c)), "$[",		\
+			sv_2mortal(newSViv(b)), 0));			\
 	    }								\
 	}								\
     } STMT_END
@@ -321,7 +617,8 @@ struct block_format {
 #define PUSHSUB_BASE(cx)						\
 	ENTRY_PROBE(GvENAME(CvGV(cv)),		       			\
 		CopFILE((const COP *)CvSTART(cv)),			\
-		CopLINE((const COP *)CvSTART(cv)));			\
+		CopLINE((const COP *)CvSTART(cv)),			\
+		CopSTASHPV((const COP *)CvSTART(cv)));			\
 									\
 	cx->blk_sub.cv = cv;						\
 	cx->blk_sub.olddepth = CvDEPTH(cv);				\
@@ -371,7 +668,8 @@ struct block_format {
     STMT_START {							\
 	RETURN_PROBE(GvENAME(CvGV((const CV*)cx->blk_sub.cv)),		\
 		CopFILE((COP*)CvSTART((const CV*)cx->blk_sub.cv)),	\
-		CopLINE((COP*)CvSTART((const CV*)cx->blk_sub.cv)));	\
+		CopLINE((COP*)CvSTART((const CV*)cx->blk_sub.cv)),	\
+		CopSTASHPV((COP*)CvSTART((const CV*)cx->blk_sub.cv)));	\
 									\
 	if (CxHASARGS(cx)) {						\
 	    POP_SAVEARRAY();						\
@@ -447,16 +745,11 @@ struct block_eval {
 struct block_loop {
     I32		resetsp;
     LOOP *	my_op;	/* My op, that contains redo, next and last ops.  */
-    /* (except for non_ithreads we need to modify next_op in pp_ctl.c, hence
-	why next_op is conditionally defined below.)  */
-#ifdef USE_ITHREADS
-    PAD		*oldcomppad; /* Also used for the GV, if targoffset is 0 */
-    /* This is also accesible via cx->blk_loop.my_op->op_targ */
-    PADOFFSET	targoffset;
-#else
-    OP *	next_op;
-    SV **	itervar;
-#endif
+    union {	/* different ways of locating the iteration variable */
+	SV      **svp;
+	GV      *gv;
+	PAD     *oldcomppad; /* only used in ITHREADS */
+    } itervar_u;
     union {
 	struct { /* valid if type is LOOP_FOR or LOOP_PLAIN (but {NULL,0})*/
 	    AV * ary; /* use the stack if this is NULL */
@@ -474,49 +767,36 @@ struct block_loop {
 };
 
 #ifdef USE_ITHREADS
-#  define CxITERVAR(c)							\
-	((c)->blk_loop.oldcomppad					\
-	 ? (CxPADLOOP(c) 						\
-	    ? &CX_CURPAD_SV( (c)->blk_loop, (c)->blk_loop.targoffset )	\
-	    : &GvSV((GV*)(c)->blk_loop.oldcomppad))			\
-	 : (SV**)NULL)
-#  define CX_ITERDATA_SET(cx,idata,o)					\
-	if ((cx->blk_loop.targoffset = (o)))				\
-	    CX_CURPAD_SAVE(cx->blk_loop);				\
-	else								\
-	    cx->blk_loop.oldcomppad = (idata);
+#  define CxITERVAR_PADSV(c) \
+	&CX_CURPAD_SV( (c)->blk_loop.itervar_u, (c)->blk_loop.my_op->op_targ)
 #else
-#  define CxITERVAR(c)		((c)->blk_loop.itervar)
-#  define CX_ITERDATA_SET(cx,ivar,o)					\
-	cx->blk_loop.itervar = (SV**)(ivar);
+#  define CxITERVAR_PADSV(c) ((c)->blk_loop.itervar_u.svp)
 #endif
+
+#define CxITERVAR(c)							\
+	((c)->blk_loop.itervar_u.oldcomppad				\
+	 ? (CxPADLOOP(c) 						\
+	    ? CxITERVAR_PADSV(c)					\
+	    : &GvSV((c)->blk_loop.itervar_u.gv))			\
+	 : (SV**)NULL)
+
 #define CxLABEL(c)	(0 + CopLABEL((c)->blk_oldcop))
 #define CxHASARGS(c)	(((c)->cx_type & CXp_HASARGS) == CXp_HASARGS)
 #define CxLVAL(c)	(0 + (c)->blk_u16)
 
-#ifdef USE_ITHREADS
-#  define PUSHLOOP_OP_NEXT		/* No need to do anything.  */
-#  define CX_LOOP_NEXTOP_GET(cx)	((cx)->blk_loop.my_op->op_nextop + 0)
-#else
-#  define PUSHLOOP_OP_NEXT		cx->blk_loop.next_op = cLOOP->op_nextop
-#  define CX_LOOP_NEXTOP_GET(cx)	((cx)->blk_loop.next_op + 0)
-#endif
-
 #define PUSHLOOP_PLAIN(cx, s)						\
 	cx->blk_loop.resetsp = s - PL_stack_base;			\
 	cx->blk_loop.my_op = cLOOP;					\
-	PUSHLOOP_OP_NEXT;						\
 	cx->blk_loop.state_u.ary.ary = NULL;				\
 	cx->blk_loop.state_u.ary.ix = 0;				\
-	CX_ITERDATA_SET(cx, NULL, 0);
+	cx->blk_loop.itervar_u.svp = NULL;
 
-#define PUSHLOOP_FOR(cx, dat, s, offset)				\
+#define PUSHLOOP_FOR(cx, ivar, s)					\
 	cx->blk_loop.resetsp = s - PL_stack_base;			\
 	cx->blk_loop.my_op = cLOOP;					\
-	PUSHLOOP_OP_NEXT;						\
 	cx->blk_loop.state_u.ary.ary = NULL;				\
 	cx->blk_loop.state_u.ary.ix = 0;				\
-	CX_ITERDATA_SET(cx, dat, offset);
+	cx->blk_loop.itervar_u.svp = (SV**)(ivar);
 
 #define POPLOOP(cx)							\
 	if (CxTYPE(cx) == CXt_LOOP_LAZYSV) {				\
@@ -713,9 +993,7 @@ struct context {
 
 /* private flags for CXt_LOOP */
 #define CXp_FOR_DEF	0x10	/* foreach using $_ */
-#ifdef USE_ITHREADS
-#  define CxPADLOOP(c)	((c)->blk_loop.targoffset)
-#endif
+#define CxPADLOOP(c)	((c)->blk_loop.my_op->op_targ)
 
 /* private flags for CXt_SUBST */
 #define CXp_ONCE	0x10	/* What was sbu_once in struct subst */
@@ -948,8 +1226,8 @@ See L<perlcall/Lightweight Callbacks>.
 
 #define POP_MULTICALL \
     STMT_START {							\
-	LEAVESUB(multicall_cv);						\
-	CvDEPTH(multicall_cv)--;					\
+	if (! --CvDEPTH(multicall_cv))					\
+	    LEAVESUB(multicall_cv);					\
 	POPBLOCK(cx,PL_curpm);						\
 	POPSTACK;							\
 	CATCH_SET(multicall_oldcatch);					\

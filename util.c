@@ -99,7 +99,6 @@ Perl_safesysmalloc(MEM_SIZE size)
 #endif
     ptr = (Malloc_t)PerlMem_malloc(size?size:1);	/* malloc(0) is NASTY on our system */
     PERL_ALLOC_CHECK(ptr);
-    DEBUG_m(PerlIO_printf(Perl_debug_log, "0x%"UVxf": (%05ld) malloc %ld bytes\n",PTR2UV(ptr),(long)PL_an++,(long)size));
     if (ptr != NULL) {
 #ifdef PERL_TRACK_MEMPOOL
 	struct perl_memory_debug_header *const header
@@ -122,6 +121,7 @@ Perl_safesysmalloc(MEM_SIZE size)
 #  endif
         ptr = (Malloc_t)((char*)ptr+sTHX);
 #endif
+	DEBUG_m(PerlIO_printf(Perl_debug_log, "0x%"UVxf": (%05ld) malloc %ld bytes\n",PTR2UV(ptr),(long)PL_an++,(long)size));
 	return ptr;
 }
     else {
@@ -930,6 +930,27 @@ Perl_foldEQ(const char *s1, const char *s2, register I32 len)
     }
     return 1;
 }
+I32
+Perl_foldEQ_latin1(const char *s1, const char *s2, register I32 len)
+{
+    /* Compare non-utf8 using Unicode (Latin1) semantics.  Does not work on
+     * MICRO_SIGN, LATIN_SMALL_LETTER_SHARP_S, nor
+     * LATIN_SMALL_LETTER_Y_WITH_DIAERESIS, and does not check for these.  Nor
+     * does it check that the strings each have at least 'len' characters */
+
+    register const U8 *a = (const U8 *)s1;
+    register const U8 *b = (const U8 *)s2;
+
+    PERL_ARGS_ASSERT_FOLDEQ_LATIN1;
+
+    while (len--) {
+	if (*a != *b && *a != PL_fold_latin1[*b]) {
+	    return 0;
+	}
+	a++, b++;
+    }
+    return 1;
+}
 
 /*
 =for apidoc foldEQ_locale
@@ -1087,6 +1108,25 @@ Perl_savesvpv(pTHX_ SV *sv)
     return (char *) CopyD(pv,newaddr,len,char);
 }
 
+/*
+=for apidoc savesharedsvpv
+
+A version of C<savesharedpv()> which allocates the duplicate string in
+memory which is shared between threads.
+
+=cut
+*/
+
+char *
+Perl_savesharedsvpv(pTHX_ SV *sv)
+{
+    STRLEN len;
+    const char * const pv = SvPV_const(sv, len);
+
+    PERL_ARGS_ASSERT_SAVESHAREDSVPV;
+
+    return savesharedpvn(pv, len);
+}
 
 /* the SV for Perl_form() and mess() is not kept in an arena */
 
@@ -1097,7 +1137,7 @@ S_mess_alloc(pTHX)
     SV *sv;
     XPVMG *any;
 
-    if (!PL_dirty)
+    if (PL_phase != PERL_PHASE_DESTRUCT)
 	return newSVpvs_flags("", SVs_TEMP);
 
     if (PL_mess_sv)
@@ -1324,7 +1364,7 @@ Perl_mess_sv(pTHX_ SV *basemsg, bool consume)
 			   line_mode ? "line" : "chunk",
 			   (IV)IoLINES(GvIOp(PL_last_in_gv)));
 	}
-	if (PL_dirty)
+	if (PL_phase == PERL_PHASE_DESTRUCT)
 	    sv_catpvs(sv, " during global destruction");
 	sv_catpvs(sv, ".\n");
     }
@@ -1399,10 +1439,8 @@ Perl_write_to_stderr(pTHX_ SV* msv)
 	dSAVED_ERRNO;
 #endif
 	PerlIO * const serr = Perl_error_log;
-	STRLEN msglen;
-	const char* message = SvPVx_const(msv, msglen);
 
-	PERL_WRITE_MSG_TO_CONSOLE(serr, message, msglen);
+	do_print(msv, serr);
 	(void)PerlIO_flush(serr);
 #ifdef USE_SFIO
 	RESTORE_ERRNO;
@@ -3828,7 +3866,8 @@ Perl_my_fflush_all(pTHX)
 void
 Perl_report_evil_fh(pTHX_ const GV *gv, const IO *io, I32 op)
 {
-    const char * const name = gv && isGV(gv) ? GvENAME(gv) : NULL;
+    const char * const name
+     = gv && (isGV(gv) || isGV_with_GP(gv)) ? GvENAME(gv) : NULL;
 
     if (op == OP_phoney_OUTPUT_ONLY || op == OP_phoney_INPUT_ONLY) {
 	if (ckWARN(WARN_IO)) {
@@ -4516,6 +4555,11 @@ Perl_getcwd_sv(pTHX_ register SV *sv)
 /*
 =for apidoc prescan_version
 
+Validate that a given string can be parsed as a version object, but doesn't
+actually perform the parsing.  Can use either strict or lax validation rules.
+Can optionally set a number of hint variables to save the parsing code
+some time when tokenizing.
+
 =cut
 */
 const char *
@@ -5049,29 +5093,35 @@ Perl_upg_version(pTHX_ SV *ver, bool qv)
 #ifndef SvVOK
 #  if PERL_VERSION > 5
 	/* This will only be executed for 5.6.0 - 5.8.0 inclusive */
-	if ( len >= 3 && !instr(version,".") && !instr(version,"_")
-	    && !(*version == 'u' && strEQ(version, "undef"))
-	    && (*version < '0' || *version > '9') ) {
+	if ( len >= 3 && !instr(version,".") && !instr(version,"_")) {
 	    /* may be a v-string */
-	    SV * const nsv = sv_newmortal();
-	    const char *nver;
-	    const char *pos;
-	    int saw_decimal = 0;
-	    sv_setpvf(nsv,"v%vd",ver);
-	    pos = nver = savepv(SvPV_nolen(nsv));
+	    char *testv = (char *)version;
+	    STRLEN tlen = len;
+	    for (tlen=0; tlen < len; tlen++, testv++) {
+		/* if one of the characters is non-text assume v-string */
+		if (testv[0] < ' ') {
+		    SV * const nsv = sv_newmortal();
+		    const char *nver;
+		    const char *pos;
+		    int saw_decimal = 0;
+		    sv_setpvf(nsv,"v%vd",ver);
+		    pos = nver = savepv(SvPV_nolen(nsv));
 
-	    /* scan the resulting formatted string */
-	    pos++; /* skip the leading 'v' */
-	    while ( *pos == '.' || isDIGIT(*pos) ) {
-		if ( *pos == '.' )
-		    saw_decimal++ ;
-		pos++;
-	    }
+		    /* scan the resulting formatted string */
+		    pos++; /* skip the leading 'v' */
+		    while ( *pos == '.' || isDIGIT(*pos) ) {
+			if ( *pos == '.' )
+			    saw_decimal++ ;
+			pos++;
+		    }
 
-	    /* is definitely a v-string */
-	    if ( saw_decimal >= 2 ) {
-		Safefree(version);
-		version = nver;
+		    /* is definitely a v-string */
+		    if ( saw_decimal >= 2 ) {	
+			Safefree(version);
+			version = nver;
+		    }
+		    break;
+		}
 	    }
 	}
 #  endif
@@ -5090,27 +5140,30 @@ Perl_upg_version(pTHX_ SV *ver, bool qv)
 /*
 =for apidoc vverify
 
-Validates that the SV contains a valid version object.
+Validates that the SV contains valid internal structure for a version object.
+It may be passed either the version object (RV) or the hash itself (HV).  If
+the structure is valid, it returns the HV.  If the structure is invalid,
+it returns NULL.
 
-    bool vverify(SV *vobj);
+    SV *hv = vverify(sv);
 
 Note that it only confirms the bare minimum structure (so as not to get
 confused by derived classes which may contain additional hash entries):
 
 =over 4
 
-=item * The SV contains a [reference to a] hash
+=item * The SV is an HV or a reference to an HV
 
 =item * The hash contains a "version" key
 
-=item * The "version" key has [a reference to] an AV as its value
+=item * The "version" key has a reference to an AV as its value
 
 =back
 
 =cut
 */
 
-bool
+SV *
 Perl_vverify(pTHX_ SV *vs)
 {
     SV *sv;
@@ -5125,9 +5178,9 @@ Perl_vverify(pTHX_ SV *vs)
 	 && hv_exists(MUTABLE_HV(vs), "version", 7)
 	 && (sv = SvRV(*hv_fetchs(MUTABLE_HV(vs), "version", FALSE)))
 	 && SvTYPE(sv) == SVt_PVAV )
-	return TRUE;
+	return vs;
     else
-	return FALSE;
+	return NULL;
 }
 
 /*
@@ -5140,6 +5193,8 @@ point representation.  Call like:
 
 NOTE: you can pass either the object directly or the SV
 contained within the RV.
+
+The SV returned has a refcount of 1.
 
 =cut
 */
@@ -5155,10 +5210,9 @@ Perl_vnumify(pTHX_ SV *vs)
 
     PERL_ARGS_ASSERT_VNUMIFY;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     /* see if various flags exist */
@@ -5221,6 +5275,8 @@ representation.  Call like:
 NOTE: you can pass either the object directly or the SV
 contained within the RV.
 
+The SV returned has a refcount of 1.
+
 =cut
 */
 
@@ -5234,10 +5290,9 @@ Perl_vnormal(pTHX_ SV *vs)
 
     PERL_ARGS_ASSERT_VNORMAL;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     if ( hv_exists(MUTABLE_HV(vs), "alpha", 5 ) )
@@ -5279,7 +5334,9 @@ Perl_vnormal(pTHX_ SV *vs)
 In order to maintain maximum compatibility with earlier versions
 of Perl, this function will return either the floating point
 notation or the multiple dotted notation, depending on whether
-the original version contained 1 or more dots, respectively
+the original version contained 1 or more dots, respectively.
+
+The SV returned has a refcount of 1.
 
 =cut
 */
@@ -5289,10 +5346,9 @@ Perl_vstringify(pTHX_ SV *vs)
 {
     PERL_ARGS_ASSERT_VSTRINGIFY;
 
-    if ( SvROK(vs) )
-	vs = SvRV(vs);
-
-    if ( !vverify(vs) )
+    /* extract the HV from the object */
+    vs = vverify(vs);
+    if ( ! vs )
 	Perl_croak(aTHX_ "Invalid version object");
 
     if (hv_exists(MUTABLE_HV(vs), "original",  sizeof("original") - 1)) {
@@ -5332,15 +5388,10 @@ Perl_vcmp(pTHX_ SV *lhv, SV *rhv)
 
     PERL_ARGS_ASSERT_VCMP;
 
-    if ( SvROK(lhv) )
-	lhv = SvRV(lhv);
-    if ( SvROK(rhv) )
-	rhv = SvRV(rhv);
-
-    if ( !vverify(lhv) )
-	Perl_croak(aTHX_ "Invalid version object");
-
-    if ( !vverify(rhv) )
+    /* extract the HVs from the objects */
+    lhv = vverify(lhv);
+    rhv = vverify(rhv);
+    if ( ! ( lhv && rhv ) )
 	Perl_croak(aTHX_ "Invalid version object");
 
     /* get the left hand term */
@@ -5720,8 +5771,11 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
 	    opt = (U32) atoi(p);
 	    while (isDIGIT(*p))
 		p++;
-	    if (*p && *p != '\n' && *p != '\r')
+	    if (*p && *p != '\n' && *p != '\r') {
+	     if(isSPACE(*p)) goto the_end_of_the_opts_parser;
+	     else
 		 Perl_croak(aTHX_ "Unknown Unicode option letter '%c'", *p);
+	    }
        }
        else {
 	    for (; *p; p++) {
@@ -5747,15 +5801,20 @@ Perl_parse_unicode_opts(pTHX_ const char **popt)
 		 case PERL_UNICODE_UTF8CACHEASSERT:
 		      opt |= PERL_UNICODE_UTF8CACHEASSERT_FLAG; break;
 		 default:
-		      if (*p != '\n' && *p != '\r')
+		      if (*p != '\n' && *p != '\r') {
+			if(isSPACE(*p)) goto the_end_of_the_opts_parser;
+			else
 			  Perl_croak(aTHX_
 				     "Unknown Unicode option letter '%c'", *p);
+		      }
 		 }
 	    }
        }
   }
   else
        opt = PERL_UNICODE_DEFAULT_FLAGS;
+
+  the_end_of_the_opts_parser:
 
   if (opt & ~PERL_UNICODE_ALL_FLAGS)
        Perl_croak(aTHX_ "Unknown Unicode option value %"UVuf,
@@ -6445,6 +6504,84 @@ Perl_my_cxt_init(pTHX_ const char *my_cxt_key, size_t size)
 #endif /* #ifndef PERL_GLOBAL_STRUCT_PRIVATE */
 #endif /* PERL_IMPLICIT_CONTEXT */
 
+void
+Perl_xs_version_bootcheck(pTHX_ U32 items, U32 ax, const char *xs_p,
+			  STRLEN xs_len)
+{
+    SV *sv;
+    const char *vn = NULL;
+    SV *const module = PL_stack_base[ax];
+
+    PERL_ARGS_ASSERT_XS_VERSION_BOOTCHECK;
+
+    if (items >= 2)	 /* version supplied as bootstrap arg */
+	sv = PL_stack_base[ax + 1];
+    else {
+	/* XXX GV_ADDWARN */
+	vn = "XS_VERSION";
+	sv = get_sv(Perl_form(aTHX_ "%"SVf"::%s", module, vn), 0);
+	if (!sv || !SvOK(sv)) {
+	    vn = "VERSION";
+	    sv = get_sv(Perl_form(aTHX_ "%"SVf"::%s", module, vn), 0);
+	}
+    }
+    if (sv) {
+	SV *xssv = Perl_newSVpvn_flags(aTHX_ xs_p, xs_len, SVs_TEMP);
+	SV *pmsv = sv_derived_from(sv, "version")
+	    ? sv : sv_2mortal(new_version(sv));
+	xssv = upg_version(xssv, 0);
+	if ( vcmp(pmsv,xssv) ) {
+	    SV *string = vstringify(xssv);
+	    SV *xpt = Perl_newSVpvf(aTHX_ "%"SVf" object version %"SVf
+				    " does not match ", module, string);
+
+	    SvREFCNT_dec(string);
+	    string = vstringify(pmsv);
+
+	    if (vn) {
+		Perl_sv_catpvf(aTHX_ xpt, "$%"SVf"::%s %"SVf, module, vn,
+			       string);
+	    } else {
+		Perl_sv_catpvf(aTHX_ xpt, "bootstrap parameter %"SVf, string);
+	    }
+	    SvREFCNT_dec(string);
+
+	    Perl_sv_2mortal(aTHX_ xpt);
+	    Perl_croak_sv(aTHX_ xpt);
+	}
+    }
+}
+
+void
+Perl_xs_apiversion_bootcheck(pTHX_ SV *module, const char *api_p,
+			     STRLEN api_len)
+{
+    SV *xpt = NULL;
+    SV *compver = Perl_newSVpvn_flags(aTHX_ api_p, api_len, SVs_TEMP);
+    SV *runver;
+
+    PERL_ARGS_ASSERT_XS_APIVERSION_BOOTCHECK;
+
+    /* This might croak  */
+    compver = upg_version(compver, 0);
+    /* This should never croak */
+    runver = new_version(PL_apiversion);
+    if (vcmp(compver, runver)) {
+	SV *compver_string = vstringify(compver);
+	SV *runver_string = vstringify(runver);
+	xpt = Perl_newSVpvf(aTHX_ "Perl API version %"SVf
+			    " of %"SVf" does not match %"SVf,
+			    compver_string, module, runver_string);
+	Perl_sv_2mortal(aTHX_ xpt);
+
+	SvREFCNT_dec(compver_string);
+	SvREFCNT_dec(runver_string);
+    }
+    SvREFCNT_dec(runver);
+    if (xpt)
+	Perl_croak_sv(aTHX_ xpt);
+}
+
 #ifndef HAS_STRLCAT
 Size_t
 Perl_my_strlcat(char *dst, const char *src, Size_t size)
@@ -6500,13 +6637,17 @@ Perl_get_db_sub(pTHX_ SV **svp, CV *cv)
     PL_tainted = FALSE;
     save_item(dbsv);
     if (!PERLDB_SUB_NN) {
-	GV * const gv = CvGV(cv);
+	GV *gv = CvGV(cv);
 
 	if ( svp && ((CvFLAGS(cv) & (CVf_ANON | CVf_CLONED))
 	     || strEQ(GvNAME(gv), "END")
 	     || ((GvCV(gv) != cv) && /* Could be imported, and old sub redefined. */
 		 !( (SvTYPE(*svp) == SVt_PVGV)
-		    && (GvCV((const GV *)*svp) == cv) )))) {
+		    && (GvCV((const GV *)*svp) == cv)
+		    && (gv = (GV *)*svp) 
+		  )
+		)
+	)) {
 	    /* Use GV from the stack as a fallback. */
 	    /* GV is potentially non-unique, or contain different CV. */
 	    SV * const tmp = newRV(MUTABLE_SV(cv));

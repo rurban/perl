@@ -3,7 +3,7 @@ use 5.006;
 use strict;
 use warnings;
 use warnings::register;
-our $VERSION = '1.17';
+our $VERSION = '1.18';
 require Exporter;
 require Cwd;
 
@@ -423,6 +423,7 @@ our @EXPORT = qw(find finddepth);
 
 use strict;
 my $Is_VMS;
+my $Is_Win32;
 
 require File::Basename;
 require File::Spec;
@@ -616,8 +617,8 @@ sub _find_opt {
     $pre_process       = $wanted->{preprocess};
     $post_process      = $wanted->{postprocess};
     $no_chdir          = $wanted->{no_chdir};
-    $full_check        = $^O eq 'MSWin32' ? 0 : $wanted->{follow};
-    $follow            = $^O eq 'MSWin32' ? 0 :
+    $full_check        = $Is_Win32 ? 0 : $wanted->{follow};
+    $follow            = $Is_Win32 ? 0 :
                              $full_check || $wanted->{follow_fast};
     $follow_skip       = $wanted->{follow_skip};
     $untaint           = $wanted->{untaint};
@@ -639,8 +640,9 @@ sub _find_opt {
 
 	($topdev,$topino,$topmode,$topnlink) = $follow ? stat $top_item : lstat $top_item;
 
-	if ($^O eq 'MSWin32') {
-	    $top_item =~ s|/\z|| unless $top_item =~ m|\w:/$|;
+	if ($Is_Win32) {
+	    $top_item =~ s|[/\\]\z||
+	      unless $top_item =~ m{^(?:\w:)?[/\\]$};
 	}
 	else {
 	    $top_item =~ s|/\z|| unless $top_item eq '/';
@@ -759,9 +761,10 @@ sub _find_dir($$$) {
     my $tainted = 0;
     my $no_nlink;
 
-    if ($^O eq 'MSWin32') {
-	$dir_pref = ($p_dir =~ m|\w:/?$| ? $p_dir : "$p_dir/" );
-    } elsif ($^O eq 'VMS') {
+    if ($Is_Win32) {
+	$dir_pref
+	  = ($p_dir =~ m{^(?:\w:[/\\]?|[/\\])$} ? $p_dir : "$p_dir/" );
+    } elsif ($Is_VMS) {
 
 	#	VMS is returning trailing .dir on directories
 	#	and trailing . on files and symbolic links
@@ -924,8 +927,9 @@ sub _find_dir($$$) {
 		$CdLvl = $Level;
 	    }
 
-	    if ($^O eq 'MSWin32') {
-		$dir_name = ($p_dir =~ m|\w:/?$| ? "$p_dir$dir_rel" : "$p_dir/$dir_rel");
+	    if ($Is_Win32) {
+		$dir_name = ($p_dir =~ m{^(?:\w:[/\\]?|[/\\])$}
+		    ? "$p_dir$dir_rel" : "$p_dir/$dir_rel");
 		$dir_pref = "$dir_name/";
 	    }
 	    elsif ($^O eq 'VMS') {
@@ -1203,13 +1207,16 @@ if ($^O eq 'VMS') {
     $Is_VMS = 1;
     $File::Find::dont_use_nlink  = 1;
 }
+elsif ($^O eq 'MSWin32') {
+    $Is_Win32 = 1;
+}
 
 # this _should_ work properly on all platforms
 # where File::Find can be expected to work
 $File::Find::current_dir = File::Spec->curdir || '.';
 
 $File::Find::dont_use_nlink = 1
-    if $^O eq 'os2' || $^O eq 'dos' || $^O eq 'amigaos' || $^O eq 'MSWin32' ||
+    if $^O eq 'os2' || $^O eq 'dos' || $^O eq 'amigaos' || $Is_Win32 ||
        $^O eq 'interix' || $^O eq 'cygwin' || $^O eq 'epoc' || $^O eq 'qnx' ||
 	   $^O eq 'nto';
 

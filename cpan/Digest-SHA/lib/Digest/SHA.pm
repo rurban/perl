@@ -3,10 +3,11 @@ package Digest::SHA;
 require 5.003000;
 
 use strict;
-use integer;
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
+use Fcntl;
+use integer;
 
-$VERSION = '5.48';
+$VERSION = '5.50';
 
 require Exporter;
 require DynaLoader;
@@ -113,11 +114,12 @@ sub Addfile {
 	my ($binary, $portable) = map { $_ eq $mode } ("b", "p");
 	my $text = -T $file;
 
+		## Always interpret "-" to mean STDIN; otherwise use
+		## sysopen to handle full range of POSIX file names
 	local *FH;
-		# protect any leading or trailing whitespace in $file;
-		# otherwise, 2-arg "open" will ignore them
-	$file =~ s#^(\s)#./$1#;
-	open(FH, "< $file\0") or _bail("Open failed");
+	$file eq '-' and open(FH, '< -') 
+		or sysopen(FH, $file, O_RDONLY)
+			or _bail('Open failed');
 	binmode(FH) if $binary || $portable;
 
 	unless ($portable && $text) {
@@ -136,8 +138,8 @@ sub Addfile {
 			last unless $n2;
 			$buf1 .= $buf2;
 		}
-		$buf1 =~ s/\015?\015\012/\012/g; 	# DOS/Windows
-		$buf1 =~ s/\015/\012/g;          	# early MacOS
+		$buf1 =~ s/\015?\015\012/\012/g;	# DOS/Windows
+		$buf1 =~ s/\015/\012/g;			# early MacOS
 		$self->add($buf1);
 	}
 	_bail("Read failed") unless defined $n1;
@@ -639,6 +641,7 @@ L<http://csrc.nist.gov/publications/fips/fips198/fips-198a.pdf>
 The author is particularly grateful to
 
 	Gisle Aas
+	Sean Burke
 	Chris Carey
 	Alexandr Ciornii
 	Jim Doble

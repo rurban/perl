@@ -3,6 +3,7 @@ use strict;
 use Cwd qw(chdir);
 use CPAN::Distroprefs;
 use CPAN::InfoObj;
+use File::Path ();
 @CPAN::Distribution::ISA = qw(CPAN::InfoObj);
 use vars qw($VERSION);
 $VERSION = "1.9600";
@@ -501,6 +502,10 @@ See also http://rt.cpan.org/Ticket/Display.html?id=38932\n");
             $from_dir = File::Spec->curdir;
             @dirents = @readdir;
         }
+        eval { File::Path::mkpath $builddir; };
+        if ($@) {
+            $CPAN::Frontend->mydie("Cannot create directory $builddir: $@");
+        }
         $packagedir = File::Temp::tempdir(
                                           "$tdir_base-XXXXXX",
                                           DIR => $builddir,
@@ -586,6 +591,7 @@ sub parse_meta_yml {
     my $early_yaml;
     eval {
         $CPAN::META->has_inst("Parse::CPAN::Meta") or die;
+        die "Parse::CPAN::Meta yaml too old" unless $Parse::CPAN::Meta::VERSION >= "1.40";
         # P::C::M returns last document in scalar context
         $early_yaml = Parse::CPAN::Meta::LoadFile($yaml);
     };
@@ -644,14 +650,15 @@ sub satisfy_configure_requires {
     if ($self->{configure_requires_later}) {
         for my $k (keys %{$self->{configure_requires_later_for}||{}}) {
             if ($self->{configure_requires_later_for}{$k}>1) {
-                # we must not come here a second time
-                $CPAN::Frontend->mywarn("Panic: Some prerequisites is not available, please investigate...");
-                require YAML::Syck;
-                $CPAN::Frontend->mydie
-                    (
-                     YAML::Syck::Dump
-                     ({self=>$self, prereq=>\@prereq})
-                    );
+                my $type = "";
+                for my $p (@prereq) {
+                    if ($p->[0] eq $k) {
+                        $type = $p->[1];
+                    }
+                }
+                $type = " $type" if $type;
+                $CPAN::Frontend->mywarn("Warning: unmanageable(?) prerequisite $k$type");
+                sleep 1;
             }
         }
     }
@@ -844,12 +851,20 @@ sub try_download {
                 my $readfh = CPAN::Tarzip->TIEHANDLE($patch);
 
                 my $pcommand;
-                my $ppp = $self->_patch_p_parameter($readfh);
+                my($ppp,$pfiles) = $self->_patch_p_parameter($readfh);
                 if ($ppp eq "applypatch") {
                     $pcommand = "$CPAN::Config->{applypatch} -verbose";
                 } else {
                     my $thispatchargs = join " ", $stdpatchargs, $ppp;
                     $pcommand = "$patchbin $thispatchargs";
+                    require Config; # usually loaded from CPAN.pm
+                    if ($Config::Config{osname} eq "solaris") {
+                        # native solaris patch cannot patch readonly files
+                        for my $file (@{$pfiles||[]}) {
+                            my @stat = stat $file or next;
+                            chmod $stat[2] | 0600, $file; # may fail
+                        }
+                    }
                 }
 
                 $readfh = CPAN::Tarzip->TIEHANDLE($patch); # open again
@@ -880,10 +895,14 @@ sub try_download {
     }
 }
 
+# may return
+# - "applypatch"
+# - ("-p0"|"-p1", $files)
 sub _patch_p_parameter {
     my($self,$fh) = @_;
     my $cnt_files   = 0;
     my $cnt_p0files = 0;
+    my @files;
     local($_);
     while ($_ = $fh->READLINE) {
         if (
@@ -895,13 +914,15 @@ sub _patch_p_parameter {
         }
         next unless /^[\*\+]{3}\s(\S+)/;
         my $file = $1;
+        push @files, $file;
         $cnt_files++;
         $cnt_p0files++ if -f $file;
         CPAN->debug("file[$file]cnt_files[$cnt_files]cnt_p0files[$cnt_p0files]")
             if $CPAN::DEBUG;
     }
     return "-p1" unless $cnt_files;
-    return $cnt_files==$cnt_p0files ? "-p0" : "-p1";
+    my $opt_p = $cnt_files==$cnt_p0files ? "-p0" : "-p1";
+    return ($opt_p, \@files);
 }
 
 #-> sub CPAN::Distribution::_edge_cases
@@ -2398,8 +2419,19 @@ sub follow_prereqs {
     return unless @prereq_tuples;
     my(@good_prereq_tuples);
     for my $p (@prereq_tuples) {
-        # XXX watch out for foul ones
-        push @good_prereq_tuples, $p;
+        # promote if possible
+        if ($p->[1] =~ /^(r|c)$/) {
+            push @good_prereq_tuples, $p;
+        } elsif ($p->[1] =~ /^(b)$/) {
+            my $reqtype = CPAN::Queue->reqtype_of($p->[0]);
+            if ($reqtype =~ /^(r|c)$/) {
+                push @good_prereq_tuples, [$p->[0], $reqtype];
+            } else {
+                push @good_prereq_tuples, $p;
+            }
+        } else {
+            die "Panic: in follow_prereqs: reqtype[$p->[1]] seen, should never happen";
+        }
     }
     my $pretty_id = $self->pretty_id;
     my %map = (
@@ -2436,7 +2468,7 @@ sub follow_prereqs {
 of modules we are processing right now?", "yes");
         $follow = $answer =~ /^\s*y/i;
     } else {
-        my @prereq = map { $_=>[0] } @good_prereq_tuples;
+        my @prereq = map { $_->[0] } @good_prereq_tuples;
         local($") = ", ";
         $CPAN::Frontend->
             myprint("  Ignoring dependencies on modules @prereq\n");
@@ -2594,6 +2626,19 @@ sub unsat_prereq {
         if ( $available_file ) {
             if  ( $inst_file && $available_file eq $inst_file && $nmo->inst_deprecated ) {
                 # continue installing as a prereq
+            } elsif ($self->{reqtype} =~ /^(r|c)$/ && exists $prereq_pm->{requires}{$need_module} && $nmo && !$inst_file) {
+                # continue installing as a prereq; this may be a
+                # distro we already used when it was a build_requires
+                # so we did not install it. But suddenly somebody
+                # wants it as a requires
+                my $need_distro = $nmo->distribution;
+                if ($need_distro->{install} && $need_distro->{install}->failed && $need_distro->{install}->text =~ /is only/) {
+                    CPAN->debug("promotion from build_requires to requires") if $CPAN::DEBUG;
+                    delete $need_distro->{install}; # promote to another installation attempt
+                    $need_distro->{reqtype} = "r";
+                    $need_distro->install;
+                    next NEED;
+                }
             }
             else {
                 next NEED if $self->_fulfills_all_version_rqs(
@@ -2700,8 +2745,13 @@ sub unsat_prereq {
         } elsif (exists $prereq_pm->{requires}{$need_module}) {
             $needed_as = "r";
         } elsif ($slot eq "configure_requires_later") {
-            # we have not yet run the {Build,Makefile}.PL, we must presume "r"
-            $needed_as = "r";
+            # in ae872487d5 we said: C< we have not yet run the
+            # {Build,Makefile}.PL, we must presume "r" >; but the
+            # meta.yml standard says C< These dependencies are not
+            # required after the distribution is installed. >; so now
+            # we change it back to "b" and care for the proper
+            # promotion later.
+            $needed_as = "b";
         } else {
             $needed_as = "b";
         }
@@ -2841,6 +2891,7 @@ sub prereq_pm {
             my $areq;
             my $do_replace;
             while (my($k,$v) = each %{$req||{}}) {
+                next unless defined $v;
                 if ($v =~ /\d/) {
                     $areq->{$k} = $v;
                 } elsif ($k =~ /[A-Za-z]/ &&
@@ -3373,13 +3424,15 @@ sub install {
             }
         }
         if (exists $self->{install}) {
-            if (UNIVERSAL::can($self->{install},"text") ?
-                $self->{install}->text eq "YES" :
-                $self->{install} =~ /^YES/
-               ) {
+            my $text = UNIVERSAL::can($self->{install},"text") ?
+                $self->{install}->text :
+                    $self->{install};
+            if ($text =~ /^YES/) {
                 $CPAN::Frontend->myprint("  Already done\n");
                 $CPAN::META->is_installed($self->{build_dir});
                 return 1;
+            } elsif ($text =~ /is only/) {
+                push @e, $text;
             } else {
                 # comment in Todo on 2006-02-11; maybe retry?
                 push @e, "Already tried without success";

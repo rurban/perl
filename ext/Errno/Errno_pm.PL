@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 use Config;
 use strict;
 
-our $VERSION = "1.12";
+our $VERSION = "1.13";
 
 my %err = ();
 my %wsa = ();
@@ -357,8 +357,9 @@ my %err;
 BEGIN {
     %err = (
 EDQ
-   
-    my @err = sort { $err{$a} <=> $err{$b} } keys %err;
+
+    my @err = sort { $err{$a} <=> $err{$b} }
+	grep { $err{$_} =~ /-?\d+$/ } keys %err;
 
     foreach $err (@err) {
 	print "\t$err => $err{$err},\n";

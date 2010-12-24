@@ -11,7 +11,7 @@ BEGIN {
 
 use Config;
 use File::Path;
-use File::Spec::Functions;
+use File::Spec::Functions qw(catfile curdir rel2abs);
 
 use strict;
 use warnings;
@@ -53,6 +53,22 @@ foreach my $file (@w_files) {
         @prgs = (@prgs, $file, split "\n########\n", <F>) ;
     }
     close F ;
+}
+
+$^X = rel2abs($^X);
+my $tempdir = tempfile;
+
+mkdir $tempdir, 0700 or die "Can't mkdir '$tempdir': $!";
+chdir $tempdir or die die "Can't chdir '$tempdir': $!";
+unshift @INC, '../../lib';
+my $cleanup = 1;
+my %tempfiles;
+
+END {
+    if ($cleanup) {
+	chdir '..' or die "Couldn't chdir .. for cleanup: $!";
+	rmtree($tempdir);
+    }
 }
 
 local $/ = undef;
@@ -121,7 +137,8 @@ for (@prgs){
     print TEST "\n#line 1\n";  # So the line numbers don't get messed up.
     print TEST $prog,"\n";
     close TEST or die "Cannot close $tmpfile: $!";
-    my $results = runperl( switches => [$switch], stderr => 1, progfile => $tmpfile );
+    my $results = runperl( switches => ["-I../../lib", $switch], nolib => 1,
+			   stderr => 1, progfile => $tmpfile );
     my $status = $?;
     $results =~ s/\n+$//;
     # allow expected output to be written as if $prog is on STDIN

@@ -2,8 +2,9 @@ package Unicode::UCD;
 
 use strict;
 use warnings;
+use charnames ();
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 use Storable qw(dclone);
 
@@ -709,35 +710,34 @@ sub bidi_types {
 
     my $compexcl = compexcl(0x09dc);
 
-This returns B<true> if the
-L</code point argument> should not be produced by composition normalization,
-B<AND> if that fact is not otherwise determinable from the Unicode data base.
-It currently does not return B<true> if the code point has a decomposition
+This routine is included for backwards compatibility, but as of Perl 5.12, for
+most purposes it is probably more convenient to use one of the following
+instead:
+
+    my $compexcl = chr(0x09dc) =~ /\p{Comp_Ex};
+    my $compexcl = chr(0x09dc) =~ /\p{Full_Composition_Exclusion};
+
+or even
+
+    my $compexcl = chr(0x09dc) =~ /\p{CE};
+    my $compexcl = chr(0x09dc) =~ /\p{Composition_Exclusion};
+
+The first two forms return B<true> if the L</code point argument> should not
+be produced by composition normalization.  The final two forms
+additionally require that this fact not otherwise be determinable from
+the Unicode data base for them to return B<true>.
+
+This routine behaves identically to the final two forms.  That is,
+it does not return B<true> if the code point has a decomposition
 consisting of another single code point, nor if its decomposition starts
 with a code point whose combining class is non-zero.  Code points that meet
 either of these conditions should also not be produced by composition
-normalization.
+normalization, which is probably why you should use the
+C<Full_Composition_Exclusion> property instead, as shown above.
 
-It returns B<false> otherwise.
+The routine returns B<false> otherwise.
 
 =cut
-
-my %COMPEXCL;
-
-sub _compexcl {
-    unless (%COMPEXCL) {
-	if (openunicode(\$COMPEXCLFH, "CompositionExclusions.txt")) {
-	    local $_;
-	    while (<$COMPEXCLFH>) {
-		if (/^([0-9A-F]+)\s+\#\s+/) {
-		    my $code = hex($1);
-		    $COMPEXCL{$code} = undef;
-		}
-	    }
-	    close($COMPEXCLFH);
-	}
-    }
-}
 
 sub compexcl {
     my $arg  = shift;
@@ -745,9 +745,8 @@ sub compexcl {
     croak __PACKAGE__, "::compexcl: unknown code '$arg'"
 	unless defined $code;
 
-    _compexcl() unless %COMPEXCL;
-
-    return exists $COMPEXCL{$code};
+    no warnings "utf8";     # So works on surrogates and non-Unicode code points
+    return chr($code) =~ /\p{Composition_Exclusion}/;
 }
 
 =head2 B<casefold()>
@@ -1123,19 +1122,26 @@ on the context.
 This function only operates on officially approved (not provisional) named
 sequences.
 
+Note that as of Perl 5.14, C<\N{KATAKANA LETTER AINU P}> will insert the named
+sequence into double-quoted strings, and C<charnames::string_vianame("KATAKANA
+LETTER AINU P")> will return the same string this function does, but will also
+operate on character names that aren't named sequences, without you having to
+know which are which.  See L<charnames>.
+
 =cut
 
 my %NAMEDSEQ;
 
 sub _namedseq {
     unless (%NAMEDSEQ) {
-	if (openunicode(\$NAMEDSEQFH, "NamedSequences.txt")) {
+	if (openunicode(\$NAMEDSEQFH, "Name.pl")) {
 	    local $_;
 	    while (<$NAMEDSEQFH>) {
-		if (/^(.+)\s*;\s*([0-9A-F]+(?: [0-9A-F]+)*)$/) {
-		    my ($n, $s) = ($1, $2);
-		    my @s = map { chr(hex($_)) } split(' ', $s);
-		    $NAMEDSEQ{$n} = join("", @s);
+		if (/^ [0-9A-F]+ \  /x) {
+                    chomp;
+                    my ($sequence, $name) = split /\t/;
+		    my @s = map { chr(hex($_)) } split(' ', $sequence);
+		    $NAMEDSEQ{$name} = join("", @s);
 		}
 	    }
 	    close($NAMEDSEQFH);
@@ -1144,18 +1150,30 @@ sub _namedseq {
 }
 
 sub namedseq {
-    _namedseq() unless %NAMEDSEQ;
+
+    # Use charnames::string_vianame() which now returns this information,
+    # unless the caller wants the hash returned, in which case we read it in,
+    # and thereafter use it instead of calling charnames, as it is faster.
+
     my $wantarray = wantarray();
     if (defined $wantarray) {
 	if ($wantarray) {
 	    if (@_ == 0) {
+                _namedseq() unless %NAMEDSEQ;
 		return %NAMEDSEQ;
 	    } elsif (@_ == 1) {
-		my $s = $NAMEDSEQ{ $_[0] };
+		my $s;
+                if (%NAMEDSEQ) {
+                    $s = $NAMEDSEQ{ $_[0] };
+                }
+                else {
+                    $s = charnames::string_vianame($_[0]);
+                }
 		return defined $s ? map { ord($_) } split('', $s) : ();
 	    }
 	} elsif (@_ == 1) {
-	    return $NAMEDSEQ{ $_[0] };
+            return $NAMEDSEQ{ $_[0] } if %NAMEDSEQ;
+            return charnames::string_vianame($_[0]);
 	}
     }
     return;
@@ -1218,8 +1236,6 @@ if you are wondering where one of your filehandles went, that's where.
 =head1 BUGS
 
 Does not yet support EBCDIC platforms.
-
-L</compexcl()> should give a complete list of excluded code points.
 
 =head1 AUTHOR
 

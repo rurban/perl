@@ -232,18 +232,18 @@ if PERL_PV_ESCAPE_UNI_DETECT is set then the input string is scanned
 using C<is_utf8_string()> to determine if it is Unicode.
 
 If PERL_PV_ESCAPE_ALL is set then all input chars will be output
-using C<\x01F1> style escapes, otherwise only chars above 255 will be
-escaped using this style, other non printable chars will use octal or
-common escaped patterns like C<\n>. If PERL_PV_ESCAPE_NOBACKSLASH
-then all chars below 255 will be treated as printable and 
+using C<\x01F1> style escapes, otherwise if PERL_PV_ESCAPE_NONASCII is set, only
+chars above 127 will be escaped using this style; otherwise, only chars above
+255 will be so escaped; other non printable chars will use octal or
+common escaped patterns like C<\n>. Otherwise, if PERL_PV_ESCAPE_NOBACKSLASH
+then all chars below 255 will be treated as printable and
 will be output as literals.
 
 If PERL_PV_ESCAPE_FIRSTCHAR is set then only the first char of the
-string will be escaped, regardles of max. If the string is utf8 and 
-the chars value is >255 then it will be returned as a plain hex 
-sequence. Thus the output will either be a single char, 
-an octal escape sequence, a special escape like C<\n> or a 3 or 
-more digit hex value. 
+string will be escaped, regardless of max. If the output is to be in hex,
+then it will be returned as a plain hex
+sequence. Thus the output will either be a single char,
+an octal escape sequence, a special escape like C<\n> or a hex value.
 
 If PERL_PV_ESCAPE_RE is set then the escape char used will be a '%' and
 not a '\\'. This is because regexes very often contain backslashed
@@ -285,7 +285,10 @@ Perl_pv_escape( pTHX_ SV *dsv, char const * const str,
         const UV u= (isuni) ? utf8_to_uvchr((U8*)pv, &readsize) : (U8)*pv;            
         const U8 c = (U8)u & 0xFF;
         
-        if ( ( u > 255 ) || (flags & PERL_PV_ESCAPE_ALL)) {
+        if ( ( u > 255 )
+	  || (flags & PERL_PV_ESCAPE_ALL)
+	  || (( u > 127 ) && (flags & PERL_PV_ESCAPE_NONASCII)))
+	{
             if (flags & PERL_PV_ESCAPE_FIRSTCHAR) 
                 chsize = my_snprintf( octbuf, PV_ESCAPE_OCTBUFSIZE, 
                                       "%"UVxf, u);
@@ -1035,7 +1038,7 @@ Perl_do_op_dump(pTHX_ I32 level, PerlIO *file, const OP *o)
 	}
 	else if (S_op_private_to_names(aTHX_ tmpsv, optype, o->op_private)) {
 	}
-	else if (PL_check[optype] != MEMBER_TO_FPTR(Perl_ck_ftst)) {
+	else if (PL_check[optype] != Perl_ck_ftst) {
 	    if (OP_IS_FILETEST_ACCESS(o->op_type) && o->op_private & OPpFT_ACCESS)
 		sv_catpv(tmpsv, ",FT_ACCESS");
 	    if (o->op_private & OPpFT_STACKED)
@@ -1248,6 +1251,7 @@ static const struct { const char type; const char *name; } magic_names[] = {
 	{ PERL_MAGIC_tied,           "tied(P)" },
 	{ PERL_MAGIC_sig,            "sig(S)" },
 	{ PERL_MAGIC_uvar,           "uvar(U)" },
+	{ PERL_MAGIC_checkcall,      "checkcall(])" },
 	{ PERL_MAGIC_overload_elem,  "overload_elem(a)" },
 	{ PERL_MAGIC_overload_table, "overload_table(c)" },
 	{ PERL_MAGIC_regdatum,       "regdatum(d)" },
@@ -1351,22 +1355,28 @@ Perl_do_magic_dump(pTHX_ I32 level, PerlIO *file, const MAGIC *mg, I32 nest, I32
 	    if (mg->mg_type == PERL_MAGIC_envelem &&
 		mg->mg_flags & MGf_TAINTEDDIR)
 	        Perl_dump_indent(aTHX_ level, file, "      TAINTEDDIR\n");
+	    if (mg->mg_type == PERL_MAGIC_regex_global &&
+		mg->mg_flags & MGf_MINMATCH)
+	        Perl_dump_indent(aTHX_ level, file, "      MINMATCH\n");
 	    if (mg->mg_flags & MGf_REFCOUNTED)
 	        Perl_dump_indent(aTHX_ level, file, "      REFCOUNTED\n");
             if (mg->mg_flags & MGf_GSKIP)
 	        Perl_dump_indent(aTHX_ level, file, "      GSKIP\n");
-	    if (mg->mg_type == PERL_MAGIC_regex_global &&
-		mg->mg_flags & MGf_MINMATCH)
-	        Perl_dump_indent(aTHX_ level, file, "      MINMATCH\n");
+	    if (mg->mg_flags & MGf_COPY)
+	        Perl_dump_indent(aTHX_ level, file, "      COPY\n");
+	    if (mg->mg_flags & MGf_DUP)
+	        Perl_dump_indent(aTHX_ level, file, "      DUP\n");
+	    if (mg->mg_flags & MGf_LOCAL)
+	        Perl_dump_indent(aTHX_ level, file, "      LOCAL\n");
         }
 	if (mg->mg_obj) {
-	    Perl_dump_indent(aTHX_ level, file, "    MG_OBJ = 0x%"UVxf"\n", 
+	    Perl_dump_indent(aTHX_ level, file, "    MG_OBJ = 0x%"UVxf"\n",
 	        PTR2UV(mg->mg_obj));
             if (mg->mg_type == PERL_MAGIC_qr) {
 		REGEXP* const re = (REGEXP *)mg->mg_obj;
 		SV * const dsv = sv_newmortal();
                 const char * const s
-		    = pv_pretty(dsv, RX_WRAPPED(re), RX_WRAPLEN(re), 
+		    = pv_pretty(dsv, RX_WRAPPED(re), RX_WRAPLEN(re),
                     60, NULL, NULL,
                     ( PERL_PV_PRETTY_QUOTE | PERL_PV_ESCAPE_RE | PERL_PV_PRETTY_ELLIPSES |
                     (RX_UTF8(re) ? PERL_PV_ESCAPE_UNI : 0))
@@ -1850,6 +1860,41 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	    AV * const backrefs
 		= *Perl_hv_backreferences_p(aTHX_ MUTABLE_HV(sv));
 	    struct mro_meta * const meta = HvAUX(sv)->xhv_mro_meta;
+	    if (HvAUX(sv)->xhv_name_count)
+		Perl_dump_indent(aTHX_
+		 level, file, "  NAMECOUNT = %"IVdf"\n",
+		 (IV)HvAUX(sv)->xhv_name_count
+		);
+	    if (HvAUX(sv)->xhv_name_u.xhvnameu_name && HvENAME_HEK_NN(sv)) {
+		const I32 count = HvAUX(sv)->xhv_name_count;
+		if (count) {
+		    SV * const names = newSVpvs_flags("", SVs_TEMP);
+		    /* The starting point is the first element if count is
+		       positive and the second element if count is negative. */
+		    HEK *const *hekp = HvAUX(sv)->xhv_name_u.xhvnameu_names
+			+ (count < 0 ? 1 : 0);
+		    HEK *const *const endp = HvAUX(sv)->xhv_name_u.xhvnameu_names
+			+ (count < 0 ? -count : count);
+		    while (hekp < endp) {
+			if (*hekp) {
+			    sv_catpvs(names, ", \"");
+			    sv_catpvn(names, HEK_KEY(*hekp), HEK_LEN(*hekp));
+			    sv_catpvs(names, "\"");
+			} else {
+			    /* This should never happen. */
+			    sv_catpvs(names, ", (null)");
+			}
+			++hekp;
+		    }
+		    Perl_dump_indent(aTHX_
+		     level, file, "  ENAME = %s\n", SvPV_nolen(names)+2
+		    );
+		}
+		else
+		    Perl_dump_indent(aTHX_
+		     level, file, "  ENAME = \"%s\"\n", HvENAME_get(sv)
+		    );
+	    }
 	    if (backrefs) {
 		Perl_dump_indent(aTHX_ level, file, "  BACKREFS = 0x%"UVxf"\n",
 				 PTR2UV(backrefs));
@@ -2393,6 +2438,13 @@ Perl_sv_catxmlsv(pTHX_ SV *dsv, SV *ssv)
 {
     PERL_ARGS_ASSERT_SV_CATXMLSV;
     return sv_catxmlpvn(dsv, SvPVX(ssv), SvCUR(ssv), SvUTF8(ssv));
+}
+
+char *
+Perl_sv_catxmlpv(pTHX_ SV *dsv, const char *pv, int utf8)
+{
+    PERL_ARGS_ASSERT_SV_CATXMLPV;
+    return sv_catxmlpvn(dsv, pv, strlen(pv), utf8);
 }
 
 char *
@@ -2966,7 +3018,7 @@ Perl_do_op_xmldump(pTHX_ I32 level, PerlIO *file, const OP *o)
 	    if (o->op_private & OPpHUSH_VMSISH)
 		sv_catpv(tmpsv, ",HUSH_VMSISH");
 	}
-	else if (PL_check[o->op_type] != MEMBER_TO_FPTR(Perl_ck_ftst)) {
+	else if (PL_check[o->op_type] != Perl_ck_ftst) {
 	    if (OP_IS_FILETEST_ACCESS(o->op_type) && o->op_private & OPpFT_ACCESS)
 		sv_catpv(tmpsv, ",FT_ACCESS");
 	    if (o->op_private & OPpFT_STACKED)

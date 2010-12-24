@@ -183,13 +183,11 @@ S_save_scalar_at(pTHX_ SV **sptr, const U32 flags)
 
     if (SvTYPE(osv) >= SVt_PVMG && SvMAGIC(osv) && SvTYPE(osv) != SVt_PVGV) {
 	if (SvGMAGICAL(osv)) {
-	    const bool oldtainted = PL_tainted;
 	    SvFLAGS(osv) |= (SvFLAGS(osv) &
 	       (SVp_IOK|SVp_NOK|SVp_POK)) >> PRIVSHIFT;
-	    PL_tainted = oldtainted;
 	}
 	if (!(flags & SAVEf_KEEPOLDELEM))
-	    mg_localize(osv, sv, (flags & SAVEf_SETMAGIC) != 0);
+	    mg_localize(osv, sv, cBOOL(flags & SAVEf_SETMAGIC));
     }
 
     return sv;
@@ -281,15 +279,7 @@ Perl_save_gp(pTHX_ GV *gv, I32 empty)
 
     PERL_ARGS_ASSERT_SAVE_GP;
 
-    SSCHECK(4);
-    SSPUSHINT(SvFAKE(gv));
-    SSPUSHPTR(GvGP(gv));
-    SSPUSHPTR(SvREFCNT_inc(gv));
-    SSPUSHUV(SAVEt_GP);
-
-    /* Don't let the localized GV coerce into non-glob, otherwise we would
-     * not be able to restore GP upon leave from context if that happened */
-    SvFAKE_off(gv);
+    save_pushptrptr(SvREFCNT_inc(gv), GvGP(gv), SAVEt_GP);
 
     if (empty) {
 	GP *gp = Perl_newGP(aTHX_ gv);
@@ -600,17 +590,12 @@ void
 Perl_save_hints(pTHX)
 {
     dVAR;
-    if (PL_compiling.cop_hints_hash) {
-	HINTS_REFCNT_LOCK;
-	    PL_compiling.cop_hints_hash->refcounted_he_refcnt++;
-	    HINTS_REFCNT_UNLOCK;
-    }
+    COPHH *save_cophh = cophh_copy(CopHINTHASH_get(&PL_compiling));
     if (PL_hints & HINT_LOCALIZE_HH) {
-	save_pushptri32ptr(GvHV(PL_hintgv), PL_hints,
-			   PL_compiling.cop_hints_hash, SAVEt_HINTS);
-	GvHV(PL_hintgv) = Perl_hv_copy_hints_hv(aTHX_ GvHV(PL_hintgv));
+	save_pushptri32ptr(GvHV(PL_hintgv), PL_hints, save_cophh, SAVEt_HINTS);
+	GvHV(PL_hintgv) = hv_copy_hints_hv(GvHV(PL_hintgv));
     } else {
-	save_pushi32ptr(PL_hints, PL_compiling.cop_hints_hash, SAVEt_HINTS);
+	save_pushi32ptr(PL_hints, save_cophh, SAVEt_HINTS);
     }
 }
 
@@ -778,9 +763,15 @@ Perl_leave_scope(pTHX_ I32 base)
 		*(char**)ptr = str;
 	    }
 	    break;
+	case SAVEt_GVSV:			/* scalar slot in GV */
+	    value = MUTABLE_SV(SSPOPPTR);
+	    gv = MUTABLE_GV(SSPOPPTR);
+	    ptr = &GvSV(gv);
+	    goto restore_svp;
 	case SAVEt_GENERIC_SVREF:		/* generic sv */
 	    value = MUTABLE_SV(SSPOPPTR);
 	    ptr = SSPOPPTR;
+	restore_svp:
 	    sv = *(SV**)ptr;
 	    *(SV**)ptr = value;
 	    SvREFCNT_dec(sv);
@@ -854,19 +845,22 @@ Perl_leave_scope(pTHX_ I32 base)
 	    *(AV**)ptr = MUTABLE_AV(SSPOPPTR);
 	    break;
 	case SAVEt_GP:				/* scalar reference */
+	    ptr = SSPOPPTR;
 	    gv = MUTABLE_GV(SSPOPPTR);
 	    gp_free(gv);
-	    GvGP(gv) = (GP*)SSPOPPTR;
-	    if (SSPOPINT)
-		SvFAKE_on(gv);
+	    GvGP(gv) = (GP*)ptr;
             /* putting a method back into circulation ("local")*/
-	    if (GvCVu(gv) && (hv=GvSTASH(gv)) && HvNAME_get(hv))
+	    if (GvCVu(gv) && (hv=GvSTASH(gv)) && HvENAME_get(hv))
                 mro_method_changed_in(hv);
 	    SvREFCNT_dec(gv);
 	    break;
 	case SAVEt_FREESV:
 	    ptr = SSPOPPTR;
 	    SvREFCNT_dec(MUTABLE_SV(ptr));
+	    break;
+	case SAVEt_FREECOPHH:
+	    ptr = SSPOPPTR;
+	    cophh_free((COPHH *)ptr);
 	    break;
 	case SAVEt_MORTALIZESV:
 	    ptr = SSPOPPTR;
@@ -1015,8 +1009,8 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvREFCNT_dec(MUTABLE_SV(GvHV(PL_hintgv)));
 		GvHV(PL_hintgv) = NULL;
 	    }
-	    Perl_refcounted_he_free(aTHX_ PL_compiling.cop_hints_hash);
-	    PL_compiling.cop_hints_hash = (struct refcounted_he *) SSPOPPTR;
+	    cophh_free(CopHINTHASH_get(&PL_compiling));
+	    CopHINTHASH_set(&PL_compiling, (COPHH*)SSPOPPTR);
 	    *(I32*)&PL_hints = (I32)SSPOPINT;
 	    if (PL_hints & HINT_LOCALIZE_HH) {
 		SvREFCNT_dec(MUTABLE_SV(GvHV(PL_hintgv)));
@@ -1232,8 +1226,6 @@ Perl_cx_dump(pTHX_ PERL_CONTEXT *cx)
 		(long)cx->blk_loop.resetsp);
 	PerlIO_printf(Perl_debug_log, "BLK_LOOP.MY_OP = 0x%"UVxf"\n",
 		PTR2UV(cx->blk_loop.my_op));
-	PerlIO_printf(Perl_debug_log, "BLK_LOOP.NEXT_OP = 0x%"UVxf"\n",
-		PTR2UV(CX_LOOP_NEXTOP_GET(cx)));
 	/* XXX: not accurate for LAZYSV/IV */
 	PerlIO_printf(Perl_debug_log, "BLK_LOOP.ITERARY = 0x%"UVxf"\n",
 		PTR2UV(cx->blk_loop.state_u.ary.ary));

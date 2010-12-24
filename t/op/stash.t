@@ -7,7 +7,7 @@ BEGIN {
 
 BEGIN { require "./test.pl"; }
 
-plan( tests => 38 );
+plan( tests => 51 );
 
 # Used to segfault (bug #15479)
 fresh_perl_like(
@@ -69,7 +69,7 @@ ok( eval q{ no warnings 'deprecated'; defined %schoenmaker:: }, 'works in eval("
 }
 
 SKIP: {
-    eval { require B; 1 } or skip "no B", 18;
+    eval { require B; 1 } or skip "no B", 27;
 
     *b = \&B::svref_2object;
     my $CVf_ANON = B::CVf_ANON();
@@ -96,7 +96,7 @@ SKIP: {
     isa_ok( $gv, "B::GV", "cleared stash leaves CV with valid GV");
     is( b($sub)->CvFLAGS & $CVf_ANON, $CVf_ANON, "...and CVf_ANON set");
     is( eval { $gv->NAME }, "__ANON__", "...and an __ANON__ name");
-    is( eval { $gv->STASH->NAME }, "__ANON__", "...and an __ANON__ stash");
+    is( eval { $gv->STASH->NAME }, "two", "...but leaves stash intact");
 
     $sub = do {
         package three;
@@ -120,9 +120,7 @@ SKIP: {
     ok($gv->isa(q/B::GV/), "cleared stash leaves anon CV with valid GV");
 
     my $st = eval { $gv->STASH->NAME };
-    { local $TODO = 'STASHES not anonymized';
-	is($st, q/__ANON__/, "...and an __ANON__ stash");
-    }
+    is($st, q/four/, "...but leaves the stash intact");
 
     my $sub = do {
 	package five;
@@ -137,15 +135,6 @@ SKIP: {
     { local $TODO = 'STASHES not anonymized';
 	is($st, q/__ANON__/, "...and an __ANON__ stash");
     }
-
-    # [perl #58530]
-    fresh_perl_is(
-        'sub foo { 1 }; use overload q/""/ => \&foo;' .
-            'delete $main::{foo}; bless []',
-        "",
-        {},
-        "no segfault with overload/deleted stash entry [#58530]",
-    );
 
     # CvSTASH should be null on a named sub if the stash has been deleted
     {
@@ -199,7 +188,45 @@ SKIP: {
 	ok($gv->isa(q/B::GV/), "anon CV has valid GV");
 	is($gv->NAME, '__ANON__', "anon CV has anon GV");
     }
+
+    {
+	my $r;
+	{
+	    package bloop;
+
+	    BEGIN {
+		$r = \&main::whack;
+	    }
+	}
+
+	my $br = B::svref_2object($r);
+	is ($br->STASH->NAME, 'bloop',
+	    'stub records the package it was compiled in');
+	# Arguably this shouldn't quite be here, but it's easy to add it
+	# here, and tricky to figure out a different good place for it.
+	like ($br->FILE, qr/stash/i,
+	      'stub records the file it was compiled in');
+
+	# We need to take this reference "late", after the subroutine is
+	# defined.
+	$br = B::svref_2object(eval 'sub whack {}; \&whack');
+	die $@ if $@;
+
+	is ($br->STASH->NAME, 'main',
+	    'definition overrides the package it was compiled in');
+	like ($br->FILE, qr/eval/,
+	      'definition overrides the file it was compiled in');
+    }
 }
+
+# [perl #58530]
+fresh_perl_is(
+    'sub foo { 1 }; use overload q/""/ => \&foo;' .
+        'delete $main::{foo}; bless []',
+    "",
+    {},
+    "no segfault with overload/deleted stash entry [#58530]",
+);
 
 # make sure having a sub called __ANON__ doesn't confuse perl.
 
@@ -209,3 +236,55 @@ SKIP: {
     __ANON__();
     is ($c, 'main::__ANON__', '__ANON__ sub called ok');
 }
+
+# Stashes that are effectively renamed
+{
+    package rile;
+
+    my $obj  = bless [];
+    my $globref = \*tat;
+
+    # effectively rename a stash
+    *slin:: = *rile::; *rile:: = *zor::;
+    
+    ::is *$globref, "*rile::tat",
+     'globs stringify the same way when stashes are moved';
+    ::is ref $obj, "rile",
+     'ref() returns the same thing when an object’s stash is moved';
+    ::like "$obj", qr "^rile=ARRAY\(0x[\da-f]+\)\z",
+     'objects stringify the same way when their stashes are moved';
+    {
+	local $::TODO = "fails under threads";
+	::is eval '__PACKAGE__', 'rile',
+	 '__PACKAGE__ returns the same when the current stash is moved';
+    }
+
+    # Now detach it completely from the symtab, making it effect-
+    # ively anonymous
+    my $life_raft = \%slin::;
+    *slin:: = *zor::;
+
+    ::is *$globref, "*rile::tat",
+     'globs stringify the same way when stashes are detached';
+    ::is ref $obj, "rile",
+     'ref() returns the same thing when an object’s stash is detached';
+    ::like "$obj", qr "^rile=ARRAY\(0x[\da-f]+\)\z",
+     'objects stringify the same way when their stashes are detached';
+    {
+	local $::TODO = "fails under threads";
+	::is eval '__PACKAGE__', 'rile',
+	 '__PACKAGE__ returns the same when the current stash is detached';
+    }
+}
+
+# Setting the name during undef %stash:: should have no effect.
+{
+    my $glob = \*Phoo::glob;
+    sub o::DESTROY { eval '++$Phoo::bar' }
+    no strict 'refs';
+    ${"Phoo::thing1"} = bless [], "o";
+    undef %Phoo::;
+    is "$$glob", "*__ANON__::glob",
+      "setting stash name during undef has no effect";
+}
+

@@ -190,20 +190,17 @@ equivalent to the following snippet:
 
     if (SvMAGICAL(sv))
         mg_get(sv);
-    if (SvROK(sv) &&
-        (tmpsv = (SV*)SvRV(sv)) &&
-        SvTYPE(tmpsv) == SVt_PVMG &&
-        (tmpmg = mg_find(tmpsv, PERL_MAGIC_qr)))
-    {
-        return (REGEXP *)tmpmg->mg_obj;
-    }
+    if (SvROK(sv))
+        sv = MUTABLE_SV(SvRV(sv));
+    if (SvTYPE(sv) == SVt_REGEXP)
+        return (REGEXP*) sv;
 
 NULL will be returned if a REGEXP* is not found.
 
 =for apidoc Am|bool|SvRXOK|SV* sv
 
-Returns a boolean indicating whether the SV contains qr magic
-(PERL_MAGIC_qr).
+Returns a boolean indicating whether the SV (or the one it references)
+is a REGEXP.
 
 If you want to do something with the REGEXP* later use SvRX instead
 and check for NULL.
@@ -221,8 +218,8 @@ and check for NULL.
  * Note that the flags whose names start with RXf_PMf_ are defined in
  * op_reg_common.h, being copied from the parallel flags of op_pmflags
  *
- * NOTE: if you modify any RXf flags you should run regen.pl or regcomp.pl
- * so that regnodes.h is updated with the changes.
+ * NOTE: if you modify any RXf flags you should run regen.pl or
+ * regen/regcomp.pl so that regnodes.h is updated with the changes.
  *
  */
 
@@ -236,6 +233,10 @@ and check for NULL.
     case SINGLE_PAT_MOD:    *(pmfl) |= RXf_PMf_SINGLELINE; break;   \
     case XTENDED_PAT_MOD:   *(pmfl) |= RXf_PMf_EXTENDED;   break
 
+/* Note, includes locale, unicode */
+#define STD_PMMOD_FLAGS_CLEAR(pmfl)                        \
+    *(pmfl) &= ~(RXf_PMf_FOLD|RXf_PMf_MULTILINE|RXf_PMf_SINGLELINE|RXf_PMf_EXTENDED|RXf_PMf_LOCALE|RXf_PMf_UNICODE)
+
 /* chars and strings used as regex pattern modifiers
  * Singlular is a 'c'har, plural is a "string"
  *
@@ -243,6 +244,7 @@ and check for NULL.
  * for compatibility reasons with Regexp::Common which highjacked (?k:...)
  * for its own uses. So 'k' is out as well.
  */
+#define DEFAULT_PAT_MOD      '^'    /* Short for all the default modifiers */
 #define EXEC_PAT_MOD         'e'
 #define KEEPCOPY_PAT_MOD     'p'
 #define ONCE_PAT_MOD         'o'
@@ -253,12 +255,18 @@ and check for NULL.
 #define IGNORE_PAT_MOD       'i'
 #define XTENDED_PAT_MOD      'x'
 #define NONDESTRUCT_PAT_MOD  'r'
+#define LOCALE_PAT_MOD       'l'
+#define UNICODE_PAT_MOD      'u'
+#define DUAL_PAT_MOD         'd'
 
 #define ONCE_PAT_MODS        "o"
 #define KEEPCOPY_PAT_MODS    "p"
 #define EXEC_PAT_MODS        "e"
 #define LOOP_PAT_MODS        "gc"
 #define NONDESTRUCT_PAT_MODS "r"
+#define LOCALE_PAT_MODS      "l"
+#define UNICODE_PAT_MODS     "u"
+#define DUAL_PAT_MODS        "d"
 
 /* This string is expected by regcomp.c to be ordered so that the first
  * character is the flag in bit RXf_PMf_STD_PMMOD_SHIFT of extflags; the next
@@ -276,14 +284,14 @@ and check for NULL.
 #define S_PAT_MODS      M_PAT_MODS      EXEC_PAT_MODS      NONDESTRUCT_PAT_MODS
 
 /*
- * NOTE: if you modify any RXf flags you should run regen.pl or regcomp.pl
- * so that regnodes.h is updated with the changes.
+ * NOTE: if you modify any RXf flags you should run regen.pl or
+ * regen/regcomp.pl so that regnodes.h is updated with the changes.
  *
  */
 
 /* Leave some space, so future bit allocations can go either in the shared or
  * unshared area without affecting binary compatibility */
-#define RXf_BASE_SHIFT (_RXf_PMf_SHIFT_NEXT+3)
+#define RXf_BASE_SHIFT (_RXf_PMf_SHIFT_NEXT+2)
 
 /* Anchor and GPOS related stuff */
 #define RXf_ANCH_BOL    	(1<<(RXf_BASE_SHIFT+0))
@@ -338,8 +346,8 @@ and check for NULL.
 #endif
 
 /*
- * NOTE: if you modify any RXf flags you should run regen.pl or regcomp.pl
- * so that regnodes.h is updated with the changes.
+ * NOTE: if you modify any RXf flags you should run regen.pl or
+ * regen/regcomp.pl so that regnodes.h is updated with the changes.
  *
  */
 

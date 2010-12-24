@@ -139,11 +139,13 @@ PP(pp_rv2gv)
 {
     dVAR; dSP; dTOPss;
 
-    SvGETMAGIC(sv);
+    if (!isGV(sv) || SvFAKE(sv)) SvGETMAGIC(sv);
     if (SvROK(sv)) {
       wasref:
-	tryAMAGICunDEREF(to_gv);
-
+	if (SvAMAGIC(sv)) {
+	    sv = amagic_deref_call(sv, to_gv_amg);
+	    SPAGAIN;
+	}
 	sv = SvRV(sv);
 	if (SvTYPE(sv) == SVt_PVIO) {
 	    GV * const gv = MUTABLE_GV(sv_newmortal());
@@ -213,7 +215,15 @@ PP(pp_rv2gv)
 		}
 		sv = MUTABLE_SV(gv_fetchsv(sv, GV_ADD, SVt_PVGV));
 	    }
+	    /* FAKE globs in the symbol table cause weird bugs (#77810) */
+	    if (sv) SvFAKE_off(sv);
 	}
+    }
+    if (sv && SvFAKE(sv)) {
+	SV *newsv = sv_newmortal();
+	sv_setsv_flags(newsv, sv, 0);
+	SvFAKE_off(newsv);
+	sv = newsv;
     }
     if (PL_op->op_private & OPpLVAL_INTRO)
 	save_gp(MUTABLE_GV(sv), !(PL_op->op_flags & OPf_SPECIAL));
@@ -275,7 +285,10 @@ PP(pp_rv2sv)
     if (!(PL_op->op_private & OPpDEREFed))
 	SvGETMAGIC(sv);
     if (SvROK(sv)) {
-	tryAMAGICunDEREF(to_sv);
+	if (SvAMAGIC(sv)) {
+	    sv = amagic_deref_call(sv, to_sv_amg);
+	    SPAGAIN;
+	}
 
 	sv = SvRV(sv);
 	switch (SvTYPE(sv)) {
@@ -421,7 +434,19 @@ PP(pp_prototype)
 		    goto set;
 		}
 		if (code == -KEY_keys || code == -KEY_values || code == -KEY_each) {
-		    ret = newSVpvs_flags("\\[@%]", SVs_TEMP);
+		    ret = newSVpvs_flags("+", SVs_TEMP);
+		    goto set;
+		}
+		if (code == -KEY_push || code == -KEY_unshift) {
+		    ret = newSVpvs_flags("+@", SVs_TEMP);
+		    goto set;
+		}
+		if (code == -KEY_pop || code == -KEY_shift) {
+		    ret = newSVpvs_flags(";+", SVs_TEMP);
+		    goto set;
+		}
+		if (code == -KEY_splice) {
+		    ret = newSVpvs_flags("+;$$@", SVs_TEMP);
 		    goto set;
 		}
 		if (code == -KEY_tied || code == -KEY_untie) {
@@ -559,7 +584,6 @@ PP(pp_ref)
     dVAR; dSP; dTARGET;
     const char *pv;
     SV * const sv = POPs;
-    STRLEN len;
 
     if (sv)
 	SvGETMAGIC(sv);
@@ -567,8 +591,8 @@ PP(pp_ref)
     if (!sv || !SvROK(sv))
 	RETPUSHNO;
 
-    pv = sv_reftype_len(SvRV(sv),TRUE,&len);
-    PUSHp(pv, len);
+    pv = sv_reftype(SvRV(sv),TRUE);
+    PUSHp(pv, strlen(pv));
     RETURN;
 }
 
@@ -756,7 +780,12 @@ PP(pp_trans)
 	EXTEND(SP,1);
     }
     TARG = sv_newmortal();
-    PUSHi(do_trans(sv));
+    if(PL_op->op_type == OP_TRANSR) {
+	SV * const newsv = newSVsv(sv);
+	do_trans(newsv);
+	mPUSHs(newsv);
+    }
+    else PUSHi(do_trans(sv));
     RETURN;
 }
 
@@ -846,13 +875,16 @@ PP(pp_undef)
 	    GP *gp;
             HV *stash;
 
-            /* undef *Foo:: */
-            if((stash = GvHV((const GV *)sv)) && HvNAME_get(stash))
-                mro_isa_changed_in(stash);
             /* undef *Pkg::meth_name ... */
-            else if(GvCVu((const GV *)sv) && (stash = GvSTASH((const GV *)sv))
-		    && HvNAME_get(stash))
-                mro_method_changed_in(stash);
+            bool method_changed
+             =   GvCVu((const GV *)sv) && (stash = GvSTASH((const GV *)sv))
+	      && HvENAME_get(stash);
+            /* undef *Foo:: */
+            if((stash = GvHV((const GV *)sv))) {
+                if(HvENAME_get(stash))
+                    SvREFCNT_inc_simple_void_NN(sv_2mortal((SV *)stash));
+                else stash = NULL;
+            }
 
 	    gp_free(MUTABLE_GV(sv));
 	    Newxz(gp, 1, GP);
@@ -861,6 +893,20 @@ PP(pp_undef)
 	    GvLINE(sv) = CopLINE(PL_curcop);
 	    GvEGV(sv) = MUTABLE_GV(sv);
 	    GvMULTI_on(sv);
+
+            if(stash)
+                mro_package_moved(NULL, stash, (const GV *)sv, 0);
+            stash = NULL;
+            /* undef *Foo::ISA */
+            if( strEQ(GvNAME((const GV *)sv), "ISA")
+             && (stash = GvSTASH((const GV *)sv))
+             && (method_changed || HvENAME(stash)) )
+                mro_isa_changed_in(stash);
+            else if(method_changed)
+                mro_method_changed_in(
+                 GvSTASH((const GV *)sv)
+                );
+
 	    break;
 	}
 	/* FALL THROUGH */
@@ -899,6 +945,8 @@ PP(pp_postinc)
     dVAR; dSP; dTARGET;
     if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
 	Perl_croak_no_modify(aTHX);
+    if (SvROK(TOPs))
+	TARG = sv_newmortal();
     sv_setsv(TARG, TOPs);
     if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
         && SvIVX(TOPs) != IV_MAX)
@@ -921,6 +969,8 @@ PP(pp_postdec)
     dVAR; dSP; dTARGET;
     if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
 	Perl_croak_no_modify(aTHX);
+    if (SvROK(TOPs))
+	TARG = sv_newmortal();
     sv_setsv(TARG, TOPs);
     if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
         && SvIVX(TOPs) != IV_MIN)
@@ -1748,7 +1798,7 @@ PP(pp_subtract)
 PP(pp_left_shift)
 {
     dVAR; dSP; dATARGET; SV *svl, *svr;
-    tryAMAGICbin_MG(lshift_amg, AMGf_assign);
+    tryAMAGICbin_MG(lshift_amg, AMGf_assign|AMGf_numeric);
     svr = POPs;
     svl = TOPs;
     {
@@ -1768,7 +1818,7 @@ PP(pp_left_shift)
 PP(pp_right_shift)
 {
     dVAR; dSP; dATARGET; SV *svl, *svr;
-    tryAMAGICbin_MG(rshift_amg, AMGf_assign);
+    tryAMAGICbin_MG(rshift_amg, AMGf_assign|AMGf_numeric);
     svr = POPs;
     svl = TOPs;
     {
@@ -1788,7 +1838,7 @@ PP(pp_right_shift)
 PP(pp_lt)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(lt_amg, AMGf_set);
+    tryAMAGICbin_MG(lt_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -1871,7 +1921,7 @@ PP(pp_lt)
 PP(pp_gt)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(gt_amg, AMGf_set);
+    tryAMAGICbin_MG(gt_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -1955,7 +2005,7 @@ PP(pp_gt)
 PP(pp_le)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(le_amg, AMGf_set);
+    tryAMAGICbin_MG(le_amg, AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -2039,7 +2089,7 @@ PP(pp_le)
 PP(pp_ge)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(ge_amg,AMGf_set);
+    tryAMAGICbin_MG(ge_amg,AMGf_set|AMGf_numeric);
 #ifdef PERL_PRESERVE_IVUV
     SvIV_please_nomg(TOPs);
     if (SvIOK(TOPs)) {
@@ -2123,7 +2173,7 @@ PP(pp_ge)
 PP(pp_ne)
 {
     dVAR; dSP;
-    tryAMAGICbin_MG(ne_amg,AMGf_set);
+    tryAMAGICbin_MG(ne_amg,AMGf_set|AMGf_numeric);
 #ifndef NV_PRESERVES_UV
     if (SvROK(TOPs) && !SvAMAGIC(TOPs) && SvROK(TOPm1s) && !SvAMAGIC(TOPm1s)) {
         SP--;
@@ -2200,7 +2250,7 @@ PP(pp_ne)
 PP(pp_ncmp)
 {
     dVAR; dSP; dTARGET;
-    tryAMAGICbin_MG(ncmp_amg, 0);
+    tryAMAGICbin_MG(ncmp_amg, AMGf_numeric);
 #ifndef NV_PRESERVES_UV
     if (SvROK(TOPs) && !SvAMAGIC(TOPs) && SvROK(TOPm1s) && !SvAMAGIC(TOPm1s)) {
 	const UV right = PTR2UV(SvRV(POPs));
@@ -2333,8 +2383,8 @@ PP(pp_sle)
     {
       dPOPTOPssrl;
       const int cmp = (IN_LOCALE_RUNTIME
-		 ? sv_cmp_locale(left, right)
-		 : sv_cmp(left, right));
+		 ? sv_cmp_locale_flags(left, right, 0)
+		 : sv_cmp_flags(left, right, 0));
       SETs(boolSV(cmp * multiplier < rhs));
       RETURN;
     }
@@ -2346,7 +2396,7 @@ PP(pp_seq)
     tryAMAGICbin_MG(seq_amg, AMGf_set);
     {
       dPOPTOPssrl;
-      SETs(boolSV(sv_eq(left, right)));
+      SETs(boolSV(sv_eq_flags(left, right, 0)));
       RETURN;
     }
 }
@@ -2357,7 +2407,7 @@ PP(pp_sne)
     tryAMAGICbin_MG(sne_amg, AMGf_set);
     {
       dPOPTOPssrl;
-      SETs(boolSV(!sv_eq(left, right)));
+      SETs(boolSV(!sv_eq_flags(left, right, 0)));
       RETURN;
     }
 }
@@ -2369,8 +2419,8 @@ PP(pp_scmp)
     {
       dPOPTOPssrl;
       const int cmp = (IN_LOCALE_RUNTIME
-		 ? sv_cmp_locale(left, right)
-		 : sv_cmp(left, right));
+		 ? sv_cmp_locale_flags(left, right, 0)
+		 : sv_cmp_flags(left, right, 0));
       SETi( cmp );
       RETURN;
     }
@@ -2383,6 +2433,8 @@ PP(pp_bit_and)
     {
       dPOPTOPssrl;
       if (SvNIOKp(left) || SvNIOKp(right)) {
+	const bool left_ro_nonnum  = !SvNIOKp(left) && SvREADONLY(left);
+	const bool right_ro_nonnum = !SvNIOKp(right) && SvREADONLY(right);
 	if (PL_op->op_private & HINT_INTEGER) {
 	  const IV i = SvIV_nomg(left) & SvIV_nomg(right);
 	  SETi(i);
@@ -2391,6 +2443,8 @@ PP(pp_bit_and)
 	  const UV u = SvUV_nomg(left) & SvUV_nomg(right);
 	  SETu(u);
 	}
+	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
 	do_vop(PL_op->op_type, TARG, left, right);
@@ -2409,6 +2463,8 @@ PP(pp_bit_or)
     {
       dPOPTOPssrl;
       if (SvNIOKp(left) || SvNIOKp(right)) {
+	const bool left_ro_nonnum  = !SvNIOKp(left) && SvREADONLY(left);
+	const bool right_ro_nonnum = !SvNIOKp(right) && SvREADONLY(right);
 	if (PL_op->op_private & HINT_INTEGER) {
 	  const IV l = (USE_LEFT(left) ? SvIV_nomg(left) : 0);
 	  const IV r = SvIV_nomg(right);
@@ -2421,6 +2477,8 @@ PP(pp_bit_or)
 	  const UV result = op_type == OP_BIT_OR ? (l | r) : (l ^ r);
 	  SETu(result);
 	}
+	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
 	do_vop(op_type, TARG, left, right);
@@ -2437,6 +2495,11 @@ PP(pp_negate)
     {
 	SV * const sv = TOPs;
 	const int flags = SvFLAGS(sv);
+
+        if( !SvNIOK( sv ) && looks_like_number( sv ) ){
+           SvIV_please( sv );
+        }   
+
 	if ((flags & SVf_IOK) || ((flags & (SVp_IOK | SVp_NOK)) == SVp_IOK)) {
 	    /* It's publicly an integer, or privately an integer-not-float */
 	oops_its_an_int:
@@ -2504,14 +2567,14 @@ PP(pp_not)
 {
     dVAR; dSP;
     tryAMAGICun_MG(not_amg, AMGf_set);
-    *PL_stack_sp = boolSV(!SvTRUE(*PL_stack_sp));
+    *PL_stack_sp = boolSV(!SvTRUE_nomg(*PL_stack_sp));
     return NORMAL;
 }
 
 PP(pp_complement)
 {
     dVAR; dSP; dTARGET;
-    tryAMAGICun_MG(compl_amg, 0);
+    tryAMAGICun_MG(compl_amg, AMGf_numeric);
     {
       dTOPss;
       if (SvNIOKp(sv)) {
@@ -3768,7 +3831,7 @@ PP(pp_ucfirst)
 
 	    /* Convert the two source bytes to a single Unicode code point
 	     * value, change case and save for below */
-	    chr = UTF8_ACCUMULATE(*s, *(s+1));
+	    chr = TWO_BYTE_UTF8_TO_UNI(*s, *(s+1));
 	    if (op_type == OP_LCFIRST) {    /* lower casing is easy */
 		U8 lower = toLOWER_LATIN1(chr);
 		STORE_UNI_TO_UTF8_TWO_BYTE(tmpbuf, lower);
@@ -4093,10 +4156,10 @@ PP(pp_uc)
 
 		/* Likewise, if it fits in a byte, its case change is in our
 		 * table */
-		U8 orig = UTF8_ACCUMULATE(*s, *(s+1));
+		U8 orig = TWO_BYTE_UTF8_TO_UNI(*s, *s++);
 		U8 upper = toUPPER_LATIN1_MOD(orig);
 		CAT_TWO_BYTE_UNI_UPPER_MOD(d, orig, upper);
-		s += 2;
+		s++;
 	    }
 	    else {
 #else
@@ -4331,9 +4394,9 @@ PP(pp_lc)
 	    else if (UTF8_IS_DOWNGRADEABLE_START(*s)) {
 
 		/* As do the ones in the Latin1 range */
-		U8 lower = toLOWER_LATIN1(UTF8_ACCUMULATE(*s, *(s+1)));
+		U8 lower = toLOWER_LATIN1(TWO_BYTE_UTF8_TO_UNI(*s, *s++));
 		CAT_UNI_TO_UTF8_TWO_BYTE(d, lower);
-		s += 2;
+		s++;
 	    }
 	    else {
 #endif
@@ -4601,6 +4664,71 @@ PP(pp_aslice)
     RETURN;
 }
 
+/* Smart dereferencing for keys, values and each */
+PP(pp_rkeys)
+{
+    dVAR;
+    dSP;
+    dPOPss;
+
+    if (!SvOK(sv))
+	RETURN;
+
+    if (SvROK(sv)) {
+	SvGETMAGIC(sv);
+	if (SvAMAGIC(sv)) {
+	    /* N.B.: AMG macros return sv if no overloading is found */
+	    SV *maybe_hv = AMG_CALLun(sv,to_hv);
+	    SV *maybe_av = AMG_CALLun(sv,to_av);
+	    if ( maybe_hv != sv && maybe_av != sv ) {
+		Perl_ck_warner(aTHX_ packWARN(WARN_AMBIGUOUS), "%s",
+		    Perl_form(aTHX_ "Ambiguous overloaded argument to %s resolved as %%{}",
+			PL_op_desc[PL_op->op_type]
+		    )
+		);
+		sv = maybe_hv;
+	    }
+	    else if ( maybe_av != sv ) {
+		if ( SvTYPE(SvRV(sv)) == SVt_PVHV ) {
+		    /* @{} overload, but underlying reftype is HV */
+		    Perl_ck_warner(aTHX_ packWARN(WARN_AMBIGUOUS), "%s",
+			Perl_form(aTHX_ "Ambiguous overloaded argument to %s resolved as @{}",
+			    PL_op_desc[PL_op->op_type]
+			)
+		    );
+		}
+		sv = maybe_av;
+	    }
+	    else if ( maybe_hv != sv ) {
+		if ( SvTYPE(SvRV(sv)) == SVt_PVAV ) {
+		    /* %{} overload, but underlying reftype is AV */
+		    Perl_ck_warner(aTHX_ packWARN(WARN_AMBIGUOUS), "%s",
+			Perl_form(aTHX_ "Ambiguous overloaded argument to %s resolved as %%{}",
+			    PL_op_desc[PL_op->op_type]
+			)
+		    );
+		}
+		sv = maybe_hv;
+	    }
+	}
+	sv = SvRV(sv);
+    }
+
+    if ( SvTYPE(sv) != SVt_PVHV && SvTYPE(sv) != SVt_PVAV ) {
+	DIE(aTHX_ "Type of argument to %s must be hashref or arrayref",
+	    PL_op_desc[PL_op->op_type] );
+    }
+
+    /* Delegate to correct function for op type */
+    PUSHs(sv);
+    if (PL_op->op_type == OP_RKEYS || PL_op->op_type == OP_RVALUES) {
+	return (SvTYPE(sv) == SVt_PVHV) ? Perl_do_kv(aTHX) : Perl_pp_akeys(aTHX);
+    }
+    else {
+	return (SvTYPE(sv) == SVt_PVHV) ? Perl_pp_each(aTHX) : Perl_pp_aeach(aTHX);
+    }
+}
+
 PP(pp_aeach)
 {
     dVAR;
@@ -4646,7 +4774,7 @@ PP(pp_akeys)
 
         EXTEND(SP, n + 1);
 
-	if (PL_op->op_type == OP_AKEYS) {
+	if (PL_op->op_type == OP_AKEYS || PL_op->op_type == OP_RKEYS) {
 	    n += i;
 	    for (;  i <= n;  i++) {
 		mPUSHi(i);
@@ -5331,6 +5459,10 @@ PP(pp_splice)
 	    *MARK = &PL_sv_undef;
 	Safefree(tmparyval);
     }
+
+    if (SvMAGICAL(ary))
+	mg_set(MUTABLE_SV(ary));
+
     SP = MARK;
     RETURN;
 }

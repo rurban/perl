@@ -1,6 +1,6 @@
 package Carp;
 
-our $VERSION = '1.18';
+our $VERSION = '1.19';
 
 our $MaxEvalLen = 0;
 our $Verbose    = 0;
@@ -86,7 +86,8 @@ sub caller_info {
       @DB::args = (); # Don't let anyone see the address of $i
       local $@;
       my $where = eval {
-	my $gv = B::svref_2object(\&CORE::GLOBAL::caller)->GV;
+	my $func = defined &{"CORE::GLOBAL::caller"} ? \&{"CORE::GLOBAL::caller"} : return '';
+	my $gv = B::svref_2object($func)->GV;
 	my $package = $gv->STASH->NAME;
 	my $subname = $gv->NAME;
 	return unless defined $package && defined $subname;

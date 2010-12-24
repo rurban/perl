@@ -539,14 +539,14 @@ in restricted hashes. This caused such hash entries not to appear
 when iterating over the hash or when checking for the keys
 with the C<hv_exists> function.
 
-You can run into similar problems when you store C<&PL_sv_true> or
-C<&PL_sv_false> into AVs or HVs. Trying to modify such elements
+You can run into similar problems when you store C<&PL_sv_yes> or
+C<&PL_sv_no> into AVs or HVs. Trying to modify such elements
 will give you the following error:
 
     Modification of a read-only value attempted
 
 To make a long story short, you can use the special variables
-C<&PL_sv_undef>, C<&PL_sv_true> and C<&PL_sv_false> with AVs and
+C<&PL_sv_undef>, C<&PL_sv_yes> and C<&PL_sv_no> with AVs and
 HVs, but you have to make sure you know what you're doing.
 
 Generally, if you want to store an undefined value in an AV
@@ -958,10 +958,16 @@ This simply calls C<sv_magic> and coerces the C<gv> argument into an C<SV>.
 
 To remove the magic from an SV, call the function sv_unmagic:
 
-    void sv_unmagic(SV *sv, int type);
+    int sv_unmagic(SV *sv, int type);
 
 The C<type> argument should be equal to the C<how> value when the C<SV>
 was initially made magical.
+
+However, note that C<sv_unmagic> removes all magic of a certain C<type> from the
+C<SV>. If you want to remove only certain magic of a C<type> based on the magic
+virtual table, use C<sv_unmagicext> instead:
+
+    int sv_unmagicext(SV *sv, int type, MGVTBL *vtbl);
 
 =head2 Magic Virtual Tables
 
@@ -1125,8 +1131,20 @@ Note that because multiple extensions may be using C<PERL_MAGIC_ext>
 or C<PERL_MAGIC_uvar> magic, it is important for extensions to take
 extra care to avoid conflict.  Typically only using the magic on
 objects blessed into the same class as the extension is sufficient.
-For C<PERL_MAGIC_ext> magic, it may also be appropriate to add an I32
-'signature' at the top of the private data area and check that.
+For C<PERL_MAGIC_ext> magic, it is usually a good idea to define an
+C<MGVTBL>, even if all its fields will be C<0>, so that individual
+C<MAGIC> pointers can be identified as a particular kind of magic
+using their magic virtual table. C<mg_findext> provides an easy way
+to do that:
+
+    STATIC MGVTBL my_vtbl = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    MAGIC *mg;
+    if ((mg = mg_findext(sv, PERL_MAGIC_ext, &my_vtbl))) {
+        /* this is really ours, not another module's PERL_MAGIC_ext */
+        my_priv_data_t *priv = (my_priv_data_t *)mg->mg_ptr;
+        ...
+    }
 
 Also note that the C<sv_set*()> and C<sv_cat*()> functions described
 earlier do B<not> invoke 'set' magic on their targets.  This must
@@ -1142,11 +1160,18 @@ since their implementation handles 'get' magic.
 
 =head2 Finding Magic
 
-    MAGIC* mg_find(SV*, int type); /* Finds the magic pointer of that type */
+    MAGIC *mg_find(SV *sv, int type); /* Finds the magic pointer of that type */
 
-This routine returns a pointer to the C<MAGIC> structure stored in the SV.
-If the SV does not have that magical feature, C<NULL> is returned.  Also,
-if the SV is not of type SVt_PVMG, Perl may core dump.
+This routine returns a pointer to a C<MAGIC> structure stored in the SV.
+If the SV does not have that magical feature, C<NULL> is returned. If the
+SV has multiple instances of that magical feature, the first one will be
+returned. C<mg_findext> can be used to find a C<MAGIC> structure of an SV
+based on both it's magic type and it's magic virtual table:
+
+    MAGIC *mg_findext(SV *sv, int type, MGVTBL *vtbl);
+
+Also, if the SV passed to C<mg_find> or C<mg_findext> is not of type
+SVt_PVMG, Perl may core dump.
 
     int mg_copy(SV* sv, SV* nsv, const char* key, STRLEN klen);
 
@@ -1438,6 +1463,8 @@ L</Reference Counts and Mortality>):
     PUSHs(sv_2mortal(newSVuv(an_unsigned_integer)))
     PUSHs(sv_2mortal(newSVnv(a_double)))
     PUSHs(sv_2mortal(newSVpv("Some String",0)))
+    /* Although the last example is better written as the more efficient: */
+    PUSHs(newSVpvs_flags("Some String", SVs_TEMP))
 
 And now the Perl program calling C<tzname>, the two values will be assigned
 as in:
@@ -1821,9 +1848,41 @@ of free()ing (i.e. their type is changed to OP_NULL).
 After the compile tree for a subroutine (or for an C<eval> or a file)
 is created, an additional pass over the code is performed. This pass
 is neither top-down or bottom-up, but in the execution order (with
-additional complications for conditionals).  These optimizations are
-done in the subroutine peep().  Optimizations performed at this stage
-are subject to the same restrictions as in the pass 2.
+additional complications for conditionals).  Optimizations performed
+at this stage are subject to the same restrictions as in the pass 2.
+
+Peephole optimizations are done by calling the function pointed to
+by the global variable C<PL_peepp>.  By default, C<PL_peepp> just
+calls the function pointed to by the global variable C<PL_rpeepp>.
+By default, that performs some basic op fixups and optimisations along
+the execution-order op chain, and recursively calls C<PL_rpeepp> for
+each side chain of ops (resulting from conditionals).  Extensions may
+provide additional optimisations or fixups, hooking into either the
+per-subroutine or recursive stage, like this:
+
+    static peep_t prev_peepp;
+    static void my_peep(pTHX_ OP *o)
+    {
+        /* custom per-subroutine optimisation goes here */
+        prev_peepp(o);
+        /* custom per-subroutine optimisation may also go here */
+    }
+    BOOT:
+        prev_peepp = PL_peepp;
+        PL_peepp = my_peep;
+
+    static peep_t prev_rpeepp;
+    static void my_rpeep(pTHX_ OP *o)
+    {
+        OP *orig_o = o;
+        for(; o; o = o->op_next) {
+            /* custom per-op optimisation goes here */
+        }
+        prev_rpeepp(orig_o);
+    }
+    BOOT:
+        prev_rpeepp = PL_rpeepp;
+        PL_rpeepp = my_rpeep;
 
 =head2 Pluggable runops
 
@@ -1852,7 +1911,7 @@ this:
     STATIC BHK my_hooks;
 
     BOOT:
-        BhkENTRY_set(&my_hooks, start, my_start_hook);
+        BhkENTRY_set(&my_hooks, bhk_start, my_start_hook);
         Perl_blockhook_register(aTHX_ &my_hooks);
 
 This will arrange to have C<my_start_hook> called at the start of
@@ -1860,7 +1919,7 @@ compiling every lexical scope. The available hooks are:
 
 =over 4
 
-=item C<void start(pTHX_ int full)>
+=item C<void bhk_start(pTHX_ int full)>
 
 This is called just after starting a new lexical scope. Note that Perl
 code like
@@ -1873,20 +1932,20 @@ C<}>, so calls to C<start> and C<pre/post_end> will match. Anything
 pushed onto the save stack by this hook will be popped just before the
 scope ends (between the C<pre_> and C<post_end> hooks, in fact).
 
-=item C<void pre_end(pTHX_ OP **o)>
+=item C<void bhk_pre_end(pTHX_ OP **o)>
 
 This is called at the end of a lexical scope, just before unwinding the
 stack. I<o> is the root of the optree representing the scope; it is a
 double pointer so you can replace the OP if you need to.
 
-=item C<void post_end(pTHX_ OP **o)>
+=item C<void bhk_post_end(pTHX_ OP **o)>
 
 This is called at the end of a lexical scope, just after unwinding the
 stack. I<o> is as above. Note that it is possible for calls to C<pre_>
 and C<post_end> to nest, if there is something on the save stack that
 calls string eval.
 
-=item C<void eval(pTHX_ OP *const o)>
+=item C<void bhk_eval(pTHX_ OP *const o)>
 
 This is called just before starting to compile an C<eval STRING>, C<do
 FILE>, C<require> or C<use>, after the eval has been set up. I<o> is the
@@ -2721,10 +2780,79 @@ responsible for adding stack marks if necessary.
 You should also "register" your op with the Perl interpreter so that it
 can produce sensible error and warning messages. Since it is possible to
 have multiple custom ops within the one "logical" op type C<OP_CUSTOM>,
-Perl uses the value of C<< o->op_ppaddr >> as a key into the
-C<PL_custom_op_descs> and C<PL_custom_op_names> hashes. This means you
-need to enter a name and description for your op at the appropriate
-place in the C<PL_custom_op_names> and C<PL_custom_op_descs> hashes.
+Perl uses the value of C<< o->op_ppaddr >> to determine which custom op
+it is dealing with. You should create an C<XOP> structure for each
+ppaddr you use, set the properties of the custom op with
+C<XopENTRY_set>, and register the structure against the ppaddr using
+C<Perl_custom_op_register>. A trivial example might look like:
+
+    static XOP my_xop;
+    static OP *my_pp(pTHX);
+
+    BOOT:
+        XopENTRY_set(&my_xop, xop_name, "myxop");
+        XopENTRY_set(&my_xop, xop_desc, "Useless custom op");
+        Perl_custom_op_register(aTHX_ my_pp, &my_xop);
+
+The available fields in the structure are:
+
+=over 4
+
+=item xop_name
+
+A short name for your op. This will be included in some error messages,
+and will also be returned as C<< $op->name >> by the L<B|B> module, so
+it will appear in the output of module like L<B::Concise|B::Concise>.
+
+=item xop_desc
+
+A short description of the function of the op.
+
+=item xop_class
+
+Which of the various C<*OP> structures this op uses. This should be one of
+the C<OA_*> constants from F<op.h>, namely
+
+=over 4
+
+=item OA_BASEOP
+
+=item OA_UNOP
+
+=item OA_BINOP
+
+=item OA_LOGOP
+
+=item OA_LISTOP
+
+=item OA_PMOP
+
+=item OA_SVOP
+
+=item OA_PADOP
+
+=item OA_PVOP_OR_SVOP
+
+This should be interpreted as 'C<PVOP>' only. The C<_OR_SVOP> is because
+the only core C<PVOP>, C<OP_TRANS>, can sometimes be a C<SVOP> instead.
+
+=item OA_LOOP
+
+=item OA_COP
+
+=back
+
+The other C<OA_*> constants should not be used.
+
+=item xop_peep
+
+This member is of type C<Perl_cpeep_t>, which expands to C<void
+(*Perl_cpeep_t)(aTHX_ OP *o, OP *oldop)>. If it is set, this function
+will be called from C<Perl_rpeep> when ops of this type are encountered
+by the peephole optimizer. I<o> is the OP that needs optimizing;
+I<oldop> is the previous OP optimized, whose C<op_next> points to I<o>.
+
+=back
 
 C<B::Generate> directly supports the creation of custom ops by name.
 

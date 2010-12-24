@@ -80,6 +80,10 @@ PERL_CALLCONV HV * Perl_newHV(pTHX);
 PERL_CALLCONV IO * Perl_newIO(pTHX);
 PERL_CALLCONV I32 Perl_my_stat(pTHX);
 PERL_CALLCONV I32 Perl_my_lstat(pTHX);
+PERL_CALLCONV I32 Perl_sv_eq(pTHX_ register SV *sv1, register SV *sv2);
+PERL_CALLCONV char * Perl_sv_collxfrm(pTHX_ SV *const sv, STRLEN *const nxp);
+PERL_CALLCONV bool Perl_sv_2bool(pTHX_ register SV *const sv);
+PERL_CALLCONV CV * Perl_newSUB(pTHX_ I32 floor, OP* o, OP* proto, OP* block);
 
 /* ref() is now a macro using Perl_doref;
  * this version provided for binary compatibility only.
@@ -1533,6 +1537,58 @@ Perl_my_lstat(pTHX)
     return my_lstat_flags(SV_GMAGIC);
 }
 
+I32
+Perl_sv_eq(pTHX_ register SV *sv1, register SV *sv2)
+{
+    return sv_eq_flags(sv1, sv2, SV_GMAGIC);
+}
+
+char *
+Perl_sv_collxfrm(pTHX_ SV *const sv, STRLEN *const nxp)
+{
+    return sv_collxfrm_flags(sv, nxp, SV_GMAGIC);
+}
+
+bool
+Perl_sv_2bool(pTHX_ register SV *const sv)
+{
+    return sv_2bool_flags(sv, SV_GMAGIC);
+}
+
+
+/*
+=for apidoc custom_op_name
+Return the name for a given custom op. This was once used by the OP_NAME
+macro, but is no longer: it has only been kept for compatibility, and
+should not be used.
+
+=for apidoc custom_op_desc
+Return the description of a given custom op. This was once used by the
+OP_DESC macro, but is no longer: it has only been kept for
+compatibility, and should not be used.
+
+=cut
+*/
+
+const char*
+Perl_custom_op_name(pTHX_ const OP* o)
+{
+    PERL_ARGS_ASSERT_CUSTOM_OP_NAME;
+    return XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_name);
+}
+
+const char*
+Perl_custom_op_desc(pTHX_ const OP* o)
+{
+    PERL_ARGS_ASSERT_CUSTOM_OP_DESC;
+    return XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_desc);
+}
+
+CV *
+Perl_newSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *block)
+{
+    return Perl_newATTRSUB(aTHX_ floor, o, proto, NULL, block);
+}
 #endif /* NO_MATHOMS */
 
 /*

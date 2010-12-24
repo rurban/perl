@@ -204,15 +204,16 @@ struct regnode_charclass {
     U8	flags;
     U8  type;
     U16 next_off;
-    U32 arg1;
+    U32 arg1;				/* used as ptr in S_regclass */
     char bitmap[ANYOF_BITMAP_SIZE];	/* only compile-time */
 };
 
-struct regnode_charclass_class {	/* has [[:blah:]] classes */
-    U8	flags;				/* should have ANYOF_CLASS here */
+/* has runtime (locale) \d, \w, ..., [:posix:] classes */
+struct regnode_charclass_class {
+    U8	flags;				/* ANYOF_CLASS bit must go here */
     U8  type;
     U16 next_off;
-    U32 arg1;
+    U32 arg1;					/* used as ptr in S_regclass */
     char bitmap[ANYOF_BITMAP_SIZE];		/* both compile-time */
     char classflags[ANYOF_CLASSBITMAP_SIZE];	/* and run-time */
 };
@@ -271,6 +272,8 @@ struct regnode_charclass_class {	/* has [[:blah:]] classes */
 #undef STRING
 
 #define	OP(p)		((p)->type)
+#define FLAGS(p)	((p)->flags)	/* Caution: Doesn't apply to all \
+					   regnode types */
 #define	OPERAND(p)	(((struct regnode_string *)p)->string)
 #define MASK(p)		((char*)OPERAND(p))
 #define	STR_LEN(p)	(((struct regnode_string *)p)->str_len)
@@ -306,25 +309,43 @@ struct regnode_charclass_class {	/* has [[:blah:]] classes */
 
 #define SIZE_ONLY (RExC_emit == &PL_regdummy)
 
+/* Flags for node->flags of several of the node types */
+#define USE_UNI                0x01
+
 /* Flags for node->flags of ANYOF */
 
-#define ANYOF_CLASS		0x08	/* has [[:blah:]] classes */
-#define ANYOF_INVERT		0x04
-#define ANYOF_FOLD		0x02
-#define ANYOF_LOCALE		0x01
+#define ANYOF_LOCALE		 0x01
 
-/* Used for regstclass only */
-#define ANYOF_EOS		0x10		/* Can match an empty string too */
+/* The fold is calculated and stored in the bitmap where possible at compile
+ * time.  However there are two cases where it isn't possible.  These share
+ * this bit:  1) under locale, where the actual folding varies depending on
+ * what the locale is at the time of execution; and 2) where the folding is
+ * specified in a swash, not the bitmap, such as characters which aren't
+ * specified in the bitmap, or properties that aren't looked at at compile time
+ */
+#define ANYOF_LOC_NONBITMAP_FOLD 0x02
 
-/* There is a character or a range past 0xff */
-#define ANYOF_UNICODE		0x20
-#define ANYOF_UNICODE_ALL	0x40	/* Can match any char past 0xff */
+#define ANYOF_INVERT		 0x04
 
-/* size of node is large (includes class pointer) */
-#define ANYOF_LARGE 		0x80
+/* CLASS is never set unless LOCALE is too: has runtime \d, \w, [:posix:], ... */
+#define ANYOF_CLASS	 0x08
+#define ANYOF_LARGE      ANYOF_CLASS    /* Same; name retained for back compat */
 
-/* Are there any runtime flags on in this node? */
-#define ANYOF_RUNTIME(s)	(ANYOF_FLAGS(s) & 0x0f)
+/* Can match something outside the bitmap that is expressible only in utf8 */
+#define ANYOF_UTF8		0x10
+
+/* Can match something outside the bitmap that isn't in utf8 */
+#define ANYOF_NONBITMAP_NON_UTF8 0x20
+
+/* Set if the bitmap doesn't fully represent what this node can match */
+#define ANYOF_NONBITMAP		(ANYOF_UTF8|ANYOF_NONBITMAP_NON_UTF8)
+#define ANYOF_UNICODE		ANYOF_NONBITMAP	/* old name, for back compat */
+
+/* Matches every code point 0x100 and above*/
+#define ANYOF_UNICODE_ALL	0x40
+
+/* EOS used for regstclass only */
+#define ANYOF_EOS		0x80	/* Can match an empty string too */
 
 #define ANYOF_FLAGS_ALL		0xff
 
@@ -408,12 +429,34 @@ struct regnode_charclass_class {	/* has [[:blah:]] classes */
 #define ANYOF_BITMAP_CLEARALL(p)	\
 	Zero (ANYOF_BITMAP(p), ANYOF_BITMAP_SIZE)
 /* Check that all 256 bits are all set.  Used in S_cl_is_anything()  */
-#define ANYOF_BITMAP_TESTALLSET(p)	\
+#define ANYOF_BITMAP_TESTALLSET(p)	/* Assumes sizeof(p) == 32 */     \
 	memEQ (ANYOF_BITMAP(p), "\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377", ANYOF_BITMAP_SIZE)
 
 #define ANYOF_SKIP		((ANYOF_SIZE - 1)/sizeof(regnode))
 #define ANYOF_CLASS_SKIP	((ANYOF_CLASS_SIZE - 1)/sizeof(regnode))
-#define ANYOF_CLASS_ADD_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+
+/* The class bit can be set to the locale one if necessary to save bits at the
+ * expense of having locale ANYOF nodes always have a class bit map, and hence
+ * take up extra space.  This allows convenient changing it as development
+ * proceeds on this */
+#if ANYOF_CLASS == ANYOF_LOCALE
+#   undef ANYOF_CLASS_ADD_SKIP
+#   define ANYOF_ADD_LOC_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+
+    /* Quicker way to see if there are actually any tests.  This is because
+     * currently the set of tests can be empty even when the class bitmap is
+     * allocated */
+#   if ANYOF_CLASSBITMAP_SIZE != 4
+#	error ANYOF_CLASSBITMAP_SIZE is expected to be 4
+#   endif
+#   define ANYOF_CLASS_TEST_ANY_SET(p)	/* assumes sizeof(p) = 4 */       \
+	memNE (((struct regnode_charclass_class*)(p))->classflags,	  \
+		"\0\0\0\0", ANYOF_CLASSBITMAP_SIZE)
+#else
+#   define ANYOF_CLASS_ADD_SKIP	(ANYOF_CLASS_SKIP - ANYOF_SKIP)
+#   undef ANYOF_ADD_LOC_SKIP
+#   define ANYOF_CLASS_TEST_ANY_SET(p) (ANYOF_FLAGS(p) & ANYOF_CLASS)
+#endif
 
 
 /*
@@ -767,9 +810,11 @@ re.pm, especially to the documentation.
     if (re_debug_flags & RE_DEBUG_EXTRA_GPOS) x )
 
 /* initialization */
-/* get_sv() can return NULL during global destruction. */
+/* get_sv() can return NULL during global destruction.  re_debug_flags can get
+ * clobbered by a longjmp, so must be initialized */
 #define GET_RE_DEBUG_FLAGS DEBUG_r({ \
         SV * re_debug_flags_sv = NULL; \
+        re_debug_flags = 0;            \
         re_debug_flags_sv = get_sv(RE_DEBUG_FLAGS, 1); \
         if (re_debug_flags_sv) { \
             if (!SvIOK(re_debug_flags_sv)) \
@@ -780,26 +825,26 @@ re.pm, especially to the documentation.
 
 #ifdef DEBUGGING
 
-#define GET_RE_DEBUG_FLAGS_DECL IV re_debug_flags = 0; GET_RE_DEBUG_FLAGS;
+#define GET_RE_DEBUG_FLAGS_DECL VOL IV re_debug_flags = 0; GET_RE_DEBUG_FLAGS;
 
 #define RE_PV_COLOR_DECL(rpv,rlen,isuni,dsv,pv,l,m,c1,c2) \
     const char * const rpv =                          \
         pv_pretty((dsv), (pv), (l), (m), \
             PL_colors[(c1)],PL_colors[(c2)], \
-            PERL_PV_ESCAPE_RE |((isuni) ? PERL_PV_ESCAPE_UNI : 0) );         \
+            PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII |((isuni) ? PERL_PV_ESCAPE_UNI : 0) );         \
     const int rlen = SvCUR(dsv)
 
 #define RE_SV_ESCAPE(rpv,isuni,dsv,sv,m) \
     const char * const rpv =                          \
         pv_pretty((dsv), (SvPV_nolen_const(sv)), (SvCUR(sv)), (m), \
             PL_colors[(c1)],PL_colors[(c2)], \
-            PERL_PV_ESCAPE_RE |((isuni) ? PERL_PV_ESCAPE_UNI : 0) )
+            PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII |((isuni) ? PERL_PV_ESCAPE_UNI : 0) )
 
 #define RE_PV_QUOTED_DECL(rpv,isuni,dsv,pv,l,m)                    \
     const char * const rpv =                                       \
         pv_pretty((dsv), (pv), (l), (m), \
             PL_colors[0], PL_colors[1], \
-            ( PERL_PV_PRETTY_QUOTE | PERL_PV_ESCAPE_RE | PERL_PV_PRETTY_ELLIPSES | \
+            ( PERL_PV_PRETTY_QUOTE | PERL_PV_ESCAPE_RE | PERL_PV_ESCAPE_NONASCII | PERL_PV_PRETTY_ELLIPSES | \
               ((isuni) ? PERL_PV_ESCAPE_UNI : 0))                  \
         )
 

@@ -39,17 +39,17 @@ Individual members of C<PL_parser> have their own documentation.
 #include "EXTERN.h"
 #define PERL_IN_TOKE_C
 #include "perl.h"
+#include "dquote_static.c"
 
 #define new_constant(a,b,c,d,e,f,g)	\
 	S_new_constant(aTHX_ a,b,STR_WITH_LEN(c),d,e,f, g)
 
 #define pl_yylval	(PL_parser->yylval)
 
-/* YYINITDEPTH -- initial size of the parser's stacks.  */
-#define YYINITDEPTH 200
-
 /* XXX temporary backwards compatibility */
 #define PL_lex_brackets		(PL_parser->lex_brackets)
+#define PL_lex_allbrackets	(PL_parser->lex_allbrackets)
+#define PL_lex_fakeeof		(PL_parser->lex_fakeeof)
 #define PL_lex_brackstack	(PL_parser->lex_brackstack)
 #define PL_lex_casemods		(PL_parser->lex_casemods)
 #define PL_lex_casestack        (PL_parser->lex_casestack)
@@ -126,8 +126,9 @@ static const char ident_too_long[] = "Identifier too long";
 #  define NEXTVAL_NEXTTOKE PL_nextval[PL_nexttoke]
 #endif
 
-#define XFAKEBRACK 128
-#define XENUMMASK 127
+#define XENUMMASK  0x3f
+#define XFAKEEOF   0x40
+#define XFAKEBRACK 0x80
 
 #ifdef USE_UTF8_SCRIPTS
 #   define UTF (!IN_BYTES)
@@ -294,7 +295,15 @@ static const char* const lex_state_names[] = {
 	}
 
 /* grandfather return to old style */
-#define OLDLOP(f) return(pl_yylval.ival=f,PL_expect = XTERM,PL_bufptr = s,(int)LSTOP)
+#define OLDLOP(f) \
+	do { \
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC) \
+		PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC; \
+	    pl_yylval.ival = (f); \
+	    PL_expect = XTERM; \
+	    PL_bufptr = s; \
+	    return (int)LSTOP; \
+	} while(0)
 
 #ifdef DEBUGGING
 
@@ -645,29 +654,39 @@ S_cr_textfilter(pTHX_ int idx, SV *sv, int maxlen)
 }
 #endif
 
-
-
 /*
- * Perl_lex_start
- *
- * Create a parser object and initialise its parser and lexer fields
- *
- * rsfp       is the opened file handle to read from (if any),
- *
- * line       holds any initial content already read from the file (or in
- *            the case of no file, such as an eval, the whole contents);
- *
- * new_filter indicates that this is a new file and it shouldn't inherit
- *            the filters from the current parser (ie require).
- */
+=for apidoc Amx|void|lex_start|SV *line|PerlIO *rsfp|U32 flags
+
+Creates and initialises a new lexer/parser state object, supplying
+a context in which to lex and parse from a new source of Perl code.
+A pointer to the new state object is placed in L</PL_parser>.  An entry
+is made on the save stack so that upon unwinding the new state object
+will be destroyed and the former value of L</PL_parser> will be restored.
+Nothing else need be done to clean up the parsing context.
+
+The code to be parsed comes from I<line> and I<rsfp>.  I<line>, if
+non-null, provides a string (in SV form) containing code to be parsed.
+A copy of the string is made, so subsequent modification of I<line>
+does not affect parsing.  I<rsfp>, if non-null, provides an input stream
+from which code will be read to be parsed.  If both are non-null, the
+code in I<line> comes first and must consist of complete lines of input,
+and I<rsfp> supplies the remainder of the source.
+
+The I<flags> parameter is reserved for future use, and must always
+be zero.
+
+=cut
+*/
 
 void
-Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, bool new_filter)
+Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, U32 flags)
 {
     dVAR;
     const char *s = NULL;
     STRLEN len;
     yy_parser *parser, *oparser;
+    if (flags)
+	Perl_croak(aTHX_ "Lexing code internal error (%s)", "lex_start");
 
     /* create and initialise a parser */
 
@@ -675,13 +694,9 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, bool new_filter)
     parser->old_parser = oparser = PL_parser;
     PL_parser = parser;
 
-    Newx(parser->stack, YYINITDEPTH, yy_stack_frame);
-    parser->ps = parser->stack;
-    parser->stack_size = YYINITDEPTH;
-
-    parser->stack->state = 0;
-    parser->yyerrstatus = 0;
-    parser->yychar = YYEMPTY;		/* Cause a token to be read.  */
+    parser->stack = NULL;
+    parser->ps = NULL;
+    parser->stack_size = 0;
 
     /* on scope exit, free this parser and restore any outer one */
     SAVEPARSER(parser);
@@ -699,8 +714,7 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, bool new_filter)
     parser->lex_state = LEX_NORMAL;
     parser->expect = XSTATE;
     parser->rsfp = rsfp;
-    parser->rsfp_filters = (new_filter || !oparser) ? newAV()
-		: MUTABLE_AV(SvREFCNT_inc(oparser->rsfp_filters));
+    parser->rsfp_filters = newAV();
 
     Newx(parser->lex_brackstack, 120, char);
     Newx(parser->lex_casestack, 12, char);
@@ -714,15 +728,10 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, bool new_filter)
 
     if (!len) {
 	parser->linestr = newSVpvs("\n;");
-    } else if (SvREADONLY(line) || s[len-1] != ';' || !SvPOK(line)) {
-	/* avoid tie/overload weirdness */
+    } else {
 	parser->linestr = newSVpvn_flags(s, len, SvUTF8(line));
 	if (s[len-1] != ';')
 	    sv_catpvs(parser->linestr, "\n;");
-    } else {
-	SvTEMP_off(line);
-	SvREFCNT_inc_simple_void_NN(line);
-	parser->linestr = line;
     }
     parser->oldoldbufptr =
 	parser->oldbufptr =
@@ -730,6 +739,8 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, bool new_filter)
 	parser->linestart = SvPVX(parser->linestr);
     parser->bufend = parser->bufptr + SvCUR(parser->linestr);
     parser->last_lop = parser->last_uni = NULL;
+
+    parser->in_pod = 0;
 }
 
 
@@ -750,26 +761,12 @@ Perl_parser_free(pTHX_  const yy_parser *parser)
 	PerlIO_close(parser->rsfp);
     SvREFCNT_dec(parser->rsfp_filters);
 
-    Safefree(parser->stack);
     Safefree(parser->lex_brackstack);
     Safefree(parser->lex_casestack);
     PL_parser = parser->old_parser;
     Safefree(parser);
 }
 
-
-/*
- * Perl_lex_end
- * Finalizer for lexing operations.  Must be called when the parser is
- * done with the lexer.
- */
-
-void
-Perl_lex_end(pTHX)
-{
-    dVAR;
-    PL_doextract = FALSE;
-}
 
 /*
 =for apidoc AmxU|SV *|PL_parser-E<gt>linestr
@@ -930,7 +927,7 @@ at I<pv>.  These octets are interpreted as either UTF-8 or Latin-1,
 according to whether the C<LEX_STUFF_UTF8> flag is set in I<flags>.
 The characters are recoded for the lexer buffer, according to how the
 buffer is currently being interpreted (L</lex_bufutf8>).  If a string
-to be interpreted is available as a Perl scalar, the L</lex_stuff_sv>
+to be inserted is available as a Perl scalar, the L</lex_stuff_sv>
 function is more convenient.
 
 =cut
@@ -1022,6 +1019,35 @@ Perl_lex_stuff_pvn(pTHX_ const char *pv, STRLEN len, U32 flags)
 }
 
 /*
+=for apidoc Amx|void|lex_stuff_pv|const char *pv|U32 flags
+
+Insert characters into the lexer buffer (L</PL_parser-E<gt>linestr>),
+immediately after the current lexing point (L</PL_parser-E<gt>bufptr>),
+reallocating the buffer if necessary.  This means that lexing code that
+runs later will see the characters as if they had appeared in the input.
+It is not recommended to do this as part of normal parsing, and most
+uses of this facility run the risk of the inserted characters being
+interpreted in an unintended manner.
+
+The string to be inserted is represented by octets starting at I<pv>
+and continuing to the first nul.  These octets are interpreted as either
+UTF-8 or Latin-1, according to whether the C<LEX_STUFF_UTF8> flag is set
+in I<flags>.  The characters are recoded for the lexer buffer, according
+to how the buffer is currently being interpreted (L</lex_bufutf8>).
+If it is not convenient to nul-terminate a string to be inserted, the
+L</lex_stuff_pvn> function is more appropriate.
+
+=cut
+*/
+
+void
+Perl_lex_stuff_pv(pTHX_ const char *pv, U32 flags)
+{
+    PERL_ARGS_ASSERT_LEX_STUFF_PV;
+    lex_stuff_pvn(pv, strlen(pv), flags);
+}
+
+/*
 =for apidoc Amx|void|lex_stuff_sv|SV *sv|U32 flags
 
 Insert characters into the lexer buffer (L</PL_parser-E<gt>linestr>),
@@ -1034,7 +1060,7 @@ interpreted in an unintended manner.
 
 The string to be inserted is the string value of I<sv>.  The characters
 are recoded for the lexer buffer, according to how the buffer is currently
-being interpreted (L</lex_bufutf8>).  If a string to be interpreted is
+being interpreted (L</lex_bufutf8>).  If a string to be inserted is
 not already a Perl scalar, the L</lex_stuff_pvn> function avoids the
 need to construct a scalar.
 
@@ -1249,7 +1275,7 @@ Perl_lex_next_chunk(pTHX_ U32 flags)
 	else if (PL_parser->rsfp)
 	    (void)PerlIO_close(PL_parser->rsfp);
 	PL_parser->rsfp = NULL;
-	PL_doextract = FALSE;
+	PL_parser->in_pod = 0;
 #ifdef PERL_MAD
 	if (PL_madskills && !PL_in_eval && (PL_minus_p || PL_minus_n))
 	    PL_faketokens = 1;
@@ -1806,18 +1832,22 @@ S_lop(pTHX_ I32 f, int x, char *s)
     PL_last_lop_op = (OPCODE)f;
 #ifdef PERL_MAD
     if (PL_lasttoke)
- 	return REPORT(LSTOP);
+	goto lstop;
 #else
     if (PL_nexttoke)
-	return REPORT(LSTOP);
+	goto lstop;
 #endif
     if (*s == '(')
 	return REPORT(FUNC);
     s = PEEKSPACE(s);
     if (*s == '(')
 	return REPORT(FUNC);
-    else
+    else {
+	lstop:
+	if (!PL_lex_allbrackets && PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+	    PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 	return REPORT(LSTOP);
+    }
 }
 
 #ifdef PERL_MAD
@@ -1927,6 +1957,28 @@ S_force_next(pTHX_ I32 type)
 	PL_lex_state = LEX_KNOWNEXT;
     }
 #endif
+}
+
+void
+Perl_yyunlex(pTHX)
+{
+    int yyc = PL_parser->yychar;
+    if (yyc != YYEMPTY) {
+	if (yyc) {
+	    start_force(-1);
+	    NEXTVAL_NEXTTOKE = PL_parser->yylval;
+	    if (yyc == '{'/*}*/ || yyc == HASHBRACK || yyc == '['/*]*/) {
+		PL_lex_allbrackets--;
+		PL_lex_brackets--;
+		yyc |= (3<<24) | (PL_lex_brackstack[PL_lex_brackets] << 16);
+	    } else if (yyc == '('/*)*/) {
+		PL_lex_allbrackets--;
+		yyc |= (2<<24);
+	    }
+	    force_next(yyc);
+	}
+	PL_parser->yychar = YYEMPTY;
+    }
 }
 
 STATIC SV *
@@ -2219,7 +2271,8 @@ S_tokeq(pTHX_ SV *sv)
     if (SvTYPE(sv) >= SVt_PVIV && SvIVX(sv) == -1)
 	goto finish;
     send = s + len;
-    while (s < send && *s != '\\')
+    /* This is relying on the SV being "well formed" with a trailing '\0'  */
+    while (s < send && !(*s == '\\' && s[1] == '\\'))
 	s++;
     if (s == send)
 	goto finish;
@@ -2344,6 +2397,8 @@ S_sublex_push(pTHX)
     PL_lex_state = PL_sublex_info.super_state;
     SAVEBOOL(PL_lex_dojoin);
     SAVEI32(PL_lex_brackets);
+    SAVEI32(PL_lex_allbrackets);
+    SAVEI8(PL_lex_fakeeof);
     SAVEI32(PL_lex_casemods);
     SAVEI32(PL_lex_starts);
     SAVEI8(PL_lex_state);
@@ -2372,6 +2427,8 @@ S_sublex_push(pTHX)
 
     PL_lex_dojoin = FALSE;
     PL_lex_brackets = 0;
+    PL_lex_allbrackets = 0;
+    PL_lex_fakeeof = LEX_FAKEEOF_NEVER;
     Newx(PL_lex_brackstack, 120, char);
     Newx(PL_lex_casestack, 12, char);
     PL_lex_casemods = 0;
@@ -2381,6 +2438,7 @@ S_sublex_push(pTHX)
     CopLINE_set(PL_curcop, (line_t)PL_multi_start);
 
     PL_lex_inwhat = PL_sublex_info.sub_inwhat;
+    if (PL_lex_inwhat == OP_TRANSR) PL_lex_inwhat = OP_TRANS;
     if (PL_lex_inwhat == OP_MATCH || PL_lex_inwhat == OP_QR || PL_lex_inwhat == OP_SUBST)
 	PL_lex_inpat = PL_sublex_info.sub_op;
     else
@@ -2413,6 +2471,7 @@ S_sublex_done(pTHX)
     }
 
     /* Is there a right-hand side to take care of? (s//RHS/ or tr//RHS/) */
+    assert(PL_lex_inwhat != OP_TRANSR);
     if (PL_lex_repl && (PL_lex_inwhat == OP_SUBST || PL_lex_inwhat == OP_TRANS)) {
 	PL_linestr = PL_lex_repl;
 	PL_lex_inpat = 0;
@@ -2422,6 +2481,8 @@ S_sublex_done(pTHX)
 	SAVEFREESV(PL_linestr);
 	PL_lex_dojoin = FALSE;
 	PL_lex_brackets = 0;
+	PL_lex_allbrackets = 0;
+	PL_lex_fakeeof = LEX_FAKEEOF_NEVER;
 	PL_lex_casemods = 0;
 	*PL_lex_casestack = '\0';
 	PL_lex_starts = 0;
@@ -2580,6 +2641,7 @@ S_scan_const(pTHX_ char *start)
 
     PERL_ARGS_ASSERT_SCAN_CONST;
 
+    assert(PL_lex_inwhat != OP_TRANSR);
     if (PL_lex_inwhat == OP_TRANS && PL_sublex_info.sub_op) {
 	/* If we are doing a trans and we know we want UTF8 set expectation */
 	has_utf8   = PL_sublex_info.sub_op->op_private & (OPpTRANS_FROM_UTF|OPpTRANS_TO_UTF);
@@ -2986,9 +3048,9 @@ S_scan_const(pTHX_ char *start)
 		 * no-op except on utfebcdic variant characters.  Every
 		 * character generated by this that would normally need to be
 		 * enclosed by this macro is invariant, so the macro is not
-		 * needed, and would complicate use of copy(). There are other
-		 * parts of this file where the macro is used inconsistently,
-		 * but are saved by it being a no-op */
+		 * needed, and would complicate use of copy().  XXX There are
+		 * other parts of this file where the macro is used
+		 * inconsistently, but are saved by it being a no-op */
 
 		/* The structure of this section of code (besides checking for
 		 * errors and upgrading to utf8) is:
@@ -3164,8 +3226,9 @@ S_scan_const(pTHX_ char *start)
 
 			    /* Convert first code point to hex, including the
 			     * boiler plate before it */
-			    sprintf(hex_string, "\\N{U+%X", (unsigned int) uv);
-			    output_length = strlen(hex_string);
+			    output_length =
+				my_snprintf(hex_string, sizeof(hex_string),
+					    "\\N{U+%X", (unsigned int) uv);
 
 			    /* Make sure there is enough space to hold it */
 			    d = off + SvGROW(sv, off
@@ -3188,8 +3251,9 @@ S_scan_const(pTHX_ char *start)
 				    uv = UNICODE_REPLACEMENT;
 				}
 
-				sprintf(hex_string, ".%X", (unsigned int) uv);
-				output_length = strlen(hex_string);
+				output_length =
+				    my_snprintf(hex_string, sizeof(hex_string),
+						".%X", (unsigned int) uv);
 
 				d = off + SvGROW(sv, off
 						     + output_length
@@ -3258,7 +3322,7 @@ S_scan_const(pTHX_ char *start)
 			    if (UTF8_IS_INVARIANT(*i)) {
 				if (! isALPHAU(*i)) problematic = TRUE;
 			    } else if (UTF8_IS_DOWNGRADEABLE_START(*i)) {
-				if (! isALPHAU(UNI_TO_NATIVE(UTF8_ACCUMULATE(*i,
+				if (! isALPHAU(UNI_TO_NATIVE(TWO_BYTE_UTF8_TO_UNI(*i,
 									    *(i+1)))))
 				{
 				    problematic = TRUE;
@@ -3274,7 +3338,7 @@ S_scan_const(pTHX_ char *start)
 				    continue;
 				} else if (isCHARNAME_CONT(
 					    UNI_TO_NATIVE(
-					    UTF8_ACCUMULATE(*i, *(i+1)))))
+					    TWO_BYTE_UTF8_TO_UNI(*i, *(i+1)))))
 				{
 				    continue;
 				}
@@ -3480,19 +3544,10 @@ S_intuit_more(pTHX_ register char *s)
 
     /* In a pattern, so maybe we have {n,m}. */
     if (*s == '{') {
-	s++;
-	if (!isDIGIT(*s))
-	    return TRUE;
-	while (isDIGIT(*s))
-	    s++;
-	if (*s == ',')
-	    s++;
-	while (isDIGIT(*s))
-	    s++;
-	if (*s == '}')
+	if (regcurly(s)) {
 	    return FALSE;
+	}
 	return TRUE;
-	
     }
 
     /* On the other hand, maybe we have a character class */
@@ -3928,7 +3983,7 @@ S_readpipe_override(pTHX)
 	     && GvCVu(gv_readpipe) && GvIMPORTED_CV(gv_readpipe)))
     {
 	PL_lex_op = (OP*)newUNOP(OP_ENTERSUB, OPf_STACKED,
-	    append_elem(OP_LIST,
+	    op_append_elem(OP_LIST,
 		newSVOP(OP_CONST, 0, &PL_sv_undef), /* value will be read later */
 		newCVREF(0, newGVOP(OP_GV, 0, gv_readpipe))));
     }
@@ -3953,7 +4008,7 @@ Perl_madlex(pTHX)
     PL_thismad = 0;
 
     /* just do what yylex would do on pending identifier; leave PL_thiswhite alone */
-    if (PL_pending_ident)
+    if (PL_lex_state != LEX_KNOWNEXT && PL_pending_ident)
         return S_pending_ident(aTHX);
 
     /* previous token ate up our whitespace? */
@@ -4156,6 +4211,16 @@ S_tokenize_use(pTHX_ int is_use, char *s) {
 	};
 #endif
 
+#define word_takes_any_delimeter(p,l) S_word_takes_any_delimeter(p,l)
+STATIC bool
+S_word_takes_any_delimeter(char *p, STRLEN len)
+{
+    return (len == 1 && strchr("msyq", p[0])) ||
+	   (len == 2 && (
+	    (p[0] == 't' && p[1] == 'r') ||
+	    (p[0] == 'q' && strchr("qwxr", p[1]))));
+}
+
 /*
   yylex
 
@@ -4212,7 +4277,7 @@ Perl_yylex(pTHX)
 	SvREFCNT_dec(tmp);
     } );
     /* check if there's an identifier for us to look at */
-    if (PL_pending_ident)
+    if (PL_lex_state != LEX_KNOWNEXT && PL_pending_ident)
         return REPORT(S_pending_ident(aTHX));
 
     /* no identifier pending identification */
@@ -4255,12 +4320,33 @@ Perl_yylex(pTHX)
 	    PL_lex_defer = LEX_NORMAL;
 	}
 #endif
+	{
+	    I32 next_type;
 #ifdef PERL_MAD
-	/* FIXME - can these be merged?  */
-	return(PL_nexttoke[PL_lasttoke].next_type);
+	    next_type = PL_nexttoke[PL_lasttoke].next_type;
 #else
-	return REPORT(PL_nexttype[PL_nexttoke]);
+	    next_type = PL_nexttype[PL_nexttoke];
 #endif
+	    if (next_type & (7<<24)) {
+		if (next_type & (1<<24)) {
+		    if (PL_lex_brackets > 100)
+			Renew(PL_lex_brackstack, PL_lex_brackets + 10, char);
+		    PL_lex_brackstack[PL_lex_brackets++] =
+			(next_type >> 16) & 0xff;
+		}
+		if (next_type & (2<<24))
+		    PL_lex_allbrackets++;
+		if (next_type & (4<<24))
+		    PL_lex_allbrackets--;
+		next_type &= 0xffff;
+	    }
+#ifdef PERL_MAD
+	    /* FIXME - can these be merged?  */
+	    return next_type;
+#else
+	    return REPORT(next_type);
+#endif
+	}
 
     /* interpolated case modifiers like \L \U, including \Q and \E.
        when we get here, PL_bufptr is at the \
@@ -4286,6 +4372,7 @@ Perl_yylex(pTHX)
 			PL_thistoken = newSVpvs("\\E");
 #endif
 		}
+		PL_lex_allbrackets--;
 		return REPORT(')');
 	    }
 #ifdef PERL_MAD
@@ -4325,6 +4412,7 @@ Perl_yylex(pTHX)
 		if ((*s == 'L' || *s == 'U') &&
 		    (strchr(PL_lex_casestack, 'L') || strchr(PL_lex_casestack, 'U'))) {
 		    PL_lex_casestack[--PL_lex_casemods] = '\0';
+		    PL_lex_allbrackets--;
 		    return REPORT(')');
 		}
 		if (PL_lex_casemods > 10)
@@ -4334,7 +4422,7 @@ Perl_yylex(pTHX)
 		PL_lex_state = LEX_INTERPCONCAT;
 		start_force(PL_curforce);
 		NEXTVAL_NEXTTOKE.ival = 0;
-		force_next('(');
+		force_next((2<<24)|'(');
 		start_force(PL_curforce);
 		if (*s == 'l')
 		    NEXTVAL_NEXTTOKE.ival = OP_LCFIRST;
@@ -4400,7 +4488,7 @@ Perl_yylex(pTHX)
 	    force_next('$');
 	    start_force(PL_curforce);
 	    NEXTVAL_NEXTTOKE.ival = 0;
-	    force_next('(');
+	    force_next((2<<24)|'(');
 	    start_force(PL_curforce);
 	    NEXTVAL_NEXTTOKE.ival = OP_JOIN;	/* emulate join($", ...) */
 	    force_next(FUNC);
@@ -4440,6 +4528,7 @@ Perl_yylex(pTHX)
 		PL_thistoken = newSVpvs("");
 	    }
 #endif
+	    PL_lex_allbrackets--;
 	    return REPORT(')');
 	}
 	if (PL_lex_inwhat == OP_SUBST && PL_linestr == PL_lex_repl
@@ -4550,7 +4639,8 @@ Perl_yylex(pTHX)
 	if (!PL_rsfp) {
 	    PL_last_uni = 0;
 	    PL_last_lop = 0;
-	    if (PL_lex_brackets) {
+	    if (PL_lex_brackets &&
+		    PL_lex_brackstack[PL_lex_brackets-1] != XFAKEEOF) {
 		yyerror((const char *)
 			(PL_lex_formbrack
 			 ? "Format not terminated"
@@ -4673,7 +4763,7 @@ Perl_yylex(pTHX)
 		    s = swallow_bom((U8*)s);
 		}
 	    }
-	    if (PL_doextract) {
+	    if (PL_parser->in_pod) {
 		/* Incest with pod. */
 #ifdef PERL_MAD
 		if (PL_madskills)
@@ -4684,12 +4774,12 @@ Perl_yylex(pTHX)
 		    PL_oldoldbufptr = PL_oldbufptr = s = PL_linestart = SvPVX(PL_linestr);
 		    PL_bufend = SvPVX(PL_linestr) + SvCUR(PL_linestr);
 		    PL_last_lop = PL_last_uni = NULL;
-		    PL_doextract = FALSE;
+		    PL_parser->in_pod = 0;
 		}
 	    }
 	    if (PL_rsfp)
 		incline(s);
-	} while (PL_doextract);
+	} while (PL_parser->in_pod);
 	PL_oldoldbufptr = PL_oldbufptr = PL_bufptr = PL_linestart = s;
 	PL_bufend = SvPVX(PL_linestr) + SvCUR(PL_linestr);
 	PL_last_lop = PL_last_uni = NULL;
@@ -5077,8 +5167,14 @@ Perl_yylex(pTHX)
 		else
 		    TERM(ARROW);
 	    }
-	    if (PL_expect == XOPERATOR)
+	    if (PL_expect == XOPERATOR) {
+		if (*s == '=' && !PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		    s--;
+		    TOKEN(0);
+		}
 		Aop(OP_SUBTRACT);
+	    }
 	    else {
 		if (isSPACE(*s) || !isSPACE(*PL_bufptr))
 		    check_uni();
@@ -5096,8 +5192,14 @@ Perl_yylex(pTHX)
 		else
 		    OPERATOR(PREINC);
 	    }
-	    if (PL_expect == XOPERATOR)
+	    if (PL_expect == XOPERATOR) {
+		if (*s == '=' && !PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		    s--;
+		    TOKEN(0);
+		}
 		Aop(OP_ADD);
+	    }
 	    else {
 		if (isSPACE(*s) || !isSPACE(*PL_bufptr))
 		    check_uni();
@@ -5117,12 +5219,25 @@ Perl_yylex(pTHX)
 	s++;
 	if (*s == '*') {
 	    s++;
+	    if (*s == '=' && !PL_lex_allbrackets &&
+		    PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		s -= 2;
+		TOKEN(0);
+	    }
 	    PWop(OP_POW);
+	}
+	if (*s == '=' && !PL_lex_allbrackets &&
+		PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+	    s--;
+	    TOKEN(0);
 	}
 	Mop(OP_MULTIPLY);
 
     case '%':
 	if (PL_expect == XOPERATOR) {
+	    if (s[1] == '=' && !PL_lex_allbrackets &&
+		    PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN)
+		TOKEN(0);
 	    ++s;
 	    Mop(OP_MODULO);
 	}
@@ -5136,10 +5251,16 @@ Perl_yylex(pTHX)
 	TERM('%');
 
     case '^':
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		(s[1] == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_BITWISE))
+	    TOKEN(0);
 	s++;
 	BOop(OP_BIT_XOR);
     case '[':
-	PL_lex_brackets++;
+	if (PL_lex_brackets > 100)
+	    Renew(PL_lex_brackstack, PL_lex_brackets + 10, char);
+	PL_lex_brackstack[PL_lex_brackets++] = 0;
+	PL_lex_allbrackets++;
 	{
 	    const char tmp = *s++;
 	    OPERATOR(tmp);
@@ -5148,14 +5269,18 @@ Perl_yylex(pTHX)
 	if (s[1] == '~'
 	    && (PL_expect == XOPERATOR || PL_expect == XTERMORDORDOR))
 	{
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		TOKEN(0);
 	    s += 2;
 	    Eop(OP_SMARTMATCH);
 	}
+	s++;
+	OPERATOR('~');
     case ',':
-	{
-	    const char tmp = *s++;
-	    OPERATOR(tmp);
-	}
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMMA)
+	    TOKEN(0);
+	s++;
+	OPERATOR(',');
     case ':':
 	if (s[1] == ':') {
 	    len = 0;
@@ -5172,7 +5297,8 @@ Perl_yylex(pTHX)
 		break;
 	    PL_bufptr = s;	/* update in case we back off */
 	    if (*s == '=') {
-		deprecate(":= for an empty attribute list");
+		Perl_croak(aTHX_
+			   "Use of := for an empty attribute list is not allowed");
 	    }
 	    goto grabattrs;
 	case XATTRBLOCK:
@@ -5223,7 +5349,7 @@ Perl_yylex(pTHX)
 		}
 		if (PL_lex_stuff) {
 		    sv_catsv(sv, PL_lex_stuff);
-		    attrs = append_elem(OP_LIST, attrs,
+		    attrs = op_append_elem(OP_LIST, attrs,
 					newSVOP(OP_CONST, 0, sv));
 		    SvREFCNT_dec(PL_lex_stuff);
 		    PL_lex_stuff = NULL;
@@ -5263,7 +5389,7 @@ Perl_yylex(pTHX)
 		       justified by the performance win for the common case
 		       of applying only built-in attributes.) */
 		    else
-		        attrs = append_elem(OP_LIST, attrs,
+		        attrs = op_append_elem(OP_LIST, attrs,
 					    newSVOP(OP_CONST, 0,
 					      	    sv));
 		}
@@ -5315,6 +5441,11 @@ Perl_yylex(pTHX)
 #endif
 	    TOKEN(COLONATTR);
 	}
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_CLOSING) {
+	    s--;
+	    TOKEN(0);
+	}
+	PL_lex_allbrackets--;
 	OPERATOR(':');
     case '(':
 	s++;
@@ -5323,27 +5454,32 @@ Perl_yylex(pTHX)
 	else
 	    PL_expect = XTERM;
 	s = SKIPSPACE1(s);
+	PL_lex_allbrackets++;
 	TOKEN('(');
     case ';':
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+	    TOKEN(0);
 	CLINE;
-	{
-	    const char tmp = *s++;
-	    OPERATOR(tmp);
-	}
+	s++;
+	OPERATOR(';');
     case ')':
-	{
-	    const char tmp = *s++;
-	    s = SKIPSPACE1(s);
-	    if (*s == '{')
-		PREBLOCK(tmp);
-	    TERM(tmp);
-	}
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_CLOSING)
+	    TOKEN(0);
+	s++;
+	PL_lex_allbrackets--;
+	s = SKIPSPACE1(s);
+	if (*s == '{')
+	    PREBLOCK(')');
+	TERM(')');
     case ']':
+	if (PL_lex_brackets && PL_lex_brackstack[PL_lex_brackets-1] == XFAKEEOF)
+	    TOKEN(0);
 	s++;
 	if (PL_lex_brackets <= 0)
 	    yyerror("Unmatched right square bracket");
 	else
 	    --PL_lex_brackets;
+	PL_lex_allbrackets--;
 	if (PL_lex_state == LEX_INTERPNORMAL) {
 	    if (PL_lex_brackets == 0) {
 		if (*s == '-' && s[1] == '>')
@@ -5369,6 +5505,7 @@ Perl_yylex(pTHX)
 		PL_lex_brackstack[PL_lex_brackets++] = XTERM;
 	    else
 		PL_lex_brackstack[PL_lex_brackets++] = XOPERATOR;
+	    PL_lex_allbrackets++;
 	    OPERATOR(HASHBRACK);
 	case XOPERATOR:
 	    while (s < PL_bufend && SPACE_OR_TAB(*s))
@@ -5397,11 +5534,13 @@ Perl_yylex(pTHX)
 	case XATTRBLOCK:
 	case XBLOCK:
 	    PL_lex_brackstack[PL_lex_brackets++] = XSTATE;
+	    PL_lex_allbrackets++;
 	    PL_expect = XSTATE;
 	    break;
 	case XATTRTERM:
 	case XTERMBLOCK:
 	    PL_lex_brackstack[PL_lex_brackets++] = XOPERATOR;
+	    PL_lex_allbrackets++;
 	    PL_expect = XSTATE;
 	    break;
 	default: {
@@ -5410,6 +5549,7 @@ Perl_yylex(pTHX)
 		    PL_lex_brackstack[PL_lex_brackets++] = XTERM;
 		else
 		    PL_lex_brackstack[PL_lex_brackets++] = XOPERATOR;
+		PL_lex_allbrackets++;
 		s = SKIPSPACE1(s);
 		if (*s == '}') {
 		    if (PL_expect == XREF && PL_lex_state == LEX_INTERPNORMAL) {
@@ -5516,12 +5656,15 @@ Perl_yylex(pTHX)
 	    PL_copline = NOLINE;   /* invalidate current command line number */
 	TOKEN('{');
     case '}':
+	if (PL_lex_brackets && PL_lex_brackstack[PL_lex_brackets-1] == XFAKEEOF)
+	    TOKEN(0);
       rightbracket:
 	s++;
 	if (PL_lex_brackets <= 0)
 	    yyerror("Unmatched right curly bracket");
 	else
 	    PL_expect = (expectation)PL_lex_brackstack[--PL_lex_brackets];
+	PL_lex_allbrackets--;
 	if (PL_lex_brackets < PL_lex_formbrack && PL_lex_state != LEX_INTERPNORMAL)
 	    PL_lex_formbrack = 0;
 	if (PL_lex_state == LEX_INTERPNORMAL) {
@@ -5563,8 +5706,14 @@ Perl_yylex(pTHX)
 	TOKEN(';');
     case '&':
 	s++;
-	if (*s++ == '&')
+	if (*s++ == '&') {
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		    (*s == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_LOGIC)) {
+		s -= 2;
+		TOKEN(0);
+	    }
 	    AOPERATOR(ANDAND);
+	}
 	s--;
 	if (PL_expect == XOPERATOR) {
 	    if (PL_bufptr == PL_linestart && ckWARN(WARN_SEMICOLON)
@@ -5573,6 +5722,11 @@ Perl_yylex(pTHX)
 		CopLINE_dec(PL_curcop);
 		Perl_warner(aTHX_ packWARN(WARN_SEMICOLON), "%s", PL_warn_nosemi);
 		CopLINE_inc(PL_curcop);
+	    }
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		    (*s == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_BITWISE)) {
+		s--;
+		TOKEN(0);
 	    }
 	    BAop(OP_BIT_AND);
 	}
@@ -5589,18 +5743,41 @@ Perl_yylex(pTHX)
 
     case '|':
 	s++;
-	if (*s++ == '|')
+	if (*s++ == '|') {
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		    (*s == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_LOGIC)) {
+		s -= 2;
+		TOKEN(0);
+	    }
 	    AOPERATOR(OROR);
+	}
 	s--;
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		(*s == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_BITWISE)) {
+	    s--;
+	    TOKEN(0);
+	}
 	BOop(OP_BIT_OR);
     case '=':
 	s++;
 	{
 	    const char tmp = *s++;
-	    if (tmp == '=')
+	    if (tmp == '=') {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		Eop(OP_EQ);
-	    if (tmp == '>')
+	    }
+	    if (tmp == '>') {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_COMMA) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		OPERATOR(',');
+	    }
 	    if (tmp == '~')
 		PMop(OP_MATCH);
 	    if (tmp && isSPACE(*s) && ckWARN(WARN_SYNTAX)
@@ -5638,7 +5815,7 @@ Perl_yylex(pTHX)
 		    }
 #endif
 		    s = PL_bufend;
-		    PL_doextract = TRUE;
+		    PL_parser->in_pod = 1;
 		    goto retry;
 		}
 	}
@@ -5655,6 +5832,10 @@ Perl_yylex(pTHX)
 		PL_expect = XBLOCK;
 		goto leftbracket;
 	    }
+	}
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+	    s--;
+	    TOKEN(0);
 	}
 	pl_yylval.ival = 0;
 	OPERATOR(ASSIGNOP);
@@ -5679,6 +5860,11 @@ Perl_yylex(pTHX)
 			Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
 				    "!=~ should be !~");
 		}
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		Eop(OP_NE);
 	    }
 	    if (tmp == '~')
@@ -5699,28 +5885,65 @@ Perl_yylex(pTHX)
 	s++;
 	{
 	    char tmp = *s++;
-	    if (tmp == '<')
+	    if (tmp == '<') {
+		if (*s == '=' && !PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		SHop(OP_LEFT_SHIFT);
+	    }
 	    if (tmp == '=') {
 		tmp = *s++;
-		if (tmp == '>')
+		if (tmp == '>') {
+		    if (!PL_lex_allbrackets &&
+			    PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+			s -= 3;
+			TOKEN(0);
+		    }
 		    Eop(OP_NCMP);
+		}
 		s--;
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		Rop(OP_LE);
 	    }
 	}
 	s--;
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+	    s--;
+	    TOKEN(0);
+	}
 	Rop(OP_LT);
     case '>':
 	s++;
 	{
 	    const char tmp = *s++;
-	    if (tmp == '>')
+	    if (tmp == '>') {
+		if (*s == '=' && !PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		SHop(OP_RIGHT_SHIFT);
-	    else if (tmp == '=')
+	    }
+	    else if (tmp == '=') {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+		    s -= 2;
+		    TOKEN(0);
+		}
 		Rop(OP_GE);
+	    }
 	}
 	s--;
+	if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE) {
+	    s--;
+	    TOKEN(0);
+	}
 	Rop(OP_GT);
 
     case '$':
@@ -5904,6 +6127,9 @@ Perl_yylex(pTHX)
 
      case '/':			/* may be division, defined-or, or pattern */
 	if (PL_expect == XTERMORDORDOR && s[1] == '/') {
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+		    (s[2] == '=' ? LEX_FAKEEOF_ASSIGN : LEX_FAKEEOF_LOGIC))
+		TOKEN(0);
 	    s += 2;
 	    AOPERATOR(DORDOR);
 	}
@@ -5911,16 +6137,33 @@ Perl_yylex(pTHX)
 	if (PL_expect == XOPERATOR) {
 	     char tmp = *s++;
 	     if(tmp == '?') {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_IFELSE) {
+		    s--;
+		    TOKEN(0);
+		}
+		PL_lex_allbrackets++;
 		OPERATOR('?');
 	     }
              else {
 	         tmp = *s++;
 	         if(tmp == '/') {
 	             /* A // operator. */
+		    if (!PL_lex_allbrackets && PL_lex_fakeeof >=
+			    (*s == '=' ? LEX_FAKEEOF_ASSIGN :
+					    LEX_FAKEEOF_LOGIC)) {
+			s -= 2;
+			TOKEN(0);
+		    }
 	            AOPERATOR(DORDOR);
 	         }
 	         else {
 	             s--;
+		     if (*s == '=' && !PL_lex_allbrackets &&
+			     PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+			 s--;
+			 TOKEN(0);
+		     }
 	             Mop(OP_DIVIDE);
 	         }
 	     }
@@ -5933,6 +6176,8 @@ Perl_yylex(pTHX)
 	          || isALNUM_lazy_if(PL_last_uni+5,UTF)
 	      ))
 	         check_uni();
+	     if (*s == '?')
+		 deprecate("?PATTERN? without explicit operator");
 	     s = scan_pat(s,OP_MATCH);
 	     TERM(sublex_start());
 	 }
@@ -5957,6 +6202,11 @@ Perl_yylex(pTHX)
 	if (PL_expect == XOPERATOR || !isDIGIT(s[1])) {
 	    char tmp = *s++;
 	    if (*s == tmp) {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_RANGE) {
+		    s--;
+		    TOKEN(0);
+		}
 		s++;
 		if (*s == tmp) {
 		    s++;
@@ -5965,6 +6215,11 @@ Perl_yylex(pTHX)
 		else
 		    pl_yylval.ival = 0;
 		OPERATOR(DOTDOT);
+	    }
+	    if (*s == '=' && !PL_lex_allbrackets &&
+		    PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN) {
+		s--;
+		TOKEN(0);
 	    }
 	    Aop(OP_CONCAT);
 	}
@@ -6102,10 +6357,7 @@ Perl_yylex(pTHX)
 	s = scan_word(s, PL_tokenbuf, sizeof PL_tokenbuf, FALSE, &len);
 
 	/* Some keywords can be followed by any delimiter, including ':' */
-	anydelim = ((len == 1 && strchr("msyq", PL_tokenbuf[0])) ||
-	       (len == 2 && ((PL_tokenbuf[0] == 't' && PL_tokenbuf[1] == 'r') ||
-			     (PL_tokenbuf[0] == 'q' &&
-			      strchr("qwxr", PL_tokenbuf[1])))));
+	anydelim = word_takes_any_delimeter(PL_tokenbuf, len);
 
 	/* x::* is just a word, unless x is "CORE" */
 	if (!anydelim && *s == ':' && s[1] == ':' && strNE(PL_tokenbuf, "CORE"))
@@ -6316,29 +6568,12 @@ Perl_yylex(pTHX)
 		if (len)
 		    goto safe_bareword;
 
-		cv = NULL;
 		{
 		    OP *const_op = newSVOP(OP_CONST, 0, SvREFCNT_inc(sv));
 		    const_op->op_private = OPpCONST_BARE;
 		    rv2cv_op = newCVREF(0, const_op);
 		}
-		if (rv2cv_op->op_type == OP_RV2CV &&
-			(rv2cv_op->op_flags & OPf_KIDS)) {
-		    OP *rv_op = cUNOPx(rv2cv_op)->op_first;
-		    switch (rv_op->op_type) {
-			case OP_CONST: {
-			    SV *sv = cSVOPx_sv(rv_op);
-			    if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVCV)
-				cv = (CV*)SvRV(sv);
-			} break;
-			case OP_GV: {
-			    GV *gv = cGVOPx_gv(rv_op);
-			    CV *maybe_cv = GvCVu(gv);
-			    if (maybe_cv && SvTYPE((SV*)maybe_cv) == SVt_PVCV)
-				cv = maybe_cv;
-			} break;
-		    }
-		}
+		cv = rv2cv_op_cv(rv2cv_op, 0);
 
 		/* See if it's the indirect object for a list operator. */
 
@@ -6363,6 +6598,9 @@ Perl_yylex(pTHX)
 		    if ((isIDFIRST_lazy_if(s,UTF) || *s == '$') &&
 			(tmp = intuit_method(s, gv, cv))) {
 			op_free(rv2cv_op);
+			if (tmp == METHOD && !PL_lex_allbrackets &&
+				PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			    PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 			return REPORT(tmp);
 		    }
 
@@ -6443,6 +6681,9 @@ Perl_yylex(pTHX)
 		    op_free(rv2cv_op);
 		    PL_last_lop = PL_oldbufptr;
 		    PL_last_lop_op = OP_METHOD;
+		    if (!PL_lex_allbrackets &&
+			    PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 		    PREBLOCK(METHOD);
 		}
 
@@ -6452,6 +6693,9 @@ Perl_yylex(pTHX)
 			&& (isIDFIRST_lazy_if(s,UTF) || *s == '$')
 			&& (tmp = intuit_method(s, gv, cv))) {
 		    op_free(rv2cv_op);
+		    if (tmp == METHOD && !PL_lex_allbrackets &&
+			    PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 		    return REPORT(tmp);
 		}
 
@@ -6469,6 +6713,7 @@ Perl_yylex(pTHX)
 			SvREFCNT_dec(((SVOP*)pl_yylval.opval)->op_sv);
 			((SVOP*)pl_yylval.opval)->op_sv = SvREFCNT_inc_simple(sv);
 			pl_yylval.opval->op_private = 0;
+			pl_yylval.opval->op_flags |= OPf_SPECIAL;
 			TOKEN(WORD);
 		    }
 
@@ -6494,7 +6739,7 @@ Perl_yylex(pTHX)
 			    (
 			        (
 			            *proto == '$' || *proto == '_'
-			         || *proto == '*'
+			         || *proto == '*' || *proto == '+'
 			        )
 			     && proto[1] == '\0'
 			    )
@@ -6514,6 +6759,9 @@ Perl_yylex(pTHX)
 				sv_setpvs(PL_subname, "__ANON__");
 			    else
 				sv_setpvs(PL_subname, "__ANON__::__ANON__");
+			    if (!PL_lex_allbrackets &&
+				    PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+				PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 			    PREBLOCK(LSTOPSUB);
 			}
 		    }
@@ -6532,6 +6780,9 @@ Perl_yylex(pTHX)
 			    PL_thistoken = newSVpvs("");
 			}
 			force_next(WORD);
+			if (!PL_lex_allbrackets &&
+				PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			    PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 			TOKEN(NOAMP);
 		    }
 		}
@@ -6571,12 +6822,18 @@ Perl_yylex(pTHX)
 			curmad('X', PL_thistoken);
 			PL_thistoken = newSVpvs("");
 			force_next(WORD);
+			if (!PL_lex_allbrackets &&
+				PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			    PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 			TOKEN(NOAMP);
 		    }
 #else
 		    NEXTVAL_NEXTTOKE.opval = pl_yylval.opval;
 		    PL_expect = XTERM;
 		    force_next(WORD);
+		    if (!PL_lex_allbrackets &&
+			    PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+			PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 		    TOKEN(NOAMP);
 #endif
 		}
@@ -6778,6 +7035,8 @@ Perl_yylex(pTHX)
 	    LOP(OP_ACCEPT,XTERM);
 
 	case KEY_and:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_LOWLOGIC)
+		return REPORT(0);
 	    OPERATOR(ANDOP);
 
 	case KEY_atan2:
@@ -6830,6 +7089,8 @@ Perl_yylex(pTHX)
 	    UNI(OP_CLOSEDIR);
 
 	case KEY_cmp:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Eop(OP_SCMP);
 
 	case KEY_caller:
@@ -6890,7 +7151,13 @@ Perl_yylex(pTHX)
 	    UNI(OP_DELETE);
 
 	case KEY_dbmopen:
-	    gv_fetchpvs("AnyDBM_File::ISA", GV_ADDMULTI, SVt_PVAV);
+	    Perl_populate_isa(aTHX_ STR_WITH_LEN("AnyDBM_File::ISA"),
+			      STR_WITH_LEN("NDBM_File::"),
+			      STR_WITH_LEN("DB_File::"),
+			      STR_WITH_LEN("GDBM_File::"),
+			      STR_WITH_LEN("SDBM_File::"),
+			      STR_WITH_LEN("ODBM_File::"),
+			      NULL);
 	    LOP(OP_DBMOPEN,XTERM);
 
 	case KEY_dbmclose:
@@ -6908,6 +7175,8 @@ Perl_yylex(pTHX)
 	    OPERATOR(ELSIF);
 
 	case KEY_eq:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Eop(OP_SEQ);
 
 	case KEY_exists:
@@ -6961,6 +7230,8 @@ Perl_yylex(pTHX)
 
 	case KEY_for:
 	case KEY_foreach:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    s = SKIPSPACE1(s);
 	    if (PL_expect == XSTATE && isIDFIRST_lazy_if(s,UTF)) {
@@ -7005,9 +7276,13 @@ Perl_yylex(pTHX)
 	    LOP(OP_FLOCK,XTERM);
 
 	case KEY_gt:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Rop(OP_SGT);
 
 	case KEY_ge:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Rop(OP_SGE);
 
 	case KEY_grep:
@@ -7109,6 +7384,8 @@ Perl_yylex(pTHX)
 	    UNI(OP_HEX);
 
 	case KEY_if:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    OPERATOR(IF);
 
@@ -7148,9 +7425,13 @@ Perl_yylex(pTHX)
 	    UNI(OP_LENGTH);
 
 	case KEY_lt:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Rop(OP_SLT);
 
 	case KEY_le:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Rop(OP_SLE);
 
 	case KEY_localtime:
@@ -7228,6 +7509,8 @@ Perl_yylex(pTHX)
 	    LOOPX(OP_NEXT);
 
 	case KEY_ne:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_COMPARE)
+		return REPORT(0);
 	    Eop(OP_SNE);
 
 	case KEY_no:
@@ -7237,8 +7520,12 @@ Perl_yylex(pTHX)
 	case KEY_not:
 	    if (*s == '(' || (s = SKIPSPACE1(s), *s == '('))
 		FUN1(OP_NOT);
-	    else
+	    else {
+		if (!PL_lex_allbrackets &&
+			PL_lex_fakeeof > LEX_FAKEEOF_LOWLOGIC)
+		    PL_lex_fakeeof = LEX_FAKEEOF_LOWLOGIC;
 		OPERATOR(NOTOP);
+	    }
 
 	case KEY_open:
 	    s = SKIPSPACE1(s);
@@ -7261,6 +7548,8 @@ Perl_yylex(pTHX)
 	    LOP(OP_OPEN,XTERM);
 
 	case KEY_or:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_LOWLOGIC)
+		return REPORT(0);
 	    pl_yylval.ival = OP_OR;
 	    OPERATOR(OROP);
 
@@ -7316,14 +7605,13 @@ Perl_yylex(pTHX)
 	case KEY_quotemeta:
 	    UNI(OP_QUOTEMETA);
 
-	case KEY_qw:
+	case KEY_qw: {
+	    OP *words = NULL;
 	    s = scan_str(s,!!PL_madskills,FALSE);
 	    if (!s)
 		missingterm(NULL);
 	    PL_expect = XOPERATOR;
-	    force_next(')');
 	    if (SvCUR(PL_lex_stuff)) {
-		OP *words = NULL;
 		int warned = 0;
 		d = SvPV_force(PL_lex_stuff, len);
 		while (len) {
@@ -7351,22 +7639,21 @@ Perl_yylex(pTHX)
 				/**/;
 			}
 			sv = newSVpvn_utf8(b, d-b, DO_UTF8(PL_lex_stuff));
-			words = append_elem(OP_LIST, words,
+			words = op_append_elem(OP_LIST, words,
 					    newSVOP(OP_CONST, 0, tokeq(sv)));
 		    }
 		}
-		if (words) {
-		    start_force(PL_curforce);
-		    NEXTVAL_NEXTTOKE.opval = words;
-		    force_next(THING);
-		}
 	    }
+	    if (!words)
+		words = newNULLLIST();
 	    if (PL_lex_stuff) {
 		SvREFCNT_dec(PL_lex_stuff);
 		PL_lex_stuff = NULL;
 	    }
-	    PL_expect = XTERM;
-	    TOKEN('(');
+	    PL_expect = XOPERATOR;
+	    pl_yylval.opval = sawparens(words);
+	    TOKEN(QWLIST);
+	}
 
 	case KEY_qq:
 	    s = scan_str(s,!!PL_madskills,FALSE);
@@ -7702,7 +7989,7 @@ Perl_yylex(pTHX)
 			    if (warnillegalproto) {
 				if (must_be_last)
 				    proto_after_greedy_proto = TRUE;
-				if (!strchr("$@%*;[]&\\_", *p)) {
+				if (!strchr("$@%*;[]&\\_+", *p)) {
 				    bad_proto = TRUE;
 				}
 				else {
@@ -7861,10 +8148,14 @@ Perl_yylex(pTHX)
 	    UNI(OP_UNTIE);
 
 	case KEY_until:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    OPERATOR(UNTIL);
 
 	case KEY_unless:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    OPERATOR(UNLESS);
 
@@ -7897,10 +8188,14 @@ Perl_yylex(pTHX)
 	    LOP(OP_VEC,XTERM);
 
 	case KEY_when:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    OPERATOR(WHEN);
 
 	case KEY_while:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_NONEXPR)
+		return REPORT(0);
 	    pl_yylval.ival = CopLINE(PL_curcop);
 	    OPERATOR(WHILE);
 
@@ -7932,12 +8227,18 @@ Perl_yylex(pTHX)
 	    UNI(OP_ENTERWRITE);
 
 	case KEY_x:
-	    if (PL_expect == XOPERATOR)
+	    if (PL_expect == XOPERATOR) {
+		if (*s == '=' && !PL_lex_allbrackets &&
+			PL_lex_fakeeof >= LEX_FAKEEOF_ASSIGN)
+		    return REPORT(0);
 		Mop(OP_REPEAT);
+	    }
 	    check_uni();
 	    goto just_a_word;
 
 	case KEY_xor:
+	    if (!PL_lex_allbrackets && PL_lex_fakeeof >= LEX_FAKEEOF_LOWLOGIC)
+		return REPORT(0);
 	    pl_yylval.ival = OP_XOR;
 	    OPERATOR(OROP);
 
@@ -11804,6 +12105,7 @@ S_scan_ident(pTHX_ register char *s, register const char *send, char *dest, STRL
 		}
 		bracket++;
 		PL_lex_brackstack[PL_lex_brackets++] = (char)(XOPERATOR | XFAKEBRACK);
+		PL_lex_allbrackets++;
 		return s;
 	    }
 	}
@@ -12059,6 +12361,7 @@ S_scan_trans(pTHX_ char *start)
     U8 squash;
     U8 del;
     U8 complement;
+    bool nondestruct = 0;
 #ifdef PERL_MAD
     char *modstart;
 #endif
@@ -12112,6 +12415,9 @@ S_scan_trans(pTHX_ char *start)
 	case 's':
 	    squash = OPpTRANS_SQUASH;
 	    break;
+	case 'r':
+	    nondestruct = 1;
+	    break;
 	default:
 	    goto no_more;
 	}
@@ -12120,14 +12426,14 @@ S_scan_trans(pTHX_ char *start)
   no_more:
 
     tbl = (short *)PerlMemShared_calloc(complement&&!del?258:256, sizeof(short));
-    o = newPVOP(OP_TRANS, 0, (char*)tbl);
+    o = newPVOP(nondestruct ? OP_TRANSR : OP_TRANS, 0, (char*)tbl);
     o->op_private &= ~OPpTRANS_ALL;
     o->op_private |= del|squash|complement|
       (DO_UTF8(PL_lex_stuff)? OPpTRANS_FROM_UTF : 0)|
       (DO_UTF8(PL_lex_repl) ? OPpTRANS_TO_UTF   : 0);
 
     PL_lex_op = o;
-    pl_yylval.ival = OP_TRANS;
+    pl_yylval.ival = nondestruct ? OP_TRANSR : OP_TRANS;
 
 #ifdef PERL_MAD
     if (PL_madskills) {
@@ -12519,7 +12825,7 @@ S_scan_inputsymbol(pTHX_ char *start)
 		    o->op_targ = tmp;
 		    PL_lex_op = readline_overriden
 			? (OP*)newUNOP(OP_ENTERSUB, OPf_STACKED,
-				append_elem(OP_LIST, o,
+				op_append_elem(OP_LIST, o,
 				    newCVREF(0, newGVOP(OP_GV,0,gv_readline))))
 			: (OP*)newUNOP(OP_READLINE, 0, o);
 		}
@@ -12535,7 +12841,7 @@ intro_sym:
 				SVt_PV);
 		PL_lex_op = readline_overriden
 		    ? (OP*)newUNOP(OP_ENTERSUB, OPf_STACKED,
-			    append_elem(OP_LIST,
+			    op_append_elem(OP_LIST,
 				newUNOP(OP_RV2SV, 0, newGVOP(OP_GV, 0, gv)),
 				newCVREF(0, newGVOP(OP_GV, 0, gv_readline))))
 		    : (OP*)newUNOP(OP_READLINE, 0,
@@ -12554,7 +12860,7 @@ intro_sym:
 	    GV * const gv = gv_fetchpv(d, GV_ADD, SVt_PVIO);
 	    PL_lex_op = readline_overriden
 		? (OP*)newUNOP(OP_ENTERSUB, OPf_STACKED,
-			append_elem(OP_LIST,
+			op_append_elem(OP_LIST,
 			    newGVOP(OP_GV, 0, gv),
 			    newCVREF(0, newGVOP(OP_GV, 0, gv_readline))))
 		: (OP*)newUNOP(OP_READLINE, 0, newGVOP(OP_GV, 0, gv));
@@ -13937,6 +14243,431 @@ Perl_keyword_plugin_standard(pTHX_
     PERL_UNUSED_ARG(keyword_len);
     PERL_UNUSED_ARG(op_ptr);
     return KEYWORD_PLUGIN_DECLINE;
+}
+
+#define parse_recdescent(g,p) S_parse_recdescent(aTHX_ g,p)
+static void
+S_parse_recdescent(pTHX_ int gramtype, I32 fakeeof)
+{
+    SAVEI32(PL_lex_brackets);
+    if (PL_lex_brackets > 100)
+	Renew(PL_lex_brackstack, PL_lex_brackets + 10, char);
+    PL_lex_brackstack[PL_lex_brackets++] = XFAKEEOF;
+    SAVEI32(PL_lex_allbrackets);
+    PL_lex_allbrackets = 0;
+    SAVEI8(PL_lex_fakeeof);
+    PL_lex_fakeeof = (U8)fakeeof;
+    if(yyparse(gramtype) && !PL_parser->error_count)
+	qerror(Perl_mess(aTHX_ "Parse error"));
+}
+
+#define parse_recdescent_for_op(g,p) S_parse_recdescent_for_op(aTHX_ g,p)
+static OP *
+S_parse_recdescent_for_op(pTHX_ int gramtype, I32 fakeeof)
+{
+    OP *o;
+    ENTER;
+    SAVEVPTR(PL_eval_root);
+    PL_eval_root = NULL;
+    parse_recdescent(gramtype, fakeeof);
+    o = PL_eval_root;
+    LEAVE;
+    return o;
+}
+
+#define parse_expr(p,f) S_parse_expr(aTHX_ p,f)
+static OP *
+S_parse_expr(pTHX_ I32 fakeeof, U32 flags)
+{
+    OP *exprop;
+    if (flags & ~PARSE_OPTIONAL)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_expr");
+    exprop = parse_recdescent_for_op(GRAMEXPR, fakeeof);
+    if (!exprop && !(flags & PARSE_OPTIONAL)) {
+	if (!PL_parser->error_count)
+	    qerror(Perl_mess(aTHX_ "Parse error"));
+	exprop = newOP(OP_NULL, 0);
+    }
+    return exprop;
+}
+
+/*
+=for apidoc Amx|OP *|parse_arithexpr|U32 flags
+
+Parse a Perl arithmetic expression.  This may contain operators of precedence
+down to the bit shift operators.  The expression must be followed (and thus
+terminated) either by a comparison or lower-precedence operator or by
+something that would normally terminate an expression such as semicolon.
+If I<flags> includes C<PARSE_OPTIONAL> then the expression is optional,
+otherwise it is mandatory.  It is up to the caller to ensure that the
+dynamic parser state (L</PL_parser> et al) is correctly set to reflect
+the source of the code to be parsed and the lexical context for the
+expression.
+
+The op tree representing the expression is returned.  If an optional
+expression is absent, a null pointer is returned, otherwise the pointer
+will be non-null.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree is returned anyway.  The error is reflected in the parser state,
+normally resulting in a single exception at the top level of parsing
+which covers all the compilation errors that occurred.  Some compilation
+errors, however, will throw an exception immediately.
+
+=cut
+*/
+
+OP *
+Perl_parse_arithexpr(pTHX_ U32 flags)
+{
+    return parse_expr(LEX_FAKEEOF_COMPARE, flags);
+}
+
+/*
+=for apidoc Amx|OP *|parse_termexpr|U32 flags
+
+Parse a Perl term expression.  This may contain operators of precedence
+down to the assignment operators.  The expression must be followed (and thus
+terminated) either by a comma or lower-precedence operator or by
+something that would normally terminate an expression such as semicolon.
+If I<flags> includes C<PARSE_OPTIONAL> then the expression is optional,
+otherwise it is mandatory.  It is up to the caller to ensure that the
+dynamic parser state (L</PL_parser> et al) is correctly set to reflect
+the source of the code to be parsed and the lexical context for the
+expression.
+
+The op tree representing the expression is returned.  If an optional
+expression is absent, a null pointer is returned, otherwise the pointer
+will be non-null.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree is returned anyway.  The error is reflected in the parser state,
+normally resulting in a single exception at the top level of parsing
+which covers all the compilation errors that occurred.  Some compilation
+errors, however, will throw an exception immediately.
+
+=cut
+*/
+
+OP *
+Perl_parse_termexpr(pTHX_ U32 flags)
+{
+    return parse_expr(LEX_FAKEEOF_COMMA, flags);
+}
+
+/*
+=for apidoc Amx|OP *|parse_listexpr|U32 flags
+
+Parse a Perl list expression.  This may contain operators of precedence
+down to the comma operator.  The expression must be followed (and thus
+terminated) either by a low-precedence logic operator such as C<or> or by
+something that would normally terminate an expression such as semicolon.
+If I<flags> includes C<PARSE_OPTIONAL> then the expression is optional,
+otherwise it is mandatory.  It is up to the caller to ensure that the
+dynamic parser state (L</PL_parser> et al) is correctly set to reflect
+the source of the code to be parsed and the lexical context for the
+expression.
+
+The op tree representing the expression is returned.  If an optional
+expression is absent, a null pointer is returned, otherwise the pointer
+will be non-null.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree is returned anyway.  The error is reflected in the parser state,
+normally resulting in a single exception at the top level of parsing
+which covers all the compilation errors that occurred.  Some compilation
+errors, however, will throw an exception immediately.
+
+=cut
+*/
+
+OP *
+Perl_parse_listexpr(pTHX_ U32 flags)
+{
+    return parse_expr(LEX_FAKEEOF_LOWLOGIC, flags);
+}
+
+/*
+=for apidoc Amx|OP *|parse_fullexpr|U32 flags
+
+Parse a single complete Perl expression.  This allows the full
+expression grammar, including the lowest-precedence operators such
+as C<or>.  The expression must be followed (and thus terminated) by a
+token that an expression would normally be terminated by: end-of-file,
+closing bracketing punctuation, semicolon, or one of the keywords that
+signals a postfix expression-statement modifier.  If I<flags> includes
+C<PARSE_OPTIONAL> then the expression is optional, otherwise it is
+mandatory.  It is up to the caller to ensure that the dynamic parser
+state (L</PL_parser> et al) is correctly set to reflect the source of
+the code to be parsed and the lexical context for the expression.
+
+The op tree representing the expression is returned.  If an optional
+expression is absent, a null pointer is returned, otherwise the pointer
+will be non-null.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree is returned anyway.  The error is reflected in the parser state,
+normally resulting in a single exception at the top level of parsing
+which covers all the compilation errors that occurred.  Some compilation
+errors, however, will throw an exception immediately.
+
+=cut
+*/
+
+OP *
+Perl_parse_fullexpr(pTHX_ U32 flags)
+{
+    return parse_expr(LEX_FAKEEOF_NONEXPR, flags);
+}
+
+/*
+=for apidoc Amx|OP *|parse_block|U32 flags
+
+Parse a single complete Perl code block.  This consists of an opening
+brace, a sequence of statements, and a closing brace.  The block
+constitutes a lexical scope, so C<my> variables and various compile-time
+effects can be contained within it.  It is up to the caller to ensure
+that the dynamic parser state (L</PL_parser> et al) is correctly set to
+reflect the source of the code to be parsed and the lexical context for
+the statement.
+
+The op tree representing the code block is returned.  This is always a
+real op, never a null pointer.  It will normally be a C<lineseq> list,
+including C<nextstate> or equivalent ops.  No ops to construct any kind
+of runtime scope are included by virtue of it being a block.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree (most likely null) is returned anyway.  The error is reflected in
+the parser state, normally resulting in a single exception at the top
+level of parsing which covers all the compilation errors that occurred.
+Some compilation errors, however, will throw an exception immediately.
+
+The I<flags> parameter is reserved for future use, and must always
+be zero.
+
+=cut
+*/
+
+OP *
+Perl_parse_block(pTHX_ U32 flags)
+{
+    if (flags)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_block");
+    return parse_recdescent_for_op(GRAMBLOCK, LEX_FAKEEOF_NEVER);
+}
+
+/*
+=for apidoc Amx|OP *|parse_barestmt|U32 flags
+
+Parse a single unadorned Perl statement.  This may be a normal imperative
+statement or a declaration that has compile-time effect.  It does not
+include any label or other affixture.  It is up to the caller to ensure
+that the dynamic parser state (L</PL_parser> et al) is correctly set to
+reflect the source of the code to be parsed and the lexical context for
+the statement.
+
+The op tree representing the statement is returned.  This may be a
+null pointer if the statement is null, for example if it was actually
+a subroutine definition (which has compile-time side effects).  If not
+null, it will be ops directly implementing the statement, suitable to
+pass to L</newSTATEOP>.  It will not normally include a C<nextstate> or
+equivalent op (except for those embedded in a scope contained entirely
+within the statement).
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree (most likely null) is returned anyway.  The error is reflected in
+the parser state, normally resulting in a single exception at the top
+level of parsing which covers all the compilation errors that occurred.
+Some compilation errors, however, will throw an exception immediately.
+
+The I<flags> parameter is reserved for future use, and must always
+be zero.
+
+=cut
+*/
+
+OP *
+Perl_parse_barestmt(pTHX_ U32 flags)
+{
+    if (flags)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_barestmt");
+    return parse_recdescent_for_op(GRAMBARESTMT, LEX_FAKEEOF_NEVER);
+}
+
+/*
+=for apidoc Amx|SV *|parse_label|U32 flags
+
+Parse a single label, possibly optional, of the type that may prefix a
+Perl statement.  It is up to the caller to ensure that the dynamic parser
+state (L</PL_parser> et al) is correctly set to reflect the source of
+the code to be parsed.  If I<flags> includes C<PARSE_OPTIONAL> then the
+label is optional, otherwise it is mandatory.
+
+The name of the label is returned in the form of a fresh scalar.  If an
+optional label is absent, a null pointer is returned.
+
+If an error occurs in parsing, which can only occur if the label is
+mandatory, a valid label is returned anyway.  The error is reflected in
+the parser state, normally resulting in a single exception at the top
+level of parsing which covers all the compilation errors that occurred.
+
+=cut
+*/
+
+SV *
+Perl_parse_label(pTHX_ U32 flags)
+{
+    if (flags & ~PARSE_OPTIONAL)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_label");
+    if (PL_lex_state == LEX_KNOWNEXT) {
+	PL_parser->yychar = yylex();
+	if (PL_parser->yychar == LABEL) {
+	    char *lpv = pl_yylval.pval;
+	    STRLEN llen = strlen(lpv);
+	    SV *lsv;
+	    PL_parser->yychar = YYEMPTY;
+	    lsv = newSV_type(SVt_PV);
+	    SvPV_set(lsv, lpv);
+	    SvCUR_set(lsv, llen);
+	    SvLEN_set(lsv, llen+1);
+	    SvPOK_on(lsv);
+	    return lsv;
+	} else {
+	    yyunlex();
+	    goto no_label;
+	}
+    } else {
+	char *s, *t;
+	U8 c;
+	STRLEN wlen, bufptr_pos;
+	lex_read_space(0);
+	t = s = PL_bufptr;
+	c = (U8)*s;
+	if (!isIDFIRST_A(c))
+	    goto no_label;
+	do {
+	    c = (U8)*++t;
+	} while(isWORDCHAR_A(c));
+	wlen = t - s;
+	if (word_takes_any_delimeter(s, wlen))
+	    goto no_label;
+	bufptr_pos = s - SvPVX(PL_linestr);
+	PL_bufptr = t;
+	lex_read_space(LEX_KEEP_PREVIOUS);
+	t = PL_bufptr;
+	s = SvPVX(PL_linestr) + bufptr_pos;
+	if (t[0] == ':' && t[1] != ':') {
+	    PL_oldoldbufptr = PL_oldbufptr;
+	    PL_oldbufptr = s;
+	    PL_bufptr = t+1;
+	    return newSVpvn(s, wlen);
+	} else {
+	    PL_bufptr = s;
+	    no_label:
+	    if (flags & PARSE_OPTIONAL) {
+		return NULL;
+	    } else {
+		qerror(Perl_mess(aTHX_ "Parse error"));
+		return newSVpvs("x");
+	    }
+	}
+    }
+}
+
+/*
+=for apidoc Amx|OP *|parse_fullstmt|U32 flags
+
+Parse a single complete Perl statement.  This may be a normal imperative
+statement or a declaration that has compile-time effect, and may include
+optional labels.  It is up to the caller to ensure that the dynamic
+parser state (L</PL_parser> et al) is correctly set to reflect the source
+of the code to be parsed and the lexical context for the statement.
+
+The op tree representing the statement is returned.  This may be a
+null pointer if the statement is null, for example if it was actually
+a subroutine definition (which has compile-time side effects).  If not
+null, it will be the result of a L</newSTATEOP> call, normally including
+a C<nextstate> or equivalent op.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree (most likely null) is returned anyway.  The error is reflected in
+the parser state, normally resulting in a single exception at the top
+level of parsing which covers all the compilation errors that occurred.
+Some compilation errors, however, will throw an exception immediately.
+
+The I<flags> parameter is reserved for future use, and must always
+be zero.
+
+=cut
+*/
+
+OP *
+Perl_parse_fullstmt(pTHX_ U32 flags)
+{
+    if (flags)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_fullstmt");
+    return parse_recdescent_for_op(GRAMFULLSTMT, LEX_FAKEEOF_NEVER);
+}
+
+/*
+=for apidoc Amx|OP *|parse_stmtseq|U32 flags
+
+Parse a sequence of zero or more Perl statements.  These may be normal
+imperative statements, including optional labels, or declarations
+that have compile-time effect, or any mixture thereof.  The statement
+sequence ends when a closing brace or end-of-file is encountered in a
+place where a new statement could have validly started.  It is up to
+the caller to ensure that the dynamic parser state (L</PL_parser> et al)
+is correctly set to reflect the source of the code to be parsed and the
+lexical context for the statements.
+
+The op tree representing the statement sequence is returned.  This may
+be a null pointer if the statements were all null, for example if there
+were no statements or if there were only subroutine definitions (which
+have compile-time side effects).  If not null, it will be a C<lineseq>
+list, normally including C<nextstate> or equivalent ops.
+
+If an error occurs in parsing or compilation, in most cases a valid op
+tree is returned anyway.  The error is reflected in the parser state,
+normally resulting in a single exception at the top level of parsing
+which covers all the compilation errors that occurred.  Some compilation
+errors, however, will throw an exception immediately.
+
+The I<flags> parameter is reserved for future use, and must always
+be zero.
+
+=cut
+*/
+
+OP *
+Perl_parse_stmtseq(pTHX_ U32 flags)
+{
+    OP *stmtseqop;
+    I32 c;
+    if (flags)
+	Perl_croak(aTHX_ "Parsing code internal error (%s)", "parse_stmtseq");
+    stmtseqop = parse_recdescent_for_op(GRAMSTMTSEQ, LEX_FAKEEOF_CLOSING);
+    c = lex_peek_unichar(0);
+    if (c != -1 && c != /*{*/'}')
+	qerror(Perl_mess(aTHX_ "Parse error"));
+    return stmtseqop;
+}
+
+void
+Perl_munge_qwlist_to_paren_list(pTHX_ OP *qwlist)
+{
+    PERL_ARGS_ASSERT_MUNGE_QWLIST_TO_PAREN_LIST;
+    deprecate("qw(...) as parentheses");
+    force_next((4<<24)|')');
+    if (qwlist->op_type == OP_STUB) {
+	op_free(qwlist);
+    }
+    else {
+	start_force(PL_curforce);
+	NEXTVAL_NEXTTOKE.opval = qwlist;
+	force_next(THING);
+    }
+    force_next((2<<24)|'(');
 }
 
 /*

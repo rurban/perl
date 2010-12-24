@@ -229,13 +229,13 @@ $corelist =~ s/^%bug_tracker .*? ;/$tracker/eismx;
 
 unless ( $corelist =~ /and $perl_vstring releases of perl/ ) {
     warn "Adding $perl_vstring to the list of perl versions covered by Module::CoreList\n";
-    $corelist =~ s/\s*and (.*?) releases of perl/, $1 and $perl_vstring releases of perl/ism;
+    $corelist =~ s/(currently covers (?:.*?))\s*and (.*?) releases of perl/$1, $2 and $perl_vstring releases of perl/ism;
 }
 
 unless (
-    $corelist =~ /^%released \s* = \s* \( 
-        .*? 
-        $perl_vnum => .*? 
+    $corelist =~ /^%released \s* = \s* \(
+        .*?
+        $perl_vnum => .*?
         \);/ismx
     )
 {
@@ -260,7 +260,7 @@ sub fetch_url {
     my $url = shift;
     eval { require LWP::Simple };
     if ( LWP::Simple->can('get') ) {
-        return LWP::Simple->get($url);
+        return LWP::Simple::get($url);
     } elsif (`which curl`) {
         return `curl -s $url`;
     } elsif (`which wget`) {

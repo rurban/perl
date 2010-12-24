@@ -425,114 +425,36 @@ Does not use C<TARG>.  See also C<XPUSHu>, C<mPUSHu> and C<PUSHu>.
 	    return NORMAL; \
     } STMT_END
 
-/* these  tryAMAGICun* tryAMAGICbin* macros are no longer used in core
- * (except for tryAMAGICunDEREF*, tryAMAGICunTARGET),
- * and are only here for backwards compatibility */
+#define AMG_CALLun(sv,meth) \
+    amagic_call(sv,&PL_sv_undef, CAT2(meth,_amg), AMGf_noright | AMGf_unary)
 
-#define tryAMAGICbinW_var(meth_enum,assign,set) STMT_START { \
-	    SV* const left = *(sp-1); \
-	    SV* const right = *(sp); \
-	    if ((SvAMAGIC(left)||SvAMAGIC(right))) {\
-		SV * const tmpsv = amagic_call(left, \
-				   right, \
-				   (meth_enum), \
-				   (assign)? AMGf_assign: 0); \
-		if (tmpsv) { \
-		    SPAGAIN; \
-		    (void)POPs; set(tmpsv); RETURN; } \
-		} \
-	} STMT_END
-
-#define tryAMAGICbinW(meth,assign,set) \
-    tryAMAGICbinW_var(CAT2(meth,_amg),assign,set)
-
-#define tryAMAGICbin_var(meth_enum,assign) \
-		tryAMAGICbinW_var(meth_enum,assign,SETsv)
-#define tryAMAGICbin(meth,assign) \
-		tryAMAGICbin_var(CAT2(meth,_amg),assign)
-
-#define tryAMAGICbinSET(meth,assign) tryAMAGICbinW(meth,assign,SETs)
-
-#define tryAMAGICbinSET_var(meth_enum,assign) \
-    tryAMAGICbinW_var(meth_enum,assign,SETs)
-
-#define AMG_CALLun_var(sv,meth_enum) amagic_call(sv,&PL_sv_undef,  \
-					meth_enum,AMGf_noright | AMGf_unary)
-#define AMG_CALLun(sv,meth) AMG_CALLun_var(sv,CAT2(meth,_amg))
-
-#define AMG_CALLbinL(left,right,meth) \
-            amagic_call(left,right,CAT2(meth,_amg),AMGf_noright)
-
-#define tryAMAGICunW_var(meth_enum,set,shift,ret) STMT_START { \
-	    SV* tmpsv; \
-	    SV* arg= sp[shift]; \
-          if(0) goto am_again;  /* shut up unused warning */ \
-	  am_again: \
-	    if ((SvAMAGIC(arg))&&\
-		(tmpsv=AMG_CALLun_var(arg,(meth_enum)))) {\
-	       SPAGAIN; if (shift) sp += shift; \
-	       set(tmpsv); ret; } \
-	} STMT_END
-#define tryAMAGICunW(meth,set,shift,ret) \
-	tryAMAGICunW_var(CAT2(meth,_amg),set,shift,ret)
-
-#define FORCE_SETs(sv) STMT_START { sv_setsv(TARG, (sv)); SETTARG; } STMT_END
-
-#define tryAMAGICun_var(meth_enum) tryAMAGICunW_var(meth_enum,SETsvUN,0,RETURN)
-#define tryAMAGICun(meth)	tryAMAGICun_var(CAT2(meth,_amg))
-#define tryAMAGICunSET_var(meth_enum) tryAMAGICunW_var(meth_enum,SETs,0,RETURN)
-#define tryAMAGICunSET(meth)	tryAMAGICunW(meth,SETs,0,RETURN)
-#define tryAMAGICunTARGET(meth, shift)					\
-	STMT_START { dSP; sp--; 	/* get TARGET from below PL_stack_sp */		\
-	    { dTARGETSTACKED; 						\
-		{ dSP; tryAMAGICunW(meth,FORCE_SETs,shift,RETURN);}}} STMT_END
-
-#define setAGAIN(ref)	\
-    STMT_START {					\
-	sv = ref;					\
-	if (!SvROK(ref))				\
-	    Perl_croak(aTHX_ "Overloaded dereference did not return a reference");	\
-	if (ref != arg && SvRV(ref) != SvRV(arg)) {	\
-	    arg = ref;					\
-	    goto am_again;				\
-	}						\
+#define tryAMAGICunTARGET(meth, shift)				\
+    STMT_START {						\
+	dSP;							\
+	sp--; /* get TARGET from below PL_stack_sp */		\
+	{							\
+	    dTARGETSTACKED;					\
+	    dSP;						\
+	    SV *tmpsv;						\
+	    SV *arg= sp[shift];					\
+	    if (SvAMAGIC(arg) &&				\
+		(tmpsv = amagic_call(arg, &PL_sv_undef, CAT2(meth,_amg), \
+				     AMGf_noright | AMGf_unary))) {	\
+		SPAGAIN;					\
+		sp += shift;					\
+		sv_setsv(TARG, tmpsv);				\
+		SETTARG;					\
+		RETURN;						\
+	    }							\
+	}							\
     } STMT_END
 
-#define tryAMAGICunDEREF(meth) tryAMAGICunW(meth,setAGAIN,0,(void)0)
-#define tryAMAGICunDEREF_var(meth_enum) \
-	tryAMAGICunW_var(meth_enum,setAGAIN,0,(void)0)
-
-/* this macro is obsolete and is only here for backwards compatibility */
-
-#define tryAMAGICftest(chr)				\
-    STMT_START {					\
-	assert(chr != '?');				\
-	SvGETMAGIC(TOPs);				\
-	if ((PL_op->op_flags & OPf_KIDS)		\
-		&& SvAMAGIC(TOPs)) {			\
-	    const char tmpchr = (chr);			\
-	    SV * const tmpsv = amagic_call(TOPs,	\
-		newSVpvn_flags(&tmpchr, 1, SVs_TEMP),	\
-		ftest_amg, AMGf_unary);			\
-							\
-	    if (tmpsv) {				\
-		const OP *next = PL_op->op_next;	\
-							\
-		SPAGAIN;				\
-							\
-		if (next->op_type >= OP_FTRREAD &&	\
-		    next->op_type <= OP_FTBINARY &&	\
-		    next->op_private & OPpFT_STACKED	\
-		) {					\
-		    if (SvTRUE(tmpsv))			\
-			/* leave the object alone */	\
-			RETURN;				\
-		}					\
-							\
-		SETs(tmpsv);				\
-		RETURN;					\
-	    }						\
-	}						\
+/* This is no longer used anywhere in the core. You might wish to consider
+   calling amagic_deref_call() directly, as it has a cleaner interface.  */
+#define tryAMAGICunDEREF(meth)						\
+    STMT_START {							\
+	sv = amagic_deref_call(*sp, CAT2(meth,_amg));			\
+	SPAGAIN;							\
     } STMT_END
 
 
@@ -546,18 +468,6 @@ Does not use C<TARG>.  See also C<XPUSHu>, C<mPUSHu> and C<PUSHu>.
 		if (SvFLAGS(TARG) & SVs_PADMY)		\
 		   { sv_setsv(TARG, (sv)); SETTARG; }			\
 		else SETs(sv); } STMT_END
-
-/* newSVsv does not behave as advertised, so we copy missing
- * information by hand */
-
-/* SV* ref causes confusion with the member variable
-   changed SV* ref to SV* tmpRef */
-#define RvDEEPCP(rv) STMT_START { SV* tmpRef=SvRV(rv); SV* rv_copy;     \
-  if (SvREFCNT(tmpRef)>1 && (rv_copy = AMG_CALLun(rv,copy))) {          \
-    SvRV_set(rv, rv_copy);		    \
-    SvSETMAGIC(rv);			    \
-    SvREFCNT_dec(tmpRef);                   \
-  } } STMT_END
 
 /*
 =for apidoc mU||LVRET

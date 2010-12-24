@@ -1,6 +1,6 @@
 name: perl
-version: 5.013004
-abstract: Practical Extraction and Report Language
+version: 5.013008
+abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
 resources:
@@ -14,18 +14,32 @@ no_index:
   directory:
     - cpan
     - dist/Attribute-Handlers
+    - dist/autouse
     - dist/B-Lint
     - dist/base
+    - dist/bignum
     - dist/constant
     - dist/Cwd
     - dist/Data-Dumper
+    - dist/Devel-SelfStubber
+    - dist/Dumpvalue
+    - dist/Env
+    - dist/ExtUtils-CBuilder
+    - dist/ExtUtils-Command
     - dist/ExtUtils-Install
+    - dist/ExtUtils-Manifest
     - dist/ExtUtils-ParseXS
+    - dist/File-CheckTree
     - dist/Filter-Simple
+    - dist/I18N-Collate
     - dist/I18N-LangTags
+    - dist/if
     - dist/IO/
     - dist/lib/
     - dist/Locale-Maketext
+    - dist/Math-BigInt
+    - dist/Math-BigInt-FastCalc
+    - dist/Math-BigRat
     - dist/Module-CoreList
     - dist/Net-Ping
     - dist/Pod-Perldoc
@@ -90,12 +104,6 @@ no_index:
     - lib/version.t
     - pod/perldoc.pod
     - pod/perlfilter.pod
-    - pod/pod2latex.PL
-    - pod/pod2man.PL
-    - pod/pod2text.PL
-    - pod/pod2usage.PL
-    - pod/podchecker.PL
-    - pod/podselect.PL
     - Porting/Maintainers.pm
     - Porting/perldelta_template.pod
     - TestInit.pm

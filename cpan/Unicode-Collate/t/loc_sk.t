@@ -1,15 +1,30 @@
-#!perl
+
+BEGIN {
+    unless ("A" eq pack('U', 0x41)) {
+	print "1..0 # Unicode::Collate " .
+	    "cannot stringify a Unicode code point\n";
+	exit 0;
+    }
+    if ($ENV{PERL_CORE}) {
+	chdir('t') if -d 't';
+	@INC = $^O eq 'MacOS' ? qw(::lib) : qw(../lib);
+    }
+}
+
+use Test;
+BEGIN { plan tests => 52 };
+
 use strict;
 use warnings;
 use Unicode::Collate::Locale;
 
-use Test;
-plan tests => 40;
+ok(1);
+
+#########################
 
 my $objSk = Unicode::Collate::Locale->
     new(locale => 'SK', normalization => undef);
 
-ok(1);
 ok($objSk->getlocale, 'sk');
 
 $objSk->change(level => 1);
@@ -57,6 +72,8 @@ ok($objSk->lt("Ch", "CH"));
 
 ok($objSk->eq("a\x{308}", pack('U', 0xE4)));
 ok($objSk->eq("A\x{308}", pack('U', 0xC4)));
+ok($objSk->eq("a\x{308}\x{304}", "\x{1DF}"));
+ok($objSk->eq("A\x{308}\x{304}", "\x{1DE}"));
 ok($objSk->eq("c\x{30C}", "\x{10D}"));
 ok($objSk->eq("C\x{30C}", "\x{10C}"));
 ok($objSk->eq("o\x{302}", pack('U', 0xF4)));
@@ -66,4 +83,17 @@ ok($objSk->eq("S\x{30C}", "\x{160}"));
 ok($objSk->eq("z\x{30C}", "\x{17E}"));
 ok($objSk->eq("Z\x{30C}", "\x{17D}"));
 
-# 40
+# 42
+
+ok($objSk->eq("o\x{302}\x{300}", "\x{1ED3}"));
+ok($objSk->eq("O\x{302}\x{300}", "\x{1ED2}"));
+ok($objSk->eq("o\x{302}\x{301}", "\x{1ED1}"));
+ok($objSk->eq("O\x{302}\x{301}", "\x{1ED0}"));
+ok($objSk->eq("o\x{302}\x{303}", "\x{1ED7}"));
+ok($objSk->eq("O\x{302}\x{303}", "\x{1ED6}"));
+ok($objSk->eq("o\x{302}\x{309}", "\x{1ED5}"));
+ok($objSk->eq("O\x{302}\x{309}", "\x{1ED4}"));
+ok($objSk->eq("o\x{302}\x{323}", "\x{1ED9}"));
+ok($objSk->eq("O\x{302}\x{323}", "\x{1ED8}"));
+
+# 52

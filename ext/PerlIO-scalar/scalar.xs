@@ -47,9 +47,15 @@ PerlIOScalar_pushed(pTHX_ PerlIO * f, const char *mode, SV * arg,
     SvUPGRADE(s->var, SVt_PV);
     code = PerlIOBase_pushed(aTHX_ f, mode, Nullsv, tab);
     if (!SvOK(s->var) || (PerlIOBase(f)->flags) & PERLIO_F_TRUNCATE)
+    {
+	sv_force_normal(s->var);
 	SvCUR_set(s->var, 0);
+    }
     if ((PerlIOBase(f)->flags) & PERLIO_F_APPEND)
+    {
+	sv_force_normal(s->var);
 	s->posn = SvCUR(s->var);
+    }
     else
 	s->posn = 0;
     SvSETMAGIC(s->var);
@@ -78,6 +84,7 @@ PerlIOScalar_close(pTHX_ PerlIO * f)
 IV
 PerlIOScalar_fileno(pTHX_ PerlIO * f)
 {
+    PERL_UNUSED_ARG(f);
     return -1;
 }
 
@@ -144,12 +151,13 @@ PerlIOScalar_read(pTHX_ PerlIO *f, void *vbuf, Size_t count)
 	PerlIOScalar *s = PerlIOSelf(f, PerlIOScalar);
 	SV *sv = s->var;
 	char *p;
-	STRLEN len, got;
+	STRLEN len;
+	I32 got;
 	p = SvPV(sv, len);
 	got = len - (STRLEN)(s->posn);
 	if (got <= 0)
 	    return 0;
-	if (got > (STRLEN)count)
+	if ((STRLEN)got > (STRLEN)count)
 	    got = (STRLEN)count;
 	Copy(p + (STRLEN)(s->posn), vbuf, got, STDCHAR);
 	s->posn += (Off_t)got;
@@ -166,6 +174,7 @@ PerlIOScalar_write(pTHX_ PerlIO * f, const void *vbuf, Size_t count)
 	SV *sv = s->var;
 	char *dst;
 	SvGETMAGIC(sv);
+	sv_force_normal(sv);
 	if ((PerlIOBase(f)->flags) & PERLIO_F_APPEND) {
 	    dst = SvGROW(sv, SvCUR(sv) + count);
 	    offset = SvCUR(sv);
@@ -193,12 +202,14 @@ PerlIOScalar_write(pTHX_ PerlIO * f, const void *vbuf, Size_t count)
 IV
 PerlIOScalar_fill(pTHX_ PerlIO * f)
 {
+    PERL_UNUSED_ARG(f);
     return -1;
 }
 
 IV
 PerlIOScalar_flush(pTHX_ PerlIO * f)
 {
+    PERL_UNUSED_ARG(f);
     return 0;
 }
 
@@ -252,6 +263,7 @@ void
 PerlIOScalar_set_ptrcnt(pTHX_ PerlIO * f, STDCHAR * ptr, SSize_t cnt)
 {
     PerlIOScalar *s = PerlIOSelf(f, PerlIOScalar);
+    PERL_UNUSED_ARG(ptr);
     SvGETMAGIC(s->var);
     s->posn = SvCUR(s->var) - cnt;
 }
@@ -262,6 +274,9 @@ PerlIOScalar_open(pTHX_ PerlIO_funcs * self, PerlIO_list_t * layers, IV n,
 		  PerlIO * f, int narg, SV ** args)
 {
     SV *arg = (narg > 0) ? *args : PerlIOArg;
+    PERL_UNUSED_ARG(fd);
+    PERL_UNUSED_ARG(imode);
+    PERL_UNUSED_ARG(perm);
     if (SvROK(arg) || SvPOK(arg)) {
 	if (!f) {
 	    f = PerlIO_allocate(aTHX);

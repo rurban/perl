@@ -146,14 +146,6 @@ do so. Test it with older perl releases, and fix the problems you find.
 To make a minimal perl distribution, it's useful to look at
 F<t/lib/commonsense.t>.
 
-=head2 Move dual-life pod/*.PL into ext
-
-Nearly all the dual-life modules have been moved to F<ext>. However, we
-still  need to move F<pod/*.PL> into their respective directories
-in F<ext/>. They're referenced by (at least) C<plextract> in F<Makefile.SH>
-and C<utils> in F<win32/Makefile> and F<win32/makefile.ml>, and listed
-explicitly in F<win32/pod.mak>, F<vms/descrip_mms.template> and F<utils.lst>
-
 =head2 POSIX memory footprint
 
 Ilya observed that use POSIX; eats memory like there's no tomorrow, and at
@@ -471,7 +463,7 @@ Natively 64-bit systems need neither -Duse64bitint nor -Duse64bitall.
 On these systems, it might be the default compilation mode, and there
 is currently no guarantee that passing no use64bitall option to the
 Configure process will build a 32bit perl. Implementing -Duse32bit*
-options would be nice for perl 5.12.
+options would be nice for perl 5.14.
 
 =head2 Profile Perl - am I hot or not?
 
@@ -974,10 +966,13 @@ years for this discrepancy.
 
 =head2 UTF-8 revamp
 
-The handling of Unicode is unclean in many places. For example, the regexp
-engine matches in Unicode semantics whenever the string or the pattern is
-flagged as UTF-8, but that should not be dependent on an internal storage
-detail of the string.
+The handling of Unicode is unclean in many places.  In the regex engine
+there are especially many problems.  The swash data structure could be
+replaced my something better.  Inversion lists and maps are likely
+candidates.  The whole Unicode database could be placed in-core for a
+huge speed-up.  Only minimal work was done on the optimizer when utf8
+was added, with the result that the synthetic start class often will
+fail to narrow down the possible choices when given non-Latin1 input.
 
 =head2 Properly Unicode safe tokeniser and pads.
 
@@ -1249,7 +1244,7 @@ C<0xddddd>
 =head1 Big projects
 
 Tasks that will get your name mentioned in the description of the "Highlights
-of 5.12"
+of 5.14"
 
 =head2 make ithreads more robust
 
@@ -1258,7 +1253,8 @@ Generally make ithreads more robust. See also L</iCOW>
 This task is incremental - even a little bit of work on it will help, and
 will be greatly appreciated.
 
-One bit would be to write the missing code in sv.c:Perl_dirp_dup.
+One bit would be to determine how to clone directory handles on systems
+without a C<fchdir> function (in sv.c:Perl_dirp_dup).
 
 Fix Perl_sv_dup, et al so that threads can return objects.
 
@@ -1271,11 +1267,6 @@ it would be a good thing.
 =head2 (?{...}) closures in regexps
 
 Fix (or rewrite) the implementation of the C</(?{...})/> closures.
-
-=head2 A re-entrant regexp engine
-
-This will allow the use of a regex from inside (?{ }), (??{ }) and
-(?(?{ })|) constructs.
 
 =head2 Add class set operations to regexp engine
 

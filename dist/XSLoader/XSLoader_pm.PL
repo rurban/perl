@@ -1,13 +1,6 @@
 use strict;
 use Config;
 
-sub to_string {
-    my ($value) = @_;
-    $value =~ s/\\/\\\\/g;
-    $value =~ s/'/\\'/g;
-    return "'$value'";
-}
-
 1 while unlink "XSLoader.pm";
 open OUT, ">XSLoader.pm" or die $!;
 print OUT <<'EOT';
@@ -15,18 +8,12 @@ print OUT <<'EOT';
 
 package XSLoader;
 
-$VERSION = "0.10";
+$VERSION = "0.13";
 
 #use strict;
 
 # enable debug/trace messages from DynaLoader perl code
 # $dl_debug = $ENV{PERL_DL_DEBUG} || 0 unless defined $dl_debug;
-
-EOT
-
-print OUT '  my $dl_dlext = ', to_string($Config::Config{'dlext'}), ";\n" ;
-
-print OUT <<'EOT';
 
 package DynaLoader;
 
@@ -39,15 +26,19 @@ package XSLoader;
 sub load {
     package DynaLoader;
 
-    die q{XSLoader::load('Your::Module', $Your::Module::VERSION)} unless @_;
+    my ($module, $modlibname) = caller();
 
-    my($module) = $_[0];
+    if (@_) {
+	$module = $_[0];
+    } else {
+	$_[0] = $module;
+    }
 
     # work with static linking too
     my $boots = "$module\::bootstrap";
     goto &$boots if defined &$boots;
 
-    goto retry unless $module and defined &dl_load_file;
+    goto \&XSLoader::bootstrap_inherit unless $module and defined &dl_load_file;
 
     my @modparts = split(/::/,$module);
     my $modfname = $modparts[-1];
@@ -71,10 +62,17 @@ EOT
 
 print OUT <<'EOT';
     my $modpname = join('/',@modparts);
-    my $modlibname = (caller())[1];
     my $c = @modparts;
     $modlibname =~ s,[\\/][^\\/]+$,, while $c--;	# Q&D basename
-    my $file = "$modlibname/auto/$modpname/$modfname.$dl_dlext";
+EOT
+
+my $dl_dlext = quotemeta($Config::Config{'dlext'});
+
+print OUT <<"EOT";
+    my \$file = "\$modlibname/auto/\$modpname/\$modfname.$dl_dlext";
+EOT
+
+print OUT <<'EOT';
 
 #   print STDERR "XSLoader::load for $module ($file)\n" if $dl_debug;
 
@@ -87,7 +85,7 @@ print OUT <<'EOT';
         warn "$bs: $@\n" if $@;
     }
 
-    goto retry if not -f $file or -s $bs;
+    goto \&XSLoader::bootstrap_inherit if not -f $file or -s $bs;
 
     my $bootname = "boot_$module";
     $bootname =~ s/\W/_/g;
@@ -138,15 +136,26 @@ print OUT <<'EOT';
     # See comment block above
     push(@DynaLoader::dl_shared_objects, $file); # record files loaded
     return &$xs(@_);
+}
+EOT
 
-  retry:
-    my $bootstrap_inherit = DynaLoader->can('bootstrap_inherit') || 
-                            XSLoader->can('bootstrap_inherit');
-    goto &$bootstrap_inherit;
+# Can't test with DynaLoader->can('bootstrap_inherit' when building in the
+# core, as XSLoader gets built before DynaLoader.
+
+if ($] >= 5.006) {
+    print OUT <<'EOT';
+
+sub bootstrap_inherit {
+    require DynaLoader;
+    goto \&DynaLoader::bootstrap_inherit;
 }
 
-# Versions of DynaLoader prior to 5.6.0 don't have this function.
+EOT
+} else {
+    print OUT <<'EOT';
+
 sub bootstrap_inherit {
+    # Versions of DynaLoader prior to 5.6.0 don't have bootstrap_inherit.
     package DynaLoader;
 
     my $module = $_[0];
@@ -157,6 +166,10 @@ sub bootstrap_inherit {
     DynaLoader::bootstrap(@_);
 }
 
+EOT
+}
+
+print OUT <<'EOT';
 1;
 
 
@@ -168,14 +181,14 @@ XSLoader - Dynamically load C libraries into Perl code
 
 =head1 VERSION
 
-Version 0.10
+Version 0.13
 
 =head1 SYNOPSIS
 
     package YourPackage;
-    use XSLoader;
+    require XSLoader;
 
-    XSLoader::load 'YourPackage', $YourPackage::VERSION;
+    XSLoader::load();
 
 =head1 DESCRIPTION
 
@@ -224,6 +237,13 @@ If no C<$VERSION> was specified on the C<bootstrap> line, the last line becomes
 
     XSLoader::load 'YourPackage';
 
+If the call to C<load> is from the YourPackage, then that can be further
+simplified to
+
+    XSLoader::load();
+
+as C<load> will use C<caller> to determine the package.
+
 =head2 Backward compatible boilerplate
 
 If you want to have your cake and eat it too, you need a more complicated
@@ -264,18 +284,22 @@ in F<YourPackage.pm>) and XS code (defined in F<YourPackage.xs>).  If this
 Perl code makes calls into this XS code, and/or this XS code makes calls to
 the Perl code, one should be careful with the order of initialization.
 
-The call to C<XSLoader::load()> (or C<bootstrap()>) has three side effects:
+The call to C<XSLoader::load()> (or C<bootstrap()>) calls the module's
+bootstrap code. For modules build by F<xsubpp> (nearly all modules) this
+has three side effects:
 
 =over
 
 =item *
 
-if C<$VERSION> was specified, a sanity check is done to ensure that the
-versions of the F<.pm> and the (compiled) F<.xs> parts are compatible;
+A sanity check is done to ensure that the versions of the F<.pm> and the
+(compiled) F<.xs> parts are compatible. If C<$VERSION> was specified, this
+is used for the check. If not specified, it defaults to
+C<$XS_VERSION // $VERSION> (in the module's namespace)
 
 =item *
 
-the XSUBs are made accessible from Perl;
+the XSUBs are made accessible from Perl
 
 =item *
 
@@ -353,13 +377,7 @@ B<(W)> As the message says, some symbols stay undefined although the
 extension module was correctly loaded and initialised. The list of undefined
 symbols follows.
 
-=item C<XSLoader::load('Your::Module', $Your::Module::VERSION)>
-
-B<(F)> You tried to invoke C<load()> without any argument. You must supply
-a module name, and optionally its version.
-
 =back
-
 
 =head1 LIMITATIONS
 

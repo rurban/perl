@@ -72,6 +72,7 @@ ext.libs
 
 # these are scattered everywhere, ignore them
 .exists
+MYMETA.yml
 
 /miniperl
 /perl
@@ -105,6 +106,8 @@ t/test_state
 cpan/ExtUtils-MakeMaker/t/Big-Dummy/
 cpan/Module-Build/MB-*
 *.tmp
+t/*.ph
+t/lib/*.ph
 
 # t/op/require.t byproducts
 t/bleah.pm

@@ -21,11 +21,18 @@ sub croak { require Carp; Carp::croak(@_) }
     # are specified that don't exactly match.
     my $min_floating_slop;
 
+    # To guard against this program calling something that in turn ends up
+    # calling this program with the same inputs, and hence infinitely
+    # recursing, we keep a stack of the properties that are currently in
+    # progress, pushed upon entry, popped upon return.
+    my @recursed;
+
     sub SWASHNEW {
         my ($class, $type, $list, $minbits, $none) = @_;
         local $^D = 0 if $^D;
 
-        print STDERR __LINE__, ": ", join(", ", @_), "\n" if DEBUG;
+        $class = "" unless defined $class;
+        print STDERR __LINE__, ": class=$class, type=$type, list=$list, minbits=$minbits, none=$none\n" if DEBUG;
 
         ##
         ## Get the list of codepoints for the type.
@@ -70,6 +77,15 @@ sub croak { require Carp; Carp::croak(@_) }
 
         if ($type)
         {
+
+            # Verify that this isn't a recursive call for this property.
+            # Can't use croak, as it may try to recurse here itself.
+            my $class_type = $class . "::$type";
+            if (grep { $_ eq $class_type } @recursed) {
+                CORE::die "panic: Infinite recursion in SWASHNEW for '$type'\n";
+            }
+            push @recursed, $class_type;
+
             $type =~ s/^\s+//;
             $type =~ s/\s+$//;
 
@@ -78,7 +94,8 @@ sub croak { require Carp; Carp::croak(@_) }
         GETFILE:
             {
                 ##
-                ## It could be a user-defined property.
+                ## It could be a user-defined property.  Look in current
+                ## package if no package given
                 ##
 
                 my $caller1 = $type =~ s/(.+)::// ? $1 : caller(1);
@@ -93,7 +110,25 @@ sub croak { require Carp; Carp::croak(@_) }
                     }
                 }
 
-                require "$unicore_dir/Heavy.pl";
+                # During Perl's compilation, this routine may be called before
+                # the tables are constructed.  If so, we have a chicken/egg
+                # problem.  If we die, the tables never get constructed, so
+                # keep going, but return an empty table so only what the code
+                # has compiled in internally (currently ASCII/Latin1 range
+                # matching) will work.
+                BEGIN {
+                    # Poor man's constant, to avoid a run-time check.
+                    $utf8::{miniperl}
+                        = \! defined &DynaLoader::boot_DynaLoader;
+                }
+                if (miniperl) {
+                    eval "require '$unicore_dir/Heavy.pl'";
+                    last GETFILE if $@;
+                }
+                else {
+                    require "$unicore_dir/Heavy.pl";
+                }
+                BEGIN { delete $utf8::{miniperl} }
 
                 # Everything is caseless matching
                 my $property_and_table = lc $type;
@@ -103,7 +138,10 @@ sub croak { require Carp; Carp::croak(@_) }
                 # value indicates the table we should use.
                 my ($property, $table, @remainder) =
                                     split /\s*[:=]\s*/, $property_and_table, -1;
-                return $type if @remainder;
+                if (@remainder) {
+                    pop @recursed if @recursed;
+                    return $type;
+                }
 
                 my $prefix;
                 if (! defined $table) {
@@ -122,7 +160,10 @@ sub croak { require Carp; Carp::croak(@_) }
 
                     # And convert to canonical form.  Quit if not valid.
                     $property = $utf8::loose_property_name_of{$property};
-                    return $type unless defined $property;
+                    if (! defined $property) {
+                        pop @recursed if @recursed;
+                        return $type;
+                    }
 
                     $prefix = "$property=";
 
@@ -132,14 +173,20 @@ sub croak { require Carp; Carp::croak(@_) }
                         print STDERR __LINE__, ": table=$table\n" if DEBUG;
 
                         # Don't allow leading nor trailing slashes 
-                        return $type if $table =~ / ^ \/ | \/ $ /x;
+                        if ($table =~ / ^ \/ | \/ $ /x) {
+                            pop @recursed if @recursed;
+                            return $type;
+                        }
 
                         # Split on slash, in case it is a rational, like \p{1/5}
                         my @parts = split qr{ \s* / \s* }x, $table, -1;
                         print __LINE__, ": $type\n" if @parts > 2 && DEBUG;
 
                         # Can have maximum of one slash
-                        return $type if @parts > 2;
+                        if (@parts > 2) {
+                            pop @recursed if @recursed;
+                            return $type;
+                        }
 
                         foreach my $part (@parts) {
                             print __LINE__, ": part=$part\n" if DEBUG;
@@ -172,8 +219,10 @@ sub croak { require Carp; Carp::croak(@_) }
                             # Result better look like a number.  (This test is
                             # needed because, for example could have a plus in
                             # the middle.)
-                            return $type if $part
-                                            !~ / ^ -? [0-9]+ ( \. [0-9]+)? $ /x;
+                            if ($part !~ / ^ -? [0-9]+ ( \. [0-9]+)? $ /x) {
+                                pop @recursed if @recursed;
+                                return $type;
+                            }
                         }
 
                         #  If a rational...
@@ -277,7 +326,10 @@ sub croak { require Carp; Carp::croak(@_) }
                                 }
 
                                 # Quit if didn't find one.
-                                return $type unless defined $table;
+                                if (! defined $table) {
+                                    pop @recursed if @recursed;
+                                    return $type;
+                                }
                             }
                         }
                         print STDERR __LINE__, ": $property=$table\n" if DEBUG;
@@ -346,6 +398,7 @@ sub croak { require Carp; Carp::croak(@_) }
                 ## out what to do with $type. Ouch.
                 ##
 
+                pop @recursed if @recursed;
                 return $type;
             }
 
@@ -362,6 +415,7 @@ sub croak { require Carp; Carp::croak(@_) }
                 my $found = $Cache{$class, $file};
                 if ($found and ref($found) eq $class) {
                     print STDERR __LINE__, ": Returning cached '$file' for \\p{$type}\n" if DEBUG;
+                    pop @recursed if @recursed;
                     return $found;
                 }
 
@@ -429,7 +483,10 @@ sub croak { require Carp; Carp::croak(@_) }
                         elsif ($c =~ /^([0-9a-fA-F]+)/) {
                             $subobj = utf8->SWASHNEW("", $c, $minbits, 0);
                         }
-                        return $subobj unless ref $subobj;
+                        if (! ref $subobj) {
+                            pop @recursed if @recursed && $type;
+                            return $subobj;
+                        }
                         push @extras, $name => $subobj;
                         $bits = $subobj->{BITS} if $bits < $subobj->{BITS};
                     }
@@ -456,6 +513,8 @@ sub croak { require Carp; Carp::croak(@_) }
         if ($file) {
             $Cache{$class, $file} = $SWASH;
         }
+
+        pop @recursed if @recursed && $type;
 
         return $SWASH;
     }

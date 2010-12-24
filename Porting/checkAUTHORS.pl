@@ -197,6 +197,7 @@ sub read_authors_files {
     my (%count, %raw);
     foreach my $filename (@authors) {
         open FH, "<$filename" or die "Can't open $filename: $!";
+        binmode FH, ':encoding(ISO-8859-1)';
         while (<FH>) {
             next if /^\#/;
             next if /^-- /;
@@ -496,6 +497,7 @@ anno4000\100lublin.zrz.tu-berlin.de     anno4000\100mailbox.tu-berlin.de
 +                                       siegel\100zrz.tu-berlin.de
 arnold\100gnu.ai.mit.edu                arnold\100emoryu2.arpa
 +                                       gatech!skeeve!arnold
+arodland\100cpan.org                    andrew\100hbslabs.com
 arussell\100cs.uml.edu                  adam\100adam-pc.(none)
 ash\100cpan.org                         ash_cpan\100firemirror.com
 avarab\100gmail.com                     avar\100cpan.org
@@ -651,6 +653,7 @@ mab\100wdl.loral.com                    markb\100rdcf.sm.unisys.com
 marcel\100codewerk.com                  gr\100univie.ac.at
 mark.p.lutz\100boeing.com               tecmpl1\100triton.ca.boeing.com
 marnix\100gmail.com                     pttesac!marnix!vanam
+marty+p5p\100kasei.com                  marty\100martian.org
 mats\100sm6sxl.net                      mats\100sm5sxl.net
 mbarbon\100dsi.unive.it                 mattia.barbon\100libero.it
 mcmahon\100ibiblio.org                  mcmahon\100metalab.unc.edu
@@ -662,6 +665,7 @@ mgjv\100comdyn.com.au                   mgjv\100tradingpost.com.au
 mlh\100swl.msd.ray.com                  webtools\100uewrhp03.msd.ray.com
 michael.schroeder\100informatik.uni-erlangen.de mls\100suse.de
 mike\100stok.co.uk                      mike\100exegenix.com
+miyagawa\100bulknews.net                    miyagawa\100edge.co.jp
 mjtg\100cam.ac.uk                       mjtg\100cus.cam.ac.uk
 mikedlr\100tardis.ed.ac.uk              mikedlr\100it.com.pl
 moritz\100casella.verplant.org          moritz\100faui2k3.org
@@ -686,6 +690,8 @@ ilya\100math.berkeley.edu               ilya\100math.ohio-state.edu
 +                                       nospam-abuse\100ilyaz.org
 +                                       [9]ilya\100math.ohio-state.edu
 ilya\100martynov.org                    ilya\100juil.nonet
+
+joshua.pritikin\100db.com               joshua\100paloalto.com
 
 okamoto\100corp.hp.com                  okamoto\100hpcc123.corp.hp.com
 orwant\100oreilly.com                   orwant\100media.mit.edu
@@ -716,6 +722,7 @@ Peter.Dintelmann\100Dresdner-Bank.com   peter.dintelmann\100dresdner-bank.com
 pfeifer\100wait.de                      pfeifer\100charly.informatik.uni-dortmund.de
 +                                       upf\100de.uu.net
 rabbit\100rabbit.us                     rabbit+bugs\100rabbit.us
+perl\100aaroncrane.co.uk		arc\100cpan.org
 phil\100perkpartners.com                phil\100finchcomputer.com
 pimlott\100idiomtech.com                andrew\100pimlott.net
 +                                       pimlott\100abel.math.harvard.edu
@@ -730,6 +737,7 @@ public\100khwilliamson.com              khw\100karl.(none)
 radu\100netsoft.ro                      rgreab\100fx.ro
 raphael.manfredi\100pobox.com           raphael_manfredi\100grenoble.hp.com
 renee.baecker\100smart-websolutions.de  reneeb\100reneeb-desktop.(none)
++                                       otrs\100ubuntu.(none)
 richard.foley\100rfi.net                richard.foley\100t-online.de
 +                                       richard.foley\100ubs.com
 +                                       richard.foley\100ubsw.com
@@ -810,6 +818,7 @@ thomas.dorner\100start.de               tdorner\100amadeus.net
 tjenness\100cpan.org                    t.jenness\100jach.hawaii.edu
 +                                       timj\100jach.hawaii.edu
 tobez\100tobez.org                      tobez\100plab.ku.dk
+toddr\100cpanel.net                     toddr\100cpan.org
 tom\100compton.nu                       thh\100cyberscience.com
 tom.horsley\100mail.ccur.com            tom.horsley\100ccur.com
 +                                       tom\100amber.ssd.hcsc.com

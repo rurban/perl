@@ -15,6 +15,91 @@ Consult your favorite dictionary for details.
 
 =head1 EPIGRAPHS
 
+=head2 v5.13.8 - Roger Williams, L<"The Fifth Gift"|http://www.kuro5hin.org/story/2005/8/19/21304/8493>
+
+The aliens called the box a "matter generator," but we'd be more inclined
+to call it a matter duplicator.  By connecting switches and potentiometers
+between the copper posts it was possible to make the box mark off two
+cubic rectangular areas of volume.  Make a certain contact, and these
+areas would be isolated within perfectly reflective fields.  They could
+be expanded or contracted by altering resistances between other posts.
+As I worked out the user interface I built a little control panel for
+the device.  It was actually a clever way for the aliens to do things;
+instead of trying to build controls we could use, they built us an
+interface we could attach to controls that made sense to us.  It could
+also be automated.
+
+Once you had made the contact that established the shielded volumes,
+if you made another certain contact the contents of the first volume
+were copied to the second.  The machine copied metal, plastic, steel,
+and diamond with equal ease.  Copies of copies of copies of copies were
+indistinguishable from the originals at any magnification, even using
+techniques like X-ray crystallography.
+
+=head2 v5.13.7 - Andy Wachowski and Lana Wachowski, 'The Matrix'
+
+[Neo sees a black cat walk by them, and then a similar black cat walk by them just like the first one]
+
+Neo:      Whoa. Deja vu.
+
+[Everyone freezes right in their tracks]
+
+Trinity:  What did you just say?
+Neo:      Nothing. Just had a little deja vu.
+Trinity:  What did you see?
+Cypher:   What happened?
+Neo:      A black cat went past us, and then another that looked just like it.
+Trinity:  How much like it? Was it the same cat?
+Neo:      It might have been. I'm not sure.
+Morpheus: Switch! Apoc!
+Neo:      What is it?
+Trinity:  A deja vu is usually a glitch in the Matrix. It happens when they change something.
+
+=head2 v5.13.6 - Haruki Murakami, "Kafka on the Shore"
+
+The boy called Crow softly rests a hand on my shoulder, and with that
+he storm vanishes.
+
+"From now on -- no matter what -- you've got to be the world's toughest
+fifteen-year-old. That's the only way you're going to survive. And in order
+to do that, you've got to figure out what it means to be tough. You following
+me?"
+
+I keep my eyes closed and don't reply. I just want to sink off into sleep
+like this, his hand on my shoulder. I hear the faint flutter of wings.
+
+"You're going to be the world's toughest fifteen-year-old," Crow whispers
+as I try to fall asleep. Like he was carving the words in a deep blue tattoo
+on my heart.
+
+(Translated from Japanese by Philip Gabriel)
+
+=head2 v5.13.5 - Joseph Sheridan Le Fanu, "The Room in the Dragon Volant"
+
+Candle in hand I stepped in.  I do not know whether the quality of
+air, long undisturbed, is peculiar; to me it has always seemed so, and
+the damp smell of the old masonry hung in this atmosphere.  My candle
+faintly lighted the bare stone wall that enclosed the stair, the foot
+of which I could not see.  Down I went, and a few turns brought me to
+the stone floor.  Here was another door, of the simple, old, oak kind,
+deep sunk in the thickness of the wall.  The large end of the key
+fitted this.  The lock was stiff; I set the candle down upon the
+stair, and applied both hands; it turned with difficulty, and as it
+revolved, uttered a shriek that alarmed me for my secret.
+
+For some minutes I did not move.  In a little time, however, I took
+courage, and opened the door.  The night-air floating in puffed out
+the candle.  There was a thicket of holly and underwood, as dense as a
+jungle, close about the door.  I should have been in pitch-darkness,
+were it not that through the topmost leaves there twinkled, here and
+there, a glimmer of moonshine.
+
+Softly, lest any one should have opened his window at the sound of the
+rusty bolt, I struggled through this till I gained a view of the open
+grounds.  Here I found that the brushwood spread a good way up the
+park, uniting with the wood that approached the little temple I have
+described. 
+
 =head2 v5.13.4 - Lewis Carroll, "Alice's Adventures in Wonderland"
 
 `How the creatures order one about, and make one repeat lessons!' thought Alice;
@@ -109,13 +194,13 @@ volcano were once more to set to work."
 
 "Now suppose," chortled Dr. Breed, enjoying himself, "that there were
 many possible ways in which water could crystallize, could freeze.
-Suppose that the sort of ice we skate upon and put into highballs—
-what we might call ice-one—is only one of several types of ice.
+Suppose that the sort of ice we skate upon and put into highballs --
+what we might call ice-one -- is only one of several types of ice.
 Suppose water always froze as ice-one on Earth because it had never
 had a seed to teach it how to form ice-two, ice-three, ice-four
 ...? And suppose," he rapped on his desk with his old hand again,
-"that there were one form, which we will call ice-nine—a crystal as
-hard as this desk—with a melting point of, let us say, one-hundred
+"that there were one form, which we will call ice-nine -- a crystal as
+hard as this desk -- with a melting point of, let us say, one-hundred
 degrees Fahrenheit, or, better still, a melting point of one-hundred-
 and-thirty degrees."
 
@@ -192,7 +277,7 @@ is the driest thing I know. Silence all round, if you please! "William
 the Conqueror, whose cause was favoured by the pope, was soon submitted
 to by the English, who wanted leaders, and had been of late much
 accustomed to usurpation and conquest. Edwin and Morcar, the earls of
-Mercia and Northumbria—"'
+Mercia and Northumbria --"'
 
 =head2 v5.12.0-RC2 - no epigraph
 
@@ -265,7 +350,7 @@ done it or not, I felt clearly of course that I wasn't Napoleon.
 =head2 v5.11.3 - Mark Twain, "The Adventures of Tom Sawyer"
 
 "Say -- I'm going in a swimming, I am. Don't you wish you could? But of
-course you'd druther work—wouldn't you? Course you would!"
+course you'd druther work -- wouldn't you? Course you would!"
 
 Tom contemplated the boy a bit, and said: "What do you call work?"
 

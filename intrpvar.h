@@ -15,7 +15,7 @@
 /* These variables are per-interpreter in threaded/multiplicity builds,
  * global otherwise.
 
- * Don't forget to re-run embed.pl to propagate changes! */
+ * Don't forget to re-run regen/embed.pl to propagate changes! */
 
 /* New variables must be added to the very end for binary compatibility.
  * XSUB.h provides wrapper functions via perlapi.h that make this
@@ -58,7 +58,7 @@ PERLVAR(Itmps_stack,	SV **)		/* mortals we've made */
 PERLVARI(Itmps_ix,	I32,	-1)
 PERLVARI(Itmps_floor,	I32,	-1)
 PERLVAR(Itmps_max,	I32)
-PERLVAR(Imodcount,	I32)		/* how much mod()ification in
+PERLVAR(Imodcount,	I32)		/* how much op_lvalue()ification in
 					   assignment? */
 
 PERLVAR(Imarkstack,	I32 *)		/* stack_sp locations we're
@@ -171,10 +171,52 @@ PERLVARI(Irehash_seed_set, bool, FALSE)	/* 582 hash initialized? */
 
 PERLVARA(Icolors,6,	char *)		/* from regcomp.c */
 
-PERLVARI(Ipeepp,	peep_t, MEMBER_TO_FPTR(Perl_peep))
-				/* Pointer to per-sub peephole optimizer */
-PERLVARI(Irpeepp,	peep_t, MEMBER_TO_FPTR(Perl_rpeep))
-				/* Pointer to recursive peephole optimizer */
+/*
+=for apidoc Amn|peep_t|PL_peepp
+
+Pointer to the per-subroutine peephole optimiser.  This is a function
+that gets called at the end of compilation of a Perl subroutine (or
+equivalently independent piece of Perl code) to perform fixups of
+some ops and to perform small-scale optimisations.  The function is
+called once for each subroutine that is compiled, and is passed, as sole
+parameter, a pointer to the op that is the entry point to the subroutine.
+It modifies the op tree in place.
+
+The peephole optimiser should never be completely replaced.  Rather,
+add code to it by wrapping the existing optimiser.  The basic way to do
+this can be seen in L<perlguts/Compile pass 3: peephole optimization>.
+If the new code wishes to operate on ops throughout the subroutine's
+structure, rather than just at the top level, it is likely to be more
+convenient to wrap the L</PL_rpeepp> hook.
+
+=cut
+*/
+
+PERLVARI(Ipeepp,	peep_t, Perl_peep)
+
+/*
+=for apidoc Amn|peep_t|PL_rpeepp
+
+Pointer to the recursive peephole optimiser.  This is a function
+that gets called at the end of compilation of a Perl subroutine (or
+equivalently independent piece of Perl code) to perform fixups of some
+ops and to perform small-scale optimisations.  The function is called
+once for each chain of ops linked through their C<op_next> fields;
+it is recursively called to handle each side chain.  It is passed, as
+sole parameter, a pointer to the op that is at the head of the chain.
+It modifies the op tree in place.
+
+The peephole optimiser should never be completely replaced.  Rather,
+add code to it by wrapping the existing optimiser.  The basic way to do
+this can be seen in L<perlguts/Compile pass 3: peephole optimization>.
+If the new code wishes to operate only on ops at a subroutine's top level,
+rather than throughout the structure, it is likely to be more convenient
+to wrap the L</PL_peepp> hook.
+
+=cut
+*/
+
+PERLVARI(Irpeepp,	peep_t, Perl_rpeep)
 
 /*
 =for apidoc Amn|Perl_ophook_t|PL_opfreehook
@@ -206,10 +248,11 @@ PERLVAR(Iregmatch_state, regmatch_state *)
 PERLVAR(Idelaymagic,	U16)		/* ($<,$>) = ... */
 PERLVAR(Ilocalizing,	U8)		/* are we processing a local() list? */
 PERLVAR(Icolorset,	bool)		/* from regcomp.c */
-PERLVARI(Idirty,	bool, FALSE)	/* in the middle of tearing things
-					   down? */
 PERLVAR(Iin_eval,	U8)		/* trap "fatal" errors? */
 PERLVAR(Itainted,	bool)		/* using variables controlled by $< */
+
+/* current phase the interpreter is in */
+PERLVARI(Iphase,	enum perl_phase, PERL_PHASE_CONSTRUCT)
 
 /* This value may be set when embedding for full cleanup  */
 /* 0=none, 1=full, 2=full with checks */
@@ -253,7 +296,7 @@ The C variable which corresponds to Perl's $^W warning variable.
 */
 
 PERLVAR(Idowarn,	U8)
-PERLVAR(Idoextract,	bool)
+     /* Space for a U8  */
 PERLVAR(Isawampersand,	bool)		/* must save all match strings */
 PERLVAR(Iunsafe,	bool)
 PERLVAR(Iexit_flags,	U8)		/* was exit() unexpected, etc. */
@@ -423,7 +466,7 @@ PERLVAR(IDBcv,		CV *)		/* from perl.c */
 PERLVARI(Igeneration,	int,	100)	/* from op.c */
 
 PERLVARI(Iin_clean_objs,bool,    FALSE)	/* from sv.c */
-PERLVARI(Iin_clean_all,	bool,    FALSE)	/* from sv.c */
+PERLVARI(Iin_clean_all,	bool,    FALSE)	/* ptrs to freed SVs now legal */
 PERLVAR(Inomemok,	bool)		/* let malloc context handle nomem */
 PERLVARI(Isavebegin,     bool,	FALSE)	/* save BEGINs for compiler	*/
 
@@ -445,12 +488,11 @@ PERLVAR(Isighandlerp,	Sighandler_t)
 
 PERLVARA(Ibody_roots,	PERL_ARENA_ROOTS_SIZE, void*) /* array of body roots */
 
-PERLVAR(Inice_chunk,	char *)		/* a nice chunk of memory to reuse */
-PERLVAR(Inice_chunk_size,	U32)	/* how nice the chunk of memory is */
+PERLVAR(Iunicode, U32)	/* Unicode features: $ENV{PERL_UNICODE} or -C */
 
 PERLVARI(Imaxo,	int,	MAXO)		/* maximum number of ops */
 
-PERLVARI(Irunops,	runops_proc_t,	MEMBER_TO_FPTR(RUNOPS_DEFAULT))
+PERLVARI(Irunops,	runops_proc_t,	RUNOPS_DEFAULT)
 
 /*
 =for apidoc Amn|SV|PL_sv_undef
@@ -616,7 +658,7 @@ PERLVAR(Icustom_op_names, HV*)  /* Names of user defined ops */
 PERLVAR(Icustom_op_descs, HV*)  /* Descriptions of user defined ops */
 
 #ifdef PERLIO_LAYERS
-PERLVARI(Iperlio, PerlIO *,NULL)
+PERLVARI(Iperlio, PerlIOl *,NULL)
 PERLVARI(Iknown_layers, PerlIO_list_t *,NULL)
 PERLVARI(Idef_layerlist, PerlIO_list_t *,NULL)
 #endif
@@ -635,10 +677,6 @@ PERLVARI(Iunitcheckav_save, AV*, NULL)	/* save UNITCHECK{}s when compiling */
 
 PERLVARI(Iclocktick, long, 0)	/* this many times() ticks in a second */
 
-/* Space for an int */
-
-PERLVAR(Iunicode, U32)	/* Unicode features: $ENV{PERL_UNICODE} or -C */
-
 PERLVAR(Isignals, U32)	/* Using which pre-5.8 signals */
 
 PERLVAR(Ireentrant_retint, int)	/* Integer return value from reentrant functions */
@@ -646,19 +684,19 @@ PERLVAR(Ireentrant_retint, int)	/* Integer return value from reentrant functions
 PERLVAR(Istashcache,	HV *)		/* Cache to speed up S_method_common */
 
 /* Hooks to shared SVs and locks. */
-PERLVARI(Isharehook,	share_proc_t,	MEMBER_TO_FPTR(Perl_sv_nosharing))
-PERLVARI(Ilockhook,	share_proc_t,	MEMBER_TO_FPTR(Perl_sv_nosharing))
+PERLVARI(Isharehook,	share_proc_t,	Perl_sv_nosharing)
+PERLVARI(Ilockhook,	share_proc_t,	Perl_sv_nosharing)
 #ifdef NO_MATHOMS
 #  define PERL_UNLOCK_HOOK Perl_sv_nosharing
 #else
 /* This reference ensures that the mathoms are linked with perl */
 #  define PERL_UNLOCK_HOOK Perl_sv_nounlocking
 #endif
-PERLVARI(Iunlockhook,	share_proc_t,	MEMBER_TO_FPTR(PERL_UNLOCK_HOOK))
+PERLVARI(Iunlockhook,	share_proc_t,	PERL_UNLOCK_HOOK)
 
-PERLVARI(Ithreadhook,	thrhook_proc_t,	MEMBER_TO_FPTR(Perl_nothreadhook))
+PERLVARI(Ithreadhook,	thrhook_proc_t,	Perl_nothreadhook)
 
-PERLVARI(Isignalhook,	despatch_signals_proc_t, MEMBER_TO_FPTR(Perl_despatch_signals))
+PERLVARI(Isignalhook,	despatch_signals_proc_t, Perl_despatch_signals)
 
 PERLVARI(Ihash_seed, UV, 0)		/* Hash initializer */
 
@@ -713,7 +751,7 @@ PERLVARI(Islab_count, U32, 0)	/* Size of the array */
 #endif
 
 /* Can shared object be destroyed */
-PERLVARI(Idestroyhook, destroyable_proc_t, MEMBER_TO_FPTR(Perl_sv_destroyable))
+PERLVARI(Idestroyhook, destroyable_proc_t, Perl_sv_destroyable)
 
 #ifdef DEBUG_LEAKING_SCALARS
 PERLVARI(Isv_serial, U32, 0) /* SV serial number, used in sv.c */
@@ -727,6 +765,12 @@ PERLVAR(Iregistered_mros, HV *)
 
 /* Compile-time block start/end hooks */
 PERLVAR(Iblockhooks, AV *)
+
+
+/* Everything that folds to a character, for case insensitivity regex matching */
+PERLVARI(Iutf8_foldclosures,	HV *, NULL)
+
+PERLVAR(Icustom_ops, HV *)      /* custom op registrations */
 
 /* If you are adding a U8 or U16, check to see if there are 'Space' comments
  * above on where there are gaps which currently will be structure padding.  */

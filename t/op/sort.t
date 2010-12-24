@@ -6,7 +6,7 @@ BEGIN {
     require 'test.pl';
 }
 use warnings;
-plan( tests => 159 );
+plan( tests => 162 );
 
 # these shouldn't hang
 {
@@ -889,4 +889,52 @@ fresh_perl_is('sub w ($$) {my ($l, my $r) = @_; my $v = \@_; undef @_; @_ = 0..2
     @a = (); @b = ();
 
     is($count, 0, 'all gone');
+}
+
+# [perl #77930] The context stack may be reallocated during a sort, as a
+#               result of deeply-nested (or not-so-deeply-nested) calls
+#               from a custom sort subroutine.
+fresh_perl_is
+ '
+   $sub = sub {
+    local $count = $count+1;
+    ()->$sub if $count < 1000;
+    $a cmp $b
+   };
+   () = sort $sub qw<a b c d e f g>;
+   print "ok"
+ ',
+ 'ok',
+  {},
+ '[perl #77930] cx_stack reallocation during sort'
+;
+
+# [perl #76026]
+# Match vars should not leak from one sort sub call to the next
+{
+  my $output = '';
+  sub soarter {
+    $output .= $1;
+    "Leakage" =~ /(.*)/;
+    1
+  }
+  sub soarterdd($$) {
+    $output .= $1;
+    "Leakage" =~ /(.*)/;
+    1
+  }
+
+  "Win" =~ /(.*)/;
+  my @b = sort soarter 0..2;
+
+  like $output, qr/^(?:Win)+\z/,
+   "Match vars do not leak from one plain sort sub to the next";
+
+  $output = '';
+
+  "Win" =~ /(.*)/;
+  @b = sort soarterdd 0..2;
+
+  like $output, qr/^(?:Win)+\z/,
+   'Match vars do not leak from one $$ sort sub to the next';
 }

@@ -10,7 +10,7 @@ $|  = 1;
 use warnings;
 use Config;
 
-plan tests => 109;
+plan tests => 114;
 
 my $Perl = which_perl();
 
@@ -323,4 +323,37 @@ like($@, qr/Modification of a read-only value attempted/, "readonly fh");
     package main;
 
     ok( open(my $f, '-|', $p),     'open -| magic');
+}
+
+# [perl #77492] Crash when stringifying a glob, a reference to which has
+#               been opened and written to.
+fresh_perl_is(
+    '
+      open my $fh, ">", \*STDOUT;
+      print $fh "hello";
+     "".*STDOUT;
+      print "ok";
+      unlink \*STDOUT;
+    ',
+    'ok', { stderr => 1 },
+    '[perl #77492]: open $fh, ">", \*glob causes SEGV');
+
+# [perl #77684] Opening a reference to a glob copy.
+{
+    my $var = *STDOUT;
+    open my $fh, ">", \$var;
+    print $fh "hello";
+    is $var, "hello", '[perl #77684]: open $fh, ">", \$glob_copy'
+        # when this fails, it leaves an extra file:
+        or unlink \*STDOUT;
+}
+
+# check that we can call methods on filehandles auto-magically
+# and have IO::File loaded for us
+{
+    is( $INC{'IO/File.pm'}, undef, "IO::File not loaded" );
+    my $var = "";
+    open my $fh, ">", \$var;
+    ok( eval { $fh->autoflush(1); 1 }, '$fh->autoflush(1) lives' );
+    ok( $INC{'IO/File.pm'}, "IO::File now loaded" );
 }

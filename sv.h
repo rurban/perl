@@ -117,7 +117,7 @@ struct STRUCT_SV {		/* struct sv { */
     PERL_BITFIELD32 sv_debug_optype:9;	/* the type of OP that allocated us */
     PERL_BITFIELD32 sv_debug_inpad:1;	/* was allocated in a pad for an OP */
     PERL_BITFIELD32 sv_debug_line:16;	/* the line where we were allocated */
-    U32		    sv_debug_serial;	/* serial number of sv allocation   */
+    UV		    sv_debug_serial;	/* serial number of sv allocation   */
     char *	    sv_debug_file;	/* the file where we were allocated */
     SV *	    sv_debug_parent;	/* what we were cloned from (ithreads)*/
 #endif
@@ -1421,6 +1421,9 @@ Returns a pointer to the string in the SV, or a stringified form of
 the SV if the SV does not contain a string.  The SV may cache the
 stringified form becoming C<SvPOK>.  Handles 'get' magic.
 
+=for apidoc Am|char*|SvPV_nomg_nolen|SV* sv
+Like C<SvPV_nolen> but doesn't process magic.
+
 =for apidoc Am|IV|SvIV|SV* sv
 Coerces the given SV to an integer and returns it. See C<SvIVx> for a
 version which guarantees to evaluate sv only once.
@@ -1458,6 +1461,12 @@ C<sv> only once. Only use this if C<sv> is an expression with side effects,
 otherwise use the more efficient C<SvUV>.
 
 =for apidoc Am|bool|SvTRUE|SV* sv
+Returns a boolean indicating whether Perl would evaluate the SV as true or
+false.  See SvOK() for a defined/undefined test.  Handles 'get' magic
+unless the scalar is already SvPOK, SvIOK or SvNOK (the public, not the
+private flags).
+
+=for apidoc Am|bool|SvTRUE_nomg|SV* sv
 Returns a boolean indicating whether Perl would evaluate the SV as true or
 false.  See SvOK() for a defined/undefined test.  Does not handle 'get' magic.
 
@@ -1510,6 +1519,9 @@ scalar.
 
 =for apidoc Am|void|sv_catpvn_nomg|SV* sv|const char* ptr|STRLEN len
 Like C<sv_catpvn> but doesn't process magic.
+
+=for apidoc Am|void|sv_catpv_nomg|SV* sv|const char* ptr
+Like C<sv_catpv> but doesn't process magic.
 
 =for apidoc Am|void|sv_setsv_nomg|SV* dsv|SV* ssv
 Like C<sv_setsv> but doesn't process magic.
@@ -1576,6 +1588,10 @@ Like sv_utf8_upgrade, but doesn't do magic on C<sv>
 #define SvPV_nolen(sv) \
     ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
      ? SvPVX(sv) : sv_2pv_flags(sv, 0, SV_GMAGIC))
+
+#define SvPV_nomg_nolen(sv) \
+    ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
+     ? SvPVX(sv) : sv_2pv_flags(sv, 0, 0))
 
 #define SvPV_nolen_const(sv) \
     ((SvFLAGS(sv) & (SVf_POK)) == SVf_POK \
@@ -1653,6 +1669,22 @@ Like sv_utf8_upgrade, but doesn't do magic on C<sv>
 	    :   SvNOK(sv)					\
 		? SvNVX(sv) != 0.0				\
 		: sv_2bool(sv) )
+#  define SvTRUE_nomg(sv) (					\
+    !sv								\
+    ? 0								\
+    :    SvPOK(sv)						\
+	?   (({XPV *nxpv = (XPV*)SvANY(sv);			\
+	     nxpv &&						\
+	     (nxpv->xpv_cur > 1 ||				\
+	      (nxpv->xpv_cur && *(sv)->sv_u.svu_pv != '0')); })	\
+	     ? 1						\
+	     : 0)						\
+	:							\
+	    SvIOK(sv)						\
+	    ? SvIVX(sv) != 0					\
+	    :   SvNOK(sv)					\
+		? SvNVX(sv) != 0.0				\
+		: sv_2bool_flags(sv,0) )
 #  define SvTRUEx(sv) ({SV *_sv = (sv); SvTRUE(_sv); })
 
 #else /* __GNUC__ */
@@ -1685,6 +1717,21 @@ Like sv_utf8_upgrade, but doesn't do magic on C<sv>
 	    :   SvNOK(sv)					\
 		? SvNVX(sv) != 0.0				\
 		: sv_2bool(sv) )
+#  define SvTRUE_nomg(sv) (					\
+    !sv								\
+    ? 0								\
+    :    SvPOK(sv)						\
+	?   ((PL_Xpv = (XPV*)SvANY(PL_Sv = (sv))) &&		\
+	     (PL_Xpv->xpv_cur > 1 ||				\
+	      (PL_Xpv->xpv_cur && *PL_Sv->sv_u.svu_pv != '0'))	\
+	     ? 1						\
+	     : 0)						\
+	:							\
+	    SvIOK(sv)						\
+	    ? SvIVX(sv) != 0					\
+	    :   SvNOK(sv)					\
+		? SvNVX(sv) != 0.0				\
+		: sv_2bool_flags(sv,0) )
 #  define SvTRUEx(sv) ((PL_Sv = (sv)), SvTRUE(PL_Sv))
 #endif /* __GNU__ */
 
@@ -1780,6 +1827,7 @@ mg.c:1024: warning: left-hand operand of comma expression has no effect
 #define sv_utf8_upgrade_flags(sv, flags) sv_utf8_upgrade_flags_grow(sv, flags, 0)
 #define sv_utf8_upgrade_nomg(sv) sv_utf8_upgrade_flags(sv, 0)
 #define sv_catpvn_nomg(dsv, sstr, slen) sv_catpvn_flags(dsv, sstr, slen, 0)
+#define sv_catpv_nomg(dsv, sstr) sv_catpv_flags(dsv, sstr, 0)
 #define sv_setsv(dsv, ssv) \
 	sv_setsv_flags(dsv, ssv, SV_GMAGIC|SV_DO_COW_SVSETSV)
 #define sv_setsv_nomg(dsv, ssv) sv_setsv_flags(dsv, ssv, SV_DO_COW_SVSETSV)
@@ -1799,6 +1847,11 @@ mg.c:1024: warning: left-hand operand of comma expression has no effect
 #define sv_2iv(sv) sv_2iv_flags(sv, SV_GMAGIC)
 #define sv_2uv(sv) sv_2uv_flags(sv, SV_GMAGIC)
 #define sv_2nv(sv) sv_2nv_flags(sv, SV_GMAGIC)
+#define sv_eq(sv1, sv2) sv_eq_flags(sv1, sv2, SV_GMAGIC)
+#define sv_cmp(sv1, sv2) sv_cmp_flags(sv1, sv2, SV_GMAGIC)
+#define sv_cmp_locale(sv1, sv2) sv_cmp_locale_flags(sv1, sv2, SV_GMAGIC)
+#define sv_collxfrm(sv, nxp) sv_cmp_flags(sv, nxp, SV_GMAGIC)
+#define sv_2bool(sv) sv_2bool_flags(sv, SV_GMAGIC)
 #define sv_insert(bigstr, offset, len, little, littlelen)		\
 	Perl_sv_insert_flags(aTHX_ (bigstr),(offset), (len), (little),	\
 			     (littlelen), SV_GMAGIC)

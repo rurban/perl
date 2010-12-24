@@ -37,7 +37,8 @@ S_mro_get_linear_isa_c3(pTHX_ HV* stash, U32 level)
 
     assert(HvAUX(stash));
 
-    stashhek = HvNAME_HEK(stash);
+    stashhek = HvENAME_HEK(stash);
+    if (!stashhek) stashhek = HvNAME_HEK(stash);
     if (!stashhek)
       Perl_croak(aTHX_ "Can't linearize anonymous symbol table");
 
@@ -481,6 +482,7 @@ mro__nextcan(...)
     const char *hvname;
     I32 entries;
     struct mro_meta* selfmeta;
+    bool searching_univ = FALSE;
     HV* nmcache;
     I32 i;
   PPCODE:
@@ -611,6 +613,7 @@ mro__nextcan(...)
     /* Now search the remainder of the MRO for the
        same method name as the contextually enclosing
        method */
+   retry:
     if(entries > 0) {
         while (entries--) {
             SV * const linear_sv = *linear_svp++;
@@ -629,6 +632,8 @@ mro__nextcan(...)
             }
 
             assert(curstash);
+
+	    if (searching_univ && curstash == selfstash) break;
 
             gvp = (GV**)hv_fetch(curstash, subname, subname_len, 0);
             if (!gvp) continue;
@@ -649,6 +654,17 @@ mro__nextcan(...)
                 XSRETURN(1);
             }
         }
+    }
+
+    if (!searching_univ) {
+      HV * const unistash = gv_stashpvn("UNIVERSAL", 9, 0);
+      if (unistash) {
+	linear_av = S_mro_get_linear_isa_c3(aTHX_ unistash, 0);
+	linear_svp = AvARRAY(linear_av);
+	entries = AvFILLp(linear_av) + 1;
+	searching_univ = TRUE;
+	goto retry;
+      }
     }
 
     (void)hv_store_ent(nmcache, sv, &PL_sv_undef, 0);

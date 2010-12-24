@@ -150,11 +150,7 @@ Perl_av_extend(pTHX_ AV *av, I32 key)
 		assert(newmax >= AvMAX(av));
 		Newx(ary, newmax+1, SV*);
 		Copy(AvALLOC(av), ary, AvMAX(av)+1, SV*);
-		if (AvMAX(av) > 64)
-		    offer_nice_chunk(AvALLOC(av),
-				     (AvMAX(av)+1) * sizeof(const SV *));
-		else
-		    Safefree(AvALLOC(av));
+		Safefree(AvALLOC(av));
 		AvALLOC(av) = ary;
 #endif
 #ifdef Perl_safesysmalloc_size
@@ -795,11 +791,11 @@ Perl_av_fill(pTHX_ register AV *av, I32 fill)
 /*
 =for apidoc av_delete
 
-Deletes the element indexed by C<key> from the array.  Returns the
-deleted element. If C<flags> equals C<G_DISCARD>, the element is freed
-and null is returned. Perl equivalent: C<my $elem = delete($myarray[$idx]);>
-for the non-C<G_DISCARD> version and a void-context C<delete($myarray[$idx]);>
-for the C<G_DISCARD> version.
+Deletes the element indexed by C<key> from the array, makes the element mortal,
+and returns it.  If C<flags> equals C<G_DISCARD>, the element is freed and null
+is returned.  Perl equivalent: C<my $elem = delete($myarray[$idx]);> for the
+non-C<G_DISCARD> version and a void-context C<delete($myarray[$idx]);> for the
+C<G_DISCARD> version.
 
 =cut
 */

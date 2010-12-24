@@ -18,25 +18,28 @@
 /* This tells where the first of these bits is.  Setting it to 0 saved cycles
  * and memory.  I (khw) think the code will work if changed back, but haven't
  * tested it */
+/* Make sure to update lib/re.pm when changing this! */
 #define RXf_PMf_STD_PMMOD_SHIFT 0
 
 /* The bits need to be ordered so that the msix are contiguous starting at bit
  * RXf_PMf_STD_PMMOD_SHIFT, followed by the p.  See STD_PAT_MODS and
  * INT_PAT_MODS in regexp.h for the reason contiguity is needed */
+/* Make sure to update lib/re.pm when changing these! */
 #define RXf_PMf_MULTILINE      (1 << (RXf_PMf_STD_PMMOD_SHIFT+0))    /* /m */
 #define RXf_PMf_SINGLELINE     (1 << (RXf_PMf_STD_PMMOD_SHIFT+1))    /* /s */
 #define RXf_PMf_FOLD           (1 << (RXf_PMf_STD_PMMOD_SHIFT+2))    /* /i */
 #define RXf_PMf_EXTENDED       (1 << (RXf_PMf_STD_PMMOD_SHIFT+3))    /* /x */
 #define RXf_PMf_KEEPCOPY       (1 << (RXf_PMf_STD_PMMOD_SHIFT+4))    /* /p */
 #define RXf_PMf_LOCALE         (1 << (RXf_PMf_STD_PMMOD_SHIFT+5))
+#define RXf_PMf_UNICODE        (1 << (RXf_PMf_STD_PMMOD_SHIFT+6))
 
 /* Next available bit after the above.  Name begins with '_' so won't be
  * exported by B */
-#define _RXf_PMf_SHIFT_NEXT (RXf_PMf_STD_PMMOD_SHIFT+6)
+#define _RXf_PMf_SHIFT_NEXT (RXf_PMf_STD_PMMOD_SHIFT+7)
 
 /* Mask of the above bits.  These need to be transferred from op_pmflags to
  * re->extflags during compilation */
-#define RXf_PMf_COMPILETIME    (RXf_PMf_MULTILINE|RXf_PMf_SINGLELINE|RXf_PMf_LOCALE|RXf_PMf_FOLD|RXf_PMf_EXTENDED|RXf_PMf_KEEPCOPY)
+#define RXf_PMf_COMPILETIME    (RXf_PMf_MULTILINE|RXf_PMf_SINGLELINE|RXf_PMf_LOCALE|RXf_PMf_FOLD|RXf_PMf_EXTENDED|RXf_PMf_KEEPCOPY|RXf_PMf_UNICODE)
 
 /* These copies need to be numerical or defsubs_h.PL won't know about them. */
 #define PMf_MULTILINE    1<<0

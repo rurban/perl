@@ -16,7 +16,6 @@ if ($^O eq 'VMS') {
     }
 }
 
-push(@extra, 'INSTALLDIRS'  => 'perl') if $] >= 5.008;
 
 WriteMakefile(
     'NAME'	   => 'Digest::MD5',
@@ -24,16 +23,18 @@ WriteMakefile(
     'ABSTRACT'     => 'Perl interface to the MD-5 algorithm',
     'AUTHOR'       => 'Gisle Aas <gisle@activestate.com>',
     'LICENSE'      => 'perl',
-    'MIN_PERL_VERSION' => 5.006,
+    'MIN_PERL_VERSION' => 5.008,
     'PREREQ_PM'    => { 'File::Spec' => 0,
 			'Digest::base' => '1.00',
 			'XSLoader' => 0,
 		      },
     'META_MERGE'   => {
-        repository => 'http://github.com/gisle/digest-md5',
+        resources  => {
+            repository => 'http://github.com/gisle/digest-md5',
+        }
     },
+    'INSTALLDIRS'  => 'perl',
     @extra,
-    'dist'         => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
 );
 
 

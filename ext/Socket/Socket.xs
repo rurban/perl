@@ -251,7 +251,6 @@ inet_ntoa(ip_address_sv)
 	{
 	STRLEN addrlen;
 	struct in_addr addr;
-	char * addr_str;
 	char * ip_address;
 	if (DO_UTF8(ip_address_sv) && !sv_utf8_downgrade(ip_address_sv, 1))
 	     croak("Wide character in %s", "Socket::inet_ntoa");
@@ -270,14 +269,11 @@ inet_ntoa(ip_address_sv)
 	 * in HP-UX + GCC + 64bitint (returns "0.0.0.0"),
 	 * so let's use this sprintf() workaround everywhere.
 	 * This is also more threadsafe than using inet_ntoa(). */
-	Newx(addr_str, 4 * 3 + 3 + 1, char); /* IPv6? */
-	sprintf(addr_str, "%d.%d.%d.%d",
-		((addr.s_addr >> 24) & 0xFF),
-		((addr.s_addr >> 16) & 0xFF),
-		((addr.s_addr >>  8) & 0xFF),
-		( addr.s_addr        & 0xFF));
-	ST(0) = newSVpvn_flags(addr_str, strlen(addr_str), SVs_TEMP);
-	Safefree(addr_str);
+	ST(0) = sv_2mortal(Perl_newSVpvf(aTHX_ "%d.%d.%d.%d", /* IPv6? */
+					 ((addr.s_addr >> 24) & 0xFF),
+					 ((addr.s_addr >> 16) & 0xFF),
+					 ((addr.s_addr >>  8) & 0xFF),
+					 ( addr.s_addr        & 0xFF)));
 	}
 
 void
@@ -389,7 +385,7 @@ unpack_sockaddr_un(sun_sv)
 		addr_len = (char *)&addr - (char *)&(addr.sun_path) + sockaddrlen;
 	} else {
 		for (addr_len = 0; addr.sun_path[addr_len]
-		     && addr_len < sizeof addr.sun_path; addr_len++);
+		     && addr_len < (int)sizeof(addr.sun_path); addr_len++);
 	}
 
 	ST(0) = newSVpvn_flags(addr.sun_path, addr_len, SVs_TEMP);
@@ -459,28 +455,104 @@ unpack_sockaddr_in(sin_sv)
 	}
 
 void
+pack_sockaddr_in6(port, sin6_addr, scope_id=0, flowinfo=0)
+	unsigned short	port
+	SV *	sin6_addr
+	unsigned long	scope_id
+	unsigned long	flowinfo
+	CODE:
+	{
+#ifdef AF_INET6
+	struct sockaddr_in6 sin6;
+	char * addrbytes;
+	STRLEN addrlen;
+	if (DO_UTF8(sin6_addr) && !sv_utf8_downgrade(sin6_addr, 1))
+	    croak("Wide character in %s", "Socket::pack_sockaddr_in6");
+	addrbytes = SvPVbyte(sin6_addr, addrlen);
+	if(addrlen != sizeof(sin6.sin6_addr))
+	    croak("Bad arg length %s, length is %d, should be %d",
+		  "Socket::pack_sockaddr_in6", addrlen, sizeof(sin6.sin6_addr));
+	Zero(&sin6, sizeof(sin6), char);
+	sin6.sin6_family = AF_INET6;
+	sin6.sin6_port = htons(port);
+	sin6.sin6_flowinfo = htonl(flowinfo);
+	Copy(addrbytes, &sin6.sin6_addr, sizeof(sin6.sin6_addr), char);
+#if !defined(__GLIBC__) || (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 3)
+	sin6.sin6_scope_id = scope_id;
+#endif
+	ST(0) = newSVpvn_flags((char *)&sin6, sizeof(sin6), SVs_TEMP);
+#else
+	ST(0) = (SV*)not_here("pack_sockaddr_in6");
+#endif
+	}
+
+void
+unpack_sockaddr_in6(sin6_sv)
+	SV *	sin6_sv
+	PPCODE:
+	{
+#ifdef AF_INET6
+	STRLEN addrlen;
+	struct sockaddr_in6 sin6;
+	char * addrbytes = SvPVbyte(sin6_sv, addrlen);
+	if (addrlen != sizeof(sin6))
+	    croak("Bad arg length for %s, length is %d, should be %d",
+		    "Socket::unpack_sockaddr_in6",
+		    addrlen, sizeof(sin6));
+	Copy(addrbytes, &sin6, sizeof(sin6), char);
+	if(sin6.sin6_family != AF_INET6)
+	    croak("Bad address family for %s, got %d, should be %d",
+		    "Socket::unpack_sockaddr_in6",
+		    sin6.sin6_family, AF_INET6);
+	EXTEND(SP, 4);
+	mPUSHi(ntohs(sin6.sin6_port));
+	mPUSHp((char *)&sin6.sin6_addr, sizeof(sin6.sin6_addr));
+#if !defined(__GLIBC__) || (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 3)
+	mPUSHi(sin6.sin6_scope_id);
+#else
+	mPUSHi(0);
+#endif
+	mPUSHi(ntohl(sin6.sin6_flowinfo));
+#else
+	ST(0) = (SV*)not_here("pack_sockaddr_in6");
+#endif
+	}
+
+void
 inet_ntop(af, ip_address_sv)
         int     af
         SV *    ip_address_sv
         CODE:
 #ifdef HAS_INETNTOP
 	STRLEN addrlen, struct_size;
+#ifdef AF_INET6
 	struct in6_addr addr;
 	char str[INET6_ADDRSTRLEN];
+#else
+	struct in_addr addr;
+	char str[INET_ADDRSTRLEN];
+#endif
 	char *ip_address = SvPV(ip_address_sv, addrlen);
 
-        if(af == AF_INET) {
-            struct_size = sizeof(struct in_addr);
-        } else if(af == AF_INET6) {
-            struct_size = sizeof(struct in6_addr);
-        } else {
-           croak("Bad address family for %s, got %d, should be either AF_INET or AF_INET6",
+	struct_size = sizeof(addr);
+
+	if(af != AF_INET
+#ifdef AF_INET6
+	    && af != AF_INET6
+#endif
+	  ) {
+           croak("Bad address family for %s, got %d, should be"
+#ifdef AF_INET6
+	       " either AF_INET or AF_INET6",
+#else
+	       " AF_INET",
+#endif
                "Socket::inet_ntop",
                af);
         }
 
 	Copy( ip_address, &addr, sizeof addr, char );
-	inet_ntop(af, &addr, str, INET6_ADDRSTRLEN);
+	inet_ntop(af, &addr, str, sizeof str);
 
 	ST(0) = newSVpvn_flags(str, strlen(str), SVs_TEMP);
 #else
@@ -494,9 +566,23 @@ inet_pton(af, host)
         CODE:
 #ifdef HAS_INETPTON
         int ok;
-        struct in6_addr ip_address;
-        if(af != AF_INET && af != AF_INET6) {
-           croak("Bad address family for %s, got %d, should be either AF_INET or AF_INET6",
+#ifdef AF_INET6
+	struct in6_addr ip_address;
+#else
+	struct in_addr ip_address;
+#endif
+
+	if(af != AF_INET
+#ifdef AF_INET6
+		&& af != AF_INET6
+#endif
+	  ) {
+		croak("Bad address family for %s, got %d, should be"
+#ifdef AF_INET6
+			" either AF_INET or AF_INET6",
+#else
+			" AF_INET",
+#endif
                         "Socket::inet_pton",
                         af);
         }
@@ -504,8 +590,7 @@ inet_pton(af, host)
 
         ST(0) = sv_newmortal();
         if (ok) {
-                sv_setpvn( ST(0), (char *)&ip_address,
-                           af == AF_INET6 ? sizeof(ip_address) : sizeof(struct in_addr) );
+                sv_setpvn( ST(0), (char *)&ip_address, sizeof(ip_address) );
         }
 #else
         ST(0) = (SV *)not_here("inet_pton");

@@ -76,6 +76,17 @@ on the operator (e.g. C<CORE::log($x)>) or declare the subroutine
 to be an object method (see L<perlsub/"Subroutine Attributes"> or
 L<attributes>).
 
+=item Ambiguous overloaded argument to %s resolved as %s
+
+(W ambiguous) You called C<keys>, C<values> or C<each> on an object that had
+overloading of C<%{}> or C<@{}> or both.  In such a case, the object is
+dereferenced according to its overloading, not its underlying reference type.
+The warning is issued when C<%{}> overloading exists on a blessed arrayref,
+when C<@{}> overloading exists on a blessed hashref, or when both overloadings
+are defined (in which case C<%{}> is used).  You can force the interpretation
+of the object by explictly dereferencing it as an array or hash instead of
+passing the object itself to C<keys>, C<values> or C<each>.
+
 =item Ambiguous range in transliteration operator
 
 (F) You wrote something like C<tr/a-z-0//> which doesn't mean anything at
@@ -1336,6 +1347,12 @@ uses the character values modulus 256 instead, as if you had provided:
 (W io) The dirhandle you tried to close is either closed or not really
 a dirhandle.  Check your control flow.
 
+=item Closure prototype called
+
+(F) If a closure has attributes, the subroutine passed to an attribute
+handler is the prototype that is cloned when a new closure is created.
+This subroutine cannot be called.
+
 =item Code missing after '/'
 
 (F) You had a (sub-)template that ends with a '/'. There must be another
@@ -2247,7 +2264,7 @@ list was terminated too soon.
 A "strict" version number is a positive decimal number (integer or
 decimal-fraction) without exponentiation or else a dotted-decimal
 v-string with a leading 'v' character and at least three components.
-The parenthesized text indicates which criteria was not met.
+The parenthesized text indicates which criteria were not met.
 See the L<version> module for more details on allowed version formats.
 
 =item Invalid type '%s' in %s
@@ -2267,7 +2284,7 @@ leading 'v' character.  Otherwise, the leading 'v' is optional.  Both
 decimal and dotted-decimal versions may have a trailing "alpha"
 component separated by an underscore character after a fractional or
 dotted-decimal component.  The parenthesized text indicates which
-criteria was not met.  See the L<version> module for more details on
+criteria were not met.  See the L<version> module for more details on
 allowed version formats.
 
 =item Invalid version object
@@ -2414,9 +2431,9 @@ instead on the filehandle.)
 =item lvalue attribute ignored after the subroutine has been defined
 
 (W misc) Making a subroutine an lvalue subroutine after it has been defined
-by declaring the subroutine with a lvalue attribute is not
-possible. To make the the subroutine a lvalue subroutine add the
-lvalue attribute to the definition, or put the the declaration before
+by declaring the subroutine with an lvalue attribute is not
+possible. To make the subroutine an lvalue subroutine add the
+lvalue attribute to the definition, or put the declaration before
 the definition.
 
 =item Lvalue subs returning %s not implemented yet
@@ -3478,6 +3495,11 @@ to even) byte length.
 
 (P) The lexer got into a bad state while processing a case modifier.
 
+=item Parsing code internal error (%s)
+
+(F) Parsing code supplied by an extension violated the parser's API in
+a detectable way.
+
 =item Pattern subroutine nesting without pos change exceeded limit in regex; marked by <-- HERE in m/%s/
 
 (F) You used a pattern that uses too many nested subpattern calls without
@@ -4028,7 +4050,12 @@ where the problem was discovered. See L<perlre>.
 
 (F) You used a regular expression extension that doesn't make sense.  The
 <-- HERE shows in the regular expression about where the problem was
-discovered.  See L<perlre>.
+discovered.  This happens when using the C<(?^...)> construct to tell
+Perl to use the default regular expression modifiers, and you
+redundantly specify a default modifier; or having a modifier that can't
+be turned off (such as C<"p"> or C<"l">) after a minus; or specifying
+more than one of the C<"d">, C<"l">, or C<"u"> modifiers.  For other
+causes, see L<perlre>.
 
 =item Sequence \%s... not terminated in regex; marked by <-- HERE in m/%s/
 
@@ -4510,6 +4537,11 @@ certain type.  Arrays must be @NAME or C<@{EXPR}>.  Hashes must be
 %NAME or C<%{EXPR}>.  No implicit dereferencing is allowed--use the
 {EXPR} forms as an explicit dereference.  See L<perlref>.
 
+=item Type of argument to %s must be hashref or arrayref
+
+(F) You called C<keys>, C<values> or C<each> with an argument that was
+expected to be a reference to a hash or a reference to an array.
+
 =item umask not implemented
 
 (F) Your machine doesn't implement the umask function and you tried to
@@ -4965,13 +4997,24 @@ modifier is not presently meaningful in substitutions.
 use the /g modifier.  Currently, /c is meaningful only when /g is
 used.  (This may change in the future.)
 
-=item Use of := for an empty attribute list is deprecated
+=item Use of := for an empty attribute list is not allowed
 
-(D deprecated) The construction C<my $x := 42> currently
-parses correctly in perl, being equivalent to C<my $x : = 42>
-(applying an empty attribute list to C<$x>). This useless
-construct is now deprecated, so C<:=> can be reclaimed as a new
-operator in the future.
+(F) The construction C<my $x := 42> used to parse as equivalent to
+C<my $x : = 42> (applying an empty attribute list to C<$x>).
+This construct was deprecated in 5.12.0, and has now been made a syntax
+error, so C<:=> can be reclaimed as a new operator in the future.
+
+If you need an empty attribute list, for example in a code generator, add
+a space before the C<=>.
+
+=item Use of ?PATTERN? without explicit operator is deprecated
+
+(D deprecated) You have written something like C<?\w?>, for a regular
+expression that matches only once.  Starting this term directly with
+the question mark delimiter is now deprecated, so that the question mark
+will be available for use in new operators in the future.  Write C<m?\w?>
+instead, explicitly using the C<m> operator: the question mark delimiter
+still invokes match-once behaviour.
 
 =item Use of freed value in iteration
 
@@ -5037,6 +5080,18 @@ only C.  This usually means there's a better way to do it in Perl.
 generally because there's a better way to do it, and also because the
 old way has bad side effects.
 
+=item Use of %s on a handle without * is deprecated
+
+(D deprecated) You used C<tie>, C<tied> or C<untie> on a scalar but that
+scalar happens to hold a typeglob, which means its filehandle will
+be tied. If you mean to tie a handle, use an explicit * as in
+C<tie *$handle>.
+
+This is a long-standing bug that will be removed in Perl 5.16, as
+there is currently no way to tie the scalar itself when it holds
+a typeglob, and no way to untie a scalar that has had a typeglob
+assigned to it.
+
 =item Use of -l on filehandle %s
 
 (W io) A filehandle represents an opened file, and when you opened the file
@@ -5049,6 +5104,17 @@ The operation returned C<undef>.  Use a filename instead.
 name. So no namespace is current at all. Using this can cause many
 otherwise reasonable constructs to fail in baffling ways. C<use strict;>
 instead.
+
+=item Use of qw(...) as parentheses is deprecated
+
+(D deprecated) You have something like C<foreach $x qw(a b c) {...}>,
+using a C<qw(...)> list literal where a parenthesised expression is
+expected.  Historically the parser fooled itself into thinking that
+C<qw(...)> literals were always enclosed in parentheses, and as a result
+you could sometimes omit parentheses around them.  (You could never do
+the C<foreach qw(a b c) {...}> that you might have expected, though.)
+The parser no longer lies to itself in this way.  Wrap the list literal
+in parentheses, like C<foreach $x (qw(a b c)) {...}>.
 
 =item Use of reference "%s" as array index
 
@@ -5105,6 +5171,13 @@ be removed in a future version.
 C<< @foo->[23] >> or C<< @$ref->[99] >>.  Versions of perl <= 5.6.1 used to
 allow this syntax, but shouldn't have. It is now deprecated, and will be
 removed in a future version.
+
+=item Using !~ with %s doesn't make sense
+
+(F) Using the C<!~> operator with C<s///r>, C<tr///r> or C<y///r> is
+currently reserved for future use, as the exact behaviour has not
+been decided. (Simply returning the boolean opposite of the
+modified string is usually not particularly useful.)
 
 =item Using just the first character returned by \N{} in character class
 

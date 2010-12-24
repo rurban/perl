@@ -1,5 +1,5 @@
 use ExtUtils::MakeMaker;
-use ExtUtils::Constant 0.11 'WriteConstants';
+use ExtUtils::Constant 0.23 'WriteConstants';
 use Config;
 WriteMakefile(
     NAME	 => 'Socket',
@@ -71,8 +71,16 @@ push @names,
  value => "newSVpvn_flags((char *)&ip_address,sizeof(ip_address), SVs_TEMP)",}
          foreach qw(INADDR_ANY INADDR_LOOPBACK INADDR_NONE INADDR_BROADCAST);
 
+push @names,
+{name => $_, type => "SV",
+ macro=>["#ifdef ${_}_INIT\n",
+         "#endif\n"],
+ pre=>"struct in6_addr ip6_address = ${_}_INIT;",
+ value => "newSVpvn_flags((char *)&ip6_address,sizeof(ip6_address), SVs_TEMP)",}
+	 foreach qw(IN6ADDR_ANY IN6ADDR_LOOPBACK);
+
 WriteConstants(
-    ($] > 5.009002 ? (PROXYSUBS => 1) : ()),
+    PROXYSUBS => {autoload => 1},
     NAME => 'Socket',
     NAMES => \@names,
 );

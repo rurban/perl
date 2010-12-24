@@ -33,41 +33,6 @@
 #include "perliol.h" /* For the PERLIO_F_XXX */
 #endif
 
-static HV *
-S_get_isa_hash(pTHX_ HV *const stash)
-{
-    dVAR;
-    struct mro_meta *const meta = HvMROMETA(stash);
-
-    PERL_ARGS_ASSERT_GET_ISA_HASH;
-
-    if (!meta->isa) {
-	AV *const isa = mro_get_linear_isa(stash);
-	if (!meta->isa) {
-	    HV *const isa_hash = newHV();
-	    /* Linearisation didn't build it for us, so do it here.  */
-	    SV *const *svp = AvARRAY(isa);
-	    SV *const *const svp_end = svp + AvFILLp(isa) + 1;
-	    const HEK *const canon_name = HvNAME_HEK(stash);
-
-	    while (svp < svp_end) {
-		(void) hv_store_ent(isa_hash, *svp++, &PL_sv_undef, 0);
-	    }
-
-	    (void) hv_common(isa_hash, NULL, HEK_KEY(canon_name),
-			     HEK_LEN(canon_name), HEK_FLAGS(canon_name),
-			     HV_FETCH_ISSTORE, &PL_sv_undef,
-			     HEK_HASH(canon_name));
-	    (void) hv_store(isa_hash, "UNIVERSAL", 9, &PL_sv_undef, 0);
-
-	    SvREADONLY_on(isa_hash);
-
-	    meta->isa = isa_hash;
-	}
-    }
-    return meta->isa;
-}
-
 /*
  * Contributed by Graham Barr  <Graham.Barr@tiuk.ti.com>
  * The main guts of traverse_isa was actually copied from gv_fetchmeth
@@ -78,11 +43,16 @@ S_isa_lookup(pTHX_ HV *stash, const char * const name)
 {
     dVAR;
     const struct mro_meta *const meta = HvMROMETA(stash);
-    HV *const isa = meta->isa ? meta->isa : S_get_isa_hash(aTHX_ stash);
+    HV *isa = meta->isa;
     STRLEN len = strlen(name);
     const HV *our_stash;
 
     PERL_ARGS_ASSERT_ISA_LOOKUP;
+
+    if (!isa) {
+	(void)mro_get_linear_isa(stash);
+	isa = meta->isa;
+    }
 
     if (hv_common(isa, NULL, name, len, 0 /* No "UTF-8" flag possible with only
 					     a char * argument*/,
@@ -92,11 +62,13 @@ S_isa_lookup(pTHX_ HV *stash, const char * const name)
     }
 
     /* A stash/class can go by many names (ie. User == main::User), so 
-       we use the name in the stash itself, which is canonical.  */
+       we use the HvENAME in the stash itself, which is canonical, falling
+       back to HvNAME if necessary.  */
     our_stash = gv_stashpvn(name, len, 0);
 
     if (our_stash) {
-	HEK *const canon_name = HvNAME_HEK(our_stash);
+	HEK *canon_name = HvENAME_HEK(our_stash);
+	if (!canon_name) canon_name = HvNAME_HEK(our_stash);
 
 	if (hv_common(isa, NULL, HEK_KEY(canon_name), HEK_LEN(canon_name),
 		      HEK_FLAGS(canon_name),
@@ -794,8 +766,15 @@ XS(XS_Internals_SvREADONLY)	/* This is dangerous stuff. */
 {
     dVAR;
     dXSARGS;
-    SV * const sv = SvRV(ST(0));
+    SV * const svz = ST(0);
+    SV * sv;
     PERL_UNUSED_ARG(cv);
+
+    /* [perl #77776] - called as &foo() not foo() */
+    if (!SvROK(svz))
+        croak_xs_usage(cv, "SCALAR[, ON]");
+
+    sv = SvRV(svz);
 
     if (items == 1) {
 	 if (SvREADONLY(sv))
@@ -821,8 +800,15 @@ XS(XS_Internals_SvREFCNT)	/* This is dangerous stuff. */
 {
     dVAR;
     dXSARGS;
-    SV * const sv = SvRV(ST(0));
+    SV * const svz = ST(0);
+    SV * sv;
     PERL_UNUSED_ARG(cv);
+
+    /* [perl #77776] - called as &foo() not foo() */
+    if (!SvROK(svz))
+        croak_xs_usage(cv, "SCALAR[, REFCOUNT]");
+
+    sv = SvRV(svz);
 
     if (items == 1)
 	 XSRETURN_IV(SvREFCNT(sv) - 1); /* Minus the ref created for us. */
@@ -839,7 +825,7 @@ XS(XS_Internals_hv_clear_placehold)
     dVAR;
     dXSARGS;
 
-    if (items != 1)
+    if (items != 1 || !SvROK(ST(0)))
 	croak_xs_usage(cv, "hv");
     else {
 	HV * const hv = MUTABLE_HV(SvRV(ST(0)));
@@ -1015,111 +1001,6 @@ XS(XS_Internals_HvREHASH)	/* Subject to change  */
     Perl_croak(aTHX_ "Internals::HvREHASH $hashref");
 }
 
-XS(XS_mauve_reftype)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if (!SvROK(sv)) {
-       XSRETURN_NO;
-    } else {
-	STRLEN len;
-	char *type= (char *)sv_reftype_len(SvRV(sv),FALSE,&len);
-        XPUSHs(sv_2mortal(newSVpv(type,len)));
-    }
-}
-
-XS(XS_mauve_refaddr)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if (!SvROK(sv)) {
-       XSRETURN_NO;
-    } else {
-       XPUSHs(sv_2mortal(newSVuv(PTR2UV(SvRV(sv)))));
-    }
-}
-
-XS(XS_mauve_blessed)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    if ( SvROK(sv) && SvOBJECT(SvRV(sv)) ) {
-	STRLEN len;
-	char *type= (char *)sv_reftype_len(SvRV(sv),TRUE,&len);
-        XPUSHs(sv_2mortal(newSVpv(type,len)));
-    } else {
-        XPUSHs(sv_2mortal(newSVpv("",0)));
-    }
-}
-
-XS(XS_mauve_weaken)
-{
-    SV *sv;
-    dVAR;
-    dXSARGS;
-    PERL_UNUSED_VAR(cv);
-
-    if (items != 1)
-	croak_xs_usage(cv, "sv");
-
-    SP -= items;
-    sv = (SV*)ST(0);
-
-    if (SvMAGICAL(sv))
-	mg_get(sv);
-    sv_rvweaken(sv);
-    XSRETURN_EMPTY;
-}
-
-XS(XS_mauve_isweak)
-{
-    dVAR;
-    dXSARGS;
-    if (items != 1)
-       croak_xs_usage(cv,  "sv");
-    {
-	SV *	sv = ST(0);
-	if (SvMAGICAL(sv))
-	    mg_get(sv);
-	ST(0) = boolSV(SvROK(sv) && SvWEAKREF(sv));
-	XSRETURN(1);
-    }
-    XSRETURN(1);
-}
-
 XS(XS_re_is_regexp)
 {
     dVAR; 
@@ -1128,8 +1009,6 @@ XS(XS_re_is_regexp)
 
     if (items != 1)
 	croak_xs_usage(cv, "sv");
-
-    SP -= items;
 
     if (SvRXOK(ST(0))) {
         XSRETURN_YES;
@@ -1149,6 +1028,7 @@ XS(XS_re_regnames_count)
 	croak_xs_usage(cv, "");
 
     SP -= items;
+    PUTBACK;
 
     if (!rx)
         XSRETURN_UNDEF;
@@ -1156,14 +1036,8 @@ XS(XS_re_regnames_count)
     ret = CALLREG_NAMED_BUFF_COUNT(rx);
 
     SPAGAIN;
-
-    if (ret) {
-        mXPUSHs(ret);
-        PUTBACK;
-        return;
-    } else {
-        XSRETURN_UNDEF;
-    }
+    PUSHs(ret ? sv_2mortal(ret) : &PL_sv_undef);
+    XSRETURN(1);
 }
 
 XS(XS_re_regname)
@@ -1178,6 +1052,7 @@ XS(XS_re_regname)
 	croak_xs_usage(cv, "name[, all ]");
 
     SP -= items;
+    PUTBACK;
 
     rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
 
@@ -1191,11 +1066,9 @@ XS(XS_re_regname)
     }
     ret = CALLREG_NAMED_BUFF_FETCH(rx, ST(0), (flags | RXapif_REGNAME));
 
-    if (ret) {
-        mXPUSHs(ret);
-        XSRETURN(1);
-    }
-    XSRETURN_UNDEF;    
+    SPAGAIN;
+    PUSHs(ret ? sv_2mortal(ret) : &PL_sv_undef);
+    XSRETURN(1);
 }
 
 
@@ -1226,12 +1099,11 @@ XS(XS_re_regnames)
     }
 
     SP -= items;
+    PUTBACK;
 
     ret = CALLREG_NAMED_BUFF_ALL(rx, (flags | RXapif_REGNAMES));
 
     SPAGAIN;
-
-    SP -= items;
 
     if (!ret)
         XSRETURN_UNDEF;
@@ -1280,19 +1152,29 @@ XS(XS_re_regexp_pattern)
     {
         /* Houston, we have a regex! */
         SV *pattern;
-        STRLEN left = 0;
-        char reflags[sizeof(INT_PAT_MODS)];
 
         if ( GIMME_V == G_ARRAY ) {
+	    STRLEN left = 0;
+	    char reflags[sizeof(INT_PAT_MODS) + 1]; /* The +1 is for the charset
+						        modifier */
+            const char *fptr;
+            char ch;
+            U16 match_flags;
+
             /*
                we are in list context so stringify
                the modifiers that apply. We ignore "negative
                modifiers" in this scenario.
             */
 
-            const char *fptr = INT_PAT_MODS;
-            char ch;
-            U16 match_flags = (U16)((RX_EXTFLAGS(re) & PMf_COMPILETIME)
+            if (RX_EXTFLAGS(re) & RXf_PMf_LOCALE) {
+		reflags[left++] = LOCALE_PAT_MOD;
+	    }
+	    else if (RX_EXTFLAGS(re) & RXf_PMf_UNICODE) {
+		reflags[left++] = UNICODE_PAT_MOD;
+	    }
+            fptr = INT_PAT_MODS;
+            match_flags = (U16)((RX_EXTFLAGS(re) & PMf_COMPILETIME)
                                     >> RXf_PMf_STD_PMMOD_SHIFT);
 
             while((ch = *fptr++)) {
@@ -1342,239 +1224,6 @@ XS(XS_re_regexp_pattern)
         }
     }
     /* NOT-REACHED */
-}
-
-XS(XS_Tie_Hash_NamedCapture_FETCH)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-    SV * ret;
-
-    if (items != 2)
-	croak_xs_usage(cv, "$key, $flags");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        XSRETURN_UNDEF;
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    ret = CALLREG_NAMED_BUFF_FETCH(rx, ST(1), flags);
-
-    SPAGAIN;
-
-    if (ret) {
-        mXPUSHs(ret);
-        PUTBACK;
-        return;
-    }
-    XSRETURN_UNDEF;
-}
-
-XS(XS_Tie_Hash_NamedCapture_STORE)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-
-    if (items != 3)
-	croak_xs_usage(cv, "$key, $value, $flags");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0))) {
-        if (!PL_localizing)
-            Perl_croak_no_modify(aTHX);
-        else
-            XSRETURN_UNDEF;
-    }
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    CALLREG_NAMED_BUFF_STORE(rx,ST(1), ST(2), flags);
-}
-
-XS(XS_Tie_Hash_NamedCapture_DELETE)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-    U32 flags;
-
-    if (items != 2)
-	croak_xs_usage(cv, "$key, $flags");
-
-    if (!rx || !SvROK(ST(0)))
-        Perl_croak_no_modify(aTHX);
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    CALLREG_NAMED_BUFF_DELETE(rx, ST(1), flags);
-}
-
-XS(XS_Tie_Hash_NamedCapture_CLEAR)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-
-    if (items != 1)
-	croak_xs_usage(cv, "$flags");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        Perl_croak_no_modify(aTHX);
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    CALLREG_NAMED_BUFF_CLEAR(rx, flags);
-}
-
-XS(XS_Tie_Hash_NamedCapture_EXISTS)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-    SV * ret;
-
-    if (items != 2)
-	croak_xs_usage(cv, "$key, $flags");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        XSRETURN_UNDEF;
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    ret = CALLREG_NAMED_BUFF_EXISTS(rx, ST(1), flags);
-
-    SPAGAIN;
-
-	XPUSHs(ret);
-	PUTBACK;
-	return;
-}
-
-XS(XS_Tie_Hash_NamedCapture_FIRSTK)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-    SV * ret;
-
-    if (items != 1)
-	croak_xs_usage(cv, "");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        XSRETURN_UNDEF;
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    ret = CALLREG_NAMED_BUFF_FIRSTKEY(rx, flags);
-
-    SPAGAIN;
-
-    if (ret) {
-        mXPUSHs(ret);
-        PUTBACK;
-    } else {
-        XSRETURN_UNDEF;
-    }
-
-}
-
-XS(XS_Tie_Hash_NamedCapture_NEXTK)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-    SV * ret;
-
-    if (items != 2)
-	croak_xs_usage(cv, "$lastkey");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        XSRETURN_UNDEF;
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    ret = CALLREG_NAMED_BUFF_NEXTKEY(rx, ST(1), flags);
-
-    SPAGAIN;
-
-    if (ret) {
-        mXPUSHs(ret);
-    } else {
-        XSRETURN_UNDEF;
-    }  
-    PUTBACK;
-}
-
-XS(XS_Tie_Hash_NamedCapture_SCALAR)
-{
-    dVAR;
-    dXSARGS;
-    REGEXP * rx;
-    U32 flags;
-    SV * ret;
-
-    if (items != 1)
-	croak_xs_usage(cv, "");
-
-    rx = PL_curpm ? PM_GETRE(PL_curpm) : NULL;
-
-    if (!rx || !SvROK(ST(0)))
-        XSRETURN_UNDEF;
-
-    SP -= items;
-
-    flags = (U32)SvUV(SvRV(MUTABLE_SV(ST(0))));
-    ret = CALLREG_NAMED_BUFF_SCALAR(rx, flags);
-
-    SPAGAIN;
-
-    if (ret) {
-        mXPUSHs(ret);
-        PUTBACK;
-        return;
-    } else {
-        XSRETURN_UNDEF;
-    }
-}
-
-XS(XS_Tie_Hash_NamedCapture_flags)
-{
-    dVAR;
-    dXSARGS;
-
-    if (items != 0)
-	croak_xs_usage(cv, "");
-
-	mXPUSHu(RXapif_ONE);
-	mXPUSHu(RXapif_ALL);
-	PUTBACK;
-	return;
 }
 
 struct xsub_details {
@@ -1627,20 +1276,6 @@ struct xsub_details details[] = {
     {"re::regnames", XS_re_regnames, ";$"},
     {"re::regnames_count", XS_re_regnames_count, ""},
     {"re::regexp_pattern", XS_re_regexp_pattern, "$"},
-    {"Tie::Hash::NamedCapture::FETCH", XS_Tie_Hash_NamedCapture_FETCH, NULL},
-    {"Tie::Hash::NamedCapture::STORE", XS_Tie_Hash_NamedCapture_STORE, NULL},
-    {"Tie::Hash::NamedCapture::DELETE", XS_Tie_Hash_NamedCapture_DELETE, NULL},
-    {"Tie::Hash::NamedCapture::CLEAR", XS_Tie_Hash_NamedCapture_CLEAR, NULL},
-    {"Tie::Hash::NamedCapture::EXISTS", XS_Tie_Hash_NamedCapture_EXISTS, NULL},
-    {"Tie::Hash::NamedCapture::FIRSTKEY", XS_Tie_Hash_NamedCapture_FIRSTK, NULL},
-    {"Tie::Hash::NamedCapture::NEXTKEY", XS_Tie_Hash_NamedCapture_NEXTK, NULL},
-    {"Tie::Hash::NamedCapture::SCALAR", XS_Tie_Hash_NamedCapture_SCALAR, NULL},
-    {"Tie::Hash::NamedCapture::flags", XS_Tie_Hash_NamedCapture_flags, NULL}
-    ,{"mauve::reftype", XS_mauve_reftype, "$"}
-    ,{"mauve::refaddr", XS_mauve_refaddr, "$"}
-    ,{"mauve::blessed", XS_mauve_blessed, "$"}
-    ,{"mauve::weaken", XS_mauve_weaken, "$"}
-    ,{"mauve::isweak", XS_mauve_isweak, "$"}
 };
 
 void

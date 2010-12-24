@@ -83,7 +83,7 @@ Because of backward compatibility with legacy encodings, the "a unique
 number for every character" idea breaks down a bit: instead, there is
 "at least one number for every character".  The same character could
 be represented differently in several legacy encodings.  The
-converse is also not true: some code points do not have an assigned
+converse is not also true: some code points do not have an assigned
 character.  Firstly, there are unallocated code points within
 otherwise used blocks.  Secondly, there are special Unicode control
 characters that do not represent true characters.
@@ -248,7 +248,7 @@ characters:
 
 Note that both C<\x{...}> and C<\N{...}> are compile-time string
 constants: you cannot use variables in them.  if you want similar
-run-time functionality, use C<chr()> and C<charnames::vianame()>.
+run-time functionality, use C<chr()> and C<charnames::string_vianame()>.
 
 If you want to force the result to Unicode characters, use the special
 C<"U0"> prefix.  It consumes no arguments but causes the following bytes

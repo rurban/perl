@@ -5,7 +5,7 @@ use 5.008;
 use strict;
 use warnings;
 
-our $VERSION = '1.77_03';
+our $VERSION = '1.81_03';
 my $XS_VERSION = $VERSION;
 $VERSION = eval $VERSION;
 
@@ -134,7 +134,7 @@ threads - Perl interpreter-based threads
 
 =head1 VERSION
 
-This document describes threads version 1.77
+This document describes threads version 1.81
 
 =head1 SYNOPSIS
 
@@ -1005,6 +1005,18 @@ mutexes that are needed to control functionality within the L<threads> module.
 For this reason, the use of C<END> blocks in threads is B<strongly>
 discouraged.
 
+=item Open directory handles
+
+In perl 5.14 and higher, on systems other than Windows that do
+not support the C<fchdir> C function, directory handles (see
+L<opendir|perlfunc/"opendir DIRHANDLE,EXPR">) will not be copied to new
+threads. You can use the C<d_fchdir> variable in L<Config.pm|Config> to
+determine whether your system supports it.
+
+In prior perl versions, spawning threads with open directory handles would
+crash the interpreter.
+L<[perl #75154]|http://rt.perl.org/rt3/Public/Bug/Display.html?id=75154>
+
 =item Perl Bugs and the CPAN Version of L<threads>
 
 Support for threads extends beyond the code in this module (i.e.,
@@ -1034,7 +1046,7 @@ L<threads> Discussion Forum on CPAN:
 L<http://www.cpanforum.com/dist/threads>
 
 Annotated POD for L<threads>:
-L<http://annocpan.org/~JDHEDDEN/threads-1.77/threads.pm>
+L<http://annocpan.org/~JDHEDDEN/threads-1.81/threads.pm>
 
 Source repository:
 L<http://code.google.com/p/threads-shared/>

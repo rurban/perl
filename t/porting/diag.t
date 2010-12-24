@@ -275,7 +275,14 @@ sub check_file {
 # 
 # PLEASE DO NOT ADD TO THIS LIST.  Instead, write an entry in
 # pod/perldiag.pod for your new (warning|error).
+
+# Also FIXME this test, as the first entry in TODO *is* covered by the
+# description: Malformed UTF-8 character (%s)
 __DATA__
+Malformed UTF-8 character (unexpected non-continuation byte 0x%02x, immediately after start byte 0x%02x)
+
+%s (%d) does not match %s (%d),
+%s (%d) smaller than %s (%d),
 Argument "%s" isn't numeric
 Argument "%s" isn't numeric in %s
 Attempt to clear deleted array
@@ -368,7 +375,6 @@ Invalid type ',' in %s
 It is proposed that "\c{" no longer be valid. It has historically evaluated to  ";".  If you disagree with this proposal, send email to perl5-porters@perl.org Otherwise, or in the meantime, you can work around this failure by changing "\c{" to ";"
 'j' not supported on this platform
 'J' not supported on this platform
-Layer does not match this perl
 leaving effective gid failed
 leaving effective uid failed
 List form of piped open not implemented

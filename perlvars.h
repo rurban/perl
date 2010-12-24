@@ -12,7 +12,7 @@
 =head1 Global Variables
 */
 
-/* Don't forget to re-run embed.pl to propagate changes! */
+/* Don't forget to re-run regen/embed.pl to propagate changes! */
 
 /* This file describes the "global" variables used by perl
  * This used to be in perl.h directly but we want to abstract out into
@@ -102,10 +102,6 @@ PERLVARA(Gsig_ignoring, SIG_SIZE, int)	/* which signals we are ignoring */
 PERLVARA(Gsig_defaulting, SIG_SIZE, int)
 #endif
 
-#ifndef PERL_IMPLICIT_CONTEXT
-PERLVAR(Gsig_sv, SV*)
-#endif
-
 /* XXX signals are process-wide anyway, so we
  * ignore the implications of this for threading */
 #ifndef HAS_SIGACTION
@@ -120,6 +116,7 @@ PERLVAR(Gwatch_pvx, char*)
 PERLVAR(Gppaddr, Perl_ppaddr_t*) /* or opcode.h */
 PERLVAR(Gcheck,  Perl_check_t *) /* or opcode.h */
 PERLVARA(Gfold_locale, 256, unsigned char) /* or perl.h */
+PERLVARA(Gcharclass, 256, U32)
 #endif
 
 #ifdef PERL_NEED_APPCTX
@@ -157,8 +154,8 @@ PERLVARI(Gveto_cleanup,	int, FALSE)	/* exit without cleanup */
 /* dummy variables that hold pointers to both runops functions, thus forcing
  * them *both* to get linked in (useful for Peek.xs, debugging etc) */
 
-PERLVARI(Grunops_std,	runops_proc_t,	MEMBER_TO_FPTR(Perl_runops_standard))
-PERLVARI(Grunops_dbg,	runops_proc_t,	MEMBER_TO_FPTR(Perl_runops_debug))
+PERLVARI(Grunops_std,	runops_proc_t,	Perl_runops_standard)
+PERLVARI(Grunops_dbg,	runops_proc_t,	Perl_runops_debug)
 
 
 /* These are baked at compile time into any shared perl library.
@@ -240,4 +237,4 @@ the Perl core) will normally return C<KEYWORD_PLUGIN_DECLINE>.
 =cut
 */
 
-PERLVARI(Gkeyword_plugin, Perl_keyword_plugin_t, MEMBER_TO_FPTR(Perl_keyword_plugin_standard))
+PERLVARI(Gkeyword_plugin, Perl_keyword_plugin_t, Perl_keyword_plugin_standard)

@@ -6,16 +6,11 @@
 #ifndef  _INC_SYS_SOCKET
 #define  _INC_SYS_SOCKET
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define WIN32_LEAN_AND_MEAN
 #ifdef __GNUC__
 #  define Win32_Winsock
 #endif
 #include <windows.h>
-
 
 /* Too late to include winsock2.h if winsock.h has already been loaded */
 #ifndef _WINSOCKAPI_
@@ -23,13 +18,73 @@ extern "C" {
      /* winsock2 only for 4.00+ */
 #    include <winsock.h>
 #  else
-#  include <winsock2.h>
-#endif
+#    include <winsock2.h>
+     /* We need to include ws2tcpip.h to get the IPv6 definitions.
+      * It will in turn include wspiapi.h.  Later versions of that
+      * header in the Windows SDK generate C++ template code that
+      * can't be compiled with VC6 anymore.  The _WSPIAPI_COUNTOF
+      * definition below prevents wspiapi.h from generating this
+      * incompatible code.
+      */
+#    define _WSPIAPI_COUNTOF(_Array) (sizeof(_Array) / sizeof(_Array[0]))
+#    include <ws2tcpip.h>
+
+#    ifndef SIO_GET_INTERFACE_LIST_EX
+       /* The ws2tcpip.h header included in VC6 doesn't define the
+        * sin6_scope_id member of sockaddr_in6.  We define our own
+        * version and redefine sockaddr_in6 to point to this one
+        * instead for compiling e.g. Socket.xs.
+        */
+       struct my_sockaddr_in6 {
+           short   sin6_family;        /* AF_INET6 */
+           u_short sin6_port;          /* Transport level port number */
+           u_long  sin6_flowinfo;      /* IPv6 flow information */
+           struct in_addr6 sin6_addr;  /* IPv6 address */
+           u_long sin6_scope_id;       /* set of interfaces for a scope */
+       };
+#      define sockaddr_in6 my_sockaddr_in6
+
+       /* Provide implementations of IN6ADDR_SETANY() and IN6ADDR_SETLOOPBACK
+        * that also initialize the sin6_scope_id field.
+        */
+#      undef IN6ADDR_SETANY
+#      define IN6ADDR_SETANY(x) {\
+(x)->sin6_family = AF_INET6; \
+(x)->sin6_port = 0; \
+(x)->sin6_flowinfo = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr)    ) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 1) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 2) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 3) = 0; \
+(x)->sin6_scope_id = 0; \
+}
+
+#      undef IN6ADDR_SETLOOPBACK
+#      define IN6ADDR_SETLOOPBACK(x) {\
+(x)->sin6_family = AF_INET6; \
+(x)->sin6_port = 0; \
+(x)->sin6_flowinfo = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr)    ) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 1) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 2) = 0; \
+*((u_long *)((x)->sin6_addr.s6_addr) + 3) = 1; \
+(x)->sin6_scope_id = 0; \
+}
+
+#    endif
+
+#  endif
 #endif
 
 #include "win32.h"
 
-#define  ENOTSOCK	WSAENOTSOCK
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef ENOTSOCK
+#define ENOTSOCK	WSAENOTSOCK
+#endif
 
 #ifdef USE_SOCKETS_AS_HANDLES
 

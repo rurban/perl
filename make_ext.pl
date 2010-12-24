@@ -29,10 +29,10 @@ my $is_Unix = !$is_Win32 && !$is_VMS;
 # environment variables on VMS
 my @toolchain = qw(cpan/AutoLoader/lib
 		   dist/Cwd dist/Cwd/lib
-		   cpan/ExtUtils-Command/lib
+		   dist/ExtUtils-Command/lib
 		   dist/ExtUtils-Install/lib
 		   cpan/ExtUtils-MakeMaker/lib
-		   cpan/ExtUtils-Manifest/lib
+		   dist/ExtUtils-Manifest/lib
 		   cpan/File-Path/lib
 		   );
 
@@ -321,42 +321,87 @@ sub build_extension {
     if (!-f $makefile) {
 	if (!-f 'Makefile.PL') {
 	    print "\nCreating Makefile.PL in $ext_dir for $mname\n";
-	    # We need to cope well with various possible layouts
-	    my @dirs = split /::/, $mname;
-	    my $leaf = pop @dirs;
-	    my $leafname = "$leaf.pm";
-	    my $pathname = join '/', @dirs, $leafname;
-	    my @locations = ($leafname, $pathname, "lib/$pathname");
-	    my $fromname;
-	    foreach (@locations) {
-		if (-f $_) {
-		    $fromname = $_;
-		    last;
+	    my ($fromname, $key, $value);
+	    if ($mname eq 'podlators') {
+		# We need to special case this somewhere, and this is fewer
+		# lines of code than a core-only Makefile.PL, and no more
+		# complex
+		$fromname = 'VERSION';
+		$key = 'DISTNAME';
+		$value = 'podlators';
+		$mname = 'Pod';
+	    } else {
+		$key = 'ABSTRACT_FROM';
+		# We need to cope well with various possible layouts
+		my @dirs = split /::/, $mname;
+		my $leaf = pop @dirs;
+		my $leafname = "$leaf.pm";
+		my $pathname = join '/', @dirs, $leafname;
+		my @locations = ($leafname, $pathname, "lib/$pathname");
+		foreach (@locations) {
+		    if (-f $_) {
+			$fromname = $_;
+			last;
+		    }
 		}
-	    }
 
-	    unless ($fromname) {
-		die "For $mname tried @locations in in $ext_dir but can't find source";
+		unless ($fromname) {
+		    die "For $mname tried @locations in in $ext_dir but can't find source";
+		}
+		($value = $fromname) =~ s/\.pm\z/.pod/;
+		$value = $fromname unless -e $value;
 	    }
-            my $pod_name;
-	    ($pod_name = $fromname) =~ s/\.pm\z/.pod/;
-	    $pod_name = $fromname unless -e $pod_name;
 	    open my $fh, '>', 'Makefile.PL'
 		or die "Can't open Makefile.PL for writing: $!";
-	    print $fh <<"EOM";
+	    printf $fh <<'EOM', $0, $mname, $fromname, $key, $value;
 #-*- buffer-read-only: t -*-
 
-# This Makefile.PL was written by $0.
+# This Makefile.PL was written by %s.
 # It will be deleted automatically by make realclean
 
 use strict;
 use ExtUtils::MakeMaker;
 
+# This is what the .PL extracts to. Not the ultimate file that is installed.
+# (ie Win32 runs pl2bat after this)
+
+# Doing this here avoids all sort of quoting issues that would come from
+# attempting to write out perl source with literals to generate the arrays and
+# hash.
+my @temps = 'Makefile.PL';
+foreach (glob('scripts/pod*.PL')) {
+    # The various pod*.PL extrators change directory. Doing that with relative
+    # paths in @INC breaks. It seems the lesser of two evils to copy (to avoid)
+    # the chdir doing anything, than to attempt to convert lib paths to
+    # absolute, and potentially run into problems with quoting special
+    # characters in the path to our build dir (such as spaces)
+    require File::Copy;
+
+    my $temp = $_;
+    $temp =~ s!scripts/!!;
+    File::Copy::copy($_, $temp) or die "Can't copy $temp to $_: $!";
+    push @temps, $temp;
+}
+
+my $script_ext = $^O eq 'VMS' ? '.com' : '';
+my %%pod_scripts;
+foreach (glob('pod*.PL')) {
+    my $script = $_;
+    s/.PL$/$script_ext/i;
+    $pod_scripts{$script} = $_;
+}
+my @exe_files = values %%pod_scripts;
+
 WriteMakefile(
-    NAME          => '$mname',
-    VERSION_FROM  => '$fromname',
-    ABSTRACT_FROM => '$pod_name',
-    realclean     => {FILES => 'Makefile.PL'},
+    NAME          => '%s',
+    VERSION_FROM  => '%s',
+    %-13s => '%s',
+    realclean     => { FILES => "@temps" },
+    (%%pod_scripts ? (
+        PL_FILES  => \%%pod_scripts,
+        EXE_FILES => \@exe_files,
+        clean     => { FILES => "@exe_files" },
+    ) : ()),
 );
 
 # ex: set ro:

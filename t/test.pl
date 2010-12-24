@@ -26,6 +26,7 @@ my $Perl;       # Safer version of $^X set by which_perl()
 
 $TODO = 0;
 $NO_ENDING = 0;
+$Tests_Are_Passing = 1;
 
 # Use this instead of print to avoid interference while testing globals.
 sub _print {
@@ -54,6 +55,17 @@ sub plan {
     $planned = $n;
 }
 
+
+# Set the plan at the end.  See Test::More::done_testing.
+sub done_testing {
+    my $n = $test - 1;
+    $n = shift if @_;
+
+    _print "1..$n\n";
+    $planned = $n;
+}
+
+
 END {
     my $ran = $test - 1;
     if (!$NO_ENDING) {
@@ -66,17 +78,27 @@ END {
     }
 }
 
-# Use this instead of "print STDERR" when outputing failure diagnostic
-# messages
 sub _diag {
     return unless @_;
-    my @mess = map { /^#/ ? "$_\n" : "# $_\n" }
-               map { split /\n/ } @_;
+    my @mess = _comment(@_);
     $TODO ? _print(@mess) : _print_stderr(@mess);
 }
 
+# Use this instead of "print STDERR" when outputing failure diagnostic
+# messages
 sub diag {
     _diag(@_);
+}
+
+# Use this instead of "print" when outputing informational messages
+sub note {
+    return unless @_;
+    _print( _comment(@_) );
+}
+
+sub _comment {
+    return map { /^#/ ? "$_\n" : "# $_\n" }
+           map { split /\n/ } @_;
 }
 
 sub skip_all {
@@ -101,7 +123,12 @@ sub _ok {
 	$out = $pass ? "ok $test" : "not ok $test";
     }
 
-    $out = $out . " # TODO $TODO" if $TODO;
+    if ($TODO) {
+	$out = $out . " # TODO $TODO";
+    } else {
+	$Tests_Are_Passing = 0 unless $pass;
+    }
+
     _print "$out\n";
 
     unless ($pass) {
@@ -406,6 +433,7 @@ USE_OK
 # Arguments :
 #   switches => [ command-line switches ]
 #   nolib    => 1 # don't use -I../lib (included by default)
+#   non_portable => Don't warn if a one liner contains quotes
 #   prog     => one-liner (avoid quotes)
 #   progs    => [ multi-liner (avoid quotes) ]
 #   progfile => perl script
@@ -459,6 +487,9 @@ sub _create_runperl { # Create the string to qx in runperl().
 	die "test.pl:runperl(): 'progs' must be an ARRAYREF " . _where()
 	    unless ref $args{progs} eq "ARRAY";
         foreach my $prog (@{$args{progs}}) {
+	    if ($prog =~ tr/'"// && !$args{non_portable}) {
+		warn "quotes in prog >>$prog<< are not portable";
+	    }
             if ($is_mswin || $is_netware || $is_vms) {
                 $runperl = $runperl . qq ( -e "$prog" );
             }
@@ -533,8 +564,12 @@ sub runperl {
 	    join $sep, grep { $_ ne "" and $_ ne "." and -d $_ and
 		($is_mswin or $is_vms or !(stat && (stat _)[2]&0022)) }
 		    split quotemeta ($sep), $1;
-	$ENV{PATH} = $ENV{PATH} . "$sep/bin" if $is_cygwin;  # Must have /bin under Cygwin
-
+	if ($is_cygwin) {   # Must have /bin under Cygwin
+	    if (length $ENV{PATH}) {
+		$ENV{PATH} = $ENV{PATH} . $sep;
+	    }
+	    $ENV{PATH} = $ENV{PATH} . '/bin';
+	}
 	$runperl =~ /(.*)/s;
 	$runperl = $1;
 
@@ -546,7 +581,8 @@ sub runperl {
     return $result;
 }
 
-*run_perl = \&runperl; # Nice alias.
+# Nice alias
+*run_perl = *run_perl = \&runperl; # shut up "used only once" warning
 
 sub DIE {
     _print_stderr "# @_\n";
@@ -600,10 +636,16 @@ sub which_perl {
 }
 
 sub unlink_all {
+    my $count = 0;
     foreach my $file (@_) {
         1 while unlink $file;
-        _print_stderr "# Couldn't unlink '$file': $!\n" if -f $file;
+	if( -f $file ){
+	    _print_stderr "# Couldn't unlink '$file': $!\n";
+	}else{
+	    ++$count;
+	}
     }
+    $count;
 }
 
 my %tmpfiles;
@@ -766,6 +808,33 @@ sub can_ok ($@) {
     _ok( !@nok, _where(), $name );
 }
 
+
+# Call $class->new( @$args ); and run the result through isa_ok.
+# See Test::More::new_ok
+sub new_ok {
+    my($class, $args, $obj_name) = @_;
+    $args ||= [];
+    $object_name = "The object" unless defined $obj_name;
+
+    local $Level = $Level + 1;
+
+    my $obj;
+    my $ok = eval { $obj = $class->new(@$args); 1 };
+    my $error = $@;
+
+    if($ok) {
+        isa_ok($obj, $class, $object_name);
+    }
+    else {
+        ok( 0, "new() died" );
+        diag("Error was:  $@");
+    }
+
+    return $obj;
+
+}
+
+
 sub isa_ok ($$;$) {
     my($object, $class, $obj_name) = @_;
 
@@ -824,9 +893,12 @@ sub watchdog ($;$)
         goto WATCHDOG_VIA_ALARM;
     }
 
+    # shut up use only once warning
+    my $threads_on = $threads::threads && $threads::threads;
+
     # Don't use a watchdog process if 'threads' is loaded -
     #   use a watchdog thread instead
-    if (! $threads::threads) {
+    if (!$threads_on) {
 
         # On Windows and VMS, try launching a watchdog process
         #   using system(1, ...) (see perlport.pod)
@@ -909,7 +981,7 @@ sub watchdog ($;$)
     # Use a watchdog thread because either 'threads' is loaded,
     #   or fork() failed
     if (eval 'require threads; 1') {
-        threads->create(sub {
+        'threads'->create(sub {
                 # Load POSIX if available
                 eval { require POSIX; };
 
@@ -1067,6 +1139,24 @@ sub latin1_to_native($) {
 
     eval '$string =~ tr/' . $straight . '/' . $$cp . '/';
     return $string;
+}
+
+sub ord_latin1_to_native {
+    # given an input code point, return the platform's native
+    # equivalent value.  Anything above latin1 is itself.
+
+    my $ord = shift;
+    return $ord if $ord > 255;
+    return ord latin1_to_native(chr $ord);
+}
+
+sub ord_native_to_latin1 {
+    # given an input platform code point, return the latin1 equivalent value.
+    # Anything above latin1 is itself.
+
+    my $ord = shift;
+    return $ord if $ord > 255;
+    return ord native_to_latin1(chr $ord);
 }
 
 1;

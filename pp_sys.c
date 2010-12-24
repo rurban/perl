@@ -505,7 +505,7 @@ PP(pp_open)
 
     GV * const gv = MUTABLE_GV(*++MARK);
 
-    if (!isGV(gv))
+    if (!isGV(gv) && !(SvTYPE(gv) == SVt_PVLV && isGV_with_GP(gv)))
 	DIE(aTHX_ PL_no_usym, "filehandle");
 
     if ((io = GvIOp(gv))) {
@@ -825,7 +825,12 @@ PP(pp_tie)
 	    methname = "TIEARRAY";
 	    break;
 	case SVt_PVGV:
+	case SVt_PVLV:
 	    if (isGV_with_GP(varsv)) {
+		if (SvFAKE(varsv) && !(GvFLAGS(varsv) & GVf_TIEWARNED)) {
+		    deprecate("tie on a handle without *");
+		    GvFLAGS(varsv) |= GVf_TIEWARNED;
+		}
 		methname = "TIEHANDLE";
 		how = PERL_MAGIC_tiedscalar;
 		/* For tied filehandles, we apply tiedscalar magic to the IO
@@ -902,8 +907,14 @@ PP(pp_untie)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv)) {
+      if (SvFAKE(sv) && !(GvFLAGS(sv) & GVf_TIEWARNED)) {
+	deprecate("untie on a handle without *");
+	GvFLAGS(sv) |= GVf_TIEWARNED;
+      }
+      if (!(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHYES;
+    }
 
     if ((mg = SvTIED_mg(sv, how))) {
 	SV * const obj = SvRV(SvTIED_obj(sv, mg));
@@ -940,8 +951,14 @@ PP(pp_tied)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv)) {
+      if (SvFAKE(sv) && !(GvFLAGS(sv) & GVf_TIEWARNED)) {
+	deprecate("tied on a handle without *");
+	GvFLAGS(sv) |= GVf_TIEWARNED;
+      }
+      if (!(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHUNDEF;
+    }
 
     if ((mg = SvTIED_mg(sv, how))) {
 	SV *osv = SvTIED_obj(sv, mg);
@@ -1275,6 +1292,9 @@ S_doform(pTHX_ CV *cv, GV *gv, OP *retop)
 
     PERL_ARGS_ASSERT_DOFORM;
 
+    if (cv && CvCLONE(cv))
+	cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
+
     ENTER;
     SAVETMPS;
 
@@ -1330,9 +1350,6 @@ PP(pp_enterwrite)
 	not_a_format_reference:
 	DIE(aTHX_ "Not a format reference");
     }
-    if (CvCLONE(cv))
-	cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
-
     IoFLAGS(io) &= ~IOf_DIDTOP;
     return doform(cv,gv,PL_op->op_next);
 }
@@ -1347,6 +1364,7 @@ PP(pp_leavewrite)
     SV **newsp;
     I32 gimme;
     register PERL_CONTEXT *cx;
+    OP *retop;
 
     if (!io || !(ofp = IoOFP(io)))
         goto forget_top;
@@ -1421,14 +1439,13 @@ PP(pp_leavewrite)
 	    else
 		DIE(aTHX_ "Undefined top format called");
 	}
-	if (cv && CvCLONE(cv))
-	    cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
 	return doform(cv, gv, PL_op);
     }
 
   forget_top:
     POPBLOCK(cx,PL_curpm);
     POPFORMAT(cx);
+    retop = cx->blk_sub.retop;
     LEAVE;
 
     fp = IoOFP(io);
@@ -1461,7 +1478,7 @@ PP(pp_leavewrite)
     PUTBACK;
     PERL_UNUSED_VAR(newsp);
     PERL_UNUSED_VAR(gimme);
-    return cx->blk_sub.retop;
+    return retop;
 }
 
 PP(pp_prtf)
@@ -1654,6 +1671,9 @@ PP(pp_sysread)
 				  (struct sockaddr *)namebuf, &bufsize);
 	if (count < 0)
 	    RETPUSHUNDEF;
+	/* MSG_TRUNC can give oversized count; quietly lose it */
+	if (count > length)
+	    count = length;
 #ifdef EPOC
         /* Bogus return without padding */
 	bufsize = sizeof (struct sockaddr_in);
@@ -3039,7 +3059,7 @@ PP(pp_ftrread)
        conditional compiling below much clearer.  */
     I32 use_access = 0;
 #endif
-    int stat_mode = S_IRUSR;
+    Mode_t stat_mode = S_IRUSR;
 
     bool effective = FALSE;
     char opchar = '?';
@@ -3338,7 +3358,7 @@ PP(pp_fttty)
 
     if (PL_op->op_flags & OPf_REF)
 	gv = cGVOP_gv;
-    else if (isGV(TOPs))
+    else if (isGV_with_GP(TOPs))
 	gv = MUTABLE_GV(POPs);
     else if (SvROK(TOPs) && isGV(SvRV(TOPs)))
 	gv = MUTABLE_GV(SvRV(POPs));
@@ -3391,7 +3411,7 @@ PP(pp_fttext)
 
     if (PL_op->op_flags & OPf_REF)
 	gv = cGVOP_gv;
-    else if (isGV(TOPs))
+    else if (isGV_with_GP(TOPs))
 	gv = MUTABLE_GV(POPs);
     else if (SvROK(TOPs) && isGV(SvRV(TOPs)))
 	gv = MUTABLE_GV(SvRV(POPs));
@@ -4453,7 +4473,7 @@ PP(pp_setpgrp)
 #endif
 }
 
-#ifdef __GLIBC__
+#if defined(__GLIBC__) && ((__GLIBC__ == 2 && __GLIBC_MINOR__ >= 3) || (__GLIBC__ > 2))
 #  define PRIORITY_WHICH_T(which) (__priority_which_t)which
 #else
 #  define PRIORITY_WHICH_T(which) which
@@ -5518,7 +5538,8 @@ PP(pp_getlogin)
     EXTEND(SP, 1);
     if (!(tmps = PerlProc_getlogin()))
 	RETPUSHUNDEF;
-    PUSHp(tmps, strlen(tmps));
+    sv_setpv_mg(TARG, tmps);
+    PUSHs(TARG);
     RETURN;
 #else
     DIE(aTHX_ PL_no_func, "getlogin");

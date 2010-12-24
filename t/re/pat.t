@@ -23,7 +23,7 @@ BEGIN {
 }
 
 
-plan tests => 366;  # Update this when adding/deleting tests.
+plan tests => 411;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -93,7 +93,7 @@ sub run_tests {
         our @XXX = ('ok 1','not ok 1', 'ok 2','not ok 2','not ok 3');
         while ($_ = shift(@XXX)) {
             my $f = index ($_, 'not') >= 0 ? \&nok : \&ok;
-            my $r = ?(.*)?;
+            my $r = m?(.*)?;
             &$f ($r, "?(.*)?");
             /not/ && reset;
             if (/not ok 2/) {
@@ -499,12 +499,40 @@ sub run_tests {
     }
 
     {
-        iseq qr/\b\v$/i,    '(?i-xsm:\b\v$)', 'qr/\b\v$/i';
-        iseq qr/\b\v$/s,    '(?s-xim:\b\v$)', 'qr/\b\v$/s';
-        iseq qr/\b\v$/m,    '(?m-xis:\b\v$)', 'qr/\b\v$/m';
-        iseq qr/\b\v$/x,    '(?x-ism:\b\v$)', 'qr/\b\v$/x';
-        iseq qr/\b\v$/xism, '(?msix:\b\v$)',  'qr/\b\v$/xism';
-        iseq qr/\b\v$/,     '(?-xism:\b\v$)', 'qr/\b\v$/';
+        iseq qr/\b\v$/i,    '(?^i:\b\v$)', 'qr/\b\v$/i';
+        iseq qr/\b\v$/s,    '(?^s:\b\v$)', 'qr/\b\v$/s';
+        iseq qr/\b\v$/m,    '(?^m:\b\v$)', 'qr/\b\v$/m';
+        iseq qr/\b\v$/x,    '(?^x:\b\v$)', 'qr/\b\v$/x';
+        iseq qr/\b\v$/xism, '(?^msix:\b\v$)',  'qr/\b\v$/xism';
+        iseq qr/\b\v$/,     '(?^:\b\v$)', 'qr/\b\v$/';
+    }
+
+    {   # Test that charset modifier work, and are interpolated
+        iseq qr/\b\v$/, '(?^:\b\v$)', 'Verify no locale, no unicode_strings gives default modifier';
+        iseq qr/(?l:\b\v$)/, '(?^:(?l:\b\v$))', 'Verify infix l modifier compiles';
+        iseq qr/(?u:\b\v$)/, '(?^:(?u:\b\v$))', 'Verify infix u modifier compiles';
+        iseq qr/(?l)\b\v$/, '(?^:(?l)\b\v$)', 'Verify (?l) compiles';
+        iseq qr/(?u)\b\v$/, '(?^:(?u)\b\v$)', 'Verify (?u) compiles';
+
+        my $dual = qr/\b\v$/;
+        use locale;
+        my $locale = qr/\b\v$/;
+        iseq $locale,    '(?^l:\b\v$)', 'Verify has l modifier when compiled under use locale';
+        no locale;
+
+        use feature 'unicode_strings';
+        my $unicode = qr/\b\v$/;
+        iseq $unicode,    '(?^u:\b\v$)', 'Verify has u modifier when compiled under unicode_strings';
+        iseq qr/abc$dual/,    '(?^u:abc(?^:\b\v$))', 'Verify retains d meaning when interpolated under locale';
+        iseq qr/abc$locale/,    '(?^u:abc(?^l:\b\v$))', 'Verify retains l when interpolated under unicode_strings';
+
+        no feature 'unicode_strings';
+        iseq qr/abc$locale/,    '(?^:abc(?^l:\b\v$))', 'Verify retains l when interpolated outside locale and unicode strings';
+        iseq qr/def$unicode/,    '(?^:def(?^u:\b\v$))', 'Verify retains u when interpolated outside locale and unicode strings';
+
+        use locale;
+        iseq qr/abc$dual/,    '(?^l:abc(?^:\b\v$))', 'Verify retains d meaning when interpolated under locale';
+        iseq qr/abc$unicode/,    '(?^l:abc(?^u:\b\v$))', 'Verify retains u when interpolated under locale';
     }
 
 
@@ -1042,6 +1070,92 @@ sub run_tests {
         ok "-" =~ /\s*\p{Dash}{1}/;
         ok " " =~ /\w*\p{Blank}{1,4}/;
 
+    }
+
+    SKIP: {   # Some constructs with Latin1 characters cause a utf8 string not
+              # to match itself in non-utf8
+        if ($IS_EBCDIC) {
+            skip "Needs to be customized to run on EBCDIC", 6;
+        }
+        my $c = "\xc0";
+        my $pattern = my $utf8_pattern = qr/((\xc0)+,?)/;
+        utf8::upgrade($utf8_pattern);
+        ok $c =~ $pattern, "\\xc0 =~ $pattern; Neither pattern nor target utf8";
+        ok $c =~ /$pattern/i, "\\xc0 =~ /$pattern/i; Neither pattern nor target utf8";
+        ok $c =~ $utf8_pattern, "\\xc0 =~ $pattern; pattern utf8, target not";
+        ok $c =~ /$utf8_pattern/i, "\\xc0 =~ /$pattern/i; pattern utf8, target not";
+        utf8::upgrade($c);
+        ok $c =~ $pattern, "\\xc0 =~ $pattern; target utf8, pattern not";
+        ok $c =~ /$pattern/i, "\\xc0 =~ /$pattern/i; target utf8, pattern not";
+        ok $c =~ $utf8_pattern, "\\xc0 =~ $pattern; Both target and pattern utf8";
+        ok $c =~ /$utf8_pattern/i, "\\xc0 =~ /$pattern/i; Both target and pattern utf8";
+    }
+
+    SKIP: {   # Make sure can override the formatting
+        if ($IS_EBCDIC) {
+            skip "Needs to be customized to run on EBCDIC", 2;
+        }
+        use feature 'unicode_strings';
+        ok "\xc0" =~ /\w/, 'Under unicode_strings: "\xc0" =~ /\w/';
+        ok "\xc0" !~ /(?d:\w)/, 'Under unicode_strings: "\xc0" !~ /(?d:\w)/';
+    }
+
+    {
+        # Test that a regex followed by an operator and/or a statement modifier work
+        # These tests use string-eval so that it reports a clean error when it fails
+        # (without the string eval the test script might be unparseable)
+
+        # Note: these test check the behaviour that currently is valid syntax
+        # If a new regex modifier is added and a test fails then there is a backwards-compatibilty issue
+        # Note-2: a new deprecate warning was added for this with commit e6897b1a5db0410e387ccbf677e89fc4a1d8c97a
+        # which indicate that this syntax will be removed in 5.16.
+        # When this happens the tests can be removed
+
+        no warnings 'syntax';
+        iseq( eval q#my $r = "a" =~ m/a/lt 2;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by lt");
+        iseq( eval q#my $r = "a" =~ m/a/le 1;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by le");
+        iseq( eval q#my $r = "a" =~ m/a/eq 1;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by eq");
+        iseq( eval q#my $r = "a" =~ m/a/ne 0;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by ne");
+        iseq( eval q#my $r = "a" =~ m/a/and 1;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by and");
+        iseq( eval q#my $r = "a" =~ m/a/unless 0;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by unless");
+        iseq( eval q#my $c = 1; my $r; $r = "a" =~ m/a/while $c--;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by while");
+        iseq( eval q#my $c = 0; my $r; $r = "a" =~ m/a/until $c++;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by until");
+        iseq( eval q#my $r; $r = "a" =~ m/a/for 1;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by for");
+        iseq( eval q#my $r; $r = "a" =~ m/a/foreach 1;"eval_ok $r"#, "eval_ok 1", "regex (m//) followed by foreach");
+
+        iseq( eval q#my $t = "a"; my $r = $t =~ s/a//lt 2;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by lt");
+        iseq( eval q#my $t = "a"; my $r = $t =~ s/a//le 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by le");
+        iseq( eval q#my $t = "a"; my $r = $t =~ s/a//ne 0;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by ne");
+        iseq( eval q#my $t = "a"; my $r = $t =~ s/a//and 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by and");
+        iseq( eval q#my $t = "a"; my $r = $t =~ s/a//unless 0;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by unless");
+
+        iseq( eval q#my $c = 1; my $r; my $t = "a"; $r = $t =~ s/a//while $c--;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by while");
+        iseq( eval q#my $c = 0; my $r; my $t = "a"; $r = $t =~ s/a//until $c++;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by until");
+        iseq( eval q#my $r; my $t = "a"; $r = $t =~ s/a//for 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by for");
+        iseq( eval q#my $r; my $t = "a"; $r = $t =~ s/a//for 1;"eval_ok $r"#, "eval_ok 1", "regex (s///) followed by foreach");
+    }
+
+    {
+        my $str= "\x{100}";
+        chop $str;
+        my $qr= qr/$str/;
+        iseq( "$qr", "(?^:)", "Empty pattern qr// stringifies to (?^:) with unicode flag enabled - Bug #80212" );
+        $str= "";
+        $qr= qr/$str/;
+        iseq( "$qr", "(?^:)", "Empty pattern qr// stringifies to (?^:) with unicode flag disabled - Bug #80212" )
+
+    }
+
+    {
+        local $TODO = "[perl #38133]";
+
+        "A" =~ /(((?:A))?)+/;
+        my $first = $2;
+
+        "A" =~ /(((A))?)+/;
+        my $second = $2;
+
+        iseq($first, $second);
     }
 
 } # End of sub run_tests

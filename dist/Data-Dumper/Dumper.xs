@@ -142,10 +142,14 @@ esc_q_utf8(pTHX_ SV* sv, register const char *src, register STRLEN slen)
     STRLEN single_quotes = 0;
     STRLEN qq_escapables = 0;	/* " $ @ will need a \ in "" strings.  */
     STRLEN normal = 0;
+    int increment;
 
     /* this will need EBCDICification */
-    for (s = src; s < send; s += UTF8SKIP(s)) {
+    for (s = src; s < send; s += increment) {
         const UV k = utf8_to_uvchr((U8*)s, NULL);
+
+        /* check for invalid utf8 */
+        increment = (k == 0 && *s != '\0') ? 1 : UTF8SKIP(s);
 
 #ifdef EBCDIC
 	if (!isprint(k) || k > 256) {
@@ -702,7 +706,7 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 		    keysv = svp ? *svp : sv_mortalcopy(&PL_sv_undef);
 		    key = SvPV(keysv, keylen);
 		    svp = hv_fetch((HV*)ival, key,
-                                   SvUTF8(keysv) ? -(I32)keylen : keylen, 0);
+                                   SvUTF8(keysv) ? -(I32)keylen : (I32)keylen, 0);
 		    hval = svp ? *svp : sv_mortalcopy(&PL_sv_undef);
 		}
 		else {
@@ -909,7 +913,7 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 	}
 	else if (realtype == SVt_PVGV) {/* GLOBs can end up with scribbly names */
 	    c = SvPV(val, i);
-	    ++c; --i;			/* just get the name */
+	    if(i) ++c, --i;			/* just get the name */
 	    if (i >= 6 && strncmp(c, "main::", 6) == 0) {
 		c += 4;
 		i -= 4;
@@ -1188,10 +1192,12 @@ Data_Dumper_Dumpxs(href, ...)
 		    else
 			newapad = apad;
 		
+		    PUTBACK;
 		    DD_dump(aTHX_ val, SvPVX_const(name), SvCUR(name), valstr, seenhv,
 			    postav, &level, indent, pad, xpad, newapad, sep, pair,
 			    freezer, toaster, purity, deepcopy, quotekeys,
 			    bless, maxdepth, sortkeys);
+		    SPAGAIN;
 		
 		    if (indent >= 2 && !terse)
 			SvREFCNT_dec(newapad);

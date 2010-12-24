@@ -9,7 +9,7 @@ require Exporter;
 use Carp;
 use Symbol qw(gensym qualify);
 
-$VERSION	= 1.06;
+$VERSION	= 1.08;
 @ISA		= qw(Exporter);
 @EXPORT		= qw(open3);
 
@@ -121,8 +121,6 @@ The order of arguments differs from that of open2().
 # allow fd numbers to be used, by Frank Tobin
 # allow '-' as command (c.f. open "-|"), by Adam Spiers <perl@adamspiers.org>
 #
-# $Id: open3.pl,v 1.1 1993/11/23 06:26:15 marc Exp $
-#
 # usage: $pid = open3('wtr', 'rdr', 'err' 'some cmd and args', 'optarg', ...);
 #
 # spawn the given $cmd and connect rdr for
@@ -181,7 +179,7 @@ sub xopen {
 }
 
 sub xclose {
-    close $_[0] or croak "$Me: close($_[0]) failed: $!";
+    $_[0] =~ /\A=?(\d+)\z/ ? eval { require POSIX; POSIX::close($1); } : close $_[0]
 }
 
 sub fh_is_fd {

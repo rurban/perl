@@ -2,7 +2,7 @@ package Locale::Codes::Currency;
 
 # This file was automatically generated.  Any changes to this file will
 # be lost the next time 'get_codes' is run.
-#    Generated on: Tue Jun  1 15:14:17 EDT 2010
+#    Generated on: Thu Dec  2 08:50:04 EST 2010
 
 =pod
 
@@ -36,8 +36,8 @@ use strict;
 use warnings;
 require 5.002;
 
-use vars qw($VERSION);
-$VERSION='3.13';
+our($VERSION);
+$VERSION='3.15';
 
 $Locale::Codes::Data{'currency'}{'id'} = '0179';
 

@@ -62,6 +62,8 @@ or not the string is encoded in UTF-8 (or UTF-EBCDIC on EBCDIC machines).  That
 is, if they are invariant.  On ASCII-ish machines, only ASCII characters
 fit this definition, hence the function's name.
 
+If C<len> is 0, it will be calculated using C<strlen(s)>.  
+
 See also is_utf8_string(), is_utf8_string_loclen(), and is_utf8_string_loc().
 
 =cut
@@ -303,9 +305,10 @@ Perl_is_utf8_char(const U8 *s)
 =for apidoc is_utf8_string
 
 Returns true if first C<len> bytes of the given string form a valid
-UTF-8 string, false otherwise.  Note that 'a valid UTF-8 string' does
-not mean 'a string that contains code points above 0x7F encoded in UTF-8'
-because a valid ASCII string is a valid UTF-8 string.
+UTF-8 string, false otherwise.  If C<len> is 0, it will be calculated
+using C<strlen(s)>.  Note that 'a valid UTF-8 string' does not mean 'a
+string that contains code points above 0x7F encoded in UTF-8' because a
+valid ASCII string is a valid UTF-8 string.
 
 See also is_ascii_string(), is_utf8_string_loclen(), and is_utf8_string_loc().
 
@@ -805,6 +808,74 @@ Perl_utf8_hop(pTHX_ const U8 *s, I32 off)
 }
 
 /*
+=for apidoc bytes_cmp_utf8
+
+Compares the sequence of characters (stored as octets) in b, blen with the
+sequence of characters (stored as UTF-8) in u, ulen. Returns 0 if they are
+equal, -1 or -2 if the first string is less than the second string, +1 or +2
+if the first string is greater than the second string.
+
+-1 or +1 is returned if the shorter string was identical to the start of the
+longer string. -2 or +2 is returned if the was a difference between characters
+within the strings.
+
+=cut
+*/
+
+int
+Perl_bytes_cmp_utf8(pTHX_ const U8 *b, STRLEN blen, const U8 *u, STRLEN ulen)
+{
+    const U8 *const bend = b + blen;
+    const U8 *const uend = u + ulen;
+
+    PERL_ARGS_ASSERT_BYTES_CMP_UTF8;
+
+    PERL_UNUSED_CONTEXT;
+
+    while (b < bend && u < uend) {
+        U8 c = *u++;
+	if (!UTF8_IS_INVARIANT(c)) {
+	    if (UTF8_IS_DOWNGRADEABLE_START(c)) {
+		if (u < uend) {
+		    U8 c1 = *u++;
+		    if (UTF8_IS_CONTINUATION(c1)) {
+			c = UNI_TO_NATIVE(TWO_BYTE_UTF8_TO_UNI(c, c1));
+		    } else {
+			Perl_ck_warner_d(aTHX_ packWARN(WARN_UTF8),
+					 "Malformed UTF-8 character "
+					 "(unexpected non-continuation byte 0x%02x"
+					 ", immediately after start byte 0x%02x)"
+					 /* Dear diag.t, it's in the pod.  */
+					 "%s%s", c1, c,
+					 PL_op ? " in " : "",
+					 PL_op ? OP_DESC(PL_op) : "");
+			return -2;
+		    }
+		} else {
+		    if (PL_op)
+			Perl_ck_warner_d(aTHX_ packWARN(WARN_UTF8),
+					 "%s in %s", unees, OP_DESC(PL_op));
+		    else
+			Perl_ck_warner_d(aTHX_ packWARN(WARN_UTF8), unees);
+		    return -2; /* Really want to return undef :-)  */
+		}
+	    } else {
+		return -2;
+	    }
+	}
+	if (*b != c) {
+	    return *b < c ? -2 : +2;
+	}
+	++b;
+    }
+
+    if (b == bend && u == uend)
+	return 0;
+
+    return b < bend ? +1 : -1;
+}
+
+/*
 =for apidoc utf8_to_bytes
 
 Converts a string C<s> of length C<len> from UTF-8 into native byte encoding.
@@ -897,8 +968,7 @@ Perl_bytes_from_utf8(pTHX_ const U8 *s, STRLEN *len, bool *is_utf8)
 	U8 c = *s++;
 	if (!UTF8_IS_INVARIANT(c)) {
 	    /* Then it is two-byte encoded */
-	    c = UTF8_ACCUMULATE(NATIVE_TO_UTF(c), *s++);
-	    c = ASCII_TO_NATIVE(c);
+	    c = UNI_TO_NATIVE(TWO_BYTE_UTF8_TO_UNI(c, *s++));
 	}
 	*d++ = c;
     }
@@ -910,9 +980,10 @@ Perl_bytes_from_utf8(pTHX_ const U8 *s, STRLEN *len, bool *is_utf8)
 /*
 =for apidoc bytes_to_utf8
 
-Converts a string C<s> of length C<len> from the native encoding into UTF-8.
+Converts a string C<s> of length C<len> bytes from the native encoding into
+UTF-8.
 Returns a pointer to the newly-created string, and sets C<len> to
-reflect the new length.
+reflect the new length in bytes.
 
 A NUL character will be written after the end of the string.
 
@@ -1898,7 +1969,8 @@ Perl_swash_init(pTHX_ const char* pkg, const char* name, SV *listsv, I32 minbits
  * return several Unicode characters for a single Unicode character
  * (see lib/unicore/SpecCase.txt) The SWASHGET in lib/utf8_heavy.pl is
  * the lower-level routine, and it is similarly broken for returning
- * multiple values.  --jhi */
+ * multiple values.  --jhi
+ * For those, you should use to_utf8_case() instead */
 /* Now SWASHGET is recasted into S_swash_get in this file. */
 
 /* Note:
@@ -2022,6 +2094,105 @@ Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
     NORETURN_FUNCTION_END;
 }
 
+/* Read a single line of the main body of the swash input text.  These are of
+ * the form:
+ * 0053	0056	0073
+ * where each number is hex.  The first two numbers form the minimum and
+ * maximum of a range, and the third is the value associated with the range.
+ * Not all swashes should have a third number
+ *
+ * On input: l	  points to the beginning of the line to be examined; it points
+ *		  to somewhere in the string of the whole input text, and is
+ *		  terminated by a \n or the null string terminator.
+ *	     lend   points to the null terminator of that string
+ *	     wants_value    is non-zero if the swash expects a third number
+ *	     typestr is the name of the swash's mapping, like 'ToLower'
+ * On output: *min, *max, and *val are set to the values read from the line.
+ *	      returns a pointer just beyond the line examined.  If there was no
+ *	      valid min number on the line, returns lend+1
+ */
+
+STATIC U8*
+S_swash_scan_list_line(pTHX_ U8* l, U8* const lend, UV* min, UV* max, UV* val,
+			     const bool wants_value, const U8* const typestr)
+{
+    const int  typeto  = typestr[0] == 'T' && typestr[1] == 'o';
+    STRLEN numlen;	    /* Length of the number */
+    I32 flags = PERL_SCAN_SILENT_ILLDIGIT | PERL_SCAN_DISALLOW_PREFIX;
+
+    /* nl points to the next \n in the scan */
+    U8* const nl = (U8*)memchr(l, '\n', lend - l);
+
+    /* Get the first number on the line: the range minimum */
+    numlen = lend - l;
+    *min = grok_hex((char *)l, &numlen, &flags, NULL);
+    if (numlen)	    /* If found a hex number, position past it */
+	l += numlen;
+    else if (nl) {	    /* Else, go handle next line, if any */
+	return nl + 1;	/* 1 is length of "\n" */
+    }
+    else {		/* Else, no next line */
+	return lend + 1;	/* to LIST's end at which \n is not found */
+    }
+
+    /* The max range value follows, separated by a BLANK */
+    if (isBLANK(*l)) {
+	++l;
+	flags = PERL_SCAN_SILENT_ILLDIGIT | PERL_SCAN_DISALLOW_PREFIX;
+	numlen = lend - l;
+	*max = grok_hex((char *)l, &numlen, &flags, NULL);
+	if (numlen)
+	    l += numlen;
+	else    /* If no value here, it is a single element range */
+	    *max = *min;
+
+	/* Non-binary tables have a third entry: what the first element of the
+	 * range maps to */
+	if (wants_value) {
+	    if (isBLANK(*l)) {
+		++l;
+		flags = PERL_SCAN_SILENT_ILLDIGIT |
+			PERL_SCAN_DISALLOW_PREFIX;
+		numlen = lend - l;
+		*val = grok_hex((char *)l, &numlen, &flags, NULL);
+		if (numlen)
+		    l += numlen;
+		else
+		    *val = 0;
+	    }
+	    else {
+		*val = 0;
+		if (typeto) {
+		    Perl_croak(aTHX_ "%s: illegal mapping '%s'",
+				     typestr, l);
+		}
+	    }
+	}
+	else
+	    *val = 0; /* bits == 1, then any val should be ignored */
+    }
+    else { /* Nothing following range min, should be single element with no
+	      mapping expected */
+	*max = *min;
+	if (wants_value) {
+	    *val = 0;
+	    if (typeto) {
+		Perl_croak(aTHX_ "%s: illegal mapping '%s'", typestr, l);
+	    }
+	}
+	else
+	    *val = 0; /* bits == 1, then val should be ignored */
+    }
+
+    /* Position to next line if any, or EOF */
+    if (nl)
+	l = nl + 1;
+    else
+	l = lend;
+
+    return l;
+}
+
 /* Note:
  * Returns a swatch (a bit vector string) for a code point sequence
  * that starts from the value C<start> and comprises the number C<span>.
@@ -2035,13 +2206,15 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
     U8 *l, *lend, *x, *xend, *s;
     STRLEN lcur, xcur, scur;
     HV *const hv = MUTABLE_HV(SvRV(swash));
+
+    /* The string containing the main body of the table */
     SV** const listsvp = hv_fetchs(hv, "LIST", FALSE);
+
     SV** const typesvp = hv_fetchs(hv, "TYPE", FALSE);
     SV** const bitssvp = hv_fetchs(hv, "BITS", FALSE);
     SV** const nonesvp = hv_fetchs(hv, "NONE", FALSE);
     SV** const extssvp = hv_fetchs(hv, "EXTRAS", FALSE);
     const U8* const typestr = (U8*)SvPV_nolen(*typesvp);
-    const int  typeto  = typestr[0] == 'T' && typestr[1] == 'o';
     const STRLEN bits  = SvUV(*bitssvp);
     const STRLEN octets = bits >> 3; /* if bits == 1, then octets == 0 */
     const UV     none  = SvUV(*nonesvp);
@@ -2088,74 +2261,13 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
     lend = l + lcur;
     while (l < lend) {
 	UV min, max, val;
-	STRLEN numlen;
-	I32 flags = PERL_SCAN_SILENT_ILLDIGIT | PERL_SCAN_DISALLOW_PREFIX;
-
-	U8* const nl = (U8*)memchr(l, '\n', lend - l);
-
-	numlen = lend - l;
-	min = grok_hex((char *)l, &numlen, &flags, NULL);
-	if (numlen)
-	    l += numlen;
-	else if (nl) {
-	    l = nl + 1; /* 1 is length of "\n" */
-	    continue;
-	}
-	else {
-	    l = lend; /* to LIST's end at which \n is not found */
+	l = S_swash_scan_list_line(aTHX_ l, lend, &min, &max, &val,
+					 cBOOL(octets), typestr);
+	if (l > lend) {
 	    break;
 	}
 
-	if (isBLANK(*l)) {
-	    ++l;
-	    flags = PERL_SCAN_SILENT_ILLDIGIT | PERL_SCAN_DISALLOW_PREFIX;
-	    numlen = lend - l;
-	    max = grok_hex((char *)l, &numlen, &flags, NULL);
-	    if (numlen)
-		l += numlen;
-	    else
-		max = min;
-
-	    if (octets) {
-		if (isBLANK(*l)) {
-		    ++l;
-		    flags = PERL_SCAN_SILENT_ILLDIGIT |
-			    PERL_SCAN_DISALLOW_PREFIX;
-		    numlen = lend - l;
-		    val = grok_hex((char *)l, &numlen, &flags, NULL);
-		    if (numlen)
-			l += numlen;
-		    else
-			val = 0;
-		}
-		else {
-		    val = 0;
-		    if (typeto) {
-			Perl_croak(aTHX_ "%s: illegal mapping '%s'",
-					 typestr, l);
-		    }
-		}
-	    }
-	    else
-		val = 0; /* bits == 1, then val should be ignored */
-	}
-	else {
-	    max = min;
-	    if (octets) {
-		val = 0;
-		if (typeto) {
-		    Perl_croak(aTHX_ "%s: illegal mapping '%s'", typestr, l);
-		}
-	    }
-	    else
-		val = 0; /* bits == 1, then val should be ignored */
-	}
-
-	if (nl)
-	    l = nl + 1;
-	else
-	    l = lend;
-
+	/* If looking for something beyond this range, go try the next one */
 	if (max < start)
 	    continue;
 
@@ -2335,6 +2447,138 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
 	sv_free(other); /* through with it! */
     } /* while */
     return swatch;
+}
+
+HV*
+Perl__swash_inversion_hash(pTHX_ SV* swash)
+{
+
+   /* Subject to change or removal.  For use only in one place in regexec.c
+    *
+    * Returns a hash which is the inversion and closure of a swash mapping.
+    * For example, consider the input lines:
+    * 004B		006B
+    * 004C		006C
+    * 212A		006B
+    *
+    * The returned hash would have two keys, the utf8 for 006B and the utf8 for
+    * 006C.  The value for each key is an array.  For 006C, the array would
+    * have a two elements, the utf8 for itself, and for 004C.  For 006B, there
+    * would be three elements in its array, the utf8 for 006B, 004B and 212A.
+    *
+    * Essentially, for any code point, it gives all the code points that map to
+    * it, or the list of 'froms' for that point.
+    *
+    * Currently it only looks at the main body of the swash, and ignores any
+    * additions or deletions from other swashes */
+
+    U8 *l, *lend;
+    STRLEN lcur;
+    HV *const hv = MUTABLE_HV(SvRV(swash));
+
+    /* The string containing the main body of the table */
+    SV** const listsvp = hv_fetchs(hv, "LIST", FALSE);
+
+    SV** const typesvp = hv_fetchs(hv, "TYPE", FALSE);
+    SV** const bitssvp = hv_fetchs(hv, "BITS", FALSE);
+    SV** const nonesvp = hv_fetchs(hv, "NONE", FALSE);
+    /*SV** const extssvp = hv_fetchs(hv, "EXTRAS", FALSE);*/
+    const U8* const typestr = (U8*)SvPV_nolen(*typesvp);
+    const STRLEN bits  = SvUV(*bitssvp);
+    const STRLEN octets = bits >> 3; /* if bits == 1, then octets == 0 */
+    const UV     none  = SvUV(*nonesvp);
+
+    HV* ret = newHV();
+
+    PERL_ARGS_ASSERT__SWASH_INVERSION_HASH;
+
+    /* Must have at least 8 bits to get the mappings */
+    if (bits != 8 && bits != 16 && bits != 32) {
+	Perl_croak(aTHX_ "panic: swash_inversion_hash doesn't expect bits %"UVuf,
+						 (UV)bits);
+    }
+
+    /* read $swash->{LIST} */
+    l = (U8*)SvPV(*listsvp, lcur);
+    lend = l + lcur;
+
+    /* Go through each input line */
+    while (l < lend) {
+	UV min, max, val;
+	UV inverse;
+	l = S_swash_scan_list_line(aTHX_ l, lend, &min, &max, &val,
+					 cBOOL(octets), typestr);
+	if (l > lend) {
+	    break;
+	}
+
+	/* Each element in the range is to be inverted */
+	for (inverse = min; inverse <= max; inverse++) {
+	    AV* list;
+	    SV* element;
+	    SV** listp;
+	    IV i;
+	    bool found_key = FALSE;
+
+	    /* The key is the inverse mapping */
+	    char key[UTF8_MAXBYTES+1];
+	    char* key_end = (char *) uvuni_to_utf8((U8*) key, val);
+	    STRLEN key_len = key_end - key;
+
+	    /* And the value is what the forward mapping is from. */
+	    char utf8_inverse[UTF8_MAXBYTES+1];
+	    char *utf8_inverse_end = (char *) uvuni_to_utf8((U8*) utf8_inverse, inverse);
+
+	    /* Get the list for the map */
+	    if ((listp = hv_fetch(ret, key, key_len, FALSE))) {
+		list = (AV*) *listp;
+	    }
+	    else { /* No entry yet for it: create one */
+		list = newAV();
+		if (! hv_store(ret, key, key_len, (SV*) list, FALSE)) {
+		    Perl_croak(aTHX_ "panic: hv_store() unexpectedly failed");
+		}
+	    }
+
+	    for (i = 0; i < av_len(list); i++) {
+		SV** entryp = av_fetch(list, i, FALSE);
+		SV* entry;
+		if (entryp == NULL) {
+		    Perl_croak(aTHX_ "panic: av_fetch() unexpectedly failed");
+		}
+		entry = *entryp;
+		if (SvCUR(entry) != key_len) {
+		    continue;
+		}
+		if (memEQ(key, SvPVX(entry), key_len)) {
+		    found_key = TRUE;
+		    break;
+		}
+	    }
+	    if (! found_key) {
+		element = newSVpvn_flags(key, key_len, SVf_UTF8);
+		av_push(list, element);
+	    }
+
+
+	    /* Simply add the value to the list */
+	    element = newSVpvn_flags(utf8_inverse, utf8_inverse_end - utf8_inverse, SVf_UTF8);
+	    av_push(list, element);
+
+	    /* swash_get() increments the value of val for each element in the
+	     * range.  That makes more compact tables possible.  You can
+	     * express the capitalization, for example, of all consecutive
+	     * letters with a single line: 0061\t007A\t0041 This maps 0061 to
+	     * 0041, 0062 to 0042, etc.  I (khw) have never understood 'none',
+	     * and it's not documented, and perhaps not even currently used,
+	     * but I copied the semantics from swash_get(), just in case */
+	    if (!none || val < none) {
+		++val;
+	    }
+	}
+    }
+
+    return ret;
 }
 
 /*

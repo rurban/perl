@@ -193,7 +193,7 @@ if ($PLATFORM =~ /^win(?:32|ce)$/) {
     print "LIBRARY $dll\n";
     # The DESCRIPTION module definition file statement is not supported
     # by VC7 onwards.
-    if ($CCTYPE !~ /^MSVC7/ && $CCTYPE !~ /^MSVC8/ && $CCTYPE !~ /^MSVC9/) {
+    if ($CCTYPE =~ /^(?:MSVC60|GCC|BORLAND)$/) {
 	print "DESCRIPTION 'Perl interpreter'\n";
     }
     print "EXPORTS\n";
@@ -1221,14 +1221,10 @@ for my $syms (@syms) {
 
 # variables
 
-if ($define{'MULTIPLICITY'}) {
-    for my $f ($perlvars_h, $intrpvar_h) {
+if ($define{'MULTIPLICITY'} && $define{PERL_GLOBAL_STRUCT}) {
+    for my $f ($perlvars_h) {
 	my $glob = readvar($f, sub { "Perl_" . $_[1] . $_[2] . "_ptr" });
 	emit_symbols $glob;
-    }
-    unless ($define{'USE_ITHREADS'}) {
-	# XXX needed for XS extensions that define PERL_CORE
-	emit_symbol("PL_curinterp");
     }
     # XXX AIX seems to want the perlvars.h symbols, for some reason
     if ($PLATFORM eq 'aix' or $PLATFORM eq 'os2') {	# OS/2 needs PL_thr_key
@@ -1241,8 +1237,10 @@ else {
 	my $glob = readvar($perlvars_h);
 	emit_symbols $glob;
     }
-    my $glob = readvar($intrpvar_h);
-    emit_symbols $glob;
+    unless ($define{MULTIPLICITY}) {
+	my $glob = readvar($intrpvar_h);
+	emit_symbols $glob;
+    }
 }
 
 sub try_symbol {

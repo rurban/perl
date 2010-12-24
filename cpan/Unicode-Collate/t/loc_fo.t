@@ -1,10 +1,26 @@
-#!perl
+
+BEGIN {
+    unless ("A" eq pack('U', 0x41)) {
+	print "1..0 # Unicode::Collate " .
+	    "cannot stringify a Unicode code point\n";
+	exit 0;
+    }
+    if ($ENV{PERL_CORE}) {
+	chdir('t') if -d 't';
+	@INC = $^O eq 'MacOS' ? qw(::lib) : qw(../lib);
+    }
+}
+
+use Test;
+BEGIN { plan tests => 105 };
+
 use strict;
 use warnings;
 use Unicode::Collate::Locale;
 
-use Test;
-plan tests => 93;
+ok(1);
+
+#########################
 
 my $eth  = pack 'U', 0xF0;
 my $ETH  = pack 'U', 0xD0;
@@ -26,7 +42,6 @@ my $Arng = pack 'U', 0xC5;
 my $objFo = Unicode::Collate::Locale->
     new(locale => 'FO', normalization => undef);
 
-ok(1);
 ok($objFo->getlocale, 'fo');
 
 $objFo->change(level => 1);
@@ -120,29 +135,41 @@ ok($objFo->eq("u\x{308}", $uuml));
 ok($objFo->eq("U\x{308}", $Uuml));
 ok($objFo->eq("u\x{30B}", "\x{171}"));
 ok($objFo->eq("U\x{30B}", "\x{170}"));
-ok($objFo->eq("\x{1FD}", "$ae\x{301}"));
-ok($objFo->eq("\x{1FC}", "$AE\x{301}"));
-ok($objFo->eq("\x{1E3}", "$ae\x{304}"));
-ok($objFo->eq("\x{1E2}", "$AE\x{304}"));
 ok($objFo->eq("a\x{308}", $auml));
 ok($objFo->eq("A\x{308}", $Auml));
 ok($objFo->eq("e\x{328}", "\x{119}"));
 ok($objFo->eq("E\x{328}", "\x{118}"));
-
-# 80
-
 ok($objFo->eq("o\x{338}", $ostk));
 ok($objFo->eq("O\x{338}", $Ostk));
-ok($objFo->eq("o\x{338}\x{301}", "\x{1FF}"));
-ok($objFo->eq("O\x{338}\x{301}", "\x{1FE}"));
 ok($objFo->eq("o\x{308}", $ouml));
 ok($objFo->eq("O\x{308}", $Ouml));
 ok($objFo->eq("o\x{30B}", "\x{151}"));
 ok($objFo->eq("O\x{30B}", "\x{150}"));
 ok($objFo->eq("a\x{30A}", $arng));
 ok($objFo->eq("A\x{30A}", $Arng));
+
+# 84
+
+ok($objFo->eq("u\x{308}\x{300}", "\x{1DC}"));
+ok($objFo->eq("U\x{308}\x{300}", "\x{1DB}"));
+ok($objFo->eq("u\x{308}\x{301}", "\x{1D8}"));
+ok($objFo->eq("U\x{308}\x{301}", "\x{1D7}"));
+ok($objFo->eq("u\x{308}\x{304}", "\x{1D6}"));
+ok($objFo->eq("U\x{308}\x{304}", "\x{1D5}"));
+ok($objFo->eq("u\x{308}\x{30C}", "\x{1DA}"));
+ok($objFo->eq("U\x{308}\x{30C}", "\x{1D9}"));
+ok($objFo->eq("\x{1FD}", "$ae\x{301}"));
+ok($objFo->eq("\x{1FC}", "$AE\x{301}"));
+ok($objFo->eq("\x{1E3}", "$ae\x{304}"));
+ok($objFo->eq("\x{1E2}", "$AE\x{304}"));
+ok($objFo->eq("a\x{308}\x{304}", "\x{1DF}"));
+ok($objFo->eq("A\x{308}\x{304}", "\x{1DE}"));
+ok($objFo->eq("o\x{338}\x{301}", "\x{1FF}"));
+ok($objFo->eq("O\x{338}\x{301}", "\x{1FE}"));
+ok($objFo->eq("o\x{308}\x{304}", "\x{22B}"));
+ok($objFo->eq("O\x{308}\x{304}", "\x{22A}"));
 ok($objFo->eq("A\x{30A}", "\x{212B}"));
 ok($objFo->eq("a\x{30A}\x{301}", "\x{1FB}"));
 ok($objFo->eq("A\x{30A}\x{301}", "\x{1FA}"));
 
-# 93
+# 105

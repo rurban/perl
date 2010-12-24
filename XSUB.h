@@ -298,66 +298,13 @@ Rethrows a previously caught exception.  See L<perlguts/"Exception Handling">.
 
 #ifdef XS_VERSION
 #  define XS_VERSION_BOOTCHECK						\
-    STMT_START {							\
-	SV *_sv;							\
-	const char *vn = NULL, *module = SvPV_nolen_const(ST(0));	\
-	if (items >= 2)	 /* version supplied as bootstrap arg */	\
-	    _sv = ST(1);						\
-	else {								\
-	    /* XXX GV_ADDWARN */					\
-	    _sv = get_sv(Perl_form(aTHX_ "%s::%s", module,		\
-				vn = "XS_VERSION"), FALSE);		\
-	    if (!_sv || !SvOK(_sv))					\
-		_sv = get_sv(Perl_form(aTHX_ "%s::%s", module,		\
-				    vn = "VERSION"), FALSE);		\
-	}								\
-	if (_sv) {							\
-	    SV *xpt = NULL;						\
-	    SV *xssv = Perl_newSVpvn(aTHX_ STR_WITH_LEN(XS_VERSION));	\
-	    SV *pmsv = sv_derived_from(_sv, "version")			\
-		? SvREFCNT_inc_simple_NN(_sv)				\
-		: new_version(_sv);					\
-	    xssv = upg_version(xssv, 0);				\
-	    if ( vcmp(pmsv,xssv) ) {	 				\
-		xpt = Perl_newSVpvf(aTHX_ "%s object version %"SVf	\
-				    " does not match %s%s%s%s %"SVf,	\
-				    module,				\
-				    SVfARG(Perl_sv_2mortal(aTHX_ vstringify(xssv))), \
-				    vn ? "$" : "", vn ? module : "",	\
-				    vn ? "::" : "",			\
-				    vn ? vn : "bootstrap parameter",	\
-				    SVfARG(Perl_sv_2mortal(aTHX_ vstringify(pmsv)))); \
-		Perl_sv_2mortal(aTHX_ xpt);				\
-	    }								\
-	    SvREFCNT_dec(xssv);						\
-	    SvREFCNT_dec(pmsv);						\
-	    if (xpt)							\
-		Perl_croak_sv(aTHX_ xpt);				\
-	}                                                               \
-    } STMT_END
+    Perl_xs_version_bootcheck(aTHX_ items, ax, STR_WITH_LEN(XS_VERSION))
 #else
 #  define XS_VERSION_BOOTCHECK
 #endif
 
 #define XS_APIVERSION_BOOTCHECK						\
-    STMT_START {							\
-	SV *_xpt = NULL;						\
-	SV *_compver = Perl_newSVpv(aTHX_ "v" PERL_API_VERSION_STRING, 0); \
-	SV *_runver = new_version(PL_apiversion);			\
-	_compver = upg_version(_compver, 0);				\
-	if (vcmp(_compver, _runver)) {					\
-	    _xpt = Perl_newSVpvf(aTHX_ "Perl API version %"SVf		\
-				 " of %s does not match %"SVf,		\
-				 SVfARG(Perl_sv_2mortal(aTHX_ vstringify(_compver))), \
-				 SvPV_nolen_const(ST(0)),		\
-				 SVfARG(Perl_sv_2mortal(aTHX_ vstringify(_runver)))); \
-	    Perl_sv_2mortal(aTHX_ _xpt);				\
-	}								\
-	SvREFCNT_dec(_compver);						\
-	SvREFCNT_dec(_runver);						\
-	if (_xpt)							\
-	    Perl_croak_sv(aTHX_ _xpt);					\
-    } STMT_END
+    Perl_xs_apiversion_bootcheck(aTHX_ ST(0), STR_WITH_LEN("v" PERL_API_VERSION_STRING))
 
 #ifdef NO_XSLOCKS
 #  define dXCPT             dJMPENV; int rEtV = 0

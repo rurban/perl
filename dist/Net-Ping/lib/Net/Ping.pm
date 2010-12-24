@@ -16,7 +16,7 @@ use Carp;
 
 @ISA = qw(Exporter);
 @EXPORT = qw(pingecho);
-$VERSION = "2.36";
+$VERSION = "2.37";
 
 sub SOL_IP { 0; };
 sub IP_TOS { 1; };
@@ -1771,7 +1771,5 @@ Copyright (c) 2001, Colin McMillen.  All rights reserved.
 
 This program is free software; you may redistribute it and/or
 modify it under the same terms as Perl itself.
-
-$Id: Ping.pm,v 1.86 2003/06/27 21:31:07 rob Exp $
 
 =cut

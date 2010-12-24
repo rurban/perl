@@ -35,17 +35,13 @@ my %abs = (
 	   '../cpan/Class-ISA' => 1,
 	   '../cpan/Devel-PPPort' => 1,
 	   '../cpan/Encode' => 1,
-	   '../cpan/ExtUtils-Command' => 1,
 	   '../cpan/ExtUtils-Constant' => 1,
 	   '../cpan/ExtUtils-MakeMaker' => 1,
-	   '../cpan/ExtUtils-Manifest' => 1,
 	   '../cpan/File-Fetch' => 1,
 	   '../cpan/IPC-Cmd' => 1,
 	   '../cpan/IPC-SysV' => 1,
 	   '../cpan/Locale-Codes' => 1,
 	   '../cpan/Log-Message' => 1,
-	   '../cpan/Math-BigInt' => 1,
-	   '../cpan/Math-BigRat' => 1,
 	   '../cpan/Math-Complex' => 1,
 	   '../cpan/Module-Build' => 1,
 	   '../cpan/Module-Load' => 1,
@@ -57,10 +53,11 @@ my %abs = (
 	   '../cpan/Term-UI' => 1,
 	   '../cpan/Test-Simple' => 1,
 	   '../cpan/Tie-File' => 1,
-	   '../cpan/bignum' => 1,
 	   '../cpan/podlators' => 1,
 	   '../dist/Cwd' => 1,
+	   '../dist/ExtUtils-Command' => 1,
 	   '../dist/ExtUtils-Install' => 1,
+	   '../dist/ExtUtils-Manifest' => 1,
 	   '../dist/ExtUtils-ParseXS' => 1,
 	  );
 
@@ -71,10 +68,7 @@ my %temp_no_core =
      '../cpan/Devel-PPPort' => 1,
      '../cpan/Getopt-Long' => 1,
      '../cpan/IO-Compress' => 1,
-     '../cpan/Math-BigInt' => 1,
-     '../cpan/Math-BigRat' => 1,
      '../cpan/MIME-Base64' => 1,
-     '../cpan/NEXT' => 1,
      '../cpan/parent' => 1,
      '../cpan/Parse-CPAN-Meta' => 1,
      '../cpan/Pod-Simple' => 1,
@@ -400,7 +394,7 @@ sub _tests_from_manifest {
 		my $extension = $2;
 		if (!$::core || $t =~ m!^lib/[a-z]!) {
 		    if (defined $extension) {
-			$extension =~ s!/t$!!;
+			$extension =~ s!/t(:?/\S+)*$!!;
 			# XXX Do I want to warn that I'm skipping these?
 			next if $skip{$extension};
 			my $flat_extension = $extension;

@@ -123,7 +123,6 @@ Deprecated.  Use C<GIMME_V> instead.
 				/*  On OP_ENTERSUB || OP_NULL, saw a "do". */
 				/*  On OP_EXISTS, treat av as av, not avhv.  */
 				/*  On OP_(ENTER|LEAVE)EVAL, don't clear $@ */
-				/*  On OP_ENTERITER, loop var is per-thread */
 				/*  On pushre, rx is used as part of split, e.g. split " " */
 				/*  On regcomp, "use re 'eval'" was in scope */
 				/*  On OP_READLINE, was <$filehandle> */
@@ -142,6 +141,11 @@ Deprecated.  Use C<GIMME_V> instead.
 				/*  On OP_HELEM and OP_HSLICE, localization will be followed
 				    by assignment, so do not wipe the target if it is special
 				    (e.g. a glob or a magic SV) */
+				/*  On OP_MATCH, OP_SUBST & OP_TRANS, the
+				    operand of a logical or conditional
+				    that was optimised away, so it should
+				    not be bound via =~ */
+				/*  On OP_CONST, from a constant CV */
 
 /* old names; don't use in new code, but don't break them, either */
 #define OPf_LIST	OPf_WANT_LIST
@@ -197,7 +201,7 @@ Deprecated.  Use C<GIMME_V> instead.
   /* OP_ENTERSUB only */
 #define OPpENTERSUB_DB		16	/* Debug subroutine. */
 #define OPpENTERSUB_HASTARG	32	/* Called from OP tree. */
-#define OPpENTERSUB_NOMOD	64	/* Immune to mod() for :attrlist. */
+#define OPpENTERSUB_NOMOD	64	/* Immune to op_lvalue() for :attrlist. */
   /* OP_ENTERSUB and OP_RV2CV only */
 #define OPpENTERSUB_AMPER	8	/* Used & form to call. */
 #define OPpENTERSUB_NOPAREN	128	/* bare sub call (without parens) */
@@ -362,7 +366,7 @@ struct pmop {
 
 /* Leave some space, so future bit allocations can go either in the shared or
  * unshared area without affecting binary compatibility */
-#define PMf_BASE_SHIFT (_RXf_PMf_SHIFT_NEXT+8)
+#define PMf_BASE_SHIFT (_RXf_PMf_SHIFT_NEXT+7)
 
 /* taint $1 etc. if target tainted */
 #define PMf_RETAINT	(1<<(PMf_BASE_SHIFT+0))
@@ -618,6 +622,21 @@ struct loop {
 #define ref(o, type) doref(o, type, TRUE)
 #endif
 
+/*
+=head1 Optree Manipulation Functions
+
+=for apidoc Am|OP*|LINKLIST|OP *o
+Given the root of an optree, link the tree in execution order using the
+C<op_next> pointers and return the first op executed. If this has
+already been done, it will not be redone, and C<< o->op_next >> will be
+returned. If C<< o->op_next >> is not already set, I<o> should be at
+least an C<UNOP>.
+
+=cut
+*/
+
+#define LINKLIST(o) ((o)->op_next ? (o)->op_next : op_linklist((OP*)o))
+
 /* no longer used anywhere in core */
 #ifndef PERL_CORE
 #define cv_ckproto(cv, gv, p) \
@@ -658,32 +677,32 @@ struct block_hooks {
 /*
 =head1 Compile-time scope hooks
 
-=for apidoc m|U32|BhkFLAGS|BHK *hk
+=for apidoc mx|U32|BhkFLAGS|BHK *hk
 Return the BHK's flags.
 
-=for apidoc m|void *|BhkENTRY|BHK *hk|which
+=for apidoc mx|void *|BhkENTRY|BHK *hk|which
 Return an entry from the BHK structure. I<which> is a preprocessor token
 indicating which entry to return. If the appropriate flag is not set
 this will return NULL. The type of the return value depends on which
 entry you ask for.
 
-=for apidoc Am|void|BhkENTRY_set|BHK *hk|which|void *ptr
+=for apidoc Amx|void|BhkENTRY_set|BHK *hk|which|void *ptr
 Set an entry in the BHK structure, and set the flags to indicate it is
 valid. I<which> is a preprocessing token indicating which entry to set.
 The type of I<ptr> depends on the entry.
 
-=for apidoc Am|void|BhkDISABLE|BHK *hk|which
+=for apidoc Amx|void|BhkDISABLE|BHK *hk|which
 Temporarily disable an entry in this BHK structure, by clearing the
 appropriate flag. I<which> is a preprocessor token indicating which
 entry to disable.
 
-=for apidoc Am|void|BhkENABLE|BHK *hk|which
+=for apidoc Amx|void|BhkENABLE|BHK *hk|which
 Re-enable an entry in this BHK structure, by setting the appropriate
 flag. I<which> is a preprocessor token indicating which entry to enable.
 This will assert (under -DDEBUGGING) if the entry doesn't contain a valid
 pointer.
 
-=for apidoc m|void|CALL_BLOCK_HOOKS|which|arg
+=for apidoc mx|void|CALL_BLOCK_HOOKS|which|arg
 Call all the registered block hooks for type I<which>. I<which> is a
 preprocessing token; the type of I<arg> depends on I<which>.
 
@@ -692,13 +711,13 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define BhkFLAGS(hk)		((hk)->bhk_flags)
 
-#define BHKf_start	    0x01
-#define BHKf_pre_end	    0x02
-#define BHKf_post_end	    0x04
-#define BHKf_eval	    0x08
+#define BHKf_bhk_start	    0x01
+#define BHKf_bhk_pre_end    0x02
+#define BHKf_bhk_post_end   0x04
+#define BHKf_bhk_eval	    0x08
 
 #define BhkENTRY(hk, which) \
-    ((BhkFLAGS(hk) & BHKf_ ## which) ? ((hk)->bhk_ ## which) : NULL)
+    ((BhkFLAGS(hk) & BHKf_ ## which) ? ((hk)->which) : NULL)
 
 #define BhkENABLE(hk, which) \
     STMT_START { \
@@ -713,7 +732,7 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define BhkENTRY_set(hk, which, ptr) \
     STMT_START { \
-	(hk)->bhk_ ## which = ptr; \
+	(hk)->which = ptr; \
 	BhkENABLE(hk, which); \
     } STMT_END
 
@@ -736,6 +755,105 @@ preprocessing token; the type of I<arg> depends on I<which>.
 	    } \
 	} \
     } STMT_END
+
+/* flags for rv2cv_op_cv */
+
+#define RV2CVOPCV_MARK_EARLY     0x00000001
+#define RV2CVOPCV_RETURN_NAME_GV 0x00000002
+
+/*
+=head1 Custom Operators
+
+=for apidoc Am|U32|XopFLAGS|XOP *xop
+Return the XOP's flags.
+
+=for apidoc Am||XopENTRY|XOP *xop|which
+Return a member of the XOP structure. I<which> is a cpp token indicating
+which entry to return. If the member is not set this will return a
+default value. The return type depends on I<which>.
+
+=for apidoc Am|void|XopENTRY_set|XOP *xop|which|value
+Set a member of the XOP structure. I<which> is a cpp token indicating
+which entry to set. See L<perlguts/"Custom Operators"> for details about
+the available members and how they are used.
+
+=for apidoc Am|void|XopDISABLE|XOP *xop|which
+Temporarily disable a member of the XOP, by clearing the appropriate flag.
+
+=for apidoc Am|void|XopENABLE|XOP *xop|which
+Reenable a member of the XOP which has been disabled.
+
+=cut
+*/
+
+struct custom_op {
+    U32		    xop_flags;    
+    const char	   *xop_name;
+    const char	   *xop_desc;
+    U32		    xop_class;
+    void	  (*xop_peep)(pTHX_ OP *o, OP *oldop);
+};
+
+#define XopFLAGS(xop) ((xop)->xop_flags)
+
+#define XOPf_xop_name	0x01
+#define XOPf_xop_desc	0x02
+#define XOPf_xop_class	0x04
+#define XOPf_xop_peep	0x08
+
+#define XOPd_xop_name	PL_op_name[OP_CUSTOM]
+#define XOPd_xop_desc	PL_op_desc[OP_CUSTOM]
+#define XOPd_xop_class	OA_BASEOP
+#define XOPd_xop_peep	((Perl_cpeep_t)0)
+
+#define XopENTRY_set(xop, which, to) \
+    STMT_START { \
+	(xop)->which = (to); \
+	(xop)->xop_flags |= XOPf_ ## which; \
+    } STMT_END
+
+#define XopENTRY(xop, which) \
+    ((XopFLAGS(xop) & XOPf_ ## which) ? (xop)->which : XOPd_ ## which)
+
+#define XopDISABLE(xop, which) ((xop)->xop_flags &= ~XOPf_ ## which)
+#define XopENABLE(xop, which) \
+    STMT_START { \
+	(xop)->xop_flags |= XOPf_ ## which; \
+	assert(XopENTRY(xop, which)); \
+    } STMT_END
+
+/*
+=head1 Optree Manipulation Functions
+
+=for apidoc Am|const char *|OP_NAME|OP *o
+Return the name of the provided OP. For core ops this looks up the name
+from the op_type; for custom ops from the op_ppaddr.
+
+=for apidoc Am|const char *|OP_DESC|OP *o
+Return a short description of the provided OP.
+
+=for apidoc Am|U32|OP_CLASS|OP *o
+Return the class of the provided OP: that is, which of the *OP
+structures it uses. For core ops this currently gets the information out
+of PL_opargs, which does not always accurately reflect the type used.
+For custom ops the type is returned from the registration, and it is up
+to the registree to ensure it is accurate. The value returned will be
+one of the OA_* constants from op.h.
+
+=cut
+*/
+
+#define OP_NAME(o) ((o)->op_type == OP_CUSTOM \
+		    ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_name) \
+		    : PL_op_name[(o)->op_type])
+#define OP_DESC(o) ((o)->op_type == OP_CUSTOM \
+		    ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_desc) \
+		    : PL_op_desc[(o)->op_type])
+#define OP_CLASS(o) ((o)->op_type == OP_CUSTOM \
+		     ? XopENTRY(Perl_custom_op_xop(aTHX_ o), xop_class) \
+		     : (PL_opargs[(o)->op_type] & OA_CLASS_MASK))
+
+#define newSUB(f, o, p, b)	Perl_newATTRSUB(aTHX_ (f), (o), (p), NULL, (b))
 
 #ifdef PERL_MAD
 #  define MAD_NULL 1
