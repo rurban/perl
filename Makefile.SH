@@ -1,4 +1,4 @@
-case $PERL_CONFIG_SH in
+git case $PERL_CONFIG_SH in
 '')
 	if test -f config.sh
 		then TOP=.
@@ -628,13 +628,8 @@ generate_uudmap$(HOST_EXE_EXT): generate_uudmap$(OBJ_EXT)
 miniperlmain$(OBJ_EXT): miniperlmain.c patchlevel.h
 	$(CCCMD) $(PLDLFLAGS) $*.c
 
-<<<<<<< HEAD
-perlmain.c: miniperlmain.c config.sh $(FIRSTMAKEFILE)
-	sh writemain $(DYNALOADER) > perlmain.c
-=======
 perlmain.c: $(MINIPERL_EXE) lib/ExtUtils/Miniperl.pm
 	$(MINIPERL) -Ilib -MExtUtils::Miniperl -e 'writemain(@ARGV)' DynaLoader $(static_ext) > perlmain.c
->>>>>>> origin/blead
 
 perlmain$(OBJ_EXT): perlmain.c
 	$(CCCMD) $(PLDLFLAGS) $*.c
