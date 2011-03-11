@@ -95,6 +95,10 @@ S_save_magic(pTHX_ I32 mgs_ix, SV *sv)
 
     PERL_ARGS_ASSERT_SAVE_MAGIC;
 
+    /* guard against sv having being freed midway by holding a private
+       reference. */
+    SvREFCNT_inc_simple_void_NN(sv);
+
     assert(SvMAGICAL(sv));
     /* Turning READONLY off for a copy-on-write scalar (including shared
        hash keys) is a bad idea.  */
@@ -199,22 +203,10 @@ Perl_mg_get(pTHX_ SV *sv)
 {
     dVAR;
     const I32 mgs_ix = SSNEW(sizeof(MGS));
-    const bool was_temp = cBOOL(SvTEMP(sv));
     bool have_new = 0;
     MAGIC *newmg, *head, *cur, *mg;
-    /* guard against sv having being freed midway by holding a private
-       reference. */
 
     PERL_ARGS_ASSERT_MG_GET;
-
-    /* sv_2mortal has this side effect of turning on the TEMP flag, which can
-       cause the SV's buffer to get stolen (and maybe other stuff).
-       So restore it.
-    */
-    sv_2mortal(SvREFCNT_inc_simple_NN(sv));
-    if (!was_temp) {
-	SvTEMP_off(sv);
-    }
 
     save_magic(mgs_ix, sv);
 
@@ -264,12 +256,6 @@ Perl_mg_get(pTHX_ SV *sv)
     }
 
     restore_magic(INT2PTR(void *, (IV)mgs_ix));
-
-    if (SvREFCNT(sv) == 1) {
-	/* We hold the last reference to this SV, which implies that the
-	   SV was deleted as a side effect of the routines we called.  */
-	SvOK_off(sv);
-    }
     return 0;
 }
 
@@ -1448,6 +1434,14 @@ Perl_csighandler_init(void)
 }
 #endif
 
+#if defined HAS_SIGPROCMASK
+static void
+unblock_sigmask(pTHX_ void* newset)
+{
+    sigprocmask(SIG_UNBLOCK, (sigset_t*)newset, NULL);
+}
+#endif
+
 void
 Perl_despatch_signals(pTHX)
 {
@@ -1457,15 +1451,38 @@ Perl_despatch_signals(pTHX)
     for (sig = 1; sig < SIG_SIZE; sig++) {
 	if (PL_psig_pend[sig]) {
 	    dSAVE_ERRNO;
-	    PERL_BLOCKSIG_ADD(set, sig);
+#ifdef HAS_SIGPROCMASK
+	    /* From sigaction(2) (FreeBSD man page):
+	     * | Signal routines normally execute with the signal that
+	     * | caused their invocation blocked, but other signals may
+	     * | yet occur.
+	     * Emulation of this behavior (from within Perl) is enabled
+	     * using sigprocmask
+	     */
+	    int was_blocked;
+	    sigset_t newset, oldset;
+
+	    sigemptyset(&newset);
+	    sigaddset(&newset, sig);
+	    sigprocmask(SIG_BLOCK, &newset, &oldset);
+	    was_blocked = sigismember(&oldset, sig);
+	    if (!was_blocked) {
+		SV* save_sv = newSVpvn((char *)(&newset), sizeof(sigset_t));
+		ENTER;
+		SAVEFREESV(save_sv);
+		SAVEDESTRUCTOR_X(unblock_sigmask, SvPV_nolen(save_sv));
+	    }
+#endif
  	    PL_psig_pend[sig] = 0;
-	    PERL_BLOCKSIG_BLOCK(set);
 #if defined(HAS_SIGACTION) && defined(SA_SIGINFO)
 	    (*PL_sighandlerp)(sig, NULL, NULL);
 #else
 	    (*PL_sighandlerp)(sig);
 #endif
-	    PERL_BLOCKSIG_UNBLOCK(set);
+#ifdef HAS_SIGPROCMASK
+	    if (!was_blocked)
+		LEAVE;
+#endif
 	    RESTORE_ERRNO;
 	}
     }
@@ -1729,7 +1746,7 @@ Perl_magic_setnkeys(pTHX_ SV *sv, MAGIC *mg)
 
 Invoke a magic method (like FETCH).
 
-* sv and mg are the tied thinggy and the tie magic;
+* sv and mg are the tied thingy and the tie magic;
 * meth is the name of the method to call;
 * argc is the number of args (in addition to $self) to pass to the method;
        the args themselves are any values following the argc argument.
@@ -1754,6 +1771,15 @@ Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg, const char *meth, U32 flags,
     PERL_ARGS_ASSERT_MAGIC_METHCALL;
 
     ENTER;
+
+    if (flags & G_WRITING_TO_STDERR) {
+	SAVETMPS;
+
+	save_re_context();
+	SAVESPTR(PL_stderrgv);
+	PL_stderrgv = NULL;
+    }
+
     PUSHSTACKi(PERLSI_MAGIC);
     PUSHMARK(SP);
 
@@ -1783,6 +1809,8 @@ Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg, const char *meth, U32 flags,
 	    ret = *PL_stack_sp--;
     }
     POPSTACK;
+    if (flags & G_WRITING_TO_STDERR)
+	FREETMPS;
     LEAVE;
     return ret;
 }
@@ -2973,7 +3001,7 @@ Perl_whichsig(pTHX_ const char *sig)
 
 Signal_t
 #if defined(HAS_SIGACTION) && defined(SA_SIGINFO)
-Perl_sighandler(int sig, siginfo_t *sip, void *uap PERL_UNUSED_DECL)
+Perl_sighandler(int sig, siginfo_t *sip, void *uap)
 #else
 Perl_sighandler(int sig)
 #endif
@@ -3079,15 +3107,20 @@ Perl_sighandler(int sig)
     POPSTACK;
     if (SvTRUE(ERRSV)) {
 #ifndef PERL_MICRO
-#ifdef HAS_SIGPROCMASK
 	/* Handler "died", for example to get out of a restart-able read().
 	 * Before we re-do that on its behalf re-enable the signal which was
 	 * blocked by the system when we entered.
 	 */
-	sigset_t set;
-	sigemptyset(&set);
-	sigaddset(&set,sig);
-	sigprocmask(SIG_UNBLOCK, &set, NULL);
+#ifdef HAS_SIGPROCMASK
+#if defined(HAS_SIGACTION) && defined(SA_SIGINFO)
+       if (sip || uap)
+#endif
+	{
+	    sigset_t set;
+	    sigemptyset(&set);
+	    sigaddset(&set,sig);
+	    sigprocmask(SIG_UNBLOCK, &set, NULL);
+	}
 #else
 	/* Not clear if this will work */
 	(void)rsignal(sig, SIG_IGN);
@@ -3168,7 +3201,21 @@ S_restore_magic(pTHX_ const void *p)
         assert((popval & SAVE_MASK) == SAVEt_ALLOC);
         PL_savestack_ix -= popval >> SAVE_TIGHT_SHIFT;
     }
-
+    if (SvREFCNT(sv) == 1) {
+	/* We hold the last reference to this SV, which implies that the
+	   SV was deleted as a side effect of the routines we called.
+	   So artificially keep it alive a bit longer.
+	   We avoid turning on the TEMP flag, which can cause the SV's
+	   buffer to get stolen (and maybe other stuff). */
+	int was_temp = SvTEMP(sv);
+	sv_2mortal(sv);
+	if (!was_temp) {
+	    SvTEMP_off(sv);
+	}
+	SvOK_off(sv);
+    }
+    else
+	SvREFCNT_dec(sv); /* undo the inc in S_save_magic() */
 }
 
 /* clean up the mess created by Perl_sighandler().

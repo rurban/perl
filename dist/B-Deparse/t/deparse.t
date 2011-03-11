@@ -12,7 +12,7 @@ BEGIN {
 use warnings;
 use strict;
 BEGIN {
-    # BEGIN block is acutally a subroutine :-)
+    # BEGIN block is actually a subroutine :-)
     return unless $] > 5.009;
     require feature;
     feature->import(':5.10');
@@ -247,7 +247,7 @@ my $foo;
 $_ .= <ARGV> . <$foo>;
 ####
 # \x{}
-my $foo = "Ab\x{100}\200\x{200}\377Cd\000Ef\x{1000}\cA\x{2000}\cZ";
+my $foo = "Ab\x{100}\200\x{200}\237Cd\000Ef\x{1000}\cA\x{2000}\cZ";
 ####
 # s///e
 s/x/'y';/e;
@@ -389,7 +389,7 @@ state $x = 42;
 }
 ####
 # SKIP ?$] < 5.010 && "state vars not implemented on this Perl version"
-# state vars in anoymous subroutines
+# state vars in anonymous subroutines
 $a = sub {
     state $x;
     return $x++;

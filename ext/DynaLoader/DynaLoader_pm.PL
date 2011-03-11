@@ -85,11 +85,8 @@ package DynaLoader;
 # Tim.Bunce@ig.co.uk, August 1994
 
 BEGIN {
-    $VERSION = '1.12';
+    $VERSION = '1.13';
 }
-
-require AutoLoader;
-*AUTOLOAD = \&AutoLoader::AUTOLOAD;
 
 use Config;
 
@@ -389,19 +386,6 @@ sub bootstrap {
     &$xs(@args);
 }
 
-
-#sub _check_file {   # private utility to handle dl_expandspec vs -f tests
-#    my($file) = @_;
-#    return $file if (!$do_expand && -f $file); # the common case
-#    return $file if ( $do_expand && ($file=dl_expandspec($file)));
-#    return undef;
-#}
-
-
-# Let autosplit and the autoloader deal with these functions:
-__END__
-
-
 sub dl_findfile {
     # Read ext/DynaLoader/DynaLoader.doc for detailed information.
     # This function does not automatically consider the architecture
@@ -456,7 +440,9 @@ sub dl_findfile {
             # these should be ordered with the most likely first
             push(@names,"$_.$dl_dlext")    unless m/\.$dl_dlext$/o;
             push(@names,"$_.$dl_so")     unless m/\.$dl_so$/o;
-            push(@names,"cyg$_.$dl_so")  if !m:/: and $^O eq 'cygwin';
+	    <<$^O-eq-cygwin>>
+            push(@names,"cyg$_.$dl_so")  unless m:/:;
+	    <</$^O-eq-cygwin>>
             push(@names,"lib$_.$dl_so")  unless m:/:;
             push(@names,"$_.a")          if !m/\.a$/ and $dlsrc eq "dl_dld.xs";
             push(@names, $_);
@@ -498,12 +484,15 @@ sub dl_findfile {
 }
 
 
+<<$^O-eq-VMS>>
+# dl_expandspec should be defined in dl_vms.xs
+<<|$^O-eq-VMS>>
 sub dl_expandspec {
     my($spec) = @_;
     # Optional function invoked if DynaLoader.pm sets $do_expand.
     # Most systems do not require or use this function.
     # Some systems may implement it in the dl_*.xs file in which case
-    # this autoload version will not be called but is harmless.
+    # this Perl version should be excluded at build time.
 
     # This function is designed to deal with systems which treat some
     # 'filenames' in a special way. For example VMS 'Logical Names'
@@ -514,16 +503,11 @@ sub dl_expandspec {
 
     my $file = $spec; # default output to input
 
-    <<$^O-eq-VMS>>
-        # dl_expandspec should be defined in dl_vms.xs
-	require Carp;
-	Carp::croak("dl_expandspec: should be defined in XS file!\n");
-    <<|$^O-eq-VMS>>
 	return undef unless -f $file;
-    <</$^O-eq-VMS>>
     print STDERR "dl_expandspec($spec) => $file\n" if $dl_debug;
     $file;
 }
+<</$^O-eq-VMS>>
 
 sub dl_find_symbol_anywhere
 {
@@ -535,6 +519,8 @@ sub dl_find_symbol_anywhere
     }
     return undef;
 }
+
+__END__
 
 =head1 NAME
 

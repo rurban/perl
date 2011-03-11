@@ -349,6 +349,27 @@ You can also use negation in both C<\p{}> and C<\P{}> by introducing a caret
 (^) between the first brace and the property name: C<\p{^Tamil}> is
 equal to C<\P{Tamil}>.
 
+Almost all properties are immune to case-insensitive matching.  That is,
+adding a C</i> regular expression modifier does not change what they
+match.  There are two sets that are affected.
+The first set is
+C<Uppercase_Letter>,
+C<Lowercase_Letter>,
+and C<Titlecase_Letter>,
+all of which match C<Cased_Letter> under C</i> matching.
+And the second set is
+C<Uppercase>,
+C<Lowercase>,
+and C<Titlecase>,
+all of which match C<Cased> under C</i> matching.
+This set also includes its subsets C<PosixUpper> and C<PosixLower> both
+of which under C</i> matching match C<PosixAlpha>.
+(The difference between these sets is that some things, such as Roman
+Numerals come in both upper and lower case so they are C<Cased>, but aren't considered to be
+letters, so they aren't C<Cased_Letter>s.)
+L<perluniprops> includes a notation for all forms that have C</i>
+differences.
+
 =head3 B<General_Category>
 
 Every Unicode character is assigned a general category, which is the "most
@@ -407,18 +428,13 @@ Here are the short and long forms of the General Category properties:
     C           Other
     Cc          Control (also Cntrl)
     Cf          Format
-    Cs          Surrogate   (not usable)
+    Cs          Surrogate
     Co          Private_Use
     Cn          Unassigned
 
 Single-letter properties match all characters in any of the
 two-letter sub-properties starting with the same letter.
 C<LC> and C<L&> are special cases, which are both aliases for the set consisting of everything matched by C<Ll>, C<Lu>, and C<Lt>.
-
-Because Perl hides the need for the user to understand the internal
-representation of Unicode characters, there is no need to implement
-the somewhat messy concept of surrogates. C<Cs> is therefore not
-supported.
 
 =head3 B<Bidirectional Character Types>
 
@@ -456,7 +472,7 @@ written right to left.
 
 The world's languages are written in a number of scripts.  This sentence
 (unless you're reading it in translation) is written in Latin, while Russian is
-written in Cyrllic, and Greek is written in, well, Greek; Japanese mainly in
+written in Cyrillic, and Greek is written in, well, Greek; Japanese mainly in
 Hiragana or Katakana.  There are many more.
 
 The Unicode Script property gives what script a given character is in,
@@ -485,11 +501,16 @@ block is all characters whose ordinals are between 0 and 127, inclusive, in
 other words, the ASCII characters.  The "Latin" script contains some letters
 from this block as well as several more, like "Latin-1 Supplement",
 "Latin Extended-A", etc., but it does not contain all the characters from
-those blocks. It does not, for example, contain digits, because digits are
-shared across many scripts. Digits and similar groups, like punctuation, are in
-the script called C<Common>.  There is also a script called C<Inherited> for
-characters that modify other characters, and inherit the script value of the
-controlling character.
+those blocks. It does not, for example, contain the digits 0-9, because
+those digits are shared across many scripts. The digits 0-9 and similar groups,
+like punctuation, are in the script called C<Common>.  There is also a
+script called C<Inherited> for characters that modify other characters,
+and inherit the script value of the controlling character.  (Note that
+there are a number of different sets of digits in Unicode that are
+equivalent to 0-9 and are matchable by C<\d> in a regular expression.
+If they are used in a single language only, they are in that language's
+script.  Only the sets that are used across languages are in the
+C<Common> script.)
 
 For more about scripts versus blocks, see UAX#24 "Unicode Script Property":
 L<http://www.unicode.org/reports/tr24>
@@ -773,6 +794,16 @@ C<\p> or C<\P> construct.
 
 
 Note that the effect is compile-time and immutable once defined.
+However the subroutines are passed a single parameter which is 0 if
+case-sensitive matching is in effect, and non-zero if caseless matching
+is in effect.  The subroutine may return different values depending on
+the value of the flag, and one set of values will immutably be in effect
+for all case-sensitive matches; the other set for all case-insensitive
+matches.
+
+Note that  if the regular expression is tainted, then perl will die rather
+than calling the subroutine, where the name of the subroutine is
+determined by the tainted data.
 
 The subroutines must return a specially-formatted string, with one
 or more newline-separated lines.  Each line must be one of the following:
@@ -1178,10 +1209,9 @@ numbers.  To use these numbers, various encodings are needed.
 
 UTF-8
 
-UTF-8 is a variable-length (1 to 6 bytes, current character allocations
-require 4 bytes), byte-order independent encoding. For ASCII (and we
-really do mean 7-bit ASCII, not another 8-bit encoding), UTF-8 is
-transparent.
+UTF-8 is a variable-length (1 to 4 bytes), byte-order independent
+encoding. For ASCII (and we really do mean 7-bit ASCII, not another
+8-bit encoding), UTF-8 is transparent.
 
 The following table is from Unicode 3.2.
 
@@ -1217,6 +1247,16 @@ As you can see, the continuation bytes all begin with "10", and the
 leading bits of the start byte tell how many bytes there are in the
 encoded character.
 
+The original UTF-8 specification allowed up to 6 bytes, to allow
+encoding of numbers up to 0x7FFF_FFFF.  Perl continues to allow those,
+and has extended that up to 13 bytes to encode code points up to what
+can fit in a 64-bit word.  However, Perl will warn if you output any of
+these, as being non-portable; and under strict UTF-8 input protocols,
+they are forbidden.
+
+The Unicode non-character code points are also disallowed in UTF-8 in
+"open interchange".  See L</Non-character code points>.
+
 =item *
 
 UTF-EBCDIC
@@ -1248,10 +1288,6 @@ and the decoding is
 
     $uni = 0x10000 + ($hi - 0xD800) * 0x400 + ($lo - 0xDC00);
 
-If you try to generate surrogates (for example by using chr()), you
-will get a warning, if warnings are turned on, because those code
-points are not valid for a Unicode character.
-
 Because of the 16-bitness, UTF-16 is byte-order dependent.  UTF-16
 itself can be used for in-memory computations, but if storage or
 transfer is required either UTF-16BE (big-endian) or UTF-16LE
@@ -1270,12 +1306,21 @@ you will read the bytes C<0xFF 0xFE>.  (And if the originating platform
 was writing in UTF-8, you will read the bytes C<0xEF 0xBB 0xBF>.)
 
 The way this trick works is that the character with the code point
-C<U+FFFE> is guaranteed not to be a valid Unicode character, so the
+C<U+FFFE> is not supposed to be in input streams, so the
 sequence of bytes C<0xFF 0xFE> is unambiguously "BOM, represented in
 little-endian format" and cannot be C<U+FFFE>, represented in big-endian
-format".  (Actually, C<U+FFFE> is legal for use by your program, even for
-input/output, but better not use it if you need a BOM.  But it is "illegal for
-interchange", so that an unsuspecting program won't get confused.)
+format".
+
+Surrogates have no meaning in Unicode outside their use in pairs to
+represent other code points.  However, Perl allows them to be
+represented individually internally, for example by saying
+C<chr(0xD801)>, so that the all code points, not just Unicode ones, are
+representable.  Unicode does define semantics for them, such as their
+General Category is "Cs".  But because their use is somewhat dangerous,
+Perl will warn (using the warning category UTF8) if an attempt is made
+to do things like take the lower case of one, or match
+case-insensitively, or to output them.  (But don't try this on Perls
+before 5.14.)
 
 =item *
 
@@ -1304,6 +1349,22 @@ transport or storage is not eight-bit safe.  Defined by RFC 2152.
 
 =back
 
+=head2 Non-character code points
+
+66 code points are set aside in Unicode as "non-character code points".
+These all have the Unassigned (Cn) General Category, and they never will
+be assigned.  These are never supposed to be in legal Unicode input
+streams, so that code can use them as sentinels that can be mixed in
+with character data, and they always will be distinguishable from that data.
+To keep them out of Perl input streams, strict UTF-8 should be
+specified, such as by using the layer C<:encoding('UTF-8')>.  The
+non-character code points are the 32 between U+FDD0 and U+FDEF, and the
+34 code points U+FFFE, U+FFFF, U+1FFFE, U+1FFFF, ... U+10FFFE, U+10FFFF.
+Some people are under the mistaken impression that these are "illegal",
+but that is not true.  An application or cooperating set of applications
+can legally use them at will internally; but these code points are
+"illegal for open interchange".
+
 =head2 Security Implications of Unicode
 
 Read L<Unicode Security Considerations|http://www.unicode.org/reports/tr36>.
@@ -1327,23 +1388,70 @@ surrogates, which are not real Unicode code points.
 
 =item *
 
-Regular expressions behave slightly differently between byte data and
-character (Unicode) data.  For example, the "word character" character
-class C<\w> will work differently depending on if data is eight-bit bytes
-or Unicode.
+Regular expression pattern matching may surprise you if you're not
+accustomed to Unicode.  Starting in Perl 5.14, there are a number of
+modifiers available that control this.  For convenience, they will be
+referred to in this section using the notation, e.g., C<"/a"> even
+though in 5.14, they are not usable in a postfix form after the
+(typical) trailing slash of a regular expression.  (In 5.14, they are
+usable only infix, for example by C</(?a:foo)/>, or by setting them to
+apply across a scope by, e.g., C<use re '/a';>.  It is planned to lift
+this restriction in 5.16.)
 
-In the first case, the set of C<\w> characters is either small--the
-default set of alphabetic characters, digits, and the "_"--or, if you
-are using a locale (see L<perllocale>), the C<\w> might contain a few
-more letters according to your language and country.
+The C<"/l"> modifier says that the regular expression should match based
+on whatever locale is in effect at execution time.  For example, C<\w>
+will match the "word" characters of that locale, and C<"/i">
+case-insensitive matching will match according to the locale's case
+folding rules.  See L<perllocale>).  C<\d> will likely match just 10
+digit characters.  This modifier is automatically selected within the
+scope of either C<use locale> or C<use re '/l'>.
 
-In the second case, the C<\w> set of characters is much, much larger.
-Most importantly, even in the set of the first 256 characters, it will
-probably match different characters: unlike most locales, which are
-specific to a language and country pair, Unicode classifies all the
-characters that are letters I<somewhere> as C<\w>.  For example, your
-locale might not think that LATIN SMALL LETTER ETH is a letter (unless
-you happen to speak Icelandic), but Unicode does.
+The C<"/u"> modifier says that the regular expression should match based
+on Unicode semantics.  C<\w> will match any of the more than 100_000
+word characters in Unicode.  Unlike most locales, which are specific to
+a language and country pair, Unicode classifies all the characters that
+are letters I<somewhere> as C<\w>.  For example, your locale might not
+think that "LATIN SMALL LETTER ETH" is a letter (unless you happen to
+speak Icelandic), but Unicode does.  Similarly, all the characters that
+are decimal digits somewhere in the world will match C<\d>; this is
+hundreds, not 10, possible matches.  (And some of those digits look like
+some of the 10 ASCII digits, but mean a different number, so a human
+could easily think a number is a different quantity than it really is.)
+Also, case-insensitive matching works on the full set of Unicode
+characters.  The "KELVIN SIGN", for example matches the letters "k" and
+"K"; and "LATIN SMALL LETTER LONG S" (which looks very much like an "f",
+and was common in the 18th century but is now obsolete), matches "s" and
+"S".  This modifier is automatically selected within the scope of either
+C<use re '/u'> or C<use feature 'unicode_strings'> (which in turn is
+selected by C<use 5.012>.
+
+The C<"/a"> modifier is like the C<"/u"> modifier, except that it
+restricts certain constructs to match only in the ASCII range.  C<\w>
+will match only the 63 characters "[A-Za-z0-9_]"; C<\d>, only the 10
+digits 0-9; C<\s>, only the five characters "[ \f\n\r\t]"; and the
+C<"[[:posix:]]"> classes only the appropriate ASCII characters.  (See
+L<perlrecharclass>.)  This modifier is like the C<"/u"> modifier in that
+things like "KELVIN SIGN" match the letters "k" and "K"; and non-ASCII
+characters continue to have Unicode semantics.  This modifier is
+recommended for people who only incidentally use Unicode.  One can write
+C<\d> with confidence that it will only match ASCII characters, and
+should the need arise to match beyond ASCII, you can use C<\p{Digit}> or
+C<\p{Word}>.  (See L<perlrecharclass> for how to extend C<\s>, and the
+Posix classes beyond ASCII under this modifier.)  This modifier is
+automatically selected within the scope of C<use re '/a'>.
+
+The C<"/d"> modifier gives the regular expression behavior that Perl has
+had between 5.6 and 5.12.  For backwards compatibility it is selected
+by default, but it leads to a number of issues, as outlined in
+L</The "Unicode Bug">.  When this modifier is in effect, regular
+expression matching uses the semantics of what is called the "C" or
+"Posix" locale, unless the pattern or target string of the match is
+encoded in UTF-8, in which case it uses Unicode semantics.  That is, it
+uses what this document calls "byte" semantics unless there is some
+UTF-8-ness involved, in which case it uses "character" semantics.  Note
+that byte semantics are not the same as C<"/a"> matching, as the former
+doesn't know about the characters that are in the Latin-1 range which
+aren't ASCII (such as "LATIN SMALL LETTER ETH), but C<"/a"> does.
 
 As discussed elsewhere, Perl has one foot (two hooves?) planted in
 each of two worlds: the old world of bytes and the new world of
@@ -1354,6 +1462,15 @@ downgraded to bytes, either.  It is possible to accidentally mix bytes
 and characters, however (see L<perluniintro>), in which case C<\w> in
 regular expressions might start behaving differently.  Review your
 code.  Use warnings and the C<strict> pragma.
+
+There are some additional rules as to which of these modifiers is in
+effect if there are contradictory rules present.  First, an explicit
+modifier in a regular expression always overrides any pragmas.  And a
+modifier in an inner cluster or capture group overrides one in an outer
+group (for that inner group only).  If both C<use locale> and C<use
+feature 'unicode_strings> are in effect, the C<"/l"> modifier is
+selected.  And finally, a C<use re> that specifies a modifier has
+precedence over both those pragmas.
 
 =back
 
@@ -1386,12 +1503,7 @@ variable, see L<perlrun> for the documentation of the C<-C> switch.
 
 Perl tries really hard to work both with Unicode and the old
 byte-oriented world. Most often this is nice, but sometimes Perl's
-straddling of the proverbial fence causes problems.  Here's an example
-of how things can go wrong.  A locale can define a code point to be
-anything it wants.  It could make 'A' into a control character, for example.
-But strings encoded in utf8 always have Unicode semantics, so an 'A' in
-such a string is always an uppercase letter, never a control, no matter
-what the locale says it should be.
+straddling of the proverbial fence causes problems.
 
 =back
 

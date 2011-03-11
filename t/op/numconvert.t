@@ -54,18 +54,13 @@ my $max_uv_less3 = $max_uv1 - 3;
 print "# max_uv1 = $max_uv1, max_uv2 = $max_uv2, big_iv = $big_iv\n";
 print "# max_uv_less3 = $max_uv_less3\n";
 if ($max_uv1 ne $max_uv2 or $big_iv > $max_uv1 or $max_uv1 == $max_uv_less3) {
-  print "1..0 # skipped: unsigned perl arithmetic is not sane";
-  eval { require Config; import Config };
-  use vars qw(%Config);
-  if ($Config{d_quad} eq 'define') {
-      print " (common in 64-bit platforms)";
-  }
-  print "\n";
-  exit 0;
+  eval { require Config; };
+  my $message = 'unsigned perl arithmetic is not sane';
+  $message .= " (common in 64-bit platforms)" if $Config::Config{d_quad};
+  skip_all($message);
 }
 if ($max_uv_less3 =~ tr/0-9//c) {
-  print "1..0 # skipped: this perl stringifies large unsigned integers using E notation\n";
-  exit 0;
+  skip_all('this perl stringifies large unsigned integers using E notation');
 }
 
 my $st_t = 4*4;			# We try 4 initializers and 4 reporters
@@ -105,7 +100,7 @@ my $max_uv_p1 = "$max_uv"; $max_uv_p1+=0; $max_uv_p1++;
 
 # Also need to cope with %g notation for max_uv_p1 that actually gives an
 # integer less than max_uv because of correct rounding for the limited
-# precisision. This bites for 12 byte long doubles and 8 byte UVs
+# precision. This bites for 12 byte long doubles and 8 byte UVs
 
 my $temp = $max_uv_p1;
 my $max_uv_p1_as_iv;

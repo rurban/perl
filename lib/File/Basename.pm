@@ -54,7 +54,7 @@ our(@ISA, @EXPORT, $VERSION, $Fileparse_fstype, $Fileparse_igncase);
 require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw(fileparse fileparse_set_fstype basename dirname);
-$VERSION = "2.79";
+$VERSION = "2.80";
 
 fileparse_set_fstype($^O);
 
@@ -166,7 +166,7 @@ sub fileparse {
     }
   }
 
-  # Ensure taint is propgated from the path to its pieces.
+  # Ensure taint is propagated from the path to its pieces.
   $tail .= $taint;
   wantarray ? ($basename .= $taint, $dirpath .= $taint, $tail)
             : ($basename .= $taint);

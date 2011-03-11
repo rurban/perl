@@ -1,5 +1,5 @@
 name: perl
-version: 5.013008
+version: 5.013010
 abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
@@ -51,10 +51,8 @@ no_index:
     - dist/threads
     - dist/threads-shared
     - dist/XSLoader
-    - ext/Time-Local
     - lib/version
     - win32
-
   file:
     - dist/IO/ChangeLog
     - dist/IO/hints/sco.pl
@@ -107,4 +105,3 @@ no_index:
     - Porting/Maintainers.pm
     - Porting/perldelta_template.pod
     - TestInit.pm
-

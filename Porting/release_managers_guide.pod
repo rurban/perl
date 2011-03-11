@@ -110,11 +110,11 @@ If you don't have a PAUSE account, then request one:
 
     https://pause.perl.org/pause/query?ACTION=request_id
 
-Check that your account is allowed to upload perl distros: goto
-L<https://pause.perl.org/>, login, then select 'upload file to CPAN'; there
-should be a "For pumpkings only: Send a CC" tickbox.  If not, ask Andreas
-KE<0xf6>nig to add your ID to the list of people allowed to upload something
-called perl.  You can find Andreas' email address at:
+Check that your account is allowed to upload perl distros: go to
+L<https://pause.perl.org/pause/authenquery?ACTION=who_pumpkin> and check that
+your PAUSE ID is listed there.  If not, ask Andreas KE<0xf6>nig to add your ID
+to the list of people allowed to upload something called perl.  You can find
+Andreas' email address at:
 
     https://pause.perl.org/pause/query?ACTION=pause_04imprint
 
@@ -134,7 +134,7 @@ but ongoing. (No, a minicpan mirror is not sufficient)
 
 You will need a working C<git> installation, checkout of the perl
 git repository and perl commit bit.  For information about working
-with perl and git, see F<pod/perlrepository.pod>.
+with perl and git, see F<pod/perlgit.pod>.
 
 If you are not yet a perl committer, you won't be able to make a
 release.  Have a chat with whichever evil perl porter tried to talk
@@ -216,8 +216,10 @@ Ensure dual-life CPAN modules are stable, which comes down to:
 
 I<You MAY SKIP this step for SNAPSHOT>
 
-Similarly, monitor the smoking of core tests, and try to fix.
-See L<http://doc.procura.nl/smoke/index.html> for a summary.
+Similarly, monitor the smoking of core tests, and try to fix.  See
+L<http://doc.procura.nl/smoke/index.html> for a summary. See also
+L<http://www.nntp.perl.org/group/perl.daily-build.reports/> which has
+the raw reports.
 
 =item *
 
@@ -225,37 +227,6 @@ I<You MAY SKIP this step for SNAPSHOT>
 
 Similarly, monitor the smoking of perl for compiler warnings, and try to
 fix.
-
-=item *
-
-I<You MAY SKIP this step for SNAPSHOT>
-
-Run F<Porting/cmpVERSION.pl> to compare the current source tree with the
-previous version to check for for modules that have identical version
-numbers but different contents, e.g.:
-
-     $ cd ~/some-perl-root
-     $ ./perl -Ilib Porting/cmpVERSION.pl -xd . v5.10.0
-
-then bump the version numbers of any non-dual-life modules that have
-changed since the previous release, but which still have the old version
-number. If there is more than one maintenance branch (e.g. 5.8.x, 5.10.x),
-then compare against both.
-
-Be sure to bump the version numbers in separate commits for each module
-(or group of related modules) so that changes can be cherry-picked later
-if necessary.
-
-Note that some of the files listed may be generated (e.g. copied from ext/
-to lib/, or a script like lib/lib_pm.PL is run to produce lib/lib.pm);
-make sure you edit the correct file!
-
-Once all version numbers have been bumped, re-run the checks.
-
-Then run again without the -x option, to check that dual-life modules are
-also sensible.
-
-     $ ./perl -Ilib Porting/cmpVERSION.pl -d . v5.10.0
 
 =item *
 
@@ -286,7 +257,7 @@ edit; then you feed this list back and it applies the edits. So, first
 scan the source directory looking for likely candidates. The command line
 arguments are the old and new version numbers, and -s means scan:
 
-    $ Porting/bump-perl-version -s 5.10.0 5.10.1 > /tmp/scan
+    $ ./perl -Ilib Porting/bump-perl-version -s 5.10.0 5.10.1 > /tmp/scan
 
 This produces a file containing a list of suggested edits, e.g.:
 
@@ -302,7 +273,7 @@ suggested replacement text. Remember that this tool is largely just
 grepping for '5.10.0' or whatever, so it will generate false positives. Be
 careful not change text like "this was fixed in 5.10.0"! Then run:
 
-    $ Porting/bump-perl-version -u < /tmp/scan
+    $ ./perl -Ilib Porting/bump-perl-version -u < /tmp/scan
 
 which will update all the files shown.
 
@@ -423,6 +394,15 @@ For example:
   $ git log --pretty=fuller v5.13.2..HEAD | \
     perl Porting/checkAUTHORS.pl --who -
 
+Look at the previous L<perldelta> for how to write the opening
+paragraph of the Acknowledgements section. To get the amount of
+changed files and number of lines use this command:
+
+  $ git diff --shortstat v5.13.8..v5.13.9 | \
+    ./perl -Ilib -nE 'my ($files, $insert, $delete) = /(\d+)/ga; say "$files files and ", $insert + $delete, " lines changed"'
+
+Making sure to round off the number of lines changed.
+
 Re-read the perldelta to try to find any embarrassing typos and thinkos;
 remove any C<TODO> or C<XXX> flags; update the "Known Problems" section
 with any serious issues for which fixes are not going to happen now; and
@@ -434,7 +414,7 @@ run through pod and spell checkers, e.g.
 Also, you may want to generate and view an HTML version of it to check
 formatting, e.g.
 
-    $ perl pod/pod2html pod/perldelta.pod > /tmp/perldelta.html
+    $ ./perl -Ilib ext/Pod-Html/pod2html pod/perldelta.pod > /tmp/perldelta.html
 
 Another good HTML preview option is http://search.cpan.org/pod2html
 
@@ -445,8 +425,8 @@ If you make changes, be sure to commit them.
 Make sure you have a gitwise-clean perl directory (no modified files,
 unpushed commits etc):
 
-    $ git clean -dxf
     $ git status
+    $ git clean -dxf
 
 =item *
 
@@ -454,24 +434,6 @@ If not already built, Configure and build perl so that you have a Makefile
 and porting tools:
 
     $ ./Configure -Dusedevel -des && make
-
-=item *
-
-Check that files managed by F<regen.pl> and friends are up to date. From
-within your working directory:
-
-    $ git status
-    $ make regen_all
-    $ make regen_perly
-    $ git status
-
-If any of the files managed by F<regen.pl> have changed, then you should
-re-make perl to check that it's okay, then commit the updated versions:
-
-    $ git commit -a -m 'make regen; make regen_perly'
-
-(XXX regen might be a problem depending on the bison version available.
-We need to get a wizard to give better instructions on what to do or not do.)
 
 =item *
 
@@ -529,8 +491,12 @@ appear in the final release, and leave as-is for the later RCs and final).
 Edit the version number in the new C<< 'Module::CoreList' => 'X.YZ' >>
 entry, as that is likely to reflect the previous version number.
 
-Also edit Module::CoreList's new version number in its F<Changes> file and
-in its F<META.yml> file.
+Also edit Module::CoreList's new version number in its F<Changes>
+file.
+
+You should also add the version you're about to release to the
+L<Module::CoreList/CAVEATS> section which enumerates the perl releases
+that Module::CoreList covers.
 
 In addition, if this is a final release (rather than a release candidate):
 
@@ -556,16 +522,14 @@ cherry-pick it back).
 
 Check that the manifest is sorted and correct:
 
-    $ make manisort
     $ make distclean
     $ git clean -xdf # This shouldn't be necessary if distclean is correct
     $ perl Porting/manicheck
-    $ git status
 
-	XXX manifest _sorting_ is now checked with make test_porting
+If manicheck turns up anything wrong, update MANIFEST and begin this step again.
 
-Commit MANIFEST if it has changed:
-
+    $ ./configure -des -Dusedevel
+    $ make test_porting
     $ git commit -m 'Update MANIFEST' MANIFEST
 
 =item *
@@ -720,7 +684,7 @@ which is why you should test from the tarball.
 
 Run the Installation Verification Procedure utility:
 
-    $ bin/perlivp
+    $ ./perl utils/perlivp
     ...
     All tests successful.
     $
@@ -744,10 +708,10 @@ previous is 5.10.0:
 
 Bootstrap the CPAN client on the clean install:
 
-    $ bin/perl -MCPAN -e'shell' 
+    $ bin/perl -MCPAN -e "shell"
 
-(Use C<... -e "shell"> instead on Win32. You probably also need a set of
-Unix command-line tools available for CPAN to function correctly without
+If you're running this on Win32 you probably also need a set of Unix
+command-line tools available for CPAN to function correctly without
 Perl alternatives like LWP installed. Cygwin is an obvious choice.)
 
 =item *
@@ -760,11 +724,9 @@ has dependencies; for example:
 
 Check that your perl can run this:
 
-    $ bin/perl -lwe 'use Inline C => "int f() { return 42;} "; print f'
+    $ bin/perl -lwe "use Inline C => q[int f() { return 42;}]; print f"
     42
     $
-
-(Use C<... -lwe "use ..."> instead on Win32.)
 
 =item *
 
@@ -819,6 +781,12 @@ based on (or at least the last commit of any consequence).
 Then check that the smoke tests pass (particularly on Win32). If not, go
 back and fix things.
 
+Note that for I<BLEAD> releases this may not be practical. It takes a
+long time for the smokers to catch up, especially the Win32
+smokers. This is why we have a RC cycle for I<MAINT> releases, but for
+I<BLEAD> releases sometimes the best you can do is to plead with
+people on IRC to test stuff on their platforms, fire away, and then
+hope for the best.
 
 =item *
 
@@ -862,6 +830,8 @@ time to publish the tag you created earlier to the public git repo (e.g.):
     $ git push origin tag v5.11.0
 
 =item *
+
+I<You MUST SKIP this step for SNAPSHOT or BLEAD release>
 
 Disarm the F<patchlevel.h> change; for example,
 
@@ -947,13 +917,6 @@ the following files:
     win32/Makefile
     win32/makefile.mk
     win32/pod.mak
-
-Then manually edit (F<vms/descrip_mms.template> to bump the version
-in the following entry:
-
-    [.pod]perl5101delta.pod : [.pod]perldelta.pod
-
-XXX this previous step needs to fixed to automate it in pod/buildtoc.
 
 Finally, commit:
 

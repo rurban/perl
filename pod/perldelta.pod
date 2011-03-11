@@ -5,16 +5,16 @@
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.13.9
+perldelta - what is new for perl v5.13.11
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.13.8 release and
-the 5.13.9 release.
+This document describes differences between the 5.13.10 release and
+the 5.13.11 release.
 
-If you are upgrading from an earlier release such as 5.13.7, first read
-L<perl5138delta>, which describes differences between 5.13.7 and
-5.13.8.
+If you are upgrading from an earlier release such as 5.13.9, first read
+L<perl5139delta>, which describes differences between 5.13.9 and
+5.13.10.
 
 =head1 Notice
 
@@ -96,11 +96,126 @@ XXX
 
 =item *
 
-C<Encode> has been upgraded from version 2.40 to 2.41
+C<base> has been upgraded from version 2.15 to 2.16.
 
 =item *
 
-XXX
+C<CPANPLUS> has been upgraded from version 0.9101 to 0.9102
+
+=item *
+
+C<CPANPLUS::Dist::Build> has been upgraded from version 0.52 to 0.54
+
+=item *
+
+C<Devel::DProf> has been upgraded from version 20110225.01 to 20110228.00.
+
+=item *
+
+C<Digest::SHA> has been upgraded from version 5.50 to 5.61
+
+New SHA-512/224 and SHA-512/256 transforms ref. NIST Draft FIPS 180-4 (February 2011)
+
+=item *
+
+C<ExtUtils::Command> has been upgraded from version 1.16 to 1.17.
+
+=item *
+
+C<IO> has been upgraded from version 1.25_03 to 1.25_04.
+
+=item *
+
+C<JSON::PP> has been upgraded from version 2.27103 to 2.27105
+
+=item *
+
+C<Locale::Codes> has been upgraded from version 3.15 to 3.16
+
+=item *
+
+C<Math::BigInt> has been upgraded from version 1.992 to 1.994
+
+=item *
+
+C<Math::BigInt::FastCalc> has been upgraded from version 0.24_02 to 0.28
+
+=item *
+
+C<Module::Build> has been upgraded from version 0.37_05 to 0.3800
+
+=item *
+
+C<parent> has been upgraded from version 0.224 to 0.225
+
+=item *
+
+C<Test::Harness> has been upgraded from version 3.22 to 3.23
+
+=item *
+
+C<Test::Simple> has been upgraded from version 0.97_01 to 0.98
+
+=item *
+
+C<Tie::RefHash> has been upgraded from version 1.38 to 1.39.
+
+=item *
+
+C<Unicode::Collate> has been upgraded from version 0.72 to 0.73
+
+DUCET has been updated for Unicode 6.0.0 as Collate/allkeys.txt and
+the default UCA_Version is 22.
+
+=item *
+
+C<Unicode::UCD> has been upgraded from version 0.31 to 0.32.
+This includes a number of bug fixes:
+
+=over 4
+
+=item charinfo()
+
+=over 4
+
+=item *
+
+It is now updated to Unicode Version 6 with Corrigendum #8, except,
+as with Perl 5.14, the code point at U+1F514 has no name.
+
+=item *
+
+The Hangul syllable code points have the correct names, and their
+decompositions are always output without requiring L<Lingua::KO::Hangul::Util>
+to be installed.
+
+=item *
+
+The CJK (Chinese-Japanese-Korean) code points U+2A700 - U+2B734
+and U+2B740 - 2B81D are now properly handled.
+
+=item *
+
+The numeric values are now output for those CJK code points that have them.
+
+=item *
+
+The names that are output for code points with multiple aliases are now the
+corrected ones.
+
+=back
+
+=item charscript()
+
+This now correctly returns "Unknown" instead of C<undef> for the script
+of a code point that hasn't been assigned another one.
+
+=item charblock()
+
+This now correctly returns "No_Block" instead of C<undef> for the block
+of a code point that hasn't been assigned to another one.
+
+=back
 
 =back
 
@@ -162,7 +277,17 @@ XXX Newly added diagnostic messages go here
 
 =item *
 
-XXX
+Regexp modifier "/%c" may not appear twice
+
+(F syntax) The regular expression pattern had one of the mutually exclusive
+modifiers repeated.  Remove all but one of the occurrences.
+
+=item *
+
+Regexp modifiers "/%c" and "/%c" are mutually exclusive
+
+(F syntax) The regular expression pattern had more than one of the mutually
+exclusive modifiers.  Retain only the modifier that is supposed to be there.
 
 =back
 
@@ -303,13 +428,13 @@ XXX Important bug fixes in the core language are summarised here.
 Bug fixes in files in F<ext/> and F<lib/> are best summarised in
 L</Modules and Pragmata>.
 
-[ List each fix as a =item entry ]
-
 =over 4
 
 =item *
 
-XXX
+A fix for a bug in C<length(undef)> in 5.13.4 introduced a regression that
+meant C<print length undef> did not warn when warnings were enabled. It now
+correctly warns (RT #85508).
 
 =back
 

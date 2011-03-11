@@ -9,7 +9,7 @@ require Exporter;
 use Carp;
 use Symbol qw(gensym qualify);
 
-$VERSION	= 1.08;
+$VERSION	= 1.09;
 @ISA		= qw(Exporter);
 @EXPORT		= qw(open3);
 
@@ -172,7 +172,7 @@ sub xclose_on_exec {
 }
 
 # I tried using a * prototype character for the filehandle but it still
-# disallows a bearword while compiling under strict subs.
+# disallows a bareword while compiling under strict subs.
 
 sub xopen {
     open $_[0], $_[1] or croak "$Me: open($_[0], $_[1]) failed: $!";

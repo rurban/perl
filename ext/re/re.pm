@@ -4,7 +4,7 @@ package re;
 use strict;
 use warnings;
 
-our $VERSION     = "0.15";
+our $VERSION     = "0.17";
 our @ISA         = qw(Exporter);
 our @EXPORT_OK   = ('regmust',
                     qw(is_regexp regexp_pattern
@@ -25,9 +25,11 @@ my %reflags = (
     x => 1 << ($PMMOD_SHIFT + 3),
     p => 1 << ($PMMOD_SHIFT + 4),
 # special cases:
-    l => 1 << ($PMMOD_SHIFT + 5),
-    u => 1 << ($PMMOD_SHIFT + 6),
     d => 0,
+    l => 1,
+    u => 2,
+    a => 3,
+    aa => 4,
 );
 
 sub setcolor {
@@ -142,24 +144,39 @@ sub bits {
 	    re->export_to_level(2, 're', $s);
 	} elsif ($s =~ s/^\///) {
 	    my $reflags = $^H{reflags} || 0;
-	    my $seen_dul;
-	    for(split//, $s) {
-		if (/[dul]/) {
+	    my $seen_charset;
+	    while ($s =~ m/( aa | . )/gx) {
+                $_ = $1;
+		if (/[adul]/) {
 		    if ($on) {
-			if ($seen_dul && $seen_dul ne $_) {
+			if ($seen_charset) {
 			    require Carp;
-			    Carp::carp(
-			      qq 'The "$seen_dul" and "$_" flags '
-			     .qq 'are exclusive'
-			    );
+                            if ($seen_charset ne $_) {
+                                Carp::carp(
+                                qq 'The "$seen_charset" and "$_" flags '
+                                .qq 'are exclusive'
+                                );
+                            }
+                            elsif ($seen_charset eq 'a') {
+                                Carp::carp(
+                                qq 'The "a" flag may only appear twice if '
+                                .qq 'adjacent, like "aa"'
+                                );
+                            }
+                            else {
+                                Carp::carp(
+                                qq 'The "$seen_charset" flag may not appear '
+                                .qq 'twice'
+                                );
+                            }
 			}
-			$^H{reflags_dul} = $reflags{$_};
-			$seen_dul = $_;
+			$^H{reflags_charset} = $reflags{$_};
+			$seen_charset = $_;
 		    }
 		    else {
-			delete $^H{reflags_dul}
-			 if  defined $^H{reflags_dul}
-			  && $^H{reflags_dul} == $reflags{$_};
+			delete $^H{reflags_charset}
+			 if  defined $^H{reflags_charset}
+			  && $^H{reflags_charset} == $reflags{$_};
 		    }
 		} elsif (exists $reflags{$_}) {
 		    $on
@@ -173,7 +190,7 @@ sub bits {
 		    next ARG;
 		}
 	    }
-	    ($^H{reflags} = $reflags or defined $^H{reflags_dul})
+	    ($^H{reflags} = $reflags or defined $^H{reflags_charset})
 	     ? $^H |= $flags_hint
 	     : ($^H &= ~$flags_hint);
 	} else {
@@ -291,16 +308,16 @@ default, simply put
 
 at the top of your code.
 
-The /dul flags cancel each other out. So, in this example,
+The character set /adul flags cancel each other out. So, in this example,
 
     use re "/u";
     "ss" =~ /\xdf/;
     use re "/d";
     "ss" =~ /\xdf/;
 
-The second C<use re> does an implicit C<no re '/u'>.
+the second C<use re> does an implicit C<no re '/u'>.
 
-Turning on the /l and /u flags with C<use re> takes precedence over the
+Turning on one of the character set flags with C<use re> takes precedence over the
 C<locale> pragma and the 'unicode_strings' C<feature>, for regular
 expressions. Turning off one of these flags when it is active reverts to
 the behaviour specified by whatever other pragmata are in scope. For
@@ -322,7 +339,7 @@ form of output that can be used to get a colorful display on terminals
 that understand termcap color sequences.  Set C<$ENV{PERL_RE_TC}> to a
 comma-separated list of C<termcap> properties to use for highlighting
 strings on/off, pre-point part on/off.
-See L<perldebug/"Debugging regular expressions"> for additional info.
+See L<perldebug/"Debugging Regular Expressions"> for additional info.
 
 As of 5.9.5 the directive C<use re 'debug'> and its equivalents are
 lexically scoped, as the other directives are.  However they have both 

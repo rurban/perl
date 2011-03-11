@@ -17,7 +17,7 @@
 # changed 0+$self to pack 'J', $self.)
 
 my $start_time;
-BEGIN { # Get the time the script started running; do it at compiliation to
+BEGIN { # Get the time the script started running; do it at compilation to
         # get it as close as possible
     $start_time= time;
 }
@@ -839,6 +839,26 @@ if ($v_version ge v5.2.0) {
     }
 }
 
+# Enum values for to_output_map() method in the Map_Table package.
+my $EXTERNAL_MAP = 1;
+my $INTERNAL_MAP = 2;
+
+# To override computed values for writing the map tables for these properties.
+# The default for enum map tables is to write them out, so that the Unicode
+# .txt files can be removed, but all the data to compute any property value
+# for any code point is available in a more compact form.
+my %global_to_output_map = (
+    # Needed by UCD.pm, but don't want to publicize that it exists, so won't
+    # get stuck supporting it if things change.  Sinc it is a STRING property,
+    # it normally would be listed in the pod, but INTERNAL_MAP suppresses
+    # that.
+    Unicode_1_Name => $INTERNAL_MAP,
+
+    Present_In => 0,                # Suppress, as easily computed from Age
+    Canonical_Combining_Class => 0, # Duplicate of CombiningClass.pl
+    Block => 0,                     # Suppress, as Blocks.txt is retained.
+);
+
 # Properties that this program ignores.
 my @unimplemented_properties = (
 'Unicode_Radical_Stroke'    # Remove if changing to handle this one.
@@ -880,7 +900,6 @@ my %why_obsolete;    # Documentation only
         'Decomposition_Mapping' => 'Accessible via Unicode::Normalize',
 
         'ISO_Comment' => 'Apparently no demand for it, but can access it through Unicode::UCD::charinfo.  Obsoleted, and code points for it removed in Unicode 5.2',
-        'Unicode_1_Name' => "$simple, and no apparent demand for it, but can access it through Unicode::UCD::charinfo.  If there is no later name for a code point, then this one is used instead in charnames",
 
         'Simple_Case_Folding' => "$simple.  Can access this through Unicode::UCD::casefold",
         'Simple_Lowercase_Mapping' => "$simple.  Can access this through Unicode::UCD::charinfo",
@@ -1136,6 +1155,7 @@ my $IF_NOT_EQUIVALENT = 1; # Replace only under certain conditions; details in
 my $UNCONDITIONALLY = 2;   # Replace without conditions.
 my $MULTIPLE = 4;          # Don't replace, but add a duplicate record if
                            # already there
+my $CROAK = 5;             # Die with an error if is already there
 
 # Flags to give property statuses.  The phrases are to remind maintainers that
 # if the flag is changed, the indefinite article referring to it in the
@@ -1202,6 +1222,18 @@ my %stricter_to_file_of;    # same; but for stricter mapping.
 my %nv_floating_to_rational; # maps numeric values floating point numbers to
                              # their rational equivalent
 my %loose_property_name_of; # Loosely maps property names to standard form
+
+# Most properties are immune to caseless matching, otherwise you would get
+# nonsensical results, as properties are a function of a code point, not
+# everything that is caselessly equivalent to that code point.  For example,
+# Changes_When_Case_Folded('s') should be false, whereas caselessly it would
+# be true because 's' and 'S' are equivalent caselessly.  However,
+# traditionally, [:upper:] and [:lower:] are equivalent caselessly, so we
+# extend that concept to those very few properties that are like this.  Each
+# such property will match the full range caselessly.  They are hard-coded in
+# the program; it's not worth trying to make it general as it's extremely
+# unlikely that they will ever change.
+my %caseless_equivalent_to;
 
 # These constants names and values were taken from the Unicode standard,
 # version 5.1, section 3.12.  They are used in conjunction with Hangul
@@ -1295,7 +1327,7 @@ my @printable;          # boolean: And are those characters printable?
 my @annotate_char_type; # Contains a type of those characters, specifically
                         # for the purposes of annotation.
 my $annotate_ranges;    # A map of ranges of code points that have the same
-                        # name for the purposes of annoation.  They map to the
+                        # name for the purposes of annotation.  They map to the
                         # upper edge of the range, so that the end point can
                         # be immediately found.  This is used to skip ahead to
                         # the end of a range, and avoid processing each
@@ -3523,6 +3555,13 @@ sub trace { return main::trace(@_); }
             if ($clean_insert) {
                 if ($r->[$j]->standard_form ne $standard_form) {
                     $clean_insert = 0;
+                    if ($replace == $CROAK) {
+                        main::croak("The range to add "
+                        . sprintf("%04X", $start)
+                        . '-'
+                        . sprintf("%04X", $end)
+                        . " with value '$value' overlaps an existing range $r->[$j]");
+                    }
                 }
                 else {
 
@@ -3815,7 +3854,7 @@ sub trace { return main::trace(@_); }
             trace "i  =[", $i, "]", $r->[$i];
             trace 'i+1=[', $i+1, ']', $r->[$i+1] if $i < @$r - 1;
             trace 'i+2=[', $i+2, ']', $r->[$i+2] if $i < @$r - 2;
-            trace "removed @return";
+            trace "removed ", @return if @return;
         }
 
         # An actual deletion could have changed the maximum in the list.
@@ -4214,8 +4253,6 @@ sub trace { return main::trace(@_); }
         # the character very frequently used.
         return $try_hard if $code == 0x0000;
 
-        return 0 if $try_hard;  # XXX Temporary until fix utf8.c
-
         # shun non-character code points.
         return $try_hard if $code >= 0xFDD0 && $code <= 0xFDEF;
         return $try_hard if ($code & 0xFFFE) == 0xFFFE; # includes FFFF
@@ -4398,6 +4435,10 @@ sub trace { return main::trace(@_); }
     # A comment about its being obsolete, or whatever non normal status it has
     main::set_access('status_info', \%status_info, 'r');
 
+    my %caseless_equivalent;
+    # The table this is equivalent to under /i matching, if any.
+    main::set_access('caseless_equivalent', \%caseless_equivalent, 'r', 's');
+
     my %range_size_1;
     # Is the table to be output with each range only a single code point?
     # This is done to avoid breaking existing code that may have come to rely
@@ -4449,6 +4490,7 @@ sub trace { return main::trace(@_); }
         $status{$addr} = delete $args{'Status'} || $NORMAL;
         $status_info{$addr} = delete $args{'_Status_Info'} || "";
         $range_size_1{$addr} = delete $args{'Range_Size_1'} || 0;
+        $caseless_equivalent{$addr} = delete $args{'Caseless_Equivalent'} || 0;
 
         my $description = delete $args{'Description'};
         my $externally_ok = delete $args{'Externally_Ok'};
@@ -4491,7 +4533,7 @@ sub trace { return main::trace(@_); }
             # not, is normal.  The lists are prioritized so the most serious
             # ones are checked first
             if (exists $why_suppressed{$complete_name}
-                # Don't suppress if overriden
+                # Don't suppress if overridden
                 && ! grep { $_ eq $complete_name{$addr} }
                                                     @output_mapped_properties)
             {
@@ -5343,7 +5385,13 @@ sub trace { return main::trace(@_); }
     main::set_access('core_access', \%core_access, 'r', 's');
 
     my %to_output_map;
-    # Boolean as to whether or not to write out this map table
+    # Enum as to whether or not to write out this map table:
+    #   $EXTERNAL_MAP   means its existence is noted in the documentation, and
+    #                   it should not be removed nor its format changed.  This
+    #                   is done for those files that have traditionally been
+    #                   output.
+    #   $INTERNAL_MAP   means Perl reserves the right to do anything it wants
+    #                   with this file
     main::set_access('to_output_map', \%to_output_map, 's');
 
 
@@ -5360,6 +5408,7 @@ sub trace { return main::trace(@_); }
         my $default_map = delete $args{'Default_Map'};
         my $property = delete $args{'_Property'};
         my $full_name = delete $args{'Full_Name'};
+
         # Rest of parameters passed on
 
         my $range_list = Range_Map->new(Owner => $property);
@@ -5546,9 +5595,11 @@ sub trace { return main::trace(@_); }
         return $to_output_map{$addr} if defined $to_output_map{$addr};
 
         my $full_name = $self->full_name;
+        return $global_to_output_map{$full_name}
+                                if defined $global_to_output_map{$full_name};
 
-        # If table says to output, do so; if says to suppress it, do do.
-        return 1 if grep { $_ eq $full_name } @output_mapped_properties;
+        # If table says to output, do so; if says to suppress it, do so.
+        return $EXTERNAL_MAP if grep { $_ eq $full_name } @output_mapped_properties;
         return 0 if $self->status eq $SUPPRESSED;
 
         my $type = $self->property->type;
@@ -5557,10 +5608,10 @@ sub trace { return main::trace(@_); }
         return 0 if $type == $BINARY;
 
         # But do want to output string ones.
-        return 1 if $type == $STRING;
+        return $EXTERNAL_MAP if $type == $STRING;
 
-        # Otherwise is an $ENUM, don't output it
-        return 0;
+        # Otherwise is an $ENUM, do output it, for Perl's purposes
+        return $INTERNAL_MAP;
     }
 
     sub inverse_list {
@@ -5573,6 +5624,16 @@ sub trace { return main::trace(@_); }
         my $current = Range_List->new(Initialize => $self->_range_list,
                                 Owner => $self->property);
         return ~ $current;
+    }
+
+    sub header {
+        my $self = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $return = $self->SUPER::header();
+
+        $return .= $INTERNAL_ONLY if $self->to_output_map == $INTERNAL_MAP;
+        return $return;
     }
 
     sub set_final_comment {
@@ -5815,7 +5876,7 @@ END
 
                 # The pack() below can't cope with surrogates.
                 if ($code_point >= 0xD800 && $code_point <= 0xDFFF) {
-                    Carp::my_carp("Surrogage code point '$code_point' in mapping to '$map' in $self.  No map created");
+                    Carp::my_carp("Surrogate code point '$code_point' in mapping to '$map' in $self.  No map created");
                     next;
                 }
 
@@ -6234,6 +6295,12 @@ END
 
         $self->_set_format($format);
 
+        # Core Perl has a different definition of mapping ranges than we do,
+        # that is applicable mainly to mapping code points, so for tables
+        # where it is possible that core Perl could be used to read it,
+        # make it range size 1 to prevent possible confusion
+        $self->set_range_size_1(1) if $format eq $HEX_FORMAT;
+
         return $self->SUPER::write(
             ($self->property == $block)
                 ? 7     # block file needs more tab stops
@@ -6555,7 +6622,7 @@ sub trace { return main::trace(@_); }
         # not quite so many.
         # If they are related, one must be a perl extension.  This is because
         # we can't guarantee that Unicode won't change one or the other in a
-        # later release even if they are idential now.
+        # later release even if they are identical now.
 
         my $self = shift;
         my $other = shift;
@@ -6610,6 +6677,7 @@ sub trace { return main::trace(@_); }
         my $status = $other->status;
         my $status_info = $other->status_info;
         my $matches_all = $matches_all{other_addr};
+        my $caseless_equivalent = $other->caseless_equivalent;
         foreach my $table ($current_leader, @{$equivalents{$leader}}) {
             next if $table == $other;
             trace "setting $other to be the leader of $table, status=$status" if main::DEBUG && $to_trace;
@@ -6623,6 +6691,7 @@ sub trace { return main::trace(@_); }
                 $parent{$table_addr} = $other;
                 push @{$children{$other_addr}}, $table;
                 $table->set_status($status, $status_info);
+                $self->set_caseless_equivalent($caseless_equivalent);
             }
         }
 
@@ -7062,7 +7131,7 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
         # each of them is stored in %alias_to_property_of as they are defined.
         # But it's possible that this subroutine will be called with some
         # variant, so if the initial lookup fails, it is repeated with the
-        # standarized form of the input name.  If found, besides returning the
+        # standardized form of the input name.  If found, besides returning the
         # result, the input name is added to the list so future calls won't
         # have to do the conversion again.
 
@@ -7216,7 +7285,7 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
                         . " argument to '-='.  Subtraction ignored.");
             return $self;
         }
-        elsif ($reversed) {   # Shouldnt happen in a -=, but just in case
+        elsif ($reversed) {   # Shouldn't happen in a -=, but just in case
             Carp::my_carp_bug("Can't cope with a "
             .  __PACKAGE__
             . " being the first parameter in a '-='.  Subtraction ignored.");
@@ -7639,7 +7708,7 @@ sub join_lines($) {
     # A blank separates the joined lines except if there is a break; an extra
     # blank is inserted after a period ending a line.
 
-    # Intialize the return with the first line.
+    # Initialize the return with the first line.
     my ($return, @lines) = split "\n", shift;
 
     # If the first line is null, it was an empty line, add the \n back in
@@ -7941,7 +8010,7 @@ sub Standardize($) {
     $name =~ s/^\s+//g;
     $name =~ s/\s+$//g;
 
-    # Convert interior white space and hypens into underscores.
+    # Convert interior white space and hyphens into underscores.
     $name =~ s/ (?<= .) [ -]+ (.) /_$1/xg;
 
     # Capitalize the letter following an underscore, and convert a sequence of
@@ -7967,6 +8036,30 @@ sub standardize ($) {
 
     $name =~ s/ (?<= .) _ (?= . ) //xg;
     return lc $name;
+}
+
+sub utf8_heavy_name ($$) {
+    # Returns the name that utf8_heavy.pl will use to find a table.  XXX
+    # perhaps this function should be placed somewhere, like Heavy.pl so that
+    # utf8_heavy can use it directly without duplicating code that can get
+    # out-of sync.
+
+    my $table = shift;
+    my $alias = shift;
+    Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+    my $property = $table->property;
+    $property = ($property == $perl)
+                ? ""                # 'perl' is never explicitly stated
+                : standardize($property->name) . '=';
+    if ($alias->loose_match) {
+        return $property . standardize($alias->name);
+    }
+    else {
+        return lc ($property . $alias->name);
+    }
+
+    return;
 }
 
 {   # Closure
@@ -8284,9 +8377,9 @@ sub finish_property_setup {
     my $fold = property_ref('Case_Folding');
     $fold->set_file('Fold') if defined $fold;
 
-    # utf8.c can't currently cope with non range-size-1 for these, and even if
-    # it were changed to do so, someone else may be using them, expecting the
-    # old style
+    # utf8.c has a different meaning for non range-size-1 for map properties
+    # that this program doesn't currently handle; and even if it were changed
+    # to do so, some other code may be using them expecting range size 1.
     foreach my $property (qw {
                                 Case_Folding
                                 Lowercase_Mapping
@@ -9008,7 +9101,7 @@ sub output_perl_charnames_line ($$) {
         #
         # meaning the codepoints in the range all have the value 'map' under
         # 'property'.
-        # Beginning and trailing white space in each field are not signficant.
+        # Beginning and trailing white space in each field are not significant.
         # Note there is not a trailing semi-colon in the above.  A trailing
         # semi-colon means the map is a null-string.  An omitted map, as
         # opposed to a null-string, is assumed to be 'Y', based on Unicode
@@ -9028,8 +9121,8 @@ sub output_perl_charnames_line ($$) {
         # file, in any order, interspersed in any way.  The first time a
         # property is seen, it gets information about that property and
         # caches it for quick retrieval later.  It also normalizes the maps
-        # so that only one of many synonym is stored.  The Unicode input files
-        # do use some multiple synonyms.
+        # so that only one of many synonyms is stored.  The Unicode input
+        # files do use some multiple synonyms.
 
         my $file = shift;
         Carp::carp_extra_args(\@_) if main::DEBUG && @_;
@@ -9338,19 +9431,17 @@ END
 
                 # If the map begins with a special command to us (enclosed in
                 # delimiters), extract the command(s).
-                if (substr($map, 0, 1) eq $CMD_DELIM) {
-                    while ($map =~ s/ ^ $CMD_DELIM (.*?) $CMD_DELIM //x) {
-                        my $command = $1;
-                        if ($command =~  / ^ $REPLACE_CMD= (.*) /x) {
-                            $replace = $1;
-                        }
-                        elsif ($command =~  / ^ $MAP_TYPE_CMD= (.*) /x) {
-                            $map_type = $1;
-                        }
-                        else {
-                           $file->carp_bad_line("Unknown command line: '$1'");
-                           next LINE;
-                        }
+                while ($map =~ s/ ^ $CMD_DELIM (.*?) $CMD_DELIM //x) {
+                    my $command = $1;
+                    if ($command =~  / ^ $REPLACE_CMD= (.*) /x) {
+                        $replace = $1;
+                    }
+                    elsif ($command =~  / ^ $MAP_TYPE_CMD= (.*) /x) {
+                        $map_type = $1;
+                    }
+                    else {
+                        $file->carp_bad_line("Unknown command line: '$1'");
+                        next LINE;
                     }
                 }
             }
@@ -9542,7 +9633,7 @@ END
     # the code point and name on each line.  This was actually the hardest
     # thing to design around.  The code points in those ranges may actually
     # have real maps not given by these two lines.  These maps will either
-    # be algorthimically determinable, or in the extracted files furnished
+    # be algorithmically determinable, or in the extracted files furnished
     # with the UCD.  In the event of conflicts between these extracted files,
     # and this one, Unicode says that this one prevails.  But it shouldn't
     # prevail for conflicts that occur in these ranges.  The data from the
@@ -10297,105 +10388,147 @@ sub filter_arabic_shaping_line {
     return;
 }
 
-sub setup_special_casing {
-    # SpecialCasing.txt contains the non-simple case change mappings.  The
-    # simple ones are in UnicodeData.txt, which should already have been read
-    # in to the full property data structures, so as to initialize these with
-    # the simple ones.  Then the SpecialCasing.txt entries overwrite the ones
-    # which have different full mappings.
+{ # Closure
+    my $lc; # Table for lowercase mapping
+    my $tc;
+    my $uc;
 
-    # This routine sees if the simple mappings are to be output, and if so,
-    # copies what has already been put into the full mapping tables, while
-    # they still contain only the simple mappings.
+    sub setup_special_casing {
+        # SpecialCasing.txt contains the non-simple case change mappings.  The
+        # simple ones are in UnicodeData.txt, which should already have been
+        # read in to the full property data structures, so as to initialize
+        # these with the simple ones.  Then the SpecialCasing.txt entries
+        # overwrite the ones which have different full mappings.
 
-    # The reason it is done this way is that the simple mappings are probably
-    # not going to be output, so it saves work to initialize the full tables
-    # with the simple mappings, and then overwrite those relatively few
-    # entries in them that have different full mappings, and thus skip the
-    # simple mapping tables altogether.
+        # This routine sees if the simple mappings are to be output, and if
+        # so, copies what has already been put into the full mapping tables,
+        # while they still contain only the simple mappings.
 
-    my $file= shift;
-    Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+        # The reason it is done this way is that the simple mappings are
+        # probably not going to be output, so it saves work to initialize the
+        # full tables with the simple mappings, and then overwrite those
+        # relatively few entries in them that have different full mappings,
+        # and thus skip the simple mapping tables altogether.
 
-    # For each of the case change mappings...
-    foreach my $case ('lc', 'tc', 'uc') {
-        my $full = property_ref($case);
-        unless (defined $full && ! $full->is_empty) {
-            Carp::my_carp_bug("Need to process UnicodeData before SpecialCasing.  Only special casing will be generated.");
+        my $file= shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        $lc = property_ref('lc');
+        $tc = property_ref('tc');
+        $uc = property_ref('uc');
+
+        # For each of the case change mappings...
+        foreach my $case_table ($lc, $tc, $uc) {
+            my $case = $case_table->name;
+            my $full = property_ref($case);
+            unless (defined $full && ! $full->is_empty) {
+                Carp::my_carp_bug("Need to process UnicodeData before SpecialCasing.  Only special casing will be generated.");
+            }
+
+            # The simple version's name in each mapping merely has an 's' in
+            # front of the full one's
+            my $simple = property_ref('s' . $case);
+            $simple->initialize($full) if $simple->to_output_map();
+
+            my $simple_only = Property->new("_s$case",
+                    Type => $STRING,
+                    Default_Map => $CODE_POINT,
+                    Perl_Extension => 1,
+                    Description => "The simple mappings for $case for code points that have full mappings as well");
+            $simple_only->set_to_output_map($INTERNAL_MAP);
+            $simple_only->add_comment(join_lines( <<END
+This file is for UCD.pm so that it can construct simple mappings that would
+otherwise be lost because they are overridden by full mappings.
+END
+            ));
         }
 
-        # The simple version's name in each mapping merely has an 's' in front
-        # of the full one's
-        my $simple = property_ref('s' . $case);
-        $simple->initialize($full) if $simple->to_output_map();
+        return;
     }
 
-    return;
-}
+    sub filter_special_casing_line {
+        # Change the format of $_ from SpecialCasing.txt into something that
+        # the generic handler understands.  Each input line contains three
+        # case mappings.  This will generate three lines to pass to the
+        # generic handler for each of those.
 
-sub filter_special_casing_line {
-    # Change the format of $_ from SpecialCasing.txt into something that the
-    # generic handler understands.  Each input line contains three case
-    # mappings.  This will generate three lines to pass to the generic handler
-    # for each of those.
+        # The input syntax (after stripping comments and trailing white space
+        # is like one of the following (with the final two being entries that
+        # we ignore):
+        # 00DF; 00DF; 0053 0073; 0053 0053; # LATIN SMALL LETTER SHARP S
+        # 03A3; 03C2; 03A3; 03A3; Final_Sigma;
+        # 0307; ; 0307; 0307; tr After_I; # COMBINING DOT ABOVE
+        # Note the trailing semi-colon, unlike many of the input files.  That
+        # means that there will be an extra null field generated by the split
 
-    # The input syntax (after stripping comments and trailing white space is
-    # like one of the following (with the final two being entries that we
-    # ignore):
-    # 00DF; 00DF; 0053 0073; 0053 0053; # LATIN SMALL LETTER SHARP S
-    # 03A3; 03C2; 03A3; 03A3; Final_Sigma;
-    # 0307; ; 0307; 0307; tr After_I; # COMBINING DOT ABOVE
-    # Note the trailing semi-colon, unlike many of the input files.  That
-    # means that there will be an extra null field generated by the split
+        my $file = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
 
-    my $file = shift;
-    Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+        my @fields = split /\s*;\s*/, $_, -1; # -1 => retain trailing null
+                                              # fields
 
-    my @fields = split /\s*;\s*/, $_, -1; # -1 => retain trailing null fields
+        # field #4 is when this mapping is conditional.  If any of these get
+        # implemented, it would be by hard-coding in the casing functions in
+        # the Perl core, not through tables.  But if there is a new condition
+        # we don't know about, output a warning.  We know about all the
+        # conditions through 6.0
+        if ($fields[4] ne "") {
+            my @conditions = split ' ', $fields[4];
+            if ($conditions[0] ne 'tr'  # We know that these languages have
+                                        # conditions, and some are multiple
+                && $conditions[0] ne 'az'
+                && $conditions[0] ne 'lt'
 
-    # field #4 is when this mapping is conditional.  If any of these get
-    # implemented, it would be by hard-coding in the casing functions in the
-    # Perl core, not through tables.  But if there is a new condition we don't
-    # know about, output a warning.  We know about all the conditions through
-    # 6.0
-    if ($fields[4] ne "") {
-        my @conditions = split ' ', $fields[4];
-        if ($conditions[0] ne 'tr'  # We know that these languages have
-                                    # conditions, and some are multiple
-            && $conditions[0] ne 'az'
-            && $conditions[0] ne 'lt'
+                # And, we know about a single condition Final_Sigma, but
+                # nothing else.
+                && ($v_version gt v5.2.0
+                    && (@conditions > 1 || $conditions[0] ne 'Final_Sigma')))
+            {
+                $file->carp_bad_line("Unknown condition '$fields[4]'.  You should inspect it and either add code to handle it, or add to list of those that are to ignore");
+            }
+            elsif ($conditions[0] ne 'Final_Sigma') {
 
-            # And, we know about a single condition Final_Sigma, but
-            # nothing else.
-            && ($v_version gt v5.2.0
-                && (@conditions > 1 || $conditions[0] ne 'Final_Sigma')))
-        {
-            $file->carp_bad_line("Unknown condition '$fields[4]'.  You should inspect it and either add code to handle it, or add to list of those that are to ignore");
-        }
-        elsif ($conditions[0] ne 'Final_Sigma') {
+                    # Don't print out a message for Final_Sigma, because we
+                    # have hard-coded handling for it.  (But the standard
+                    # could change what the rule should be, but it wouldn't
+                    # show up here anyway.
 
-                # Don't print out a message for Final_Sigma, because we have
-                # hard-coded handling for it.  (But the standard could change
-                # what the rule should be, but it wouldn't show up here
-                # anyway.
-
-                print "# SKIPPING Special Casing: $_\n"
+                    print "# SKIPPING Special Casing: $_\n"
                                                     if $verbosity >= $VERBOSE;
+            }
+            $_ = "";
+            return;
         }
-        $_ = "";
+        elsif (@fields > 6 || (@fields == 6 && $fields[5] ne "" )) {
+            $file->carp_bad_line('Extra fields');
+            $_ = "";
+            return;
+        }
+
+        $_ = "$fields[0]; lc; $fields[1]";
+        $file->insert_adjusted_lines("$fields[0]; tc; $fields[2]");
+        $file->insert_adjusted_lines("$fields[0]; uc; $fields[3]");
+
+        # Copy any simple case change to the special tables constructed if
+        # being overridden by a multi-character case change.
+        if ($fields[1] ne $fields[0]
+            && (my $value = $lc->value_of(hex $fields[0])) ne $CODE_POINT)
+        {
+            $file->insert_adjusted_lines("$fields[0]; _slc; $value");
+        }
+        if ($fields[2] ne $fields[0]
+            && (my $value = $tc->value_of(hex $fields[0])) ne $CODE_POINT)
+        {
+            $file->insert_adjusted_lines("$fields[0]; _stc; $value");
+        }
+        if ($fields[3] ne $fields[0]
+            && (my $value = $uc->value_of(hex $fields[0])) ne $CODE_POINT)
+        {
+            $file->insert_adjusted_lines("$fields[0]; _suc; $value");
+        }
+
         return;
     }
-    elsif (@fields > 6 || (@fields == 6 && $fields[5] ne "" )) {
-        $file->carp_bad_line('Extra fields');
-        $_ = "";
-        return;
-    }
-
-    $_ = "$fields[0]; lc; $fields[1]";
-    $file->insert_adjusted_lines("$fields[0]; tc; $fields[2]");
-    $file->insert_adjusted_lines("$fields[0]; uc; $fields[3]");
-
-    return;
 }
 
 sub filter_old_style_case_folding {
@@ -10434,15 +10567,6 @@ sub filter_old_style_case_folding {
     # Create the map for simple only if are going to output it, for otherwise
     # it takes no part in anything we do.
     my $to_output_simple;
-
-    # XXX
-    # These are experimental, perhaps will need these to pass to regcomp.c to
-    # handle the cases where for example the Kelvin sign character folds to k,
-    # and in regcomp, we need to know which of the characters can have a
-    # non-latin1 char fold to it, so it doesn't do the optimizations it might
-    # otherwise.
-    my @latin1_singly_folded;
-    my @latin1_folded;
 
     sub setup_case_folding($) {
         # Read in the case foldings in CaseFolding.txt.  This handles both
@@ -10504,31 +10628,9 @@ sub filter_old_style_case_folding {
             $file->insert_adjusted_lines("$range; Simple_Case_Folding; $map");
         }
 
-        # XXX Experimental, see comment above
-        if ($type ne 'S' && hex($range) >= 256) {   # assumes range is 1 point
-            my @folded = split ' ', $map;
-            if (hex $folded[0] < 256 && @folded == 1) {
-                push @latin1_singly_folded, hex $folded[0];
-            }
-            foreach my $folded (@folded) {
-                push @latin1_folded, hex $folded if hex $folded < 256;
-            }
-        }
-
         return;
     }
 
-    sub post_fold {
-        # XXX Experimental, see comment above
-        return;
-
-        #local $to_trace = 1 if main::DEBUG;
-        @latin1_singly_folded = uniques(@latin1_singly_folded);
-        @latin1_folded = uniques(@latin1_folded);
-        trace "latin1 single folded:", map { chr $_ } sort { $a <=> $b } @latin1_singly_folded if main::DEBUG && $to_trace;
-        trace "latin1 folded:", map { chr $_ } sort { $a <=> $b } @latin1_folded if main::DEBUG && $to_trace;
-        return;
-    }
 } # End case fold closure
 
 sub filter_jamo_line {
@@ -10854,7 +10956,7 @@ sub filter_blocks_lines {
         #                                one.
         #   Titlecase                    duplicates UnicodeData.txt: gc=lt
         #   Unassigned Code Value        duplicates UnicodeData.txt: gc=cc
-        #   Zero-width                   never made into offical property;
+        #   Zero-width                   never made into official property;
         #                                subset of gc=cf
         # Most of the properties have the same names in this file as in later
         # versions, but a couple do not.
@@ -10995,7 +11097,8 @@ sub finish_Unicode() {
 
                 # Add mappings to the property for each code point in the list
                 foreach my $range ($list->ranges) {
-                    $property->add_map($range->start, $range->end, $default);
+                    $property->add_map($range->start, $range->end, $default,
+                    Replace => $CROAK);
                 }
             }
 
@@ -11022,11 +11125,12 @@ sub finish_Unicode() {
         }
 
         # Add any remaining code points to the mapping, using the default for
-        # missing code points
+        # missing code points.
         if (defined (my $default_map = $property->default_map)) {
-            foreach my $range ($property->inverse_list->ranges) {
-                $property->add_map($range->start, $range->end, $default_map);
-            }
+
+            # This fills in any missing values with the default.
+            $property->add_map(0, $LAST_UNICODE_CODEPOINT,
+                               $default_map, Replace => $NO);
 
             # Make sure there is a match table for the default
             if (! defined $property->table($default_map)) {
@@ -11119,19 +11223,17 @@ END
         $LC->initialize($gc->table('Ll') + $gc->table('Lu'));
 
         # Lt not in release 1.
-        $LC += $gc->table('Lt') if defined $gc->table('Lt');
+        if (defined $gc->table('Lt')) {
+            $LC += $gc->table('Lt');
+            $gc->table('Lt')->set_caseless_equivalent($LC);
+        }
     }
     $LC->add_description('[\p{Ll}\p{Lu}\p{Lt}]');
 
+    $gc->table('Ll')->set_caseless_equivalent($LC);
+    $gc->table('Lu')->set_caseless_equivalent($LC);
+
     my $Cs = $gc->table('Cs');
-    if (defined $Cs) {
-        $Cs->add_note('Mostly not usable in Perl.');
-        $Cs->add_comment(join_lines(<<END
-Surrogates are used exclusively for I/O in UTF-16, and should not appear in
-Unicode text, and hence their use will generate (usually fatal) messages
-END
-        ));
-    }
 
 
     # Folding information was introduced later into Unicode data.  To get
@@ -11240,13 +11342,17 @@ sub compile_perl() {
     my $Unicode_Lower = property_ref('Lowercase');
     if (defined $Unicode_Lower && ! $Unicode_Lower->is_empty) {
         $Lower->set_equivalent_to($Unicode_Lower->table('Y'), Related => 1);
+        $Unicode_Lower->table('Y')->set_caseless_equivalent(property_ref('Cased')->table('Y'));
+        $Unicode_Lower->table('N')->set_caseless_equivalent(property_ref('Cased')->table('N'));
+        $Lower->set_caseless_equivalent(property_ref('Cased')->table('Y'));
+
     }
     else {
         $Lower->set_equivalent_to($gc->table('Lowercase_Letter'),
                                                                 Related => 1);
     }
     $Lower->add_alias('XPosixLower');
-    $perl->add_match_table("PosixLower",
+    my $Posix_Lower = $perl->add_match_table("PosixLower",
                             Description => "[a-z]",
                             Initialize => $Lower & $ASCII,
                             );
@@ -11255,13 +11361,16 @@ sub compile_perl() {
     my $Unicode_Upper = property_ref('Uppercase');
     if (defined $Unicode_Upper && ! $Unicode_Upper->is_empty) {
         $Upper->set_equivalent_to($Unicode_Upper->table('Y'), Related => 1);
+        $Unicode_Upper->table('Y')->set_caseless_equivalent(property_ref('Cased')->table('Y'));
+        $Unicode_Upper->table('N')->set_caseless_equivalent(property_ref('Cased')->table('N'));
+        $Upper->set_caseless_equivalent(property_ref('Cased')->table('Y'));
     }
     else {
         $Upper->set_equivalent_to($gc->table('Uppercase_Letter'),
                                                                 Related => 1);
     }
     $Upper->add_alias('XPosixUpper');
-    $perl->add_match_table("PosixUpper",
+    my $Posix_Upper = $perl->add_match_table("PosixUpper",
                             Description => "[A-Z]",
                             Initialize => $Upper & $ASCII,
                             );
@@ -11269,21 +11378,27 @@ sub compile_perl() {
     # Earliest releases didn't have title case.  Initialize it to empty if not
     # otherwise present
     my $Title = $perl->add_match_table('Title');
+    $Title->add_alias('Titlecase');
     my $lt = $gc->table('Lt');
-    if (defined $lt) {
-        $Title->set_equivalent_to($lt, Related => 1);
-    }
+
+    # Earlier versions of mktables had this related to $lt since they have
+    # identical code points, but their casefolds are not equivalent, and so
+    # now must be kept as separate entities.
+    $Title += $lt if defined $lt;
 
     # If this Unicode version doesn't have Cased, set up our own.  From
     # Unicode 5.1: Definition D120: A character C is defined to be cased if
     # and only if C has the Lowercase or Uppercase property or has a
     # General_Category value of Titlecase_Letter.
-    unless (defined property_ref('Cased')) {
+    my $Unicode_Cased = property_ref('Cased');
+    unless (defined $Unicode_Cased) {
         my $cased = $perl->add_match_table('Cased',
                         Initialize => $Lower + $Upper + $Title,
                         Description => 'Uppercase or Lowercase or Titlecase',
                         );
+        $Unicode_Cased = $cased;
     }
+    $Title->set_caseless_equivalent($Unicode_Cased->table('Y'));
 
     # Similarly, set up our own Case_Ignorable property if this Unicode
     # version doesn't have it.  From Unicode 5.1: Definition D121: A character
@@ -11356,10 +11471,12 @@ sub compile_perl() {
         $Alpha->add_description('Alphabetic');
     }
     $Alpha->add_alias('XPosixAlpha');
-    $perl->add_match_table("PosixAlpha",
+    my $Posix_Alpha = $perl->add_match_table("PosixAlpha",
                             Description => "[A-Za-z]",
                             Initialize => $Alpha & $ASCII,
                             );
+    $Posix_Upper->set_caseless_equivalent($Posix_Alpha);
+    $Posix_Lower->set_caseless_equivalent($Posix_Alpha);
 
     my $Alnum = $perl->add_match_table('Alnum',
                         Description => 'Alphabetic and (Decimal) Numeric',
@@ -11682,7 +11799,7 @@ END
                             File => 'CombiningClass',
                             Directory => File::Spec->curdir(),
                             );
-    $perl_ccc->set_to_output_map(1);
+    $perl_ccc->set_to_output_map($EXTERNAL_MAP);
     $perl_ccc->add_comment(join_lines(<<END
 This mapping is for normalize.pm.  It is currently identical to the Unicode
 Canonical_Combining_Class property.
@@ -11732,7 +11849,7 @@ END
         my $description_start = "Code point's usage introduced in version ";
         $first_age->add_description($description_start . $first_age->name);
 
-        # To construct the accumlated values, for each of the age tables
+        # To construct the accumulated values, for each of the age tables
         # starting with the 2nd earliest, merge the earliest with it, to get
         # all those code points existing in the 2nd earliest.  Repeat merging
         # the new 2nd earliest with the 3rd earliest to get all those existing
@@ -12069,7 +12186,7 @@ END
 
 sub register_file_for_name($$$) {
     # Given info about a table and a datafile that it should be associated
-    # with, register that assocation
+    # with, register that association
 
     my $table = shift;
     my $directory_ref = shift;   # Array of the directory path for the file
@@ -12114,19 +12231,18 @@ sub register_file_for_name($$$) {
         my $deprecated = ($table->status eq $DEPRECATED)
                          ? $table->status_info
                          : "";
+        my $caseless_equivalent = $table->caseless_equivalent;
 
         # And for each of the table's aliases...  This inner loop eventually
         # goes through all aliases in the UCD that we generate regex match
         # files for
         foreach my $alias ($table->aliases) {
-            my $name = $alias->name;
+            my $standard = utf8_heavy_name($table, $alias);
 
             # Generate an entry in either the loose or strict hashes, which
             # will translate the property and alias names combination into the
             # file where the table for them is stored.
-            my $standard;
             if ($alias->loose_match) {
-                $standard = $property . standardize($alias->name);
                 if (exists $loose_to_file_of{$standard}) {
                     Carp::my_carp("Can't change file registered to $loose_to_file_of{$standard} to '$sub_filename'.");
                 }
@@ -12135,7 +12251,6 @@ sub register_file_for_name($$$) {
                 }
             }
             else {
-                $standard = lc ($property . $name);
                 if (exists $stricter_to_file_of{$standard}) {
                     Carp::my_carp("Can't change file registered to $stricter_to_file_of{$standard} to '$sub_filename'.");
                 }
@@ -12148,7 +12263,7 @@ sub register_file_for_name($$$) {
                     # will work.  Also note that this assumes that such a
                     # number is matched strictly; so if that were to change,
                     # this would be wrong.
-                    if ((my $integer_name = $name)
+                    if ((my $integer_name = $alias->name)
                             =~ s/^ ( -? \d+ ) \.0+ $ /$1/x)
                     {
                         $stricter_to_file_of{$property . $integer_name}
@@ -12160,6 +12275,11 @@ sub register_file_for_name($$$) {
             # Keep a list of the deprecated properties and their filenames
             if ($deprecated) {
                 $utf8::why_deprecated{$sub_filename} = $deprecated;
+            }
+
+            # And a substitute table, if any, for case-insensitive matching
+            if ($caseless_equivalent != 0) {
+                $caseless_equivalent_to{$standard} = $caseless_equivalent;
             }
         }
     }
@@ -12361,6 +12481,7 @@ sub make_table_pod_entries($) {
     my $string_count = clarify_number($count);
     my $status = $input_table->status;
     my $status_info = $input_table->status_info;
+    my $caseless_equivalent = $input_table->caseless_equivalent;
 
     my $entry_for_first_table; # The entry for the first table output.
                            # Almost certainly, it is the parent.
@@ -12573,7 +12694,6 @@ sub make_table_pod_entries($) {
                 # expression, but with only one of 'Single', 'Short' if there
                 # are both items.
                 if ($short_name || $single_form || $table->conflicting) {
-                    $parenthesized .= '(';
                     $parenthesized .= "Short: $short_name" if $short_name;
                     if ($short_name && $single_form) {
                         $parenthesized .= ', ';
@@ -12585,6 +12705,11 @@ sub make_table_pod_entries($) {
                 }
             }
 
+            if ($caseless_equivalent != 0) {
+                $parenthesized .=  '; ' if $parenthesized ne "";
+                $parenthesized .= "/i= " . $caseless_equivalent->complete_name;
+            }
+
 
             # Warn if this property isn't the same as one that a
             # semi-casual user might expect.  The other components of this
@@ -12593,13 +12718,11 @@ sub make_table_pod_entries($) {
             # to go on every entry.
             my $conflicting = join " NOR ", $table->conflicting;
             if ($conflicting) {
-                $parenthesized .= '(' if ! $parenthesized;
-                $parenthesized .=  '; ' if $parenthesized ne '(';
+                $parenthesized .=  '; ' if $parenthesized ne "";
                 $parenthesized .= "NOT $conflicting";
             }
-            $parenthesized .= ')' if $parenthesized;
 
-            push @info, $parenthesized if $parenthesized;
+            push @info, "($parenthesized)" if $parenthesized;
 
             if ($table_property != $perl && $table->perl_extension) {
                 push @info, '(Perl extension)';
@@ -12835,6 +12958,10 @@ END
         # directory.
         my @path = $property->file_path;
         next if $path[0] ne $map_directory;
+
+        # Don't mention map tables that are for internal-use only
+        next if $property->to_output_map == $INTERNAL_MAP;
+
         shift @path;    # Remove the standard name
 
         my $file = join '/', @path; # In case is in sub directory
@@ -12869,8 +12996,10 @@ END
     # Generate a list of the formats that can appear in the map tables.
     my @map_table_formats;
     foreach my $format (sort keys %map_table_formats) {
-        push @map_table_formats, " $format    $map_table_formats{$format}\n";
+        push @map_table_formats, "  $format    $map_table_formats{$format}\n";
     }
+
+    local $" = "";
 
     # Everything is ready to assemble.
     my @OUT = << "END";
@@ -12967,7 +13096,7 @@ adjacent to (but within) the braces and the colon or equal sign.
 =back
 
 Some properties are considered obsolete, but still available.  There are
-several varieties of obsolesence:
+several varieties of obsolescence:
 
 =over 4
 
@@ -13011,7 +13140,7 @@ flags each such entry in the table.
 @block_warning
 
 The table below has two columns.  The left column contains the \\p{}
-constructs to look up, possibly preceeded by the flags mentioned above; and
+constructs to look up, possibly preceded by the flags mentioned above; and
 the right column contains information about them, like a description, or
 synonyms.  It shows both the single and compound forms for each property that
 has them.  If the left column is a short name for a property, the right column
@@ -13028,6 +13157,15 @@ are noted as such.
 Numbers in (parentheses) indicate the total number of code points matched by
 the property.  For emphasis, those properties that match no code points at all
 are listed as well in a separate section following the table.
+
+Most properties match the same code points regardless of whether C<"/i">
+case-insensitive matching is specified or not.  But a few properties are
+affected.  These are shown with the notation
+
+ (/i= other_property)
+
+in the second column.  Under case-insensitive matching they match the
+same code pode points as the property "other_property".
 
 There is no description given for most non-Perl defined properties (See
 $unicode_reference_url for that).
@@ -13157,7 +13295,7 @@ this is not necessarily the property's official Unicode name.  (The 'To' is
 also for backwards compatibility.)  The hash entry gives the format of the
 mapping fields of the table, currently one of the following:
 
- @map_table_formats
+@map_table_formats
 
 This format applies only to the entries in the main body of the table.
 Entries defined in hashes or ones that are missing from the list can have a
@@ -13241,6 +13379,25 @@ END
 END
 
     push @heavy, simple_dumper (\%utf8::why_deprecated, ' ' x 4);
+    push @heavy, <<END;
+);
+
+# A few properties have different behavior under /i matching.  This maps the
+# those to substitute files to use under /i.
+\%utf8::caseless_equivalent = (
+END
+
+
+    # We set the key to the file when we associated files with tables, but we
+    # couldn't do the same for the value then, as we might not have the file
+    # for the alternate table figured out at that time.
+    foreach my $cased (keys %caseless_equivalent_to) {
+        my @path = $caseless_equivalent_to{$cased}->file_path;
+        my $path = join '/', @path[1, -1];
+        $path =~ s/\.pl//;
+        $utf8::caseless_equivalent_to{$cased} = $path;
+    }
+    push @heavy, simple_dumper (\%utf8::caseless_equivalent_to, ' ' x 4);
     push @heavy, <<END;
 );
 
@@ -13564,7 +13721,7 @@ sub write_all_tables() {
             $filename = $table->file;
         }
 
-        # Use specified filename if avaliable, or default to property's
+        # Use specified filename if available, or default to property's
         # shortest name.  We need an 8.3 safe filename (which means "an 8
         # safe" filename, since after the dot is only 'pl', which is < 3)
         # The 2nd parameter is if the filename shouldn't be changed, and
@@ -14189,7 +14346,6 @@ my @input_file_objects = (
                                  : undef,
                            \&filter_case_folding_line
                         ],
-                    Post_Handler => \&post_fold,
                     ),
     Input_file->new('DCoreProperties.txt', v3.1.0,
                     # 5.2 changed this file
@@ -14532,7 +14688,7 @@ if ( $file_list and $make_list ) {
 #
 # - First section is input files
 #   ($0 itself is not listed but is automatically considered an input)
-# - Section seperator is /^=+\$/
+# - Section separator is /^=+\$/
 # - Second section is a list of output files.
 # - Lines matching /^\\s*#/ are treated as comments
 #   which along with blank lines are ignored.

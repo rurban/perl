@@ -98,7 +98,7 @@ PP(pp_regcomp)
     STMT_START {				\
 	SvGETMAGIC(rx);				\
 	if (SvROK(rx) && SvAMAGIC(rx)) {	\
-	    SV *sv = AMG_CALLun(rx, regexp);	\
+	    SV *sv = AMG_CALLunary(rx, regexp_amg); \
 	    if (sv) {				\
 		if (SvROK(sv))			\
 		    sv = SvRV(sv);		\
@@ -111,7 +111,7 @@ PP(pp_regcomp)
 	    
 
     if (PL_op->op_flags & OPf_STACKED) {
-	/* multiple args; concatentate them */
+	/* multiple args; concatenate them */
 	dMARK; dORIGMARK;
 	tmpstr = PAD_SV(ARGTARG);
 	sv_setpvs(tmpstr, "");
@@ -185,7 +185,7 @@ PP(pp_regcomp)
 	    memNE(RX_PRECOMP(re), t, len))
 	{
 	    const regexp_engine *eng = re ? RX_ENGINE(re) : NULL;
-            U32 pm_flags = pm->op_pmflags & PMf_COMPILETIME;
+            U32 pm_flags = pm->op_pmflags & RXf_PMf_COMPILETIME;
 	    if (re) {
 	        ReREFCNT_dec(re);
 #ifdef USE_ITHREADS
@@ -240,10 +240,10 @@ PP(pp_regcomp)
 
 #ifndef INCOMPLETE_TAINTS
     if (PL_tainting) {
-	if (PL_tainted)
+	if (PL_tainted) {
+	    SvTAINTED_on((SV*)re);
 	    RX_EXTFLAGS(re) |= RXf_TAINTED;
-	else
-	    RX_EXTFLAGS(re) &= ~RXf_TAINTED;
+	}
     }
 #endif
 
@@ -294,8 +294,9 @@ PP(pp_substcont)
 
 	SvGETMAGIC(TOPs); /* possibly clear taint on $1 etc: #67962 */
 
-	if (!(cx->sb_rxtainted & 2) && SvTAINTED(TOPs))
-	    cx->sb_rxtainted |= 2;
+    	/* See "how taint works" above pp_subst() */
+	if (SvTAINTED(TOPs))
+	    cx->sb_rxtainted |= SUBST_TAINT_REPL;
 	sv_catsv_nomg(dstr, POPs);
 	/* XXX: adjust for positive offsets of \G for instance s/(.)\G//g with positive pos() */
 	s -= RX_GOFS(rx);
@@ -317,7 +318,8 @@ PP(pp_substcont)
 		 else
 		      sv_catpvn(dstr, s, cx->sb_strend - s);
 	    }
-	    cx->sb_rxtainted |= RX_MATCH_TAINTED(rx);
+	    if (RX_MATCH_TAINTED(rx)) /* run time pattern taint, eg locale */
+		cx->sb_rxtainted |= SUBST_TAINT_PAT;
 
 #ifdef PERL_OLD_COPY_ON_WRITE
 	    if (SvIsCOW(targ)) {
@@ -334,20 +336,39 @@ PP(pp_substcont)
 		SvUTF8_on(targ);
 	    SvPV_set(dstr, NULL);
 
-	    TAINT_IF(cx->sb_rxtainted & 1);
 	    if (pm->op_pmflags & PMf_NONDESTRUCT)
 		PUSHs(targ);
 	    else
 		mPUSHi(saviters - 1);
 
 	    (void)SvPOK_only_UTF8(targ);
-	    TAINT_IF(cx->sb_rxtainted);
-	    SvSETMAGIC(targ);
-	    SvTAINT(targ);
 
+	    /* update the taint state of various various variables in
+	     * preparation for final exit.
+	     * See "how taint works" above pp_subst() */
+	    if (PL_tainting) {
+		if ((cx->sb_rxtainted & SUBST_TAINT_PAT) ||
+		    ((cx->sb_rxtainted & (SUBST_TAINT_STR|SUBST_TAINT_RETAINT))
+				    == (SUBST_TAINT_STR|SUBST_TAINT_RETAINT))
+		)
+		    (RX_MATCH_TAINTED_on(rx)); /* taint $1 et al */
+
+		if (!(cx->sb_rxtainted & SUBST_TAINT_BOOLRET)
+		    && (cx->sb_rxtainted & (SUBST_TAINT_STR|SUBST_TAINT_PAT))
+		)
+		    SvTAINTED_on(TOPs);  /* taint return value */
+		/* needed for mg_set below */
+		PL_tainted = cBOOL(cx->sb_rxtainted &
+			    (SUBST_TAINT_STR|SUBST_TAINT_PAT|SUBST_TAINT_REPL));
+		SvTAINT(TARG);
+	    }
+	    /* PL_tainted must be correctly set for this mg_set */
+	    SvSETMAGIC(TARG);
+	    TAINT_NOT;
 	    LEAVE_SCOPE(cx->sb_oldsave);
 	    POPSUBST(cx);
 	    RETURNOP(pm->op_next);
+	    /* NOTREACHED */
 	}
 	cx->sb_iters = saviters;
     }
@@ -382,7 +403,24 @@ PP(pp_substcont)
     }
     if (old != rx)
 	(void)ReREFCNT_inc(rx);
-    cx->sb_rxtainted |= RX_MATCH_TAINTED(rx);
+    /* update the taint state of various various variables in preparation
+     * for calling the code block.
+     * See "how taint works" above pp_subst() */
+    if (PL_tainting) {
+	if (RX_MATCH_TAINTED(rx)) /* run time pattern taint, eg locale */
+	    cx->sb_rxtainted |= SUBST_TAINT_PAT;
+
+	if ((cx->sb_rxtainted & SUBST_TAINT_PAT) ||
+	    ((cx->sb_rxtainted & (SUBST_TAINT_STR|SUBST_TAINT_RETAINT))
+			    == (SUBST_TAINT_STR|SUBST_TAINT_RETAINT))
+	)
+	    (RX_MATCH_TAINTED_on(rx)); /* taint $1 et al */
+
+	if (cx->sb_iters > 1 && (cx->sb_rxtainted & 
+			(SUBST_TAINT_STR|SUBST_TAINT_PAT|SUBST_TAINT_REPL)))
+	    SvTAINTED_on(cx->sb_targ);
+	TAINT_NOT;
+    }
     rxres_save(&cx->sb_rxres, rx);
     PL_curpm = pm;
     RETURNOP(pm->op_pmstashstartu.op_pmreplstart);
@@ -1039,8 +1077,8 @@ PP(pp_grepstart)
 	RETURNOP(PL_op->op_next->op_next);
     }
     PL_stack_sp = PL_stack_base + *PL_markstack_ptr + 1;
-    pp_pushmark();				/* push dst */
-    pp_pushmark();				/* push src */
+    Perl_pp_pushmark(aTHX);				/* push dst */
+    Perl_pp_pushmark(aTHX);				/* push src */
     ENTER_with_name("grep");					/* enter outer scope */
 
     SAVETMPS;
@@ -1060,7 +1098,7 @@ PP(pp_grepstart)
 
     PUTBACK;
     if (PL_op->op_type == OP_MAPSTART)
-	pp_pushmark();			/* push top */
+	Perl_pp_pushmark(aTHX);			/* push top */
     return ((LOGOP*)PL_op->op_next)->op_other;
 }
 
@@ -3998,7 +4036,7 @@ PP(pp_entereval)
 	}
 	return DOCATCH(PL_eval_start);
     } else {
-	/* We have already left the scope set up earler thanks to the LEAVE
+	/* We have already left the scope set up earlier thanks to the LEAVE
 	   in doeval().  */
 	if (was != PL_breakable_sub_gen /* Some subs defined here. */
 	    ? (PERLDB_LINE || PERLDB_SAVESRC)
@@ -4275,7 +4313,7 @@ S_matcher_matches_sv(pTHX_ PMOP *matcher, SV *sv)
     PL_op = (OP *) matcher;
     XPUSHs(sv);
     PUTBACK;
-    (void) pp_match();
+    (void) Perl_pp_match(aTHX);
     SPAGAIN;
     return (SvTRUEx(POPs));
 }
@@ -4758,9 +4796,9 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
 	PUSHs(d); PUSHs(e);
 	PUTBACK;
 	if (CopHINTS_get(PL_curcop) & HINT_INTEGER)
-	    (void) pp_i_eq();
+	    (void) Perl_pp_i_eq(aTHX);
 	else
-	    (void) pp_eq();
+	    (void) Perl_pp_eq(aTHX);
 	SPAGAIN;
 	if (SvTRUEx(POPs))
 	    RETPUSHYES;
@@ -4772,7 +4810,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
     DEBUG_M(Perl_deb(aTHX_ "    applying rule Any-Any\n"));
     PUSHs(d); PUSHs(e);
     PUTBACK;
-    return pp_seq();
+    return Perl_pp_seq(aTHX);
 }
 
 PP(pp_enterwhen)
@@ -5174,7 +5212,7 @@ S_run_user_filter(pTHX_ int idx, SV *buf_sv, int maxlen)
 	    if (take) {
 		sv_catpvn(buf_sv, cache_p, take);
 		sv_chop(cache, cache_p + take);
-		/* Definately not EOF  */
+		/* Definitely not EOF  */
 		return 1;
 	    }
 

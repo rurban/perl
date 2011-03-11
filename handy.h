@@ -579,7 +579,51 @@ patched there.  The file as of this writing is cpan/Devel-PPPort/parts/inc/misc
 
 /* ASCII range only */
 #ifdef H_PERL       /* If have access to perl.h, lookup in its table */
-#   include "l1_char_class_tab.h"
+/* Bits for PL_charclass[] */
+#  define _CC_ALNUMC_A         (1<<0)
+#  define _CC_ALNUMC_L1        (1<<1)
+#  define _CC_ALPHA_A          (1<<2)
+#  define _CC_ALPHA_L1         (1<<3)
+#  define _CC_BLANK_A          (1<<4)
+#  define _CC_BLANK_L1         (1<<5)
+#  define _CC_CHARNAME_CONT    (1<<6)
+#  define _CC_CNTRL_A          (1<<7)
+#  define _CC_CNTRL_L1         (1<<8)
+#  define _CC_DIGIT_A          (1<<9)
+#  define _CC_GRAPH_A          (1<<10)
+#  define _CC_GRAPH_L1         (1<<11)
+#  define _CC_IDFIRST_A        (1<<12)
+#  define _CC_IDFIRST_L1       (1<<13)
+#  define _CC_LOWER_A          (1<<14)
+#  define _CC_LOWER_L1         (1<<15)
+#  define _CC_OCTAL_A          (1<<16)
+#  define _CC_PRINT_A          (1<<17)
+#  define _CC_PRINT_L1         (1<<18)
+#  define _CC_PSXSPC_A         (1<<19)
+#  define _CC_PSXSPC_L1        (1<<20)
+#  define _CC_PUNCT_A          (1<<21)
+#  define _CC_PUNCT_L1         (1<<22)
+#  define _CC_SPACE_A          (1<<23)
+#  define _CC_SPACE_L1         (1<<24)
+#  define _CC_UPPER_A          (1<<25)
+#  define _CC_UPPER_L1         (1<<26)
+#  define _CC_WORDCHAR_A       (1<<27)
+#  define _CC_WORDCHAR_L1      (1<<28)
+#  define _CC_XDIGIT_A         (1<<29)
+#  define _CC_NONLATIN1_FOLD   (1<<30)
+/* Unused
+ *                             (1<<31)
+ */
+
+#  ifdef DOINIT
+EXTCONST  U32 PL_charclass[] = {
+#    include "l1_char_class_tab.h"
+};
+
+#  else /* ! DOINIT */
+EXTCONST U32 PL_charclass[];
+#  endif
+
 #   define isALNUMC_A(c) cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_ALNUMC_A))
 #   define isALPHA_A(c)  cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_ALPHA_A))
 #   define isBLANK_A(c)  cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_BLANK_A))
@@ -596,6 +640,8 @@ patched there.  The file as of this writing is cpan/Devel-PPPort/parts/inc/misc
 #   define isUPPER_A(c)  cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_UPPER_A))
 #   define isWORDCHAR_A(c) cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_WORDCHAR_A))
 #   define isXDIGIT_A(c)  cBOOL(FITS_IN_8_BITS(c) && (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_XDIGIT_A))
+    /* Either participates in a fold with a character above 255, or is a
+     * multi-char fold */
 #   define _HAS_NONLATIN1_FOLD_CLOSURE_ONLY_FOR_USE_BY_REGCOMP_DOT_C_AND_REGEXEC_DOT_C(c) ((! cBOOL(FITS_IN_8_BITS(c))) || (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_NONLATIN1_FOLD))
 #else   /* No perl.h. */
 #   define isOCTAL_A(c)  ((c) >= '0' && (c) <= '9')
@@ -837,16 +883,13 @@ patched there.  The file as of this writing is cpan/Devel-PPPort/parts/inc/misc
 #define isBLANK_LC_uni(c)	isBLANK(c) /* could be wrong */
 
 #define isALNUM_utf8(p)		is_utf8_alnum(p)
-/* The ID_Start of Unicode was originally quite limiting: it assumed an
- * L-class character (meaning that you could not have, say, a CJK charac-
- * ter). So, instead, perl has for a long time allowed ID_Continue but
- * not digits.
- * We still preserve that for backward compatibility. But we also make sure
- * that it is alphanumeric, so S_scan_word in toke.c will not hang. See
- *    http://rt.perl.org/rt3/Ticket/Display.html?id=74022
- * for more detail than you ever wanted to know about. */
-#define isIDFIRST_utf8(p) \
-    (is_utf8_idcont(p) && !is_utf8_digit(p) && is_utf8_alnum(p))
+/* To prevent S_scan_word in toke.c from hanging, we have to make sure that
+ * IDFIRST is an alnum.  See
+ * http://rt.perl.org/rt3/Ticket/Display.html?id=74022
+ * for more detail than you ever wanted to know about.  This used to be not the
+ * XID version, but we decided to go with the more modern Unicode definition */
+#define isIDFIRST_utf8(p)	(is_utf8_xidfirst(p) && is_utf8_alnum(p))
+#define isIDCONT_utf8(p)	is_utf8_xidcont(p)
 #define isALPHA_utf8(p)		is_utf8_alpha(p)
 #define isSPACE_utf8(p)		is_utf8_space(p)
 #define isDIGIT_utf8(p)		is_utf8_digit(p)

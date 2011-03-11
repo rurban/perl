@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.82";
+our $VERSION   = "0.83";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -306,7 +306,7 @@ sub compileOpts {
 		if (!$Config::Config{usedl}
 		    && keys %{$pkg.'::'} == 1
 		    && $pkg->can('bootstrap')) {
-		    # It is something that we're staticly linked to, but hasn't
+		    # It is something that we're statically linked to, but hasn't
 		    # yet been used.
 		    eval "require $pkg";
 		}

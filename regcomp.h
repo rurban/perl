@@ -15,27 +15,8 @@ typedef OP OP_4tree;			/* Will be redefined later. */
 /* Convert branch sequences to more efficient trie ops? */
 #define PERL_ENABLE_TRIE_OPTIMISATION 1
 
-/* Be really agressive about optimising patterns with trie sequences? */
+/* Be really aggressive about optimising patterns with trie sequences? */
 #define PERL_ENABLE_EXTENDED_TRIE_OPTIMISATION 1
-
-/* Use old style unicode mappings for perl and posix character classes
- *
- * NOTE: Enabling this essentially breaks character class matching against unicode 
- * strings, so that POSIX char classes match when they shouldn't, and \d matches 
- * way more than 10 characters, and sometimes a charclass and its complement either
- * both match or neither match.
- * NOTE: Disabling this will cause various backwards compatibility issues to rear 
- * their head, and tests to fail. However it will make the charclass behaviour 
- * consistant regardless of internal string type, and make character class inversions
- * consistant. The tests that fail in the regex engine are basically broken tests.
- *
- * Personally I think 5.12 should disable this for sure. Its a bit more debatable for
- * 5.10, so for now im leaving it enabled.
- * XXX: It is now enabled for 5.11/5.12
- *
- * -demerphq
- */
-#define PERL_LEGACY_UNICODE_CHARCLASS_MAPPINGS 1
 
 /* Should the optimiser take positive assertions into account? */
 #define PERL_ENABLE_POSITIVE_ASSERTION_STUDY 0
@@ -272,8 +253,9 @@ struct regnode_charclass_class {
 #undef STRING
 
 #define	OP(p)		((p)->type)
-#define FLAGS(p)	((p)->flags)	/* Caution: Doesn't apply to all \
-					   regnode types */
+#define FLAGS(p)	((p)->flags)	/* Caution: Doesn't apply to all      \
+					   regnode types.  For some, it's the \
+					   character set of the regnode */
 #define	OPERAND(p)	(((struct regnode_string *)p)->string)
 #define MASK(p)		((char*)OPERAND(p))
 #define	STR_LEN(p)	(((struct regnode_string *)p)->str_len)
@@ -309,10 +291,32 @@ struct regnode_charclass_class {
 
 #define SIZE_ONLY (RExC_emit == &PL_regdummy)
 
-/* Flags for node->flags of several of the node types */
-#define USE_UNI                0x01
+/* If the bitmap doesn't fully represent what this ANYOF node can match, the
+ * ARG is set to this special value (since 0, 1, ... are legal, but will never
+ * reach this high). */
+#define ANYOF_NONBITMAP_EMPTY	((U32) -1)
 
-/* Flags for node->flags of ANYOF */
+/* The information used to be stored as as combination of the ANYOF_UTF8 and
+ * ANYOF_NONBITMAP_NON_UTF8 bits in the flags field, but was moved out of there
+ * to free up a bit for other uses.  This tries to hide the change from
+ * existing code as much as possible.  Now, the data structure that goes in ARG
+ * is not allocated unless it is needed, and that is what is used to determine
+ * if there is something outside the bitmap.  The code now assumes that if
+ * that structure exists, that any UTF-8 encoded string should be tried against
+ * it, but a non-UTF8-encoded string will be tried only if the
+ * ANYOF_NONBITMAP_NON_UTF8 bit is also set. */
+#define ANYOF_NONBITMAP(node)	(ARG(node) != ANYOF_NONBITMAP_EMPTY)
+
+/* Flags for node->flags of ANYOF.  These are in short supply, so some games
+ * are done to share them, as described below.  If necessary, the ANYOF_LOCALE
+ * and ANYOF_CLASS bits could be shared with a space penalty for locale nodes
+ * (and the code at the time this comment was written, is written so that all
+ * that is necessary to make the change would be to redefine the ANYOF_CLASS
+ * define).  Once the planned change to compile all the above-latin1 code points
+ * is done, then the UNICODE_ALL bit can be freed up.  If flags need to be
+ * added that are applicable to the synthetic start class only, with some work,
+ * they could be put in the next-node field, or in an unused bit of the
+ * classflags field. */
 
 #define ANYOF_LOCALE		 0x01
 
@@ -327,27 +331,45 @@ struct regnode_charclass_class {
 
 #define ANYOF_INVERT		 0x04
 
-/* CLASS is never set unless LOCALE is too: has runtime \d, \w, [:posix:], ... */
+/* CLASS is never set unless LOCALE is too: has runtime \d, \w, [:posix:], ...
+ * The non-locale ones are resolved at compile-time */
 #define ANYOF_CLASS	 0x08
 #define ANYOF_LARGE      ANYOF_CLASS    /* Same; name retained for back compat */
 
-/* Can match something outside the bitmap that is expressible only in utf8 */
-#define ANYOF_UTF8		0x10
+/* EOS, meaning that it can match an empty string too, is used for the
+ * synthetic start class only. */
+#define ANYOF_EOS		0x10
+
+/* ? Is this node the synthetic start class (ssc).  This bit is shared with
+ * ANYOF_EOS, as the latter is used only for the ssc, and then not used by
+ * regexec.c.  And, the code is structured so that if it is set, the ssc is
+ * not used, so it is guaranteed to be 0 for the ssc by the time regexec.c
+ * gets executed, and 0 for a non-ssc ANYOF node, as it only ever gets set for
+ * a potential ssc candidate.  Thus setting it to 1 after it has been
+ * determined that the ssc will be used is not ambiguous */
+#define ANYOF_IS_SYNTHETIC	ANYOF_EOS
 
 /* Can match something outside the bitmap that isn't in utf8 */
 #define ANYOF_NONBITMAP_NON_UTF8 0x20
 
-/* Set if the bitmap doesn't fully represent what this node can match */
-#define ANYOF_NONBITMAP		(ANYOF_UTF8|ANYOF_NONBITMAP_NON_UTF8)
-#define ANYOF_UNICODE		ANYOF_NONBITMAP	/* old name, for back compat */
-
 /* Matches every code point 0x100 and above*/
 #define ANYOF_UNICODE_ALL	0x40
 
-/* EOS used for regstclass only */
-#define ANYOF_EOS		0x80	/* Can match an empty string too */
+/* Match all Latin1 characters that aren't ASCII when the target string is not
+ * in utf8. */
+#define ANYOF_NON_UTF8_LATIN1_ALL 0x80
 
 #define ANYOF_FLAGS_ALL		0xff
+
+/* These are the flags that ANYOF_INVERT being set or not doesn't affect
+ * whether they are operative or not.  e.g., the node still has LOCALE
+ * regardless of being inverted; whereas ANYOF_UNICODE_ALL means something
+ * different if inverted */
+#define INVERSION_UNAFFECTED_FLAGS (ANYOF_LOCALE                        \
+	                           |ANYOF_LOC_NONBITMAP_FOLD            \
+	                           |ANYOF_CLASS                         \
+	                           |ANYOF_EOS                           \
+	                           |ANYOF_NONBITMAP_NON_UTF8)
 
 /* Character classes for node->classflags of ANYOF */
 /* Should be synchronized with a table in regprop() */
@@ -664,7 +686,7 @@ struct _reg_ac_data {
 };
 typedef struct _reg_ac_data reg_ac_data;
 
-/* ANY_BIT doesnt use the structure, so we can borrow it here.
+/* ANY_BIT doesn't use the structure, so we can borrow it here.
    This is simpler than refactoring all of it as wed end up with
    three different sets... */
 

@@ -32,7 +32,9 @@ sub croak { require Carp; Carp::croak(@_) }
         local $^D = 0 if $^D;
 
         $class = "" unless defined $class;
-        print STDERR __LINE__, ": class=$class, type=$type, list=$list, minbits=$minbits, none=$none\n" if DEBUG;
+        print STDERR __LINE__, ": class=$class, type=$type, list=",
+                                (defined $list) ? $list : ':undef:',
+                                ", minbits=$minbits, none=$none\n" if DEBUG;
 
         ##
         ## Get the list of codepoints for the type.
@@ -89,7 +91,11 @@ sub croak { require Carp; Carp::croak(@_) }
             $type =~ s/^\s+//;
             $type =~ s/\s+$//;
 
-            print STDERR __LINE__, ": type = $type\n" if DEBUG;
+            # regcomp.c surrounds the property name with '__" and '_i' if this
+            # is to be caseless matching.
+            my $caseless = $type =~ s/^__(.*)_i$/$1/;
+
+            print STDERR __LINE__, ": type=$type, caseless=$caseless\n" if DEBUG;
 
         GETFILE:
             {
@@ -100,12 +106,22 @@ sub croak { require Carp; Carp::croak(@_) }
 
                 my $caller1 = $type =~ s/(.+)::// ? $1 : caller(1);
 
-                if (defined $caller1 && $type =~ /^(?:\w+)$/) {
+                if (defined $caller1 && $type =~ /^I[ns]\w+$/) {
                     my $prop = "${caller1}::$type";
                     if (exists &{$prop}) {
+                        # stolen from Scalar::Util::PP::tainted()
+                        my $tainted;
+                        {
+                            local($@, $SIG{__DIE__}, $SIG{__WARN__});
+                            local $^W = 0;
+                            no warnings;
+                            eval { kill 0 * $prop };
+                            $tainted = 1 if $@ =~ /^Insecure/;
+                        }
+                        die "Insecure user-defined property \\p{$prop}\n"
+                            if $tainted;
                         no strict 'refs';
-                        
-                        $list = &{$prop};
+                        $list = &{$prop}($caseless);
                         last GETFILE;
                     }
                 }
@@ -130,7 +146,7 @@ sub croak { require Carp; Carp::croak(@_) }
                 }
                 BEGIN { delete $utf8::{miniperl} }
 
-                # Everything is caseless matching
+                # All property names are matched caselessly
                 my $property_and_table = lc $type;
                 print STDERR __LINE__, ": $property_and_table\n" if DEBUG;
 
@@ -359,6 +375,12 @@ sub croak { require Carp; Carp::croak(@_) }
                     if ($utf8::why_deprecated{$file}) {
                         warnings::warnif('deprecated', "Use of '$type' in \\p{} or \\P{} is deprecated because: $utf8::why_deprecated{$file};");
                     }
+
+                    if ($caseless
+                        && exists $utf8::caseless_equivalent{$property_and_table})
+                    {
+                        $file = $utf8::caseless_equivalent{$property_and_table};
+                    }
                     $file= "$unicore_dir/lib/$file.pl";
                     last GETFILE;
                 }
@@ -377,6 +399,7 @@ sub croak { require Carp; Carp::croak(@_) }
                         no strict 'refs';
                         
                         $list = &{$map};
+                        warnings::warnif('deprecated', "User-defined case-mapping '$type' is deprecated");
                         last GETFILE;
                     }
                 }
@@ -430,13 +453,13 @@ sub croak { require Carp; Carp::croak(@_) }
         my $extras;
         my $bits = $minbits;
 
-        my $ORIG = $list;
         if ($list) {
+            my $taint = substr($list,0,0); # maintain taint
             my @tmp = split(/^/m, $list);
             my %seen;
             no warnings;
-            $extras = join '', grep /^[^0-9a-fA-F]/, @tmp;
-            $list = join '',
+            $extras = join '', $taint, grep /^[^0-9a-fA-F]/, @tmp;
+            $list = join '', $taint,
                 map  { $_->[1] }
                 sort { $a->[0] <=> $b->[0] }
                 map  { /^([0-9a-fA-F]+)/; [ CORE::hex($1), $_ ] }
@@ -466,11 +489,13 @@ sub croak { require Carp; Carp::croak(@_) }
         my @extras;
         if ($extras) {
             for my $x ($extras) {
+                my $taint = substr($x,0,0); # maintain taint
                 pos $x = 0;
                 while ($x =~ /^([^0-9a-fA-F\n])(.*)/mg) {
-                    my $char = $1;
-                    my $name = $2;
-                    print STDERR __LINE__, ": $1 => $2\n" if DEBUG;
+                    my $char = "$1$taint";
+                    my $name = "$2$taint";
+                    print STDERR __LINE__, ": char [$char] => name [$name]\n"
+                        if DEBUG;
                     if ($char =~ /[-+!&]/) {
                         my ($c,$t) = split(/::/, $name, 2);	# bogus use of ::, really
                         my $subobj;

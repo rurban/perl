@@ -7,9 +7,8 @@ BEGIN {
 }
 
 use strict qw(refs subs);
-use re ();
 
-plan(198);
+plan(213);
 
 # Test glob operations.
 
@@ -136,7 +135,9 @@ sub mysub2 { lc shift }
 
 # Test REGEXP assignment
 
-{
+SKIP: {
+    skip_if_miniperl("no dynamic loading on miniperl, so can't load re", 5);
+    require re;
     my $x = qr/x/;
     my $str = "$x"; # regex stringification may change
 
@@ -375,6 +376,26 @@ curr_test($test + 2);
     }
     print "# good, didn't recurse\n";
 }
+
+# test that DESTROY is called on all objects during global destruction,
+# even those without hard references [perl #36347]
+
+$TODO = 'bug #36347';
+is(
+  runperl(
+   stderr => 1, prog => 'sub DESTROY { print qq-aaa\n- } bless \$a[0]'
+  ),
+ "aaa\n", 'DESTROY called on array elem'
+);
+is(
+  runperl(
+   stderr => 1,
+   prog => '{ bless \my@x; *a=sub{@x}}sub DESTROY { print qq-aaa\n- }'
+  ),
+ "aaa\n",
+ 'DESTROY called on closure variable'
+);
+$TODO = undef;
 
 # test if refgen behaves with autoviv magic
 {
@@ -640,7 +661,7 @@ is( runperl(stderr => 1, prog => 'my $i;for $i (1) { for $i (2) { } }'), "");
 #    GV => blessed(AV) => RV => GV => blessed(SV)
 # all with a refcnt of 1, and hope that the second GV gets processed first
 # by do_clean_named_objs.  Then when the first GV is processed, it mustn't
-# find anything nastly left by the previous GV processing.
+# find anything nasty left by the previous GV processing.
 # The eval is stop things in the main body of the code holding a reference
 # to a GV, and the print at the end seems to bee necessary to ensure
 # the correct freeing order of *x and *y (no, I don't know why - DAPM).
@@ -650,6 +671,26 @@ is (runperl(
 		. 'delete $::{x}; delete $::{y}; print qq{ok\n};',
 	stderr => 1),
     "ok\n", 'freeing freed glob in global destruction');
+
+
+# Test undefined hash references as arguments to %{} in boolean context
+# [perl #81750]
+{
+ no strict 'refs';
+ eval { my $foo; %$foo;             }; ok !$@, '%$undef';
+ eval { my $foo; scalar %$foo;      }; ok !$@, 'scalar %$undef';
+ eval { my $foo; !%$foo;            }; ok !$@, '!%$undef';
+ eval { my $foo; if ( %$foo) {}     }; ok !$@, 'if ( %$undef) {}';
+ eval { my $foo; if (!%$foo) {}     }; ok !$@, 'if (!%$undef) {}';
+ eval { my $foo; unless ( %$foo) {} }; ok !$@, 'unless ( %$undef) {}';
+ eval { my $foo; unless (!%$foo) {} }; ok !$@, 'unless (!%$undef) {}';
+ eval { my $foo; 1 if %$foo;        }; ok !$@, '1 if %$undef';
+ eval { my $foo; 1 if !%$foo;       }; ok !$@, '1 if !%$undef';
+ eval { my $foo; 1 unless %$foo;    }; ok !$@, '1 unless %$undef;';
+ eval { my $foo; 1 unless ! %$foo;  }; ok !$@, '1 unless ! %$undef';
+ eval { my $foo;  %$foo ? 1 : 0;    }; ok !$@, ' %$undef ? 1 : 0';
+ eval { my $foo; !%$foo ? 1 : 0;    }; ok !$@, '!%$undef ? 1 : 0';
+}
 
 
 # Bit of a hack to make test.pl happy. There are 3 more tests after it leaves.

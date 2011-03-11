@@ -2744,12 +2744,12 @@ S_gen_constant_list(pTHX_ register OP *o)
     PL_op = curop = LINKLIST(o);
     o->op_next = 0;
     CALL_PEEP(curop);
-    pp_pushmark();
+    Perl_pp_pushmark(aTHX);
     CALLRUNOPS(aTHX);
     PL_op = curop;
     assert (!(curop->op_flags & OPf_SPECIAL));
     assert(curop->op_type == OP_RANGE);
-    pp_anonlist();
+    Perl_pp_anonlist(aTHX);
     PL_tmps_floor = oldtmps_floor;
 
     o->op_type = OP_RV2AV;
@@ -3527,8 +3527,7 @@ S_pmtrans(pTHX_ OP *o, OP *expr, OP *repl)
 		U8 range_mark = UTF_TO_NATIVE(0xff);
 		sv_catpvn(transv, (char *)&range_mark, 1);
 	    }
-	    t = uvuni_to_utf8_flags(tmpbuf, 0x7fffffff,
-				    UNICODE_ALLOW_SUPER);
+	    t = uvuni_to_utf8(tmpbuf, 0x7fffffff);
 	    sv_catpvn(transv, (char*)tmpbuf, t - tmpbuf);
 	    t = (const U8*)SvPVX_const(transv);
 	    tlen = SvCUR(transv);
@@ -3779,10 +3778,10 @@ Perl_newPMOP(pTHX_ I32 type, I32 flags)
     if (PL_hints & HINT_RE_TAINT)
 	pmop->op_pmflags |= PMf_RETAINT;
     if (PL_hints & HINT_LOCALE) {
-	pmop->op_pmflags |= PMf_LOCALE;
+	set_regex_charset(&(pmop->op_pmflags), REGEX_LOCALE_CHARSET);
     }
     else if ((! (PL_hints & HINT_BYTES)) && (PL_hints & HINT_UNI_8_BIT)) {
-        pmop->op_pmflags |= RXf_PMf_UNICODE;
+	set_regex_charset(&(pmop->op_pmflags), REGEX_UNICODE_CHARSET);
     }
     if (PL_hints & HINT_RE_FLAGS) {
         SV *reflags = Perl_refcounted_he_fetch_pvn(aTHX_
@@ -3790,11 +3789,10 @@ Perl_newPMOP(pTHX_ I32 type, I32 flags)
         );
         if (reflags && SvOK(reflags)) pmop->op_pmflags |= SvIV(reflags);
         reflags = Perl_refcounted_he_fetch_pvn(aTHX_
-         PL_compiling.cop_hints_hash, STR_WITH_LEN("reflags_dul"), 0, 0
+         PL_compiling.cop_hints_hash, STR_WITH_LEN("reflags_charset"), 0, 0
         );
         if (reflags && SvOK(reflags)) {
-            pmop->op_pmflags &= ~(RXf_PMf_LOCALE|RXf_PMf_UNICODE);
-            pmop->op_pmflags |= SvIV(reflags);
+            set_regex_charset(&(pmop->op_pmflags), (regex_charset)SvIV(reflags));
         }
     }
 
@@ -3887,7 +3885,7 @@ Perl_pmruntime(pTHX_ OP *o, OP *expr, bool isreg)
 
     if (expr->op_type == OP_CONST) {
 	SV *pat = ((SVOP*)expr)->op_sv;
-	U32 pm_flags = pm->op_pmflags & PMf_COMPILETIME;
+	U32 pm_flags = pm->op_pmflags & RXf_PMf_COMPILETIME;
 
 	if (o->op_flags & OPf_SPECIAL)
 	    pm_flags |= RXf_SPLIT;
@@ -4358,6 +4356,8 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
     PL_parser->copline = NOLINE;
     PL_parser->expect = XSTATE;
     PL_cop_seqmax++; /* Purely for B::*'s benefit */
+    if (PL_cop_seqmax == PERL_PADSEQ_INTRO) /* not a legal value */
+	PL_cop_seqmax++;
 
 #ifdef PERL_MAD
     if (!PL_madskills) {
@@ -6000,7 +6000,7 @@ Perl_cv_const_sv(pTHX_ const CV *const cv)
  * cv && CvCONST(cv)
  *
  *	We have just cloned an anon prototype that was marked as a const
- *	candidiate. Try to grab the current value, and in the case of
+ *	candidate. Try to grab the current value, and in the case of
  *	PADSV, ignore it if it has multiple references. Return the value.
  */
 
@@ -6246,7 +6246,7 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	    CvISXSUB_on(cv);
 	}
 	else {
-	    GvCV(gv) = NULL;
+	    GvCV_set(gv, NULL);
 	    cv = newCONSTSUB(NULL, name, const_sv);
 	}
         mro_method_changed_in( /* sub Foo::Bar () { 123 } */
@@ -6311,7 +6311,7 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
     else {
 	cv = PL_compcv;
 	if (name) {
-	    GvCV(gv) = cv;
+	    GvCV_set(gv, cv);
 	    if (PL_madskills) {
 		if (strEQ(name, "import")) {
 		    PL_formfeed = MUTABLE_SV(cv);
@@ -6457,7 +6457,7 @@ S_process_special_blocks(pTHX_ const char *const fullname, GV *const gv,
 
 	    DEBUG_x( dump_sub(gv) );
 	    Perl_av_create_and_push(aTHX_ &PL_beginav, MUTABLE_SV(cv));
-	    GvCV(gv) = 0;		/* cv has been hijacked */
+	    GvCV_set(gv,0);		/* cv has been hijacked */
 	    call_list(oldscope, PL_beginav);
 
 	    PL_curcop = &PL_compiling;
@@ -6501,7 +6501,7 @@ S_process_special_blocks(pTHX_ const char *const fullname, GV *const gv,
 	} else
 	    return;
 	DEBUG_x( dump_sub(gv) );
-	GvCV(gv) = 0;		/* cv has been hijacked */
+	GvCV_set(gv,0);		/* cv has been hijacked */
     }
 }
 
@@ -6679,7 +6679,7 @@ Perl_newXS(pTHX_ const char *name, XSUBADDR_t subaddr, const char *filename)
     else {
 	cv = MUTABLE_CV(newSV_type(SVt_PVCV));
 	if (name) {
-	    GvCV(gv) = cv;
+	    GvCV_set(gv,cv);
 	    GvCVGEN(gv) = 0;
             mro_method_changed_in(GvSTASH(gv)); /* newXS */
 	}
@@ -7638,7 +7638,7 @@ Perl_ck_glob(pTHX_ OP *o)
 
     o = ck_fun(o);
     if ((o->op_flags & OPf_KIDS) && !cLISTOPo->op_first->op_sibling)
-	op_append_elem(OP_GLOB, o, newDEFSVOP());
+	op_append_elem(OP_GLOB, o, newDEFSVOP()); /* glob() => glob($_) */
 
     if (!((gv = gv_fetchpvs("glob", GV_NOTQUAL, SVt_PVCV))
 	  && GvCVu(gv) && GvIMPORTED_CV(gv)))
@@ -7655,7 +7655,7 @@ Perl_ck_glob(pTHX_ OP *o)
 		newSVpvs("File::Glob"), NULL, NULL, NULL);
 	if((glob_gv = gv_fetchpvs("File::Glob::csh_glob", 0, SVt_PVCV))) {
 	    gv = gv_fetchpvs("CORE::GLOBAL::glob", 0, SVt_PVCV);
-	    GvCV(gv) = GvCV(glob_gv);
+	    GvCV_set(gv, GvCV(glob_gv));
 	    SvREFCNT_inc_void(MUTABLE_SV(GvCV(gv)));
 	    GvIMPORTED_CV_on(gv);
 	}
@@ -7663,20 +7663,31 @@ Perl_ck_glob(pTHX_ OP *o)
     }
 #endif /* PERL_EXTERNAL_GLOB */
 
+    assert(!(o->op_flags & OPf_SPECIAL));
     if (gv && GvCVu(gv) && GvIMPORTED_CV(gv)) {
+	/* convert
+	 *     glob
+	 *       \ null - const(wildcard)
+	 * into
+	 *     null
+	 *       \ enter
+	 *            \ list
+	 *                 \ mark - glob - rv2cv
+	 *                             |        \ gv(CORE::GLOBAL::glob)
+	 *                             |
+	 *                              \ null - const(wildcard) - const(ix)
+	 */
+	o->op_flags |= OPf_SPECIAL;
+	o->op_targ = pad_alloc(OP_GLOB, SVs_PADTMP);
 	op_append_elem(OP_GLOB, o,
 		    newSVOP(OP_CONST, 0, newSViv(PL_glob_index++)));
-	o->op_type = OP_LIST;
-	o->op_ppaddr = PL_ppaddr[OP_LIST];
-	cLISTOPo->op_first->op_type = OP_PUSHMARK;
-	cLISTOPo->op_first->op_ppaddr = PL_ppaddr[OP_PUSHMARK];
-	cLISTOPo->op_first->op_targ = 0;
+	o = newLISTOP(OP_LIST, 0, o, NULL);
 	o = newUNOP(OP_ENTERSUB, OPf_STACKED,
 		    op_append_elem(OP_LIST, o,
 				scalar(newUNOP(OP_RV2CV, 0,
 					       newGVOP(OP_GV, 0, gv)))));
 	o = newUNOP(OP_NULL, 0, ck_subr(o));
-	o->op_targ = OP_GLOB;		/* hint at what it used to be */
+	o->op_targ = OP_GLOB; /* hint at what it used to be: eg in newWHILEOP */
 	return o;
     }
     gv = newGVgen("main");
@@ -7963,7 +7974,7 @@ Perl_ck_sassign(pTHX_ OP *o)
 	    other->op_targ = target;
 
 	    /* Because we change the type of the op here, we will skip the
-	       assinment binop->op_last = binop->op_first->op_sibling; at the
+	       assignment binop->op_last = binop->op_first->op_sibling; at the
 	       end of Perl_newBINOP(). So need to do it here. */
 	    cBINOPo->op_last = cBINOPo->op_first->op_sibling;
 
