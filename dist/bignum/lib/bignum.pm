@@ -1,7 +1,7 @@
 package bignum;
 use 5.006;
 
-$VERSION = '0.26';
+$VERSION = '0.27';
 use Exporter;
 @ISA 		= qw( bigint );
 @EXPORT_OK	= qw( PI e bexp bpi ); 
@@ -600,7 +600,7 @@ numbers or as a result of 0/0. '+inf' and '-inf' represent plus respectively
 minus infinity. You will get '+inf' when dividing a positive number by 0, and
 '-inf' when dividing any negative number by 0.
 
-=head1 CAVAETS
+=head1 CAVEATS
 
 =over 2
 

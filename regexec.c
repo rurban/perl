@@ -2555,7 +2555,7 @@ S_regtry(pTHX_ regmatch_info *reginfo, char **startpos)
 	/* This is safe against NULLs: */
 	ReREFCNT_dec(PM_GETRE(PL_reg_curpm));
 	/* PM_reg_curpm owns a reference to this regexp.  */
-	ReREFCNT_inc(rx);
+	(void)ReREFCNT_inc(rx);
 #endif
 	PM_SETRE(PL_reg_curpm, rx);
 	PL_reg_oldcurpm = PL_curpm;
@@ -3625,20 +3625,9 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		char *e = PL_regeol;
 
 		if (! foldEQ_utf8_flags(s, 0,  ln, cBOOL(UTF_PATTERN),
-			       l, &e, 0,  utf8_target, fold_utf8_flags)) {
-		     /* One more case for the sharp s:
-		      * pack("U0U*", 0xDF) =~ /ss/i,
-		      * the 0xC3 0x9F are the UTF-8
-		      * byte sequence for the U+00DF. */
-
-		     if (!(utf8_target &&
-		           toLOWER(s[0]) == 's' &&
-			   ln >= 2 &&
-			   toLOWER(s[1]) == 's' &&
-			   (U8)l[0] == 0xC3 &&
-			   e - l >= 2 &&
-			   (U8)l[1] == 0x9F))
-			  sayNO;
+			       l, &e, 0,  utf8_target, fold_utf8_flags))
+		{
+		    sayNO;
 		}
 		locinput = e;
 		nextchr = UCHARAT(locinput);
@@ -4648,7 +4637,10 @@ NULL
 	    /* First just match a string of min A's. */
 
 	    if (n < min) {
+		ST.cp = regcppush(cur_curlyx->u.curlyx.parenfloor);
 		cur_curlyx->u.curlyx.lastloc = locinput;
+		REGCP_SET(ST.lastcp);
+
 		PUSH_STATE_GOTO(WHILEM_A_pre, A);
 		/* NOTREACHED */
 	    }
@@ -4754,10 +4746,10 @@ NULL
 	    /* NOTREACHED */
 
 	case WHILEM_A_min_fail: /* just failed to match A in a minimal match */
-	    REGCP_UNWIND(ST.lastcp);
-	    regcppop(rex);
 	    /* FALL THROUGH */
 	case WHILEM_A_pre_fail: /* just failed to match even minimal A */
+	    REGCP_UNWIND(ST.lastcp);
+	    regcppop(rex);
 	    cur_curlyx->u.curlyx.lastloc = ST.save_lastloc;
 	    cur_curlyx->u.curlyx.count--;
 	    CACHEsayNO;
@@ -5409,7 +5401,7 @@ NULL
 		rex = (struct regexp *)SvANY(rex_sv);
 		rexi = RXi_GET(rex);
 		cur_curlyx = cur_eval->u.eval.prev_curlyx;
-		ReREFCNT_inc(rex_sv);
+		(void)ReREFCNT_inc(rex_sv);
 		st->u.eval.cp = regcppush(0);	/* Save *all* the positions. */
 
 		/* rex was changed so update the pointer in PL_reglastparen and PL_reglastcloseparen */
@@ -6625,31 +6617,19 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 		else if (flags & ANYOF_LOC_NONBITMAP_FOLD) {
 
 		    /* Here, we need to test if the fold of the target string
-		     * matches.  In the case of a multi-char fold that is
-		     * caught by regcomp.c, it has stored all such folds into
-		     * 'av'; we linearly check to see if any match the target
-		     * string (folded).   We know that the originals were each
-		     * one character, but we don't currently know how many
-		     * characters/bytes each folded to, except we do know that
-		     * there are small limits imposed by Unicode.  XXX A
-		     * performance enhancement would be to have regcomp.c store
-		     * the max number of chars/bytes that are in an av entry,
-		     * as, say the 0th element.  Even better would be to have a
-		     * hash of the few characters that can start a multi-char
-		     * fold to the max number of chars of those folds.
-		     *
-		     * Further down, if there isn't a
-		     * match in the av, we will check if there is another
-		     * fold-type match.  For that, we also need the fold, but
-		     * only the first character.  No sense in folding it twice,
-		     * so we do it here, even if there isn't any multi-char
-		     * fold, so we always fold at least the first character.
-		     * If the node is a straight ANYOF node, or there is only
-		     * one character available in the string, or if there isn't
-		     * any av, that's all we have to fold.  In the case of a
-		     * multi-char fold, we do have guarantees in Unicode that
-		     * it can only expand up to so many characters and so many
-		     * bytes.  We keep track so don't exceed either.
+		     * matches.  The non-multi char folds have all been moved to
+                     * the compilation phase, and the multi-char folds have
+                     * been stored by regcomp into 'av'; we linearly check to
+                     * see if any match the target string (folded).   We know
+                     * that the originals were each one character, but we don't
+                     * currently know how many characters/bytes each folded to,
+                     * except we do know that there are small limits imposed by
+                     * Unicode.  XXX A performance enhancement would be to have
+                     * regcomp.c store the max number of chars/bytes that are
+                     * in an av entry, as, say the 0th element.  Even better
+                     * would be to have a hash of the few characters that can
+                     * start a multi-char fold to the max number of chars of
+                     * those folds.
 		     *
 		     * If there is a match, we will need to advance (if lenp is
 		     * specified) the match pointer in the target string.  But
@@ -6659,28 +6639,34 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 		     * create a map so that we know how many bytes in the
 		     * source to advance given that we have matched a certain
 		     * number of bytes in the fold.  This map is stored in
-		     * 'map_fold_len_back'.  The first character in the fold
-		     * has array element 1 contain the number of bytes in the
-		     * source that folded to it; the 2nd is the cumulative
-		     * number to match it; ... */
-		    U8 map_fold_len_back[UTF8_MAX_FOLD_CHAR_EXPAND+1] = { 0 };
+		     * 'map_fold_len_back'.  Let n mean the number of bytes in
+		     * the fold of the first character that we are folding.
+		     * Then map_fold_len_back[n] is set to the number of bytes
+		     * in that first character.  Similarly let m be the
+		     * corresponding number for the second character to be
+		     * folded.  Then map_fold_len_back[n+m] is set to the
+		     * number of bytes occupied by the first two source
+		     * characters. ... */
+		    U8 map_fold_len_back[UTF8_MAXBYTES_CASE+1] = { 0 };
 		    U8 folded[UTF8_MAXBYTES_CASE+1];
 		    STRLEN foldlen = 0; /* num bytes in fold of 1st char */
-		    STRLEN foldlen_for_av; /* num bytes in fold of all chars */
+		    STRLEN total_foldlen = 0; /* num bytes in fold of all
+						  chars */
 
 		    if (OP(n) == ANYOF || maxlen == 1 || ! lenp || ! av) {
 
 			/* Here, only need to fold the first char of the target
-			 * string */
+			 * string.  It the source wasn't utf8, is 1 byte long */
 			to_utf8_fold(utf8_p, folded, &foldlen);
-			foldlen_for_av = foldlen;
-			map_fold_len_back[1] = UTF8SKIP(utf8_p);
+			total_foldlen = foldlen;
+			map_fold_len_back[foldlen] = (utf8_target)
+						     ? UTF8SKIP(utf8_p)
+						     : 1;
 		    }
 		    else {
 
 			/* Here, need to fold more than the first char.  Do so
 			 * up to the limits */
-			UV which_char = 0;
 			U8* source_ptr = utf8_p;    /* The source for the fold
 						       is the regex target
 						       string */
@@ -6688,8 +6674,10 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 			U8* e = utf8_p + maxlen;    /* Can't go beyond last
 						       available byte in the
 						       target string */
-			while (which_char < UTF8_MAX_FOLD_CHAR_EXPAND
-			       && source_ptr < e)
+			U8 i;
+			for (i = 0;
+			     i < UTF8_MAX_FOLD_CHAR_EXPAND && source_ptr < e;
+			     i++)
 			{
 
 			    /* Fold the next character */
@@ -6707,39 +6695,38 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 				break;
 			    }
 
-			    /* Save the first character's folded length, in
-			     * case we have to use it later */
-			    if (! foldlen) {
-				foldlen = this_char_foldlen;
-			    }
-
-			    /* Here, add the fold of this character */
+			    /* Add the fold of this character */
 			    Copy(this_char_folded,
 				 folded_ptr,
 				 this_char_foldlen,
 				 U8);
-			    which_char++;
-			    map_fold_len_back[which_char] =
-				map_fold_len_back[which_char - 1]
-				+ UTF8SKIP(source_ptr);
-			    folded_ptr += this_char_foldlen;
 			    source_ptr += UTF8SKIP(source_ptr);
+			    folded_ptr += this_char_foldlen;
+			    total_foldlen = folded_ptr - folded;
+
+			    /* Create map from the number of bytes in the fold
+			     * back to the number of bytes in the source.  If
+			     * the source isn't utf8, the byte count is just
+			     * the number of characters so far */
+			    map_fold_len_back[total_foldlen]
+						      = (utf8_target)
+							? source_ptr - utf8_p
+							: i + 1;
 			}
 			*folded_ptr = '\0';
-			foldlen_for_av = folded_ptr - folded;
 		    }
 
 
 		    /* Do the linear search to see if the fold is in the list
-		     * of multi-char folds.  (Useless to look if won't be able
-		     * to store that it is a multi-char fold in *lenp) */
-		    if (lenp && av) {
+		     * of multi-char folds. */
+		    if (av) {
 		        I32 i;
 			for (i = 0; i <= av_len(av); i++) {
 			    SV* const sv = *av_fetch(av, i, FALSE);
 			    STRLEN len;
 			    const char * const s = SvPV_const(sv, len);
-			    if (len <= foldlen_for_av && memEQ(s,
+
+			    if (len <= total_foldlen && memEQ(s,
 							       (char*)folded,
 							       len))
 			    {
@@ -6747,10 +6734,11 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 				/* Advance the target string ptr to account for
 				 * this fold, but have to translate from the
 				 * folded length to the corresponding source
-				 * length.  The array is indexed by how many
-				 * characters in the match */
-			        *lenp = map_fold_len_back[
-					utf8_length(folded, folded + len)];
+				 * length. */
+				if (lenp) {
+				    *lenp = map_fold_len_back[len];
+				    assert(*lenp != 0);	/* Otherwise will loop */
+				}
 				match = TRUE;
 				break;
 			    }

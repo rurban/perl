@@ -1,7 +1,7 @@
 package bigint;
 use 5.006;
 
-$VERSION = '0.26';
+$VERSION = '0.27';
 use Exporter;
 @ISA		= qw( Exporter );
 @EXPORT_OK	= qw( PI e bpi bexp );
@@ -594,7 +594,7 @@ Using methods that do not modify, but testthe contents works:
 See the documentation about the copy constructor and C<=> in overload, as
 well as the documentation in BigInt for further details.
 
-=head1 CAVAETS
+=head1 CAVEATS
 
 =over 2
 

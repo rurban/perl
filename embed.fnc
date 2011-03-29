@@ -1787,7 +1787,7 @@ Es	|UV	|reg_recode	|const char value|NN SV **encp
 Es	|regnode*|regpiece	|NN struct RExC_state_t *pRExC_state \
 				|NN I32 *flagp|U32 depth
 Es	|regnode*|reg_namedseq	|NN struct RExC_state_t *pRExC_state \
-				|NULLOK UV *valuep|NULLOK I32 *flagp
+				|NULLOK UV *valuep|NULLOK I32 *flagp|U32 depth
 Es	|void	|reginsert	|NN struct RExC_state_t *pRExC_state \
 				|U8 op|NN regnode *opnd|U32 depth
 Es	|void	|regtail	|NN struct RExC_state_t *pRExC_state \
@@ -1803,12 +1803,15 @@ Es	|bool	|reg_skipcomment|NN struct RExC_state_t *pRExC_state
 Es	|void	|scan_commit	|NN const struct RExC_state_t *pRExC_state \
 				|NN struct scan_data_t *data|NN I32 *minlenp \
 				|int is_inf
-Esn	|void	|cl_anything	|NN struct regnode_charclass_class *cl
+Esn	|void	|cl_anything	|NN const struct RExC_state_t *pRExC_state \
+				|NN struct regnode_charclass_class *cl
 EsRn	|int	|cl_is_anything	|NN const struct regnode_charclass_class *cl
-Esn	|void	|cl_init	|NN struct regnode_charclass_class *cl
+Esn	|void	|cl_init	|NN const struct RExC_state_t *pRExC_state \
+				|NN struct regnode_charclass_class *cl
 Esn	|void	|cl_and		|NN struct regnode_charclass_class *cl \
 				|NN const struct regnode_charclass_class *and_with
-Esn	|void	|cl_or		|NN struct regnode_charclass_class *cl \
+Esn	|void	|cl_or		|NN const struct RExC_state_t *pRExC_state \
+				|NN struct regnode_charclass_class *cl \
 				|NN const struct regnode_charclass_class *or_with
 Es	|I32	|study_chunk	|NN struct RExC_state_t *pRExC_state \
 				|NN regnode **scanp|NN I32 *minlenp \

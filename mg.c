@@ -286,7 +286,7 @@ Perl_mg_set(pTHX_ SV *sv)
 	    mg->mg_flags &= ~MGf_GSKIP;	/* setting requires another read */
 	    (SSPTR(mgs_ix, MGS*))->mgs_magical = 0;
 	}
-	if (PL_localizing == 2 && !S_is_container_magic(mg))
+	if (PL_localizing == 2 && (!S_is_container_magic(mg) || sv == DEFSV))
 	    continue;
 	if (vtbl && vtbl->svt_set)
 	    vtbl->svt_set(aTHX_ sv, mg);
@@ -510,6 +510,9 @@ Perl_mg_localize(pTHX_ SV *sv, SV *nsv, bool setmagic)
     MAGIC *mg;
 
     PERL_ARGS_ASSERT_MG_LOCALIZE;
+
+    if (nsv == DEFSV)
+	return;
 
     for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
 	const MGVTBL* const vtbl = mg->mg_virtual;
@@ -3028,20 +3031,14 @@ Perl_sighandler(int sig)
 		exit(sig);
 	}
 
-    /* Max number of items pushed there is 3*n or 4. We cannot fix
-       infinity, so we fix 4 (in fact 5): */
-    if (PL_savestack_ix + 15 <= PL_savestack_max) {
-	flags |= 1;
-	PL_savestack_ix += 5;		/* Protect save in progress. */
-	SAVEDESTRUCTOR_X(S_unwind_handler_stack, NULL);
-    }
-    if (PL_markstack_ptr < PL_markstack_max - 2) {
-	flags |= 2;
-	PL_markstack_ptr++;		/* Protect mark. */
-    }
-    if (PL_scopestack_ix < PL_scopestack_max - 3) {
-	flags |= 4;
-	PL_scopestack_ix++;
+    if (PL_signals &  PERL_SIGNALS_UNSAFE_FLAG) {
+	/* Max number of items pushed there is 3*n or 4. We cannot fix
+	   infinity, so we fix 4 (in fact 5): */
+	if (PL_savestack_ix + 15 <= PL_savestack_max) {
+	    flags |= 1;
+	    PL_savestack_ix += 5;		/* Protect save in progress. */
+	    SAVEDESTRUCTOR_X(S_unwind_handler_stack, NULL);
+	}
     }
     /* sv_2cv is too complicated, try a simpler variant first: */
     if (!SvROK(PL_psig_ptr[sig]) || !(cv = MUTABLE_CV(SvRV(PL_psig_ptr[sig])))
@@ -3065,9 +3062,11 @@ Perl_sighandler(int sig)
     flags |= 8;
     SAVEFREESV(sv);
 
-    /* make sure our assumption about the size of the SAVEs are correct:
-     * 3 for SAVEDESTRUCTOR_X, 2 for SAVEFREESV */
-    assert(old_ss_ix + 2 + ((flags & 1) ? 3+5 : 0)  == PL_savestack_ix);
+    if (PL_signals &  PERL_SIGNALS_UNSAFE_FLAG) {
+	/* make sure our assumption about the size of the SAVEs are correct:
+	 * 3 for SAVEDESTRUCTOR_X, 2 for SAVEFREESV */
+	assert(old_ss_ix + 2 + ((flags & 1) ? 3+5 : 0)  == PL_savestack_ix);
+    }
 
     PUSHSTACKi(PERLSI_SIGNAL);
     PUSHMARK(SP);
@@ -3132,10 +3131,6 @@ Perl_sighandler(int sig)
 cleanup:
     /* pop any of SAVEFREESV, SAVEDESTRUCTOR_X and "save in progress" */
     PL_savestack_ix = old_ss_ix;
-    if (flags & 2)
-	PL_markstack_ptr--;
-    if (flags & 4)
-	PL_scopestack_ix -= 1;
     if (flags & 8)
 	SvREFCNT_dec(sv);
     PL_op = myop;			/* Apparently not needed... */
@@ -3221,8 +3216,7 @@ S_restore_magic(pTHX_ const void *p)
 /* clean up the mess created by Perl_sighandler().
  * Note that this is only called during an exit in a signal handler;
  * a die is trapped by the call_sv() and the SAVEDESTRUCTOR_X manually
- * skipped over. This is why we don't need to fix up the markstack and
- * scopestack - they're going to be set to 0 anyway */
+ * skipped over. */
 
 static void
 S_unwind_handler_stack(pTHX_ const void *p)

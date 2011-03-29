@@ -1,5 +1,5 @@
 name: perl
-version: 5.013010
+version: 5.013011
 abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
@@ -100,7 +100,6 @@ no_index:
     - lib/version.pm
     - lib/version.pod
     - lib/version.t
-    - pod/perldoc.pod
     - pod/perlfilter.pod
     - Porting/Maintainers.pm
     - Porting/perldelta_template.pod

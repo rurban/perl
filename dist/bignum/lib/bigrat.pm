@@ -1,7 +1,7 @@
 package bigrat;
 use 5.006;
 
-$VERSION = '0.27';
+$VERSION = '0.28';
 require Exporter;
 @ISA		= qw( bigint );
 @EXPORT_OK 	= qw( PI e bpi bexp );
@@ -503,7 +503,7 @@ This prints out the name and version of all modules used and then exits.
 
 =back
 
-=head1 CAVAETS
+=head1 CAVEATS
 
 =over 2
 

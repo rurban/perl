@@ -226,8 +226,9 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  * version.  An example of maximal expansion is the U+03B0 which
  * uppercases to U+03C5 U+0308 U+0301.  The Unicode databases that
  * tell these things are UnicodeData.txt, CaseFolding.txt, and
- * SpecialCasing.txt. */
-#define UTF8_MAXBYTES_CASE	6
+ * SpecialCasing.txt.  The value is 6 for strict Unicode characters, but it has
+ * to be as big as Perl allows for a single character */
+#define UTF8_MAXBYTES_CASE	UTF8_MAXBYTES
 
 /* A Unicode character can fold to up to 3 characters */
 #define UTF8_MAX_FOLD_CHAR_EXPAND 3
@@ -426,6 +427,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define GREEK_SMALL_LETTER_MU                   0x03BC
 #define GREEK_CAPITAL_LETTER_MU 0x039C	/* Upper and title case of MICRON */
 #define LATIN_CAPITAL_LETTER_Y_WITH_DIAERESIS 0x0178	/* Also is title case */
+#define LATIN_CAPITAL_LETTER_SHARP_S	0x1E9E
 
 #define UNI_DISPLAY_ISPRINT	0x0001
 #define UNI_DISPLAY_BACKSLASH	0x0002

@@ -391,14 +391,14 @@ Finalize the perldelta.  In particular, fill in the Acknowledgements
 section.  You can generate a list of contributors with checkAUTHORS.pl.
 For example:
 
-  $ git log --pretty=fuller v5.13.2..HEAD | \
+  $ git log --pretty=fuller v5.13.${last}..HEAD | \
     perl Porting/checkAUTHORS.pl --who -
 
 Look at the previous L<perldelta> for how to write the opening
 paragraph of the Acknowledgements section. To get the amount of
 changed files and number of lines use this command:
 
-  $ git diff --shortstat v5.13.8..v5.13.9 | \
+  $ git diff --shortstat v5.13.${last}..HEAD | \
     ./perl -Ilib -nE 'my ($files, $insert, $delete) = /(\d+)/ga; say "$files files and ", $insert + $delete, " lines changed"'
 
 Making sure to round off the number of lines changed.
@@ -493,6 +493,8 @@ entry, as that is likely to reflect the previous version number.
 
 Also edit Module::CoreList's new version number in its F<Changes>
 file.
+
+Add a perldelta entry for the new Module::CoreList version.
 
 You should also add the version you're about to release to the
 L<Module::CoreList/CAVEATS> section which enumerates the perl releases
@@ -601,10 +603,7 @@ I<You MUST SKIP this step for SNAPSHOT>
 
 Tag the release (e.g.):
 
-    $ git tag v5.11.0 -m'First release of the v5.11 series!'
-
-(Adjust the syntax appropriately if you're working on Win32, i.e. use
-C<-m "..."> rather than C<-m'...'>.)
+    $ git tag v5.11.0 -m "First release of the v5.11 series!"
 
 It is VERY important that from this point forward, you not push
 your git changes to the Perl master repository.  If anything goes
@@ -911,7 +910,6 @@ the following files:
 
     MANIFEST
     Makefile.SH
-    pod.lst
     pod/perl.pod
     vms/descrip_mms.template
     win32/Makefile

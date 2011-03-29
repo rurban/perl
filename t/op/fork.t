@@ -5,7 +5,6 @@
 BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
-    $ENV{PERL5LIB} = "../lib";
     require './test.pl';
     require Config;
     skip_all('no fork')
@@ -452,3 +451,35 @@ EXPECT
 OPTION random
 child: called as [main::f(foo,bar)]
 waitpid() returned ok
+########
+# Windows 2000: https://rt.cpan.org/Ticket/Display.html?id=66016#txn-908976
+system $^X,  "-e", "if (\$pid=fork){sleep 1;kill(9, \$pid)} else {sleep 5}";
+print $?>>8, "\n";
+EXPECT
+0
+########
+# Windows 7: https://rt.cpan.org/Ticket/Display.html?id=66016#txn-908976
+system $^X,  "-e", "if (\$pid=fork){kill(9, \$pid)} else {sleep 5}";
+print $?>>8, "\n";
+EXPECT
+0
+########
+# Windows fork() emulation: can we still waitpid() after signalling SIGTERM?
+$|=1;
+if (my $pid = fork) {
+    sleep 1;
+    print "1\n";
+    kill 'TERM', $pid;
+    waitpid($pid, 0);
+    print "4\n";
+}
+else {
+    $SIG{TERM} = sub { print "2\n" };
+    sleep 3;
+    print "3\n";
+}
+EXPECT
+1
+2
+3
+4

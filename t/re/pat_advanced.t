@@ -1007,18 +1007,7 @@ sub run_tests {
         # If remove the limitation in regcomp code these should work
         # differently
         undef $w;
-        eval q [ok "\N{LONG-STR}" =~ /^\N{TOO-LONG-STR}$/, 'Verify that too long a string fails gracefully'];
-        ok $w && $w =~ /Using just the first characters returned/, 'Verify that got too-long string warning in \N{} that exceeds the limit';
-        undef $w;
-        eval q [ok "\N{LONG-STR}" =~ /^\N{TOO-LONG-STR}$/i, 'Verify under folding that too long a string fails gracefully'];
-        ok $w && $w =~ /Using just the first characters returned/, 'Verify under folding that got too-long string warning in \N{} that exceeds the limit';
-        undef $w;
-        eval q [ok "\N{TOO-LONG-STR}" !~ /^\N{TOO-LONG-STR}$/, 'Verify that too long a string doesnt work'];
-        ok $w && $w =~ /Using just the first characters returned/, 'Verify that got too-long string warning in \N{} that exceeds the limit';
-        undef $w;
-        eval q [ok "\N{TOO-LONG-STR}" !~ /^\N{TOO-LONG-STR}$/i, 'Verify under folding that too long a string doesnt work'];
-        ok $w && $w =~ /Using just the first characters returned/i, 'Verify under folding that got too-long string warning in \N{} that exceeds the limit';
-        undef $w;
+        eval q [ok "\N{TOO-LONG-STR}" =~ /^\N{TOO-LONG-STR}$/, 'Verify that what once was too long a string works'];
         eval 'q(syntax error) =~ /\N{MALFORMED}/';
         ok $@ && $@ =~ /Malformed/, 'Verify that malformed utf8 gives an error';
         undef $w;
@@ -1657,6 +1646,22 @@ sub run_tests {
         ($_ = 'abc') =~ /(abc)/g;
         $_ = '123';
         is("$1", 'abc', "/g leads to unsafe match vars: $1");
+
+        fresh_perl_is(<<'EOP', ">abc<\n", {}, 'mention $&');
+$&;
+my $x; 
+($x='abc')=~/(abc)/g; 
+$x='123'; 
+print ">$1<\n";
+EOP
+
+        local $::TODO = 'RT #86042';
+        fresh_perl_is(<<'EOP', ">abc<\n", {}, 'no mention of $&');
+my $x; 
+($x='abc')=~/(abc)/g; 
+$x='123'; 
+print ">$1<\n";
+EOP
     }
 
     {
@@ -2055,6 +2060,12 @@ sub run_tests {
     # RT #82610
     ok 'foo/file.fob' =~ m,^(?=[^\.])[^/]*/(?=[^\.])[^/]*\.fo[^/]$,;
 
+    {   # This was failing unless an explicit /d was added
+        my $p = qr/[\xE0_]/i;
+        utf8::upgrade($p);
+        like("\xC0", $p, "Verify \"\\xC0\" =~ /[\\xE0_]/i; pattern in utf8");
+    }
+
     #
     # Keep the following tests last -- they may crash perl
     #
@@ -2088,6 +2099,13 @@ sub run_tests {
         local $SIG{__WARN__} = sub { $warning_message = $_[0] };
         eval $a =~ /[a-z]/;
         ok(1, $message);  # If it didn't crash, it worked.
+    }
+
+    TODO: {   # Was looping
+        todo_skip('Triggers thread clone SEGV. See #86550')
+	  if $::running_as_thread && $::running_as_thread;
+        watchdog(10);   # Use a bigger value for busy systems
+        like("\x{00DF}", qr/[\x{1E9E}_]*/i, "\"\\x{00DF}\" =~ /[\\x{1E9E}_]*/i was looping");
     }
 
     # !!! NOTE that tests that aren't at all likely to crash perl should go
