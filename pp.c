@@ -3049,7 +3049,7 @@ PP(pp_i_ncmp)
     dVAR; dSP; dTARGET;
     tryAMAGICbin_MG(ncmp_amg, 0);
     {
-      dPOPTOPiirl_nomg;
+      dPOPTOPiirl_halfmg;
       I32 value;
 
       if (left > right)
@@ -3082,7 +3082,7 @@ PP(pp_atan2)
     dVAR; dSP; dTARGET;
     tryAMAGICbin_MG(atan2_amg, 0);
     {
-      dPOPTOPnnrl_nomg;
+      dPOPTOPnnrl_halfmg;
       SETn(Perl_atan2(left, right));
       RETURN;
     }
@@ -4209,6 +4209,8 @@ PP(pp_ucfirst)
 	    SvCUR_set(dest, need - 1);
 	}
     }
+    if (dest != source && SvTAINTED(source))
+	SvTAINT(dest);
     SvSETMAGIC(dest);
     RETURN;
 }
@@ -4479,6 +4481,8 @@ PP(pp_uc)
 	    SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
 	}
     } /* End of isn't utf8 */
+    if (dest != source && SvTAINTED(source))
+	SvTAINT(dest);
     SvSETMAGIC(dest);
     RETURN;
 }
@@ -4701,6 +4705,8 @@ PP(pp_lc)
 	    SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
 	}
     }
+    if (dest != source && SvTAINTED(source))
+	SvTAINT(dest);
     SvSETMAGIC(dest);
     RETURN;
 }

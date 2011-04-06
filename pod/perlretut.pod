@@ -176,7 +176,7 @@ In addition to the metacharacters, there are some ASCII characters
 which don't have printable character equivalents and are instead
 represented by I<escape sequences>.  Common examples are C<\t> for a
 tab, C<\n> for a newline, C<\r> for a carriage return and C<\a> for a
-bell.  If your string is better thought of as a sequence of arbitrary
+bell (or alert).  If your string is better thought of as a sequence of arbitrary
 bytes, the octal escape sequence, e.g., C<\033>, or hexadecimal escape
 sequence, e.g., C<\x1B> may be a more natural representation for your
 bytes.  Here are some examples of escapes:
@@ -401,6 +401,11 @@ but also digits and characters from non-roman scripts
 
 The period '.' matches any character but "\n" (unless the modifier C<//s> is
 in effect, as explained below).
+
+=item *
+
+\N, like the period, matches any character but "\n", but it does so
+regardless of whether the modifier C<//s> is in effect.
 
 =back
 
@@ -1501,31 +1506,6 @@ single line C<//s>, multi-line C<//m>, case-insensitive C<//i> and
 extended C<//x> modifiers.  There are a few more things you might
 want to know about matching operators.
 
-=head3 Optimizing pattern evaluation
-
-We pointed out earlier that variables in regexps are substituted
-before the regexp is evaluated:
-
-    $pattern = 'Seuss';
-    while (<>) {
-        print if /$pattern/;
-    }
-
-This will print any lines containing the word C<Seuss>.  It is not as
-efficient as it could be, however, because Perl has to re-evaluate
-(or compile) C<$pattern> each time through the loop.  If C<$pattern> won't be
-changing over the lifetime of the script, we can add the C<//o>
-modifier, which directs Perl to only perform variable substitutions
-once:
-
-    #!/usr/bin/perl
-    #    Improved simple_grep
-    $regexp = shift;
-    while (<>) {
-        print if /$regexp/o;  # a good deal faster
-    }
-
-
 =head3 Prohibiting substitution
 
 If you change C<$pattern> after the first substitution happens, Perl
@@ -1547,7 +1527,8 @@ the regexp in the I<last successful match> is used instead.  So we have
 
 =head3 Global matching
 
-The final two modifiers C<//g> and C<//c> concern multiple matches.
+The final two modifiers we will disccuss here,
+C<//g> and C<//c>, concern multiple matches.
 The modifier C<//g> stands for global matching and allows the
 matching operator to match within a string as many times as possible.
 In scalar context, successive invocations against a string will have
@@ -1707,7 +1688,7 @@ the following program to replace it:
     $regexp = shift;
     $replacement = shift;
     while (<>) {
-        s/$regexp/$replacement/go;
+        s/$regexp/$replacement/g;
         print;
     }
     ^D
@@ -1715,13 +1696,15 @@ the following program to replace it:
     % simple_replace regexp regex perlretut.pod
 
 In C<simple_replace> we used the C<s///g> modifier to replace all
-occurrences of the regexp on each line and the C<s///o> modifier to
-compile the regexp only once.  As with C<simple_grep>, both the
-C<print> and the C<s/$regexp/$replacement/go> use C<$_> implicitly.
+occurrences of the regexp on each line.  (Even though the regular
+expression appears in a loop, Perl is smart enough to compile it
+only once.)  As with C<simple_grep>, both the
+C<print> and the C<s/$regexp/$replacement/g> use C<$_> implicitly.
 
 If you don't want C<s///> to change your original variable you can use
 the non-destructive substitute modifier, C<s///r>.  This changes the
-behavior so that C<s///r> returns the final substituted string:
+behavior so that C<s///r> returns the final substituted string
+(instead of the number of substitutions):
 
     $x = "I like dogs.";
     $y = $x =~ s/dogs/cats/r;
@@ -1890,8 +1873,8 @@ to know 1) how to represent Unicode characters in a regexp and 2) that
 a matching operation will treat the string to be searched as a sequence
 of characters, not bytes.  The answer to 1) is that Unicode characters
 greater than C<chr(255)> are represented using the C<\x{hex}> notation, because
-\x hex (without curly braces) doesn't go further than 255.  Starting in Perl
-5.14, if you're an octal fan, you can also use C<\o{oct}>.
+\x hex (without curly braces) doesn't go further than 255.  (Starting in Perl
+5.14, if you're an octal fan, you can also use C<\o{oct}>.)
 
     /\x{263a}/;  # match a Unicode smiley face :)
 
@@ -1926,7 +1909,7 @@ One can also use short names or restrict names to a certain alphabet:
     print "\N{sigma} is Greek sigma\n";
 
 A list of full names can be found in F<NamesList.txt> in the Unicode standard
-(available at L<http://www.unicode.org/Public/6.0.0/ucd/>).
+(available at L<http://www.unicode.org/Public/UNIDATA/>).
 
 The answer to requirement 2), as of 5.6.0, is that a regexp uses Unicode
 characters. Internally, this is encoded to bytes using either UTF-8 or a
@@ -1946,6 +1929,8 @@ example, to match lower and uppercase characters,
     $x =~ /^\P{IsUpper}/;   # doesn't match, char class sans uppercase
     $x =~ /^\p{IsLower}/;   # doesn't match, lowercase char class
     $x =~ /^\P{IsLower}/;   # matches, char class sans lowercase
+
+(The "Is" is optional.)
 
 Here is the association between some Perl named classes and the
 traditional Unicode classes:
@@ -1979,10 +1964,7 @@ Unicode has also been separated into various sets of characters
 which you can test with C<\p{...}> (in) and C<\P{...}> (not in).
 To test whether a character is (or is not) an element of a script
 you would use the script name, for example C<\p{Latin}>, C<\p{Greek}>,
-or C<\P{Katakana}>. Other sets are the Unicode blocks, the names
-of which begin with "In". One such block is dedicated to mathematical
-operators, and its pattern formula is <C\p{InMathematicalOperators>}>.
-For the full list see L<perluniprops>.
+or C<\P{Katakana}>.
 
 What we have described so far is the single form of the C<\p{...}> character
 classes.  There is also a compound form which you may run into.  These
@@ -1996,7 +1978,7 @@ never have to use the compound forms, but sometimes it is necessary, and their
 use can make your code easier to understand.
 
 C<\X> is an abbreviation for a character class that comprises
-a Unicode I<extended grapheme cluster>.  This represents a "logical character",
+a Unicode I<extended grapheme cluster>.  This represents a "logical character":
 what appears to be a single character, but may be represented internally by more
 than one.  As an example, using the Unicode full names, e.g., S<C<A + COMBINING
 RING>> is a grapheme cluster with base character C<A> and combining character
@@ -2034,8 +2016,8 @@ Whew! That is all the rest of the characters and character classes.
 
 =head2 Compiling and saving regular expressions
 
-In Part 1 we discussed the C<//o> modifier, which compiles a regexp
-just once.  This suggests that a compiled regexp is some data structure
+In Part 1 we mentioned that Perl compiles a regexp into a compact
+sequence of opcodes.  Thus, a compiled regexp is a data structure
 that can be stored once and used again and again.  The regexp quote
 C<qr//> does exactly that: C<qr/string/> compiles the C<string> as a
 regexp and transforms the result into a form that can be assigned to a
@@ -2110,7 +2092,7 @@ multiple patterns:
     $pattern = join '|', @regexp;
 
     while ($line = <>) {
-        print $line if $line =~ /$pattern/o;
+        print $line if $line =~ /$pattern/;
     }
     ^D
 
@@ -2178,7 +2160,7 @@ example is
 This style of commenting has been largely superseded by the raw,
 freeform commenting that is allowed with the C<//x> modifier.
 
-The modifiers C<//i>, C<//m>, C<//s> and C<//x> (or any
+Most modifiers, such as C<//i>, C<//m>, C<//s> and C<//x> (or any
 combination thereof) can also be embedded in
 a regexp using C<(?i)>, C<(?m)>, C<(?s)>, and C<(?x)>.  For instance,
 
@@ -2729,7 +2711,7 @@ combination with embedded code.
 
    %count = ();
    "supercalifragilisticexpialidoceous" =~
-       /([aeiou])(?{ $count{$1}++; })(*FAIL)/oi;
+       /([aeiou])(?{ $count{$1}++; })(*FAIL)/i;
    printf "%3d '%s'\n", $count{$_}, $_ for (sort keys %count);
 
 The pattern begins with a class matching a subset of letters.  Whenever
