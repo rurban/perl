@@ -579,8 +579,8 @@ Use of uninitialized value $g1 in integer eq (==) at - line 17.
 Use of uninitialized value $m1 in integer eq (==) at - line 17.
 Use of uninitialized value $g1 in integer ne (!=) at - line 18.
 Use of uninitialized value $m1 in integer ne (!=) at - line 18.
-Use of uninitialized value $m1 in integer comparison (<=>) at - line 19.
 Use of uninitialized value $g1 in integer comparison (<=>) at - line 19.
+Use of uninitialized value $m1 in integer comparison (<=>) at - line 19.
 Use of uninitialized value $m1 in integer negation (-) at - line 20.
 ########
 use warnings 'uninitialized';
@@ -686,6 +686,23 @@ Use of uninitialized value $g1 in addition (+) at - line 19.
 Use of uninitialized value $m1 in addition (+) at - line 19.
 Use of uninitialized value $g1 in subtraction (-) at - line 20.
 Use of uninitialized value $m1 in subtraction (-) at - line 20.
+########
+use warnings 'uninitialized';
+sub TIESCALAR{bless[]}
+sub FETCH { undef }
+
+tie my $m1, "";
+my $v;
+$v = $m1 + $m1;
+$v = $m1 - $m1;
+no warnings;
+$v = $m1 + $m1;
+$v = $m1 - $m1;
+EXPECT
+Use of uninitialized value $m1 in addition (+) at - line 7.
+Use of uninitialized value $m1 in addition (+) at - line 7.
+Use of uninitialized value $m1 in subtraction (-) at - line 8.
+Use of uninitialized value $m1 in subtraction (-) at - line 8.
 ########
 use warnings 'uninitialized';
 my ($m1, $v);
@@ -910,8 +927,8 @@ $v = oct $m1;
 $v = oct;
 $v = length; # does not warn
 EXPECT
-Use of uninitialized value $m1 in atan2 at - line 5.
 Use of uninitialized value $g1 in atan2 at - line 5.
+Use of uninitialized value $m1 in atan2 at - line 5.
 Use of uninitialized value $m1 in sin at - line 6.
 Use of uninitialized value $m1 in cos at - line 7.
 Use of uninitialized value $m1 in rand at - line 8.

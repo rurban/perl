@@ -3719,7 +3719,8 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
             mro_changes = 2;
         else {
             const STRLEN len = GvNAMELEN(dstr);
-            if (len > 1 && name[len-2] == ':' && name[len-1] == ':') {
+            if ((len > 1 && name[len-2] == ':' && name[len-1] == ':')
+             || (len == 1 && name[0] == ':')) {
                 mro_changes = 3;
 
                 /* Set aside the old stash, so we can reset isa caches on
@@ -3879,7 +3880,10 @@ S_glob_assign_ref(pTHX_ SV *const dstr, SV *const sstr)
 	    const char * const name = GvNAME((GV*)dstr);
 	    const STRLEN len = GvNAMELEN(dstr);
 	    if (
-	        len > 1 && name[len-2] == ':' && name[len-1] == ':'
+	        (
+	           (len > 1 && name[len-2] == ':' && name[len-1] == ':')
+	        || (len == 1 && name[0] == ':')
+	        )
 	     && (!dref || HvENAME_get(dref))
 	    ) {
 		mro_package_moved(
@@ -4177,7 +4181,8 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
 		const STRLEN len = GvNAMELEN(dstr);
 		HV *old_stash = NULL;
 		bool reset_isa = FALSE;
-		if (len > 1 && name[len-2] == ':' && name[len-1] == ':') {
+		if ((len > 1 && name[len-2] == ':' && name[len-1] == ':')
+		 || (len == 1 && name[0] == ':')) {
 		    /* Set aside the old stash, so we can reset isa caches
 		       on its subclasses. */
 		    if((old_stash = GvHV(dstr))) {
@@ -5718,6 +5723,17 @@ Perl_sv_kill_backrefs(pTHX_ SV *const sv, AV *const av)
 
     if (!av)
 	return;
+
+    /* after multiple passes through Perl_sv_clean_all() for a thinngy
+     * that has badly leaked, the backref array may have gotten freed,
+     * since we only protect it against 1 round of cleanup */
+    if (SvIS_FREED(av)) {
+	if (PL_in_clean_all) /* All is fair */
+	    return;
+	Perl_croak(aTHX_
+		   "panic: magic_killbackrefs (freed backref AV/SV)");
+    }
+
 
     is_array = (SvTYPE(av) == SVt_PVAV);
     if (is_array) {

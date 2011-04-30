@@ -7,7 +7,7 @@ BEGIN {
 
 BEGIN { require "./test.pl"; }
 
-plan( tests => 53 );
+plan( tests => 54 );
 
 # Used to segfault (bug #15479)
 fresh_perl_like(
@@ -69,7 +69,7 @@ ok( eval q{ no warnings 'deprecated'; defined %schoenmaker:: }, 'works in eval("
 }
 
 SKIP: {
-    eval { require B; 1 } or skip "no B", 27;
+    eval { require B; 1 } or skip "no B", 29;
 
     *b = \&B::svref_2object;
     my $CVf_ANON = B::CVf_ANON();
@@ -304,3 +304,11 @@ fresh_perl_is(
       "setting stash name during undef has no effect";
 }
 
+# [perl #88134] incorrect package structure
+{
+    package Bear::;
+    sub baz{1}
+    package main;
+    ok eval { Bear::::baz() },
+     'packages ending with :: are self-consistent';
+}

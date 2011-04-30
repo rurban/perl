@@ -1,8 +1,9 @@
 #!./perl -w
 
 #
-# Compare the current Perl source tree and a given tag for modules that
-# have identical version numbers but different contents.
+# Compare the current Perl source tree against the version at the most
+# recent tag, for modules that have identical version numbers but
+# different contents. Skips cpan/.
 #
 # Original by slaven@rezic.de, modified by jhi and matt.w.johnson@gmail.com
 #
@@ -63,6 +64,15 @@ my %skip;
     'lib/Exporter/Heavy.pm',
     'win32/FindExt.pm',
 } = ();
+
+# Files to skip just for particular version(s),
+# usually due to some # mix-up
+
+my %skip_versions = (
+    # 'some/sample/file.pm' => [ '1.23', '1.24' ],
+    'dist/threads/lib/threads.pm' => [ '1.83' ],
+);
+
 my $skip_dirs = qr{^(?:t/lib|cpan)};
 
 my @all_diffs = `git --no-pager diff --name-only $tag_to_compare`;
@@ -107,6 +117,8 @@ foreach my $pm_file (@module_diffs) {
     next if ( ! defined $pm_version || ! defined $orig_pm_version );
     next if ( $pm_version eq 'undef' || $orig_pm_version eq 'undef' ); # sigh
     next if $pm_version ne $orig_pm_version;
+    next if exists $skip_versions{$pm_file}
+	 and grep $pm_version eq $_, @{$skip_versions{$pm_file}};
     push @diff => $pm_file unless $pm_eq;
     push @diff => $xs_file unless $xs_eq;
 }

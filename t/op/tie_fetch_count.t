@@ -7,7 +7,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 172);
+    plan (tests => 210);
 }
 
 use strict;
@@ -22,7 +22,7 @@ my $count = 0;
 #                                    # when the list is exhausted.
 sub TIESCALAR {my $pack = shift; bless [@_], $pack;}
 sub FETCH {$count ++; @{$_ [0]} == 1 ? ${$_ [0]}[0] : shift @{$_ [0]}}
-sub STORE {1;}
+sub STORE { unshift @{$_[0]}, $_[1] }
 
 
 sub check_count {
@@ -162,8 +162,10 @@ tie my $var1 => 'main', \1;
 $dummy  = $$var1        ; check_count '${}';
 tie my $var2 => 'main', [];
 $dummy  = @$var2        ; check_count '@{}';
+$dummy  = shift $var2   ; check_count 'shift arrayref';
 tie my $var3 => 'main', {};
 $dummy  = %$var3        ; check_count '%{}';
+$dummy  = keys $var3    ; check_count 'keys hashref';
 {
     no strict 'refs';
     tie my $var4 => 'main', **;
@@ -182,76 +184,74 @@ $dummy  = &$var5        ; check_count '&{}';
 # for both operands. They also test that both return values from
 # FETCH are used.
 
-sub bin_test {
+my %mutators = map { ($_ => 1) } qw(. + - * / % ** << >> & | ^);
+
+
+sub _bin_test {
+    my $int = shift;
     my $op = shift;
-    tie my $var, "main", @_[0..$#_-1];
-    is(eval "\$var $op \$var", pop, "retval of \$var $op \$var");
-    check_count $op, 2;
-}
-sub bin_int_test {
-    my $op = shift;
-    tie my $var, "main", @_[0..$#_-1];
-    is(eval "use integer; \$var $op \$var", pop,
-       "retval of \$var $op \$var under use integer");
-    check_count "$op under use integer", 2;
+    my $exp = pop;
+    my @fetches = @_;
+
+    $int = $int ? 'use integer; ' : '';
+
+    tie my $var, "main", @fetches;
+    is(eval "$int\$var $op \$var", $exp, "retval of $int\$var $op \$var");
+    check_count "$int$op", 2;
+
+    return unless $mutators{$op};
+
+    tie my $var2, "main", @fetches;
+    is(eval "$int \$var2 $op= \$var2", $exp, "retval of $int \$var2 $op= \$var2");
+    check_count "$int$op=", 3;
 }
 
-our $TODO;
-my  $todo = 'bug #87708';
-{
-    local $TODO = $todo;
-    bin_test '**',  2, 3, 8;
-    bin_test '*' ,  2, 3, 6;
-    bin_test '/' , 10, 2, 5;
-    bin_test '%' , 11, 2, 1;
-    bin_test 'x' , 11, 2, 1111;
-    bin_test '-' , 11, 2, 9;
-    bin_test '<<', 11, 2, 44;
-    bin_test '>>', 44, 2, 11;
-    bin_test '<' ,  1, 2, 1;
-    bin_test '>' , 44, 2, 1;
-    bin_test '<=', 44, 2, "";
-    bin_test '>=',  1, 2, "";
-    bin_test '!=',  1, 2, 1;
-    bin_test '<=>', 1, 2, -1;
-    bin_test 'le',  4, 2, "";
-    bin_test 'lt',  1, 2, 1;
-    bin_test 'gt',  4, 2, 1;
-    bin_test 'ge',  1, 2, "";
-    bin_test 'eq',  1, 2, "";
-    bin_test 'ne',  1, 2, 1;
-    bin_test 'cmp', 1, 2, -1;
-    bin_test '&' ,  1, 2, 0;
-    bin_test '|' ,  1, 2, 3;
+sub bin_test {
+    _bin_test(0, @_);
 }
+
+sub bin_int_test {
+    _bin_test(1, @_);
+}
+
+bin_test '**',  2, 3, 8;
+bin_test '*' ,  2, 3, 6;
+bin_test '/' , 10, 2, 5;
+bin_test '%' , 11, 2, 1;
+bin_test 'x' , 11, 2, 1111;
+bin_test '-' , 11, 2, 9;
+bin_test '<<', 11, 2, 44;
+bin_test '>>', 44, 2, 11;
+bin_test '<' ,  1, 2, 1;
+bin_test '>' , 44, 2, 1;
+bin_test '<=', 44, 2, "";
+bin_test '>=',  1, 2, "";
+bin_test '!=',  1, 2, 1;
+bin_test '<=>', 1, 2, -1;
+bin_test 'le',  4, 2, "";
+bin_test 'lt',  1, 2, 1;
+bin_test 'gt',  4, 2, 1;
+bin_test 'ge',  1, 2, "";
+bin_test 'eq',  1, 2, "";
+bin_test 'ne',  1, 2, 1;
+bin_test 'cmp', 1, 2, -1;
+bin_test '&' ,  1, 2, 0;
+bin_test '|' ,  1, 2, 3;
+bin_test '^' ,  3, 5, 6;
 bin_test '.' ,  1, 2, 12;
-{
-    local $TODO = $todo ;
-    bin_test '==',  1, 2, "";
-    bin_test '+' ,  1, 2, 3;
-    bin_int_test '*' ,  2, 3, 6;
-    bin_int_test '/' , 10, 2, 5;
-    bin_int_test '%' , 11, 2, 1;
-    # For these two, one of the tests in bin_int_test passes and the other
-    # fails, so we spell them out for now.
-    #bin_int_test '+' ,  1, 2, 3;
-    #bin_int_test '-' , 11, 2, 9;
-    {
-        use integer;
-        tie my $var, "main", 1, 2;
-        is($var + $var, 3, 'retval of $var + $var under use integer');
-        { local $TODO; check_count '+ under use integer',  2; }
-        tie $var, "main", 11, 2;
-        is($var - $var, 9, 'retval of $var - $var under use integer');
-        { local $TODO; check_count '- under use integer',  2; }
-    }
-    bin_int_test '<' ,  1, 2, 1;
-    bin_int_test '>' , 44, 2, 1;
-    bin_int_test '<=', 44, 2, "";
-    bin_int_test '>=',  1, 2, "";
-    bin_int_test '==',  1, 2, "";
-    bin_int_test '!=',  1, 2, 1;
-}
+bin_test '==',  1, 2, "";
+bin_test '+' ,  1, 2, 3;
+bin_int_test '*' ,  2, 3, 6;
+bin_int_test '/' , 10, 2, 5;
+bin_int_test '%' , 11, 2, 1;
+bin_int_test '+' ,  1, 2, 3;
+bin_int_test '-' , 11, 2, 9;
+bin_int_test '<' ,  1, 2, 1;
+bin_int_test '>' , 44, 2, 1;
+bin_int_test '<=', 44, 2, "";
+bin_int_test '>=',  1, 2, "";
+bin_int_test '==',  1, 2, "";
+bin_int_test '!=',  1, 2, 1;
 bin_int_test '<=>', 1, 2, -1;
 tie $var, "main", 1, 4;
 cmp_ok(atan2($var, $var), '<', .3, 'retval of atan2 $var, $var');

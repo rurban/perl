@@ -1690,6 +1690,7 @@ Perl_op_lvalue(pTHX_ OP *o, I32 type)
 	break;
 
     case OP_KEYS:
+    case OP_RKEYS:
 	if (type != OP_SASSIGN)
 	    goto nomod;
 	goto lvalue_func;
@@ -7434,9 +7435,15 @@ Perl_ck_fun(pTHX_ OP *o)
 		    kid->op_sibling = sibl;
 		    *tokid = kid;
 		}
-		else if (kid->op_type != OP_RV2AV && kid->op_type != OP_PADAV)
+		else if (kid->op_type == OP_CONST
+		      && (  !SvROK(cSVOPx_sv(kid)) 
+		         || SvTYPE(SvRV(cSVOPx_sv(kid))) != SVt_PVAV  )
+		        )
 		    bad_type(numargs, "array", PL_op_desc[type], kid);
-		op_lvalue(kid, type);
+		/* Defer checks to run-time if we have a scalar arg */
+		if (kid->op_type == OP_RV2AV || kid->op_type == OP_PADAV)
+		    op_lvalue(kid, type);
+		else scalar(kid);
 		break;
 	    case OA_HVREF:
 		if (kid->op_type == OP_CONST &&
@@ -8277,7 +8284,7 @@ Perl_ck_shift(pTHX_ OP *o)
 	return newUNOP(type, 0, scalar(argop));
 #endif
     }
-    return scalar(modkids(ck_push(o), type));
+    return scalar(ck_fun(o));
 }
 
 OP *
@@ -9143,48 +9150,6 @@ Perl_ck_substr(pTHX_ OP *o)
 }
 
 OP *
-Perl_ck_push(pTHX_ OP *o)
-{
-    dVAR;
-    OP *kid = o->op_flags & OPf_KIDS ? cLISTOPo->op_first : NULL;
-    OP *cursor = NULL;
-    OP *proxy = NULL;
-
-    PERL_ARGS_ASSERT_CK_PUSH;
-
-    /* If 1st kid is pushmark (e.g. push, unshift, splice), we need 2nd kid */
-    if (kid) {
-	cursor = kid->op_type == OP_PUSHMARK ? kid->op_sibling : kid;
-    }
-
-    /* If not array or array deref, wrap it with an array deref.
-     * For OP_CONST, we only wrap arrayrefs */
-    if (cursor) {
-	if ( (    cursor->op_type != OP_PADAV
-	       && cursor->op_type != OP_RV2AV
-	       && cursor->op_type != OP_CONST
-	     )
-	     ||
-	     (    cursor->op_type == OP_CONST
-	       && SvROK(cSVOPx_sv(cursor))
-	       && SvTYPE(SvRV(cSVOPx_sv(cursor))) == SVt_PVAV
-	     )
-	) {
-	    proxy = newAVREF(cursor);
-	    if ( cursor == kid ) {
-		cLISTOPx(o)->op_first = proxy;
-	    }
-	    else {
-		cLISTOPx(kid)->op_sibling = proxy;
-	    }
-	    cLISTOPx(proxy)->op_sibling = cLISTOPx(cursor)->op_sibling;
-	    cLISTOPx(cursor)->op_sibling = NULL;
-	}
-    }
-    return ck_fun(o);
-}
-
-OP *
 Perl_ck_each(pTHX_ OP *o)
 {
     dVAR;
@@ -9207,11 +9172,16 @@ Perl_ck_each(pTHX_ OP *o)
 		CHANGE_TYPE(o, array_type);
 		break;
 	    case OP_CONST:
-		if (kid->op_private == OPpCONST_BARE)
-		    /* we let ck_fun treat as hash */
+		if (kid->op_private == OPpCONST_BARE
+		 || !SvROK(cSVOPx_sv(kid))
+		 || (  SvTYPE(SvRV(cSVOPx_sv(kid))) != SVt_PVAV
+		    && SvTYPE(SvRV(cSVOPx_sv(kid))) != SVt_PVHV  )
+		   )
+		    /* we let ck_fun handle it */
 		    break;
 	    default:
 		CHANGE_TYPE(o, ref_type);
+		scalar(kid);
 	}
     }
     /* if treating as a reference, defer additional checks to runtime */

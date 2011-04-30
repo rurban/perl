@@ -959,8 +959,17 @@ Perl_gv_stashpvn(pTHX_ const char *name, U32 namelen, I32 flags)
     if (!tmpgv)
 	return NULL;
     stash = GvHV(tmpgv);
+    if (!(flags & ~GV_NOADD_MASK) && !stash) return NULL;
+    if (!HvNAME_get(stash)) {
+	hv_name_set(stash, name, namelen, 0);
+	
+	/* FIXME: This is a repeat of logic in gv_fetchpvn_flags */
+	/* If the containing stash has multiple effective
+	   names, see that this one gets them, too. */
+	if (HvAUX(GvSTASH(tmpgv))->xhv_name_count)
+	    mro_package_moved(stash, NULL, tmpgv, 1);
+    }
     assert(stash);
-    assert(HvNAME_get(stash));
     return stash;
 }
 
@@ -1065,7 +1074,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		return NULL;
 
 	    len = name_cursor - name;
-	    if (len > 0) {
+	    if (name_cursor > nambeg) { /* Skip for initial :: or ' */
 		const char *key;
 		if (*name_cursor == ':') {
 		    key = name;
@@ -1108,8 +1117,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 
 	    if (*name_cursor == ':')
 		name_cursor++;
-	    name_cursor++;
-	    name = name_cursor;
+	    name = name_cursor+1;
 	    if (name == name_end)
 		return gv
 		    ? gv : MUTABLE_GV(*hv_fetchs(PL_defstash, "main::", TRUE));
@@ -2076,9 +2084,21 @@ Perl_try_amagic_bin(pTHX_ int method, int flags) {
 	    return TRUE;
 	}
     }
+    if(left==right && SvGMAGICAL(left)) {
+	SV * const left = sv_newmortal();
+	*(sp-1) = left;
+	/* Print the uninitialized warning now, so it includes the vari-
+	   able name. */
+	if (!SvOK(right)) {
+	    if (ckWARN(WARN_UNINITIALIZED)) report_uninit(right);
+	    sv_setsv_flags(left, &PL_sv_no, 0);
+	}
+	else sv_setsv_flags(left, right, 0);
+	SvGETMAGIC(right);
+    }
     if (flags & AMGf_numeric) {
-	if (SvROK(left))
-	    *(sp-1) = sv_2num(left);
+	if (SvROK(TOPm1s))
+	    *(sp-1) = sv_2num(TOPm1s);
 	if (SvROK(right))
 	    *sp     = sv_2num(right);
     }

@@ -2869,6 +2869,7 @@ dist/B-Lint/t/lint.t				See if B::Lint works
 dist/B-Lint/t/pluglib/B/Lint/Plugin/Test.pm	See if B::Lint works
 dist/constant/lib/constant.pm	For "use constant"
 dist/constant/t/constant.t	See if compile-time constants work
+dist/constant/t/utf8.t		Test Unicode constants under utf8 pragma
 dist/Cwd/Cwd.pm				Various cwd routines (getcwd, fastcwd, chdir)
 dist/Cwd/Cwd.xs				Cwd extension external subroutines
 dist/Cwd/lib/File/Spec/Cygwin.pm	portable operations on Cygwin file names
@@ -3009,6 +3010,7 @@ dist/IO/README			IO extension maintenance notice
 dist/IO/t/io_const.t		See if constants from IO work
 dist/IO/t/io_dir.t		See if directory-related methods from IO work
 dist/IO/t/io_dup.t		See if dup()-related methods from IO work
+dist/IO/t/io_file_export.t	Test IO::File exports
 dist/IO/t/io_file.t		See if binmode()-related methods on IO::File work
 dist/IO/t/io_linenum.t		See if I/O line numbers are tracked correctly
 dist/IO/t/io_multihomed.t	See if INET sockets work with multi-homed hosts
@@ -4683,6 +4685,7 @@ time64_config.h			64 bit clean time.h (configuration)
 time64.h			64 bit clean time.h (header)
 t/io/argv.t			See if ARGV stuff works
 t/io/binmode.t			See if binmode() works
+t/io/bom.t			See if scripts can start with a byte order mark
 t/io/crlf.t			See if :crlf works
 t/io/crlf_through.t		See if pipe passes data intact with :crlf
 t/io/data.t			See if DATA works
@@ -5022,6 +5025,7 @@ t/porting/test_bootstrap.t	Test that the instructions for test bootstrapping are
 t/README			Instructions for regression tests
 t/re/charset.t			See if regex modifiers like /d, /u work properly
 t/re/fold_grind.t		See if case folding works properly
+t/re/no_utf8_pm.t		Verify utf8.pm doesn't get loaded unless required
 t/re/overload.t		Test against string corruption in pattern matches on overloaded objects
 t/re/pat_advanced.t		See if advanced esoteric patterns work
 t/re/pat_advanced_thr.t		See if advanced esoteric patterns work in another thread

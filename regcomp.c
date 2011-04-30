@@ -730,15 +730,7 @@ S_cl_anything(const RExC_state_t *pRExC_state, struct regnode_charclass_class *c
 
     ANYOF_BITMAP_SETALL(cl);
     cl->flags = ANYOF_CLASS|ANYOF_EOS|ANYOF_UNICODE_ALL
-		|ANYOF_LOC_NONBITMAP_FOLD|ANYOF_NON_UTF8_LATIN1_ALL
-		    /* Even though no bitmap is in use here, we need to set
-		     * the flag below so an AND with a node that does have one
-		     * doesn't lose that one.  The flag should get cleared if
-		     * the other one doesn't; and the code in regexec.c is
-		     * structured so this being set when not needed does no
-		     * harm.  It seemed a little cleaner to set it here than do
-		     * a special case in cl_and() */
-		|ANYOF_NONBITMAP_NON_UTF8;
+		|ANYOF_LOC_NONBITMAP_FOLD|ANYOF_NON_UTF8_LATIN1_ALL;
 
     /* If any portion of the regex is to operate under locale rules,
      * initialization includes it.  The reason this isn't done for all regexes
@@ -841,6 +833,8 @@ S_cl_and(struct regnode_charclass_class *cl,
 	}
     }
     else {   /* and'd node is not inverted */
+	U8 outside_bitmap_but_not_utf8; /* Temp variable */
+
 	if (! ANYOF_NONBITMAP(and_with)) {
 
             /* Here 'and_with' doesn't match anything outside the bitmap
@@ -859,14 +853,18 @@ S_cl_and(struct regnode_charclass_class *cl,
 	    /* Here, 'and_with' does match something outside the bitmap, and cl
 	     * doesn't have a list of things to match outside the bitmap.  If
              * cl can match all code points above 255, the intersection will
-             * be those above-255 code points that 'and_with' matches.  There
-             * may be false positives from code points in 'and_with' that are
-             * outside the bitmap but below 256, but those get sorted out
-             * after the synthetic start class succeeds).  If cl can't match
-             * all Unicode code points, it means here that it can't match *
-             * anything outside the bitmap, so we leave the bitmap empty */
+             * be those above-255 code points that 'and_with' matches.  If cl
+             * can't match all Unicode code points, it means that it can't
+             * match anything outside the bitmap (since the 'if' that got us
+             * into this block tested for that), so we leave the bitmap empty.
+             */
 	    if (cl->flags & ANYOF_UNICODE_ALL) {
 		ARG_SET(cl, ARG(and_with));
+
+                /* and_with's ARG may match things that don't require UTF8.
+                 * And now cl's will too, in spite of this being an 'and'.  See
+                 * the comments below about the kludge */
+		cl->flags |= and_with->flags & ANYOF_NONBITMAP_NON_UTF8;
 	    }
 	}
 	else {
@@ -876,8 +874,33 @@ S_cl_and(struct regnode_charclass_class *cl,
 	}
 
 
-        /* Take the intersection of the two sets of flags */
+        /* Take the intersection of the two sets of flags.  However, the
+         * ANYOF_NONBITMAP_NON_UTF8 flag is treated as an 'or'.  This is a
+         * kludge around the fact that this flag is not treated like the others
+         * which are initialized in cl_anything().  The way the optimizer works
+         * is that the synthetic start class (SSC) is initialized to match
+         * anything, and then the first time a real node is encountered, its
+         * values are AND'd with the SSC's with the result being the values of
+         * the real node.  However, there are paths through the optimizer where
+         * the AND never gets called, so those initialized bits are set
+         * inappropriately, which is not usually a big deal, as they just cause
+         * false positives in the SSC, which will just mean a probably
+         * imperceptible slow down in execution.  However this bit has a
+         * higher false positive consequence in that it can cause utf8.pm,
+         * utf8_heavy.pl ... to be loaded when not necessary, which is a much
+         * bigger slowdown and also causes significant extra memory to be used.
+         * In order to prevent this, the code now takes a different tack.  The
+         * bit isn't set unless some part of the regular expression needs it,
+         * but once set it won't get cleared.  This means that these extra
+         * modules won't get loaded unless there was some path through the
+         * pattern that would have required them anyway, and  so any false
+         * positives that occur by not ANDing them out when they could be
+         * aren't as severe as they would be if we treated this bit like all
+         * the others */
+        outside_bitmap_but_not_utf8 = (cl->flags | and_with->flags)
+                                      & ANYOF_NONBITMAP_NON_UTF8;
 	cl->flags &= and_with->flags;
+	cl->flags |= outside_bitmap_but_not_utf8;
     }
 }
 
@@ -972,10 +995,10 @@ S_cl_or(const RExC_state_t *pRExC_state, struct regnode_charclass_class *cl, con
 		    cl->flags |= ANYOF_UNICODE_ALL;
 		}
 	    }
+	}
 
         /* Take the union */
 	cl->flags |= or_with->flags;
-	}
     }
 }
 
@@ -7047,7 +7070,7 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 	    {
                 U32 posflags = 0, negflags = 0;
 	        U32 *flagsp = &posflags;
-                bool has_charset_modifier = 0;
+                char has_charset_modifier = '\0';
 		regex_charset cs = (RExC_utf8 || RExC_uni_semantics)
 				    ? REGEX_UNICODE_CHARSET
 				    : REGEX_DEPENDS_CHARSET;
@@ -7059,40 +7082,51 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
                     switch (*RExC_parse) {
 	            CASE_STD_PMMOD_FLAGS_PARSE_SET(flagsp);
                     case LOCALE_PAT_MOD:
-                        if (has_charset_modifier || flagsp == &negflags) {
-                            goto fail_modifiers;
+                        if (has_charset_modifier) {
+			    goto excess_modifier;
+			}
+			else if (flagsp == &negflags) {
+                            goto neg_modifier;
                         }
 			cs = REGEX_LOCALE_CHARSET;
-                        has_charset_modifier = 1;
+                        has_charset_modifier = LOCALE_PAT_MOD;
 			RExC_contains_locale = 1;
                         break;
                     case UNICODE_PAT_MOD:
-                        if (has_charset_modifier || flagsp == &negflags) {
-                            goto fail_modifiers;
+                        if (has_charset_modifier) {
+			    goto excess_modifier;
+			}
+			else if (flagsp == &negflags) {
+                            goto neg_modifier;
                         }
 			cs = REGEX_UNICODE_CHARSET;
-                        has_charset_modifier = 1;
+                        has_charset_modifier = UNICODE_PAT_MOD;
                         break;
                     case ASCII_RESTRICT_PAT_MOD:
-                        if (has_charset_modifier || flagsp == &negflags) {
-                            goto fail_modifiers;
+                        if (flagsp == &negflags) {
+                            goto neg_modifier;
                         }
-			if (*(RExC_parse + 1) == ASCII_RESTRICT_PAT_MOD) {
+                        if (has_charset_modifier) {
+                            if (cs != REGEX_ASCII_RESTRICTED_CHARSET) {
+                                goto excess_modifier;
+                            }
 			    /* Doubled modifier implies more restricted */
-			    cs = REGEX_ASCII_MORE_RESTRICTED_CHARSET;
-			    RExC_parse++;
-			}
+                            cs = REGEX_ASCII_MORE_RESTRICTED_CHARSET;
+                        }
 			else {
 			    cs = REGEX_ASCII_RESTRICTED_CHARSET;
 			}
-                        has_charset_modifier = 1;
+                        has_charset_modifier = ASCII_RESTRICT_PAT_MOD;
                         break;
                     case DEPENDS_PAT_MOD:
-                        if (has_use_defaults
-                            || has_charset_modifier
-                            || flagsp == &negflags)
-                        {
+                        if (has_use_defaults) {
                             goto fail_modifiers;
+			}
+			else if (flagsp == &negflags) {
+                            goto neg_modifier;
+			}
+			else if (has_charset_modifier) {
+			    goto excess_modifier;
                         }
 
 			/* The dual charset means unicode semantics if the
@@ -7102,8 +7136,24 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
 			cs = (RExC_utf8 || RExC_uni_semantics)
 			     ? REGEX_UNICODE_CHARSET
 			     : REGEX_DEPENDS_CHARSET;
-                        has_charset_modifier = 1;
+                        has_charset_modifier = DEPENDS_PAT_MOD;
                         break;
+		    excess_modifier:
+			RExC_parse++;
+			if (has_charset_modifier == ASCII_RESTRICT_PAT_MOD) {
+			    vFAIL2("Regexp modifier \"%c\" may appear a maximum of twice", ASCII_RESTRICT_PAT_MOD);
+			}
+			else if (has_charset_modifier == *(RExC_parse - 1)) {
+			    vFAIL2("Regexp modifier \"%c\" may not appear twice", *(RExC_parse - 1));
+			}
+			else {
+			    vFAIL3("Regexp modifiers \"%c\" and \"%c\" are mutually exclusive", has_charset_modifier, *(RExC_parse - 1));
+			}
+			/*NOTREACHED*/
+		    neg_modifier:
+			RExC_parse++;
+			vFAIL2("Regexp modifier \"%c\" may not appear after the \"-\"", *(RExC_parse - 1));
+			/*NOTREACHED*/
                     case ONCE_PAT_MOD: /* 'o' */
                     case GLOBAL_PAT_MOD: /* 'g' */
 			if (SIZE_ONLY && ckWARN(WARN_REGEXP)) {
@@ -9403,21 +9453,17 @@ S_set_regclass_bit_fold(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8
 	    case 'I': case 'i':
 	    case 'L': case 'l':
 	    case 'T': case 't':
-		/* These all are targets of multi-character folds, which can
-		 * occur with only non-Latin1 characters in the fold, so they
-		 * can match if the target string isn't UTF-8 */
-		ANYOF_FLAGS(node) |= ANYOF_NONBITMAP_NON_UTF8;
-		break;
 	    case 'A': case 'a':
 	    case 'H': case 'h':
 	    case 'J': case 'j':
 	    case 'N': case 'n':
 	    case 'W': case 'w':
 	    case 'Y': case 'y':
-		/* These all are targets of multi-character folds, which occur
-		 * only with a non-Latin1 character as part of the fold, so
-		 * they can't match unless the target string is in UTF-8, so no
-		 * action here is necessary */
+                /* These all are targets of multi-character folds from code
+                 * points that require UTF8 to express, so they can't match
+                 * unless the target string is in UTF-8, so no action here is
+                 * necessary, as regexec.c properly handles the general case
+                 * for UTF-8 matching */
 		break;
 	    default:
 		/* Use deprecated warning to increase the chances of this
