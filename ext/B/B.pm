@@ -1028,7 +1028,7 @@ underlying C "inheritance":
             /     \
         B::LOOP B::PMOP
 
-Access methods correspond to the underlying C structre field names,
+Access methods correspond to the underlying C structure field names,
 with the leading "class indication" prefix (C<"op_">) removed.
 
 =head2 B::OP Methods
