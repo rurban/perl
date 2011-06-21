@@ -197,6 +197,13 @@ PP(pp_sassign)
 	}
 
     }
+    if (
+      SvTEMP(right) && !SvSMAGICAL(right) && SvREFCNT(right) == 1 &&
+      (!isGV_with_GP(right) || SvFAKE(right)) && ckWARN(WARN_MISC)
+    )
+	Perl_warner(aTHX_
+	    packWARN(WARN_MISC), "Useless assignment to a temporary"
+	);
     SvSetMagicSV(right, left);
     SETs(right);
     RETURN;
@@ -664,7 +671,7 @@ PP(pp_add)
 PP(pp_aelemfast)
 {
     dVAR; dSP;
-    AV * const av = PL_op->op_flags & OPf_SPECIAL
+    AV * const av = PL_op->op_type == OP_AELEMFAST_LEX
 	? MUTABLE_AV(PAD_SV(PL_op->op_targ)) : GvAVn(cGVOP_gv);
     const U32 lval = PL_op->op_flags & OPf_MOD;
     SV** const svp = av_fetch(av, PL_op->op_private, lval);
@@ -824,11 +831,14 @@ PP(pp_rv2av)
 	    SETs(sv);
 	    RETURN;
 	}
-	else if (LVRET) {
+	else if (PL_op->op_private & OPpMAYBE_LVSUB) {
+	  const I32 flags = is_lvalue_sub();
+	  if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	    if (gimme != G_ARRAY)
 		goto croak_cant_return;
 	    SETs(sv);
 	    RETURN;
+	  }
 	}
 	else if (PL_op->op_flags & OPf_MOD
 		&& PL_op->op_private & OPpLVAL_INTRO)
@@ -866,11 +876,14 @@ PP(pp_rv2av)
 		SETs(sv);
 		RETURN;
 	    }
-	    else if (LVRET) {
+	    else if (PL_op->op_private & OPpMAYBE_LVSUB) {
+	      const I32 flags = is_lvalue_sub();
+	      if (flags && !(flags & OPpENTERSUB_INARGS)) {
 		if (gimme != G_ARRAY)
 		    goto croak_cant_return;
 		SETs(sv);
 		RETURN;
+	      }
 	    }
 	}
     }
@@ -999,7 +1012,7 @@ PP(pp_aassign)
 	    || SvMAGICAL(sv)
 	    || ! (SvTYPE(sv) == SVt_PVAV || SvTYPE(sv) == SVt_PVHV)
 	    || (SvTYPE(sv) == SVt_PVAV && AvFILL((AV*)sv) != -1)
-	    || (SvTYPE(sv) == SVt_PVHV && HvKEYS((HV*)sv) != 0)
+	    || (SvTYPE(sv) == SVt_PVHV && HvUSEDKEYS((HV*)sv) != 0)
 	    )
     ) {
 	EXTEND_MORTAL(lastrelem - firstrelem + 1);
@@ -1105,6 +1118,14 @@ PP(pp_aassign)
 		break;
 	    }
 	    if (relem <= lastrelem) {
+		if (
+		  SvTEMP(sv) && !SvSMAGICAL(sv) && SvREFCNT(sv) == 1 &&
+		  (!isGV_with_GP(sv) || SvFAKE(sv)) && ckWARN(WARN_MISC)
+		)
+		    Perl_warner(aTHX_
+		       packWARN(WARN_MISC),
+		      "Useless assignment to a temporary"
+		    );
 		sv_setsv(sv, *relem);
 		*(relem++) = sv;
 	    }
@@ -1383,22 +1404,18 @@ PP(pp_match)
 	     && !SvROK(TARG))	/* Cannot trust since INTUIT cannot guess ^ */
 	    goto yup;
     }
-    if (CALLREGEXEC(rx, (char*)s, (char *)strend, (char*)truebase,
-                    minmatch, TARG, NUM2PTR(void*, gpos), r_flags))
-    {
-	PL_curpm = pm;
-	if (dynpm->op_pmflags & PMf_ONCE) {
-#ifdef USE_ITHREADS
-            SvREADONLY_on(PL_regex_pad[dynpm->op_pmoffset]);
-#else
-	    dynpm->op_pmflags |= PMf_USED;
-#endif
-        }
-	goto gotcha;
-    }
-    else
+    if (!CALLREGEXEC(rx, (char*)s, (char *)strend, (char*)truebase,
+		     minmatch, TARG, NUM2PTR(void*, gpos), r_flags))
 	goto ret_no;
-    /*NOTREACHED*/
+
+    PL_curpm = pm;
+    if (dynpm->op_pmflags & PMf_ONCE) {
+#ifdef USE_ITHREADS
+	SvREADONLY_on(PL_regex_pad[dynpm->op_pmoffset]);
+#else
+	dynpm->op_pmflags |= PMf_USED;
+#endif
+    }
 
   gotcha:
     if (rxtainted)
@@ -2420,8 +2437,7 @@ PP(pp_subst)
 #endif
 	if (RX_MATCH_TAINTED(rx)) /* run time pattern taint, eg locale */
 	    rxtainted |= SUBST_TAINT_PAT;
-	dstr = newSVpvn_utf8(m, s-m, DO_UTF8(TARG));
-	SAVEFREESV(dstr);
+	dstr = newSVpvn_flags(m, s-m, SVs_TEMP | (DO_UTF8(TARG) ? SVf_UTF8 : 0));
 	PL_curpm = pm;
 	if (!c) {
 	    register PERL_CONTEXT *cx;
@@ -2580,22 +2596,25 @@ PP(pp_leavesub)
     I32 gimme;
     register PERL_CONTEXT *cx;
     SV *sv;
+    bool gmagic;
 
     if (CxMULTICALL(&cxstack[cxstack_ix]))
 	return 0;
 
     POPBLOCK(cx,newpm);
     cxstack_ix++; /* temporarily protect top context */
+    gmagic = CxLVAL(cx) & OPpENTERSUB_DEREF;
 
     TAINT_NOT;
     if (gimme == G_SCALAR) {
 	MARK = newsp + 1;
 	if (MARK <= SP) {
 	    if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		if (SvTEMP(TOPs)) {
+		if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
 		    *MARK = SvREFCNT_inc(TOPs);
 		    FREETMPS;
 		    sv_2mortal(*MARK);
+		    if (gmagic) SvGETMAGIC(*MARK);
 		}
 		else {
 		    sv = SvREFCNT_inc(TOPs);	/* FREETMPS could clobber it */
@@ -2604,8 +2623,12 @@ PP(pp_leavesub)
 		    SvREFCNT_dec(sv);
 		}
 	    }
+	    else if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+		*MARK = TOPs;
+		if (gmagic) SvGETMAGIC(TOPs);
+	    }
 	    else
-		*MARK = SvTEMP(TOPs) ? TOPs : sv_mortalcopy(TOPs);
+		*MARK = sv_mortalcopy(TOPs);
 	}
 	else {
 	    MEXTEND(MARK, 0);
@@ -2615,7 +2638,7 @@ PP(pp_leavesub)
     }
     else if (gimme == G_ARRAY) {
 	for (MARK = newsp + 1; MARK <= SP; MARK++) {
-	    if (!SvTEMP(*MARK)) {
+	    if (!SvTEMP(*MARK) || SvREFCNT(*MARK) != 1) {
 		*MARK = sv_mortalcopy(*MARK);
 		TAINT_NOT;	/* Each item is independent */
 	    }
@@ -2658,41 +2681,18 @@ PP(pp_leavesublv)
 	 * subroutines too, so be backward compatible:
 	 * cannot report errors.  */
 
-	/* Scalar context *is* possible, on the LHS of -> only,
-	 * as in f()->meth().  But this is not an lvalue. */
+	/* Scalar context *is* possible, on the LHS of ->. */
 	if (gimme == G_SCALAR)
-	    goto temporise;
+	    goto rvalue;
 	if (gimme == G_ARRAY) {
 	    mark = newsp + 1;
-	    /* We want an array here, but padav will have left us an arrayref for an lvalue,
-	     * so we need to expand it */
-	    if(SvTYPE(*mark) == SVt_PVAV) {
-		AV *const av = MUTABLE_AV(*mark);
-		const I32 maxarg = AvFILL(av) + 1;
-		(void)POPs; /* get rid of the array ref */
-		EXTEND(SP, maxarg);
-		if (SvRMAGICAL(av)) {
-		    U32 i;
-		    for (i=0; i < (U32)maxarg; i++) {
-			SV ** const svp = av_fetch(av, i, FALSE);
-			SP[i+1] = svp
-			    ? SvGMAGICAL(*svp) ? (mg_get(*svp), *svp) : *svp
-			    : &PL_sv_undef;
-		    }
-		}
-		else {
-		    Copy(AvARRAY(av), SP+1, maxarg, SV*);
-		}
-		SP += maxarg;
-		PUTBACK;
-	    }
 	    if (!CvLVALUE(cx->blk_sub.cv))
-		goto temporise_array;
+		goto rvalue_array;
 	    EXTEND_MORTAL(SP - newsp);
 	    for (mark = newsp + 1; mark <= SP; mark++) {
 		if (SvTEMP(*mark))
 		    NOOP;
-		else if (SvFLAGS(*mark) & (SVs_PADTMP | SVf_READONLY))
+		else if (SvFLAGS(*mark) & SVs_PADTMP)
 		    *mark = sv_mortalcopy(*mark);
 		else {
 		    /* Can be a localized value subject to deletion. */
@@ -2718,9 +2718,7 @@ PP(pp_leavesublv)
 	    MARK = newsp + 1;
 	    EXTEND_MORTAL(1);
 	    if (MARK == SP) {
-		/* Temporaries are bad unless they happen to have set magic
-		 * attached, such as the elements of a tied hash or array */
-		if ((SvFLAGS(TOPs) & (SVs_TEMP | SVs_PADTMP) ||
+		if ((SvPADTMP(TOPs) ||
 		     (SvFLAGS(TOPs) & (SVf_READONLY | SVf_FAKE))
 		       == SVf_READONLY
 		    ) &&
@@ -2740,14 +2738,22 @@ PP(pp_leavesublv)
 		    SvREFCNT_inc_void(*mark);
 		}
 	    }
-	    else {			/* Should not happen? */
+	    else {
+		/* sub:lvalue{} will take us here.
+		   Presumably the case of a non-empty array never happens.
+		 */
 		LEAVE;
 		cxstack_ix--;
 		POPSUB(cx,sv);
 		PL_curpm = newpm;
 		LEAVESUB(sv);
-		DIE(aTHX_ "%s returned from lvalue subroutine in scalar context",
-		    (MARK > SP ? "Empty array" : "Array"));
+		DIE(aTHX_ "%s",
+		    (MARK > SP
+		      ? "Can't return undef from lvalue subroutine"
+		      : "Array returned from lvalue subroutine in scalar "
+		        "context"
+		    )
+		);
 	    }
 	    SP = MARK;
 	}
@@ -2755,7 +2761,11 @@ PP(pp_leavesublv)
 	    EXTEND_MORTAL(SP - newsp);
 	    for (mark = newsp + 1; mark <= SP; mark++) {
 		if (*mark != &PL_sv_undef
-		    && SvFLAGS(*mark) & (SVs_TEMP | SVs_PADTMP | SVf_READONLY)) {
+		    && (SvPADTMP(*mark)
+		       || (SvFLAGS(*mark) & (SVf_READONLY|SVf_FAKE))
+		             == SVf_READONLY
+		       )
+		) {
 		    /* Might be flattened array after $#array =  */
 		    PUTBACK;
 		    LEAVE;
@@ -2776,24 +2786,18 @@ PP(pp_leavesublv)
     }
     else {
 	if (gimme == G_SCALAR) {
-	  temporise:
+	  rvalue:
 	    MARK = newsp + 1;
 	    if (MARK <= SP) {
 		if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		    if (SvTEMP(TOPs)) {
 			*MARK = SvREFCNT_inc(TOPs);
 			FREETMPS;
 			sv_2mortal(*MARK);
-		    }
-		    else {
-			sv = SvREFCNT_inc(TOPs); /* FREETMPS could clobber it */
-			FREETMPS;
-			*MARK = sv_mortalcopy(sv);
-			SvREFCNT_dec(sv);
-		    }
 		}
 		else
-		    *MARK = SvTEMP(TOPs) ? TOPs : sv_mortalcopy(TOPs);
+		    *MARK = SvTEMP(TOPs)
+		              ? TOPs
+		              : sv_2mortal(SvREFCNT_inc_simple_NN(TOPs));
 	    }
 	    else {
 		MEXTEND(MARK, 0);
@@ -2802,15 +2806,31 @@ PP(pp_leavesublv)
 	    SP = MARK;
 	}
 	else if (gimme == G_ARRAY) {
-	  temporise_array:
+	  rvalue_array:
 	    for (MARK = newsp + 1; MARK <= SP; MARK++) {
-		if (!SvTEMP(*MARK)) {
-		    *MARK = sv_mortalcopy(*MARK);
-		    TAINT_NOT;  /* Each item is independent */
-		}
+		if (!SvTEMP(*MARK))
+		    *MARK = sv_2mortal(SvREFCNT_inc_simple_NN(*MARK));
 	    }
 	}
     }
+
+    if (CxLVAL(cx) & OPpENTERSUB_DEREF) {
+	assert(gimme == G_SCALAR);
+	SvGETMAGIC(TOPs);
+	if (!SvOK(TOPs)) {
+	    U8 deref_type;
+	    if (cx->blk_sub.retop->op_type == OP_RV2SV)
+		deref_type = OPpDEREF_SV;
+	    else if (cx->blk_sub.retop->op_type == OP_RV2AV)
+		deref_type = OPpDEREF_AV;
+	    else {
+		assert(cx->blk_sub.retop->op_type == OP_RV2HV);
+		deref_type = OPpDEREF_HV;
+	    }
+	    vivify_ref(TOPs, deref_type);
+	}
+    }
+
     PUTBACK;
 
     LEAVE;

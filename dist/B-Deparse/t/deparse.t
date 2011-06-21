@@ -170,6 +170,18 @@ eval <<EOFCODE and test($x);
    1
 EOFCODE
 
+# Exotic sub declarations
+$a = `$^X $path "-MO=Deparse" -e "sub ::::{}sub ::::::{}" 2>&1`;
+$a =~ s/-e syntax OK\n//g;
+is($a, <<'EOCODG', "sub :::: and sub ::::::");
+sub :::: {
+    
+}
+sub :::::: {
+    
+}
+EOCODG
+
 # [perl #33752]
 {
   my $code = <<"EOCODE";
@@ -182,6 +194,19 @@ EOCODE
   s/$ \n//x for $deparsed, $code;
   is $deparsed, $code, 'our $funny_Unicode_chars';
 }
+
+# [perl #62500]
+$a =
+  `$^X $path "-MO=Deparse" -e "BEGIN{*CORE::GLOBAL::require=sub{1}}" 2>&1`;
+$a =~ s/-e syntax OK\n//g;
+is($a, <<'EOCODF', "CORE::GLOBAL::require override causing panick");
+sub BEGIN {
+    *CORE::GLOBAL::require = sub {
+        1;
+    }
+    ;
+}
+EOCODF
 
 done_testing();
 
@@ -367,6 +392,7 @@ my $f = sub {
 # variables as method names
 my $bar;
 'Foo'->$bar('orz');
+'Foo'->$bar('orz') = 'a stranger stranger than before';
 ####
 # constants as method names
 'Foo'->bar('orz');
@@ -694,3 +720,38 @@ tr/a/b/r;
 ####
 # y/uni/code/
 tr/\x{345}/\x{370}/;
+####
+# [perl #90898]
+<a,>;
+####
+# [perl #91008]
+each $@;
+keys $~;
+values $!;
+####
+# readpipe with complex expression
+readpipe $a + $b;
+####
+# aelemfast
+$b::a[0] = 1;
+####
+# aelemfast for a lexical
+my @a;
+$a[0] = 1;
+####
+# feature features without feature
+BEGIN {
+    delete $^H{'feature_say'};
+    delete $^H{'feature_state'};
+    delete $^H{'feature_switch'};
+}
+CORE::state $x;
+CORE::say $x;
+CORE::given ($x) {
+    CORE::when (3) {
+        continue;
+    }
+    CORE::default {
+        CORE::break;
+    }
+}

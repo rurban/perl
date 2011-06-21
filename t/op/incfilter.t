@@ -13,7 +13,7 @@ use strict;
 use Config;
 use Filter::Util::Call;
 
-plan(tests => 143);
+plan(tests => 144);
 
 unshift @INC, sub {
     no warnings 'uninitialized';
@@ -226,4 +226,12 @@ for (0 .. 1) {
     open $fh, "<",
 	\'like(__FILE__, qr/(?:GLOB|CODE)\(0x[0-9a-f]+\)/, "__FILE__ is valid");';
     do $fh or die;
+}
+
+# [perl #91880] $_ having the wrong refcount inside a
+{ #             filter sub
+    local @INC; local $|;
+    unshift @INC, sub { sub { undef *_; --$| }};
+    do "dah";
+    pass '$_ has the right refcount inside a filter sub';
 }

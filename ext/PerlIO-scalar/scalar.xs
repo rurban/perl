@@ -24,7 +24,8 @@ PerlIOScalar_pushed(pTHX_ PerlIO * f, const char *mode, SV * arg,
      */
     if (arg && SvOK(arg)) {
 	if (SvROK(arg)) {
-	    if (SvREADONLY(SvRV(arg)) && mode && *mode != 'r') {
+	    if (SvREADONLY(SvRV(arg)) && !SvIsCOW(SvRV(arg))
+	     && mode && *mode != 'r') {
 		if (ckWARN(WARN_LAYER))
 		    Perl_warner(aTHX_ packWARN(WARN_LAYER), "%s", PL_no_modify);
 		SETERRNO(EINVAL, SS_IVCHAN);
@@ -239,9 +240,13 @@ PerlIOScalar_get_cnt(pTHX_ PerlIO * f)
 {
     if (PerlIOBase(f)->flags & PERLIO_F_CANREAD) {
 	PerlIOScalar *s = PerlIOSelf(f, PerlIOScalar);
+	STRLEN len;
 	SvGETMAGIC(s->var);
-	if (SvCUR(s->var) > (STRLEN) s->posn)
-	    return SvCUR(s->var) - (STRLEN)s->posn;
+	if (isGV_with_GP(s->var))
+	    (void)SvPV(s->var,len);
+	else len = SvCUR(s->var);
+	if (len > (STRLEN) s->posn)
+	    return len - (STRLEN)s->posn;
 	else
 	    return 0;
     }
@@ -263,9 +268,12 @@ void
 PerlIOScalar_set_ptrcnt(pTHX_ PerlIO * f, STDCHAR * ptr, SSize_t cnt)
 {
     PerlIOScalar *s = PerlIOSelf(f, PerlIOScalar);
+    STRLEN len;
     PERL_UNUSED_ARG(ptr);
     SvGETMAGIC(s->var);
-    s->posn = SvCUR(s->var) - cnt;
+    if (isGV_with_GP(s->var)) (void)SvPV(s->var,len);
+    else len = SvCUR(s->var);
+    s->posn = len - cnt;
 }
 
 PerlIO *

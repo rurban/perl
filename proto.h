@@ -43,6 +43,18 @@ PERL_CALLCONV HV*	Perl__swash_to_invlist(pTHX_ SV* const swash)
 #define PERL_ARGS_ASSERT__SWASH_TO_INVLIST	\
 	assert(swash)
 
+PERL_CALLCONV UV	Perl__to_uni_fold_flags(pTHX_ UV c, U8 *p, STRLEN *lenp, U8 flags)
+			__attribute__nonnull__(pTHX_2)
+			__attribute__nonnull__(pTHX_3);
+#define PERL_ARGS_ASSERT__TO_UNI_FOLD_FLAGS	\
+	assert(p); assert(lenp)
+
+PERL_CALLCONV UV	Perl__to_utf8_fold_flags(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp, U8 flags)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT__TO_UTF8_FOLD_FLAGS	\
+	assert(p); assert(ustrp)
+
 PERL_CALLCONV PADOFFSET	Perl_allocmy(pTHX_ const char *const name, const STRLEN len, const U32 flags)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_ALLOCMY	\
@@ -4213,11 +4225,9 @@ PERL_CALLCONV OP *	Perl_tied_method(pTHX_ const char *const methname, SV **sp, S
 	assert(methname); assert(sp); assert(sv); assert(mg)
 
 PERL_CALLCONV void	Perl_tmps_grow(pTHX_ I32 n);
-PERL_CALLCONV UV	Perl_to_uni_fold(pTHX_ UV c, U8 *p, STRLEN *lenp)
+/* PERL_CALLCONV UV	Perl_to_uni_fold(pTHX_ UV c, U8 *p, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_2)
-			__attribute__nonnull__(pTHX_3);
-#define PERL_ARGS_ASSERT_TO_UNI_FOLD	\
-	assert(p); assert(lenp)
+			__attribute__nonnull__(pTHX_3); */
 
 PERL_CALLCONV UV	Perl_to_uni_lower(pTHX_ UV c, U8 *p, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_2)
@@ -4253,16 +4263,13 @@ PERL_CALLCONV UV	Perl_to_utf8_case(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp, S
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2)
 			__attribute__nonnull__(pTHX_4)
-			__attribute__nonnull__(pTHX_5)
-			__attribute__nonnull__(pTHX_6);
+			__attribute__nonnull__(pTHX_5);
 #define PERL_ARGS_ASSERT_TO_UTF8_CASE	\
-	assert(p); assert(ustrp); assert(swashp); assert(normal); assert(special)
+	assert(p); assert(ustrp); assert(swashp); assert(normal)
 
-PERL_CALLCONV UV	Perl_to_utf8_fold(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
+/* PERL_CALLCONV UV	Perl_to_utf8_fold(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
-			__attribute__nonnull__(pTHX_2);
-#define PERL_ARGS_ASSERT_TO_UTF8_FOLD	\
-	assert(p); assert(ustrp)
+			__attribute__nonnull__(pTHX_2); */
 
 PERL_CALLCONV UV	Perl_to_utf8_lower(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
@@ -5315,6 +5322,11 @@ STATIC struct xpvhv_aux*	S_hv_auxinit(HV *hv)
 	assert(hv)
 
 STATIC SV*	S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen, int k_flags, I32 d_flags, U32 hash);
+STATIC SV*	S_hv_free_ent_ret(pTHX_ HV *hv, HE *entryK)
+			__attribute__nonnull__(pTHX_1);
+#define PERL_ARGS_ASSERT_HV_FREE_ENT_RET	\
+	assert(hv)
+
 STATIC void	S_hv_magic_check(HV *hv, bool *needs_copy, bool *needs_store)
 			__attribute__nonnull__(1)
 			__attribute__nonnull__(2)
@@ -5358,6 +5370,14 @@ PERL_CALLCONV void	Perl_sv_kill_backrefs(pTHX_ SV *const sv, AV *const av)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_SV_KILL_BACKREFS	\
 	assert(sv)
+
+#endif
+#if defined(PERL_IN_HV_C) || defined(PERL_IN_SV_C)
+PERL_CALLCONV SV*	Perl_hfree_next_entry(pTHX_ HV *hv, STRLEN *indexp)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT_HFREE_NEXT_ENTRY	\
+	assert(hv); assert(indexp)
 
 #endif
 #if defined(PERL_IN_LOCALE_C)
@@ -5703,8 +5723,7 @@ STATIC OP*	S_dofindlabel(pTHX_ OP *o, const char *label, OP **opstack, OP **opli
 #define PERL_ARGS_ASSERT_DOFINDLABEL	\
 	assert(o); assert(label); assert(opstack); assert(oplimit)
 
-STATIC OP*	S_doparseform(pTHX_ SV *sv)
-			__attribute__warn_unused_result__
+STATIC MAGIC *	S_doparseform(pTHX_ SV *sv)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_DOPARSEFORM	\
 	assert(sv)
@@ -6041,12 +6060,6 @@ PERL_STATIC_INLINE UV	S_invlist_max(pTHX_ HV* const invlist)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_INVLIST_MAX	\
 	assert(invlist)
-
-PERL_STATIC_INLINE void	S_invlist_set_array(pTHX_ HV* const invlist, const UV* const array)
-			__attribute__nonnull__(pTHX_1)
-			__attribute__nonnull__(pTHX_2);
-#define PERL_ARGS_ASSERT_INVLIST_SET_ARRAY	\
-	assert(invlist); assert(array)
 
 PERL_STATIC_INLINE void	S_invlist_set_len(pTHX_ HV* const invlist, const UV len)
 			__attribute__nonnull__(pTHX_1);

@@ -175,6 +175,7 @@ cpan/CGI/t/carp.t			See if CGI::Carp works
 cpan/CGI/t/charset.t			See if CGI::Carp works
 cpan/CGI/t/checkbox_group.t		See if CGI.pm works
 cpan/CGI/t/cookie.t			See if CGI::Cookie works
+cpan/CGI/t/delete.t			See if CGI.pm works
 cpan/CGI/t/Dump.t			See if CGI->Dump works
 cpan/CGI/t/end_form.t			See if CGI.pm works
 cpan/CGI/t/form.t			See if CGI.pm works
@@ -197,6 +198,7 @@ cpan/CGI/t/start_end_asterisk.t		See if CGI.pm works
 cpan/CGI/t/start_end_end.t		See if CGI.pm works
 cpan/CGI/t/start_end_start.t		See if CGI.pm works
 cpan/CGI/t/switch.t			See if CGI::Switch still loads
+cpan/CGI/t/tmpdir.t			See if CGI.pm works
 cpan/CGI/t/unescapeHTML.t		See if CGI::unescapeHTML() works
 cpan/CGI/t/uploadInfo.t			See if CGI.pm works
 cpan/CGI/t/upload_post_text.txt		Test data for CGI.pm
@@ -345,6 +347,7 @@ cpan/CPAN-Meta/t/data-fail/META-1_2.yml
 cpan/CPAN-Meta/t/data-fail/META-1_3.yml
 cpan/CPAN-Meta/t/data-fail/META-1_4.yml
 cpan/CPAN-Meta/t/data-fail/META-2.json
+cpan/CPAN-Meta/t/data/gpl-1_4.yml
 cpan/CPAN-Meta/t/data/META-1_0.yml
 cpan/CPAN-Meta/t/data/META-1_1.yml
 cpan/CPAN-Meta/t/data/META-1_2.yml
@@ -510,28 +513,6 @@ cpan/DB_File/t/db-hash.t	See if DB_File works
 cpan/DB_File/t/db-recno.t	See if DB_File works
 cpan/DB_File/typemap		Berkeley DB extension interface types
 cpan/DB_File/version.c		Berkeley DB extension interface version check
-cpan/Devel-DProf/bin/dprofpp	Perl code profile post-processor
-cpan/Devel-DProf/DProf.pm	Perl code profiler
-cpan/Devel-DProf/dprof/test1_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test1_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test2_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test2_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test3_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test3_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test4_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test4_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test5_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test5_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test6_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test6_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test7_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test7_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/test8_t	Perl code profiler tests
-cpan/Devel-DProf/dprof/test8_v	Perl code profiler tests
-cpan/Devel-DProf/dprof/V.pm	Perl code profiler tests
-cpan/Devel-DProf/DProf.xs	Perl code profiler
-cpan/Devel-DProf/t/DProf.t	Perl code profiler
-cpan/Devel-DProf/Todo		Perl code profiler todo list
 cpan/Devel-PPPort/apicheck_c.PL		Devel::PPPort apicheck generator
 cpan/Devel-PPPort/Changes		Devel::PPPort changes
 cpan/Devel-PPPort/devel/buildperl.pl	Devel::PPPort perl version builder
@@ -1382,6 +1363,7 @@ cpan/JSON-PP/t/112_upgrade.t
 cpan/JSON-PP/t/113_overloaded_eq.t
 cpan/JSON-PP/t/114_decode_prefix.t
 cpan/JSON-PP/t/115_tie_ixhash.t
+cpan/JSON-PP/t/116_incr_parse_fixed.t
 cpan/JSON-PP/t/_unicode_handling.pm
 cpan/libnet/Changes		libnet
 cpan/libnet/Config.eg		libnet
@@ -2065,8 +2047,6 @@ cpan/Pod-Simple/t/xhtml01.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml05.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml10.t				Pod::Simple test file
 cpan/Pod-Simple/t/x_nixer.t				Pod::Simple test file
-cpan/Shell/Shell.pm		Make AUTOLOADed system() calls
-cpan/Shell/t/Shell.t		Tests for above
 cpan/Sys-Syslog/Changes			Changelog for Sys::Syslog
 cpan/Sys-Syslog/fallback/const-c.inc	Sys::Syslog constants fallback file
 cpan/Sys-Syslog/fallback/const-xs.inc	Sys::Syslog constants fallback file
@@ -2610,7 +2590,6 @@ cpan/Unicode-Collate/Collate/Locale/sk.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sl.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sq.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sv.pl			Unicode::Collate
-cpan/Unicode-Collate/Collate/Locale/sw.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/tn.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/to.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/tr.pl			Unicode::Collate
@@ -2642,6 +2621,7 @@ cpan/Unicode-Collate/t/contract.t		Unicode::Collate
 cpan/Unicode-Collate/t/default.t		Unicode::Collate
 cpan/Unicode-Collate/t/hangtype.t		Unicode::Collate
 cpan/Unicode-Collate/t/hangul.t			Unicode::Collate
+cpan/Unicode-Collate/t/iglevel2.t			Unicode::Collate
 cpan/Unicode-Collate/t/ignor.t			Unicode::Collate
 cpan/Unicode-Collate/t/illegalp.t		Unicode::Collate
 cpan/Unicode-Collate/t/illegal.t		Unicode::Collate
@@ -2716,6 +2696,7 @@ cpan/Unicode-Collate/t/overcjk0.t		Unicode::Collate
 cpan/Unicode-Collate/t/overcjk1.t		Unicode::Collate
 cpan/Unicode-Collate/t/override.t		Unicode::Collate
 cpan/Unicode-Collate/t/rearrang.t		Unicode::Collate
+cpan/Unicode-Collate/t/rewrite.t			Unicode::Collate
 cpan/Unicode-Collate/t/test.t			Unicode::Collate
 cpan/Unicode-Collate/t/trailwt.t		Unicode::Collate
 cpan/Unicode-Collate/t/variable.t		Unicode::Collate
@@ -2836,6 +2817,7 @@ dist/base/t/sigdie.t		See if base works with SIGDIE
 dist/base/t/version.t		See if base works with versions
 dist/base/t/warnings.t		See if base works with warnings
 dist/B-Deparse/Deparse.pm	Compiler Deparse backend
+dist/B-Deparse/t/core.t		See if B::Deparse knows when to use CORE::
 dist/B-Deparse/t/deparse.t	See if B::Deparse works
 dist/bignum/lib/bigint.pm		bigint
 dist/bignum/lib/bignum.pm		bignum
@@ -3098,6 +3080,7 @@ dist/Math-BigInt/t/req_mbfn.t		test: require Math::BigFloat; ->new();
 dist/Math-BigInt/t/req_mbfw.t		require Math::BigFloat; import ( with => );
 dist/Math-BigInt/t/require.t		Test if require Math::BigInt works
 dist/Math-BigInt/t/round.t		Test rounding with non-integer A and P
+dist/Math-BigInt/t/rt-16221.t		Tests for objectify() w/foreign objs
 dist/Math-BigInt/t/sub_ali.t		Tests for aliases in BigInt subclasses
 dist/Math-BigInt/t/sub_mbf.t		Empty subclass test of BigFloat
 dist/Math-BigInt/t/sub_mbi.t		Empty subclass test of BigInt
@@ -3448,10 +3431,10 @@ ext/I18N-Langinfo/Langinfo.pm	I18N::Langinfo
 ext/I18N-Langinfo/Langinfo.xs	I18N::Langinfo
 ext/I18N-Langinfo/Makefile.PL	I18N::Langinfo
 ext/I18N-Langinfo/t/Langinfo.t	See whether I18N::Langinfo works
-ext/IPC-Open2/lib/IPC/Open2.pm	Open a two-ended pipe
-ext/IPC-Open2/t/IPC-Open2.t	See if IPC::Open2 works
+ext/IPC-Open3/lib/IPC/Open2.pm	Open a two-ended pipe
 ext/IPC-Open3/lib/IPC/Open3.pm	Open a three-ended pipe
 ext/IPC-Open3/t/fd.t		See if IPC::Open3 works w/ file descriptors
+ext/IPC-Open3/t/IPC-Open2.t	See if IPC::Open2 works
 ext/IPC-Open3/t/IPC-Open3.t	See if IPC::Open3 works
 ext/mro/Changes			mro extension
 ext/mro/mro.pm			mro extension
@@ -3645,6 +3628,7 @@ ext/XS-APItest/t/labelconst.aux	auxiliary file for label test
 ext/XS-APItest/t/labelconst.t	test recursive descent label parsing
 ext/XS-APItest/t/loopblock.t	test recursive descent block parsing
 ext/XS-APItest/t/looprest.t	test recursive descent statement-sequence parsing
+ext/XS-APItest/t/lvalue.t	Test XS lvalue functions
 ext/XS-APItest/t/magic_chain.t	test low-level MAGIC chain handling
 ext/XS-APItest/t/magic.t	test attaching, finding, and removing magic
 ext/XS-APItest/t/Markers.pm	Helper for ./blockhooks.t
@@ -3956,8 +3940,11 @@ lib/overload.pm			Module for overloading perl operators
 lib/overload.t			See if operator overloading works
 lib/perl5db.pl			Perl debugging routines
 lib/perl5db.t			Tests for the Perl debugger
+lib/perl5db/t/breakpoint-bug	Test script used by perl5db.t
 lib/perl5db/t/eval-line-bug	Tests for the Perl debugger
+lib/perl5db/t/filename-line-breakpoint		Tests for the Perl debugger
 lib/perl5db/t/lvalue-bug	Tests for the Perl debugger
+lib/perl5db/t/MyModule.pm	Tests for the Perl debugger
 lib/perl5db/t/proxy-constants	Tests for the Perl debugger
 lib/perl5db/t/rt-61222		Tests for the Perl debugger
 lib/perl5db/t/rt-66110		Tests for the Perl debugger
@@ -4118,6 +4105,9 @@ metaconfig.SH			Control file for the metaconfig process
 META.yml			Distribution meta-data in YAML
 mg.c				Magic code
 mg.h				Magic header
+mg_names.c			Generated magic names used by dump.c
+mg_raw.h			Generated magic data used by generate_uudmap.c
+mg_vtable.h			Generated magic vtable data
 minimod.pl			Writes lib/ExtUtils/Miniperl.pm
 miniperlmain.c			Basic perl w/o dynamic loading or extensions
 mkppport			A script that distributes ppport.h
@@ -4307,6 +4297,7 @@ pod/perl5120delta.pod		Perl changes in version 5.12.0
 pod/perl5121delta.pod		Perl changes in version 5.12.1
 pod/perl5122delta.pod		Perl changes in version 5.12.2
 pod/perl5123delta.pod		Perl changes in version 5.12.3
+pod/perl5124delta.pod		Perl changes in version 5.12.4
 pod/perl5130delta.pod		Perl changes in version 5.13.0
 pod/perl51310delta.pod		Perl changes in version 5.13.10
 pod/perl51311delta.pod		Perl changes in version 5.13.11
@@ -4319,6 +4310,7 @@ pod/perl5136delta.pod		Perl changes in version 5.13.6
 pod/perl5137delta.pod		Perl changes in version 5.13.7
 pod/perl5138delta.pod		Perl changes in version 5.13.8
 pod/perl5139delta.pod		Perl changes in version 5.13.9
+pod/perl5140delta.pod		Perl changes in version 5.14.0
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl570delta.pod		Perl changes in version 5.7.0
@@ -4384,7 +4376,7 @@ pod/perlhack.pod		Perl hackers guide
 pod/perlhacktips.pod		Tips for Perl core C code hacking
 pod/perlhacktut.pod		Walk through the creation of a simple C code patch
 pod/perlhist.pod		Perl history records
-pod/perlinterp.pod		Overview of the Perl intepreter source and how it works
+pod/perlinterp.pod		Overview of the Perl interpreter source and how it works
 pod/perlintro.pod		Perl introduction for beginners
 pod/perliol.pod			C API for Perl's implementation of IO in Layers
 pod/perlipc.pod			Perl interprocess communication
@@ -4486,6 +4478,7 @@ Porting/Maintainers.pl		Information about maintainers
 Porting/Maintainers.pm		Library to pretty print info in Maintainers.pl
 Porting/make_dot_patch.pl	Make a .patch file from a git WD
 Porting/makemeta		Create the top-level META.yml
+Porting/make_modlib_cpan.pl	Generates the list of CPAN sites in perlmodlib
 Porting/makerel			Release making utility
 Porting/make_snapshot.pl	Make a tgz snapshot of our tree with a .patch file in it
 Porting/manicheck		Check against MANIFEST
@@ -4565,6 +4558,7 @@ regcomp.h			Private declarations for above
 regcomp.sym			Data for regnodes.h
 regen/embed.pl			Produces {embed,embedvar,proto}.h, global.sym
 regen/keywords.pl		Program to write keywords.h
+regen/mg_vtable.pl		generate mg_vtable.h
 regen/mk_PL_charclass.pl	Populate the PL_charclass table
 regen/opcode.pl			Opcode header generator
 regen/opcodes			Opcode data
@@ -4891,6 +4885,7 @@ t/op/grep.t			See if grep() and map() work
 t/op/groups.t			See if $( works
 t/op/gv.t			See if typeglobs work
 t/op/hashassign.t		See if hash assignments work
+t/op/hash-rt85026.t		See if hash iteration/deletion works
 t/op/hash.t			See if the complexity attackers are repelled
 t/op/hashwarn.t			See if warnings for bad hash assignments work
 t/op/inccode.t			See if coderefs work in @INC
@@ -5017,6 +5012,7 @@ t/porting/dual-life.t		Check that dual-life bins are in utils/
 t/porting/exec-bit.t		Check that exec-bit bins are identified
 t/porting/filenames.t		Check the MANIFEST for filename portability.
 t/porting/FindExt.t		Test win32/FindExt.pm
+t/porting/known_pod_issues.dat	Data file for porting/podcheck.t
 t/porting/maintainers.t		Test that Porting/Maintainers.pl is up to date
 t/porting/manifest.t		Test that this MANIFEST file is well formed
 t/porting/podcheck.t		Test the POD of shipped modules is well formed
@@ -5137,7 +5133,6 @@ utils/cpan2dist.PL		the cpan2dist utility
 utils/cpan.PL			easily interact with CPAN from the command line
 utils/cpanp.PL			the cpanp utility
 utils/cpanp-run-perl.PL		the cpanp-run-perl utility
-utils/dprofpp.PL		Perl code profile post-processor
 utils/enc2xs.PL			Encode module generator
 utils/h2ph.PL			A thing to turn C .h files into perl .ph files
 utils/h2xs.PL			Program to make .xs files from C header files

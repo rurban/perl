@@ -164,6 +164,16 @@ EOT
 	;;
 esac
 
+: is Cwd static or dynamic
+static_cwd='define'
+list_util_dep='$(PERL_EXE)'
+for f in $dynamic_ext; do
+   case $f in
+       Cwd) static_cwd='undef' ;;
+       List/Util) list_util_dep=lib/auto/List/Util/Util.$dlext
+   esac
+done
+
 : Prepare dependency lists for Makefile.
 dynamic_list=' '
 dynamic_ext_re="lib/auto/re/re.$dlext"
@@ -176,16 +186,10 @@ for f in $dynamic_ext; do
 
     : Parallel makes reveal that we have some interdependencies
     case $f in
-	Encode) extra_dep="$extra_dep
-$this_target: lib/auto/Cwd/Cwd.$dlext" ;;
 	Math/BigInt/FastCalc|Devel/NYTProf) extra_dep="$extra_dep
-$this_target: lib/auto/List/Util/Util.$dlext" ;;
+$this_target: $list_util_dep" ;;
 	Unicode/Normalize) extra_dep="$extra_dep
 $this_target: uni.data" ;;
-	Text/ParseWords) extra_dep="$extra_dep
-$this_target: lib/auto/Scalar/Util.$dlext" ;;
-	SDBM_File) extra_dep="$extra_dep
-$this_target: lib/auto/Cwd/Cwd.$dlext" ;;
     esac
 done
 
@@ -462,7 +466,7 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5140delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5150delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 
 Icwd = -Idist/Cwd -Idist/Cwd/lib
@@ -555,10 +559,14 @@ perl$(OBJ_EXT): git_version.h
 # Making utilities and translators require Cwd.  If we have dynamic
 # loading, we only need miniperl and Cwd.$dlext.  If we have static
 # loading, we need to build perl first.
-case "$usedl" in
-define)
+case "$usedl$static_cwd" in
+defineundef)
     util_deps='$(MINIPERL_EXE) $(CONFIGPM) lib/auto/Cwd/Cwd$(DLSUFFIX) FORCE'
      x2p_deps='$(MINIPERL_EXE) $(CONFIGPM) $(dynamic_ext) FORCE'
+    ;;
+definedefine)
+    util_deps='$(PERL_EXE) $(CONFIGPM) FORCE'
+     x2p_deps='$(PERL_EXE) $(CONFIGPM) $(dynamic_ext) FORCE'
     ;;
 *)  util_deps='$(PERL_EXE) $(CONFIGPM) FORCE'
      x2p_deps='$(PERL_EXE) $(CONFIGPM) FORCE'
@@ -571,6 +579,9 @@ translators:	$x2p_deps
 
 x2p/s2p: $x2p_deps
 	cd x2p; \$(LDLIBPTH) \$(MAKE) s2p
+
+x2p/find2perl: $x2p_deps
+	cd x2p; \$(LDLIBPTH) \$(MAKE) find2perl
 
 utilities:	$util_deps
 	@echo " "; echo "	Making utilities"; cd utils; \$(LDLIBPTH) \$(MAKE) all
@@ -619,12 +630,14 @@ done
 
 $spitshell >>$Makefile <<'!NO!SUBS!'
 
-globals$(OBJ_EXT): uudmap.h bitcount.h
+globals$(OBJ_EXT): uudmap.h bitcount.h mg_data.h
 
-uudmap.h: bitcount.h
+uudmap.h mg_data.h: bitcount.h
 
 bitcount.h: generate_uudmap$(HOST_EXE_EXT)
-	$(RUN) ./generate_uudmap$(HOST_EXE_EXT) uudmap.h bitcount.h
+	$(RUN) ./generate_uudmap$(HOST_EXE_EXT) uudmap.h bitcount.h mg_data.h
+
+generate_uudmap$(OBJ_EXT): mg_raw.h
 
 generate_uudmap$(HOST_EXE_EXT): generate_uudmap$(OBJ_EXT)
 	$(CC) -o generate_uudmap$(EXE_EXT) $(LDFLAGS) generate_uudmap$(OBJ_EXT) $(libs)
@@ -1020,8 +1033,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5140delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5140delta.pod
+pod/perl5150delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5150delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1213,7 +1226,7 @@ veryclean:	_verycleaner _mopup _clobber
 
 # Do not 'make _mopup' directly.
 _mopup:
-	rm -f *$(OBJ_EXT) *$(LIB_EXT) all perlmain.c opmini.c perlmini.c uudmap.h generate_uudmap$(EXE_EXT) bitcount.h
+	rm -f *$(OBJ_EXT) *$(LIB_EXT) all perlmain.c opmini.c perlmini.c uudmap.h generate_uudmap$(EXE_EXT) bitcount.h mg_data.h
 	-rmdir .depending
 	-@test -f extra.pods && rm -f `cat extra.pods`
 	-@test -f vms/README_vms.pod && rm -f vms/README_vms.pod
@@ -1259,7 +1272,8 @@ _cleaner1:
 _cleaner2:
 	-rm -f core.*perl.*.? t/core.perl.*.? .?*.c
 	rm -f core *perl.core t/core t/*perl.core core.* t/core.*
-	rm -f t/misctmp* t/forktmp* t/tmp* t/c t/$(PERL_EXE) t/rantests
+	rm -f t/$(PERL_EXE) t/rantests
+	rm -rf t/tmp*
 	rm -f so_locations $(LIBPERL_NONSHR) $(MINIPERL_NONSHR)
 	rm -rf $(addedbyconf)
 	rm -f $(FIRSTMAKEFILE) $(FIRSTMAKEFILE).old makefile.old
@@ -1370,7 +1384,9 @@ _test:
 
 test_prep_pre: preplibrary utilities $(nonxs_ext)
 
-test_prep: test_prep_pre $(MINIPERL_EXE) $(unidatafiles) $(PERL_EXE) $(dynamic_ext) $(TEST_PERL_DLL) runtests x2p/s2p $(generated_pods)
+test_prep: test_prep_pre $(MINIPERL_EXE) $(unidatafiles) $(PERL_EXE) \
+	$(dynamic_ext) $(TEST_PERL_DLL) runtests x2p/s2p x2p/find2perl \
+	$(generated_pods)
 	cd t && (rm -f $(PERL_EXE); $(LNS) ../$(PERL_EXE) $(PERL_EXE))
 
 test_prep_reonly: $(MINIPERL_EXE) $(PERL_EXE) $(dynamic_ext_re) $(TEST_PERL_DLL)

@@ -7,7 +7,7 @@
 #	Windows SDK 64-bit compiler and tools
 #
 # This is set up to build a perl.exe that runs off a shared library
-# (perl514.dll).  Also makes individual DLLs for the XS extensions.
+# (perl515.dll).  Also makes individual DLLs for the XS extensions.
 #
 
 ##
@@ -39,7 +39,7 @@ INST_TOP	*= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	*= \5.14.0
+#INST_VER	*= \5.15.0
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -170,7 +170,7 @@ CCTYPE		*= GCC
 # set this to additionally provide a statically linked perl-static.exe.
 # Note that dynamic loading will not work with this perl, so you must
 # include required modules statically using the STATIC_EXT or ALL_STATIC
-# variables below. A static library perl514s.lib will also be created.
+# variables below. A static library perl515s.lib will also be created.
 # Ordinary perl.exe is not affected by this option.
 #
 #BUILD_STATIC	*= define
@@ -198,22 +198,6 @@ CCHOME		*= C:\MinGW
 .ELSE
 CCHOME		*= $(MSVCDIR)
 .ENDIF
-
-#
-# If building with gcc-4.x.x (or x86_64-w64-mingw32-gcc-4.x.x), then
-# uncomment  the following assignment to GCC_4XX, make sure that CCHOME
-# has been set correctly above, and uncomment the appropriate
-# GCCHELPERDLL line.
-# The name of the dll can change, depending upon which vendor has supplied
-# your 4.x.x compiler, and upon the values of "x".
-# (The dll will be in your mingw/bin folder, so check there if you're
-# unsure about the correct name.)
-# Without these corrections, the op/taint.t test script will fail.
-#
-#GCC_4XX		*= define
-#GCCHELPERDLL	*= $(CCHOME)\bin\libgcc_s_sjlj-1.dll
-#GCCHELPERDLL	*= $(CCHOME)\bin\libgcc_s_dw2-1.dll
-#GCCHELPERDLL	*= $(CCHOME)\bin\libgcc_s_1.dll
 
 #
 # uncomment this if you are using x86_64-w64-mingw32 cross-compiler
@@ -750,7 +734,6 @@ GLOBBAT		= bin\perlglob.bat
 UTILS		=			\
 		..\utils\h2ph		\
 		..\utils\splain		\
-		..\utils\dprofpp	\
 		..\utils\perlbug	\
 		..\utils\pl2pm 		\
 		..\utils\c2ph		\
@@ -803,8 +786,8 @@ CFGH_TMPL	= config_H.gc64nox
 CFGSH_TMPL	= config.gc
 CFGH_TMPL	= config_H.gc
 .ENDIF
-PERLIMPLIB	= ..\libperl514$(a)
-PERLSTATICLIB	= ..\libperl514s$(a)
+PERLIMPLIB	= ..\libperl515$(a)
+PERLSTATICLIB	= ..\libperl515s$(a)
 
 .ELSE
 
@@ -820,9 +803,9 @@ CFGH_TMPL	= config_H.vc
 
 # makedef.pl must be updated if this changes, and this should normally
 # only change when there is an incompatible revision of the public API.
-PERLIMPLIB	*= ..\perl514$(a)
-PERLSTATICLIB	*= ..\perl514s$(a)
-PERLDLL		= ..\perl514.dll
+PERLIMPLIB	*= ..\perl515$(a)
+PERLSTATICLIB	*= ..\perl515s$(a)
+PERLDLL		= ..\perl515.dll
 
 XCOPY		= xcopy /f /r /i /d /y
 RCOPY		= xcopy /f /r /i /e /d /y
@@ -937,6 +920,7 @@ CORE_H		= $(CORE_NOCFG_H) .\config.h ..\git_version.h
 
 UUDMAP_H	= ..\uudmap.h
 BITCOUNT_H	= ..\bitcount.h
+MG_DATA_H	= ..\mg_data.h
 
 MICROCORE_OBJ	= $(MICROCORE_SRC:db:+$(o))
 CORE_OBJ	= $(MICROCORE_OBJ) $(EXTRACORE_SRC:db:+$(o))
@@ -1308,12 +1292,14 @@ $(X2P) : $(MINIPERL) $(X2P_OBJ) Extensions
 	$(EMBED_EXE_MANI)
 .ENDIF
 
-$(MINIDIR)\globals$(o) : $(UUDMAP_H) $(BITCOUNT_H)
+$(MINIDIR)\globals$(o) : $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
 
-$(UUDMAP_H) : $(BITCOUNT_H)
+$(UUDMAP_H) $(MG_DATA_H) : $(BITCOUNT_H)
 
 $(BITCOUNT_H) : $(GENUUDMAP)
-	$(GENUUDMAP) $(UUDMAP_H) $(BITCOUNT_H)
+	$(GENUUDMAP) $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
+
+$(GENUUDMAP_OBJ) : ..\mg_raw.h
 
 $(GENUUDMAP) : $(GENUUDMAP_OBJ)
 .IF "$(CCTYPE)" == "BORLAND"
@@ -1456,7 +1442,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5140delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5150delta.pod
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
 	$(PERLEXE) $(ICWD) ..\pod\perlmodlib.pl -q
@@ -1548,7 +1534,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5140delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5150delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
@@ -1560,7 +1546,7 @@ distclean: realclean
 	    perltw.pod perluniprops.pod perluts.pod perlvmesa.pod \
 	    perlvos.pod perlwin32.pod
 	-cd ..\utils && del /f h2ph splain perlbug pl2pm c2ph pstruct h2xs \
-	    perldoc perlivp dprofpp libnetcfg enc2xs piconv cpan *.bat \
+	    perldoc perlivp libnetcfg enc2xs piconv cpan *.bat \
 	    xsubpp instmodsh json_pp prove ptar ptardiff ptargrep cpanp-run-perl cpanp cpan2dist shasum corelist config_data
 	-cd ..\x2p && del /f find2perl s2p psed *.bat
 	-del /f ..\config.sh perlmain.c dlutils.c config.h.new \
@@ -1623,10 +1609,19 @@ test-prep : all utils ..\pod\perltoc.pod
 .ELSE
 	$(XCOPY) $(GLOBEXE) ..\t\$(NULL)
 .ENDIF
+
 .IF "$(CCTYPE)" == "GCC"
-.IF "$(GCC_4XX)" == "define"
-	$(XCOPY) $(GCCHELPERDLL) ..\t\$(NULL)
-.ENDIF
+# If building with gcc versions 4.x.x or greater, then
+# the GCC helper DLL will also need copied to the test directory.
+# The name of the dll can change, depending upon which vendor has supplied
+# your compiler, and upon the values of "x".
+# libstdc++-6.dll is copied if it exists as it, too, may then be needed.
+# Without this copying, the op/taint.t test script will fail.
+	if exist $(CCHOME)\bin\libgcc_s_sjlj-1.dll $(XCOPY) $(CCHOME)\bin\libgcc_s_sjlj-1.dll ..\t\$(NULL)
+	if exist $(CCHOME)\bin\libgcc_s_dw2-1.dll $(XCOPY) $(CCHOME)\bin\libgcc_s_dw2-1.dll ..\t\$(NULL)
+	if exist $(CCHOME)\bin\libgcc_s_1.dll $(XCOPY) $(CCHOME)\bin\libgcc_s_1.dll ..\t\$(NULL)
+	if exist $(CCHOME)\bin\w64gcc_s_sjlj-1.dll $(XCOPY) $(CCHOME)\bin\w64gcc_s_sjlj-1.dll ..\t\$(NULL)
+	if exist $(CCHOME)\bin\libstdc++-6.dll $(XCOPY) $(CCHOME)\bin\libstdc++-6.dll ..\t\$(NULL)
 .ENDIF
 
 test : $(RIGHTMAKE) test-prep
@@ -1676,7 +1671,7 @@ _clean :
 	-@erase $(PERLSTATICLIB)
 	-@erase $(PERLDLL)
 	-@erase $(CORE_OBJ)
-	-@erase $(GENUUDMAP) $(GENUUDMAP_OBJ) $(UUDMAP_H) $(BITCOUNT_H)
+	-@erase $(GENUUDMAP) $(GENUUDMAP_OBJ) $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
 	-if exist $(MINIDIR) rmdir /s /q $(MINIDIR)
 	-if exist $(UNIDATADIR1) rmdir /s /q $(UNIDATADIR1)
 	-if exist $(UNIDATADIR2) rmdir /s /q $(UNIDATADIR2)

@@ -194,7 +194,7 @@ foreach my $value (\&foo, \$scalar, \@array, \%hash) {
 sub PVBM () { 'foo' }
 { my $dummy = index 'foo', PVBM }
 
-ok !defined(attributes::get(\PVBM)), 
+ok !defined(eval 'attributes::get(\PVBM)'), 
     'PVBMs don\'t segfault attributes::get';
 
 {
@@ -320,6 +320,16 @@ foreach my $test (@tests) {
   foo(); foo();
   package main;
   is $x_values, '00', 'state with attributes';
+}
+
+{
+  package ningnangnong;
+  sub MODIFY_SCALAR_ATTRIBUTES{}
+  sub MODIFY_ARRAY_ATTRIBUTES{  }
+  sub MODIFY_HASH_ATTRIBUTES{    }
+  my ($cows, @go, %bong) : teapots = qw[ jibber jabber joo ];
+  ::is $cows, 'jibber', 'list assignment to scalar with attrs';
+  ::is "@go", 'jabber joo', 'list assignment to array with attrs';
 }
 
 done_testing();

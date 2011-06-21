@@ -635,7 +635,7 @@ struct block_format {
 #define PUSHSUB(cx)							\
 	PUSHSUB_BASE(cx)						\
 	cx->blk_u16 = PL_op->op_private &				\
-	                      (OPpLVAL_INTRO|OPpENTERSUB_INARGS);
+	              (OPpLVAL_INTRO|OPpENTERSUB_INARGS|OPpENTERSUB_DEREF);
 
 /* variant for use by OP_DBSTATE, where op_private holds hint bits */
 #define PUSHSUB_DB(cx)							\
@@ -1174,18 +1174,18 @@ typedef struct stackinfo PERL_SI;
 =head1 Multicall Functions
 
 =for apidoc Ams||dMULTICALL
-Declare local variables for a multicall. See L<perlcall/Lightweight Callbacks>.
+Declare local variables for a multicall. See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 
 =for apidoc Ams||PUSH_MULTICALL
 Opening bracket for a lightweight callback.
-See L<perlcall/Lightweight Callbacks>.
+See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 
 =for apidoc Ams||MULTICALL
-Make a lightweight callback. See L<perlcall/Lightweight Callbacks>.
+Make a lightweight callback. See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 
 =for apidoc Ams||POP_MULTICALL
 Closing bracket for a lightweight callback.
-See L<perlcall/Lightweight Callbacks>.
+See L<perlcall/LIGHTWEIGHT CALLBACKS>.
 
 =cut
 */

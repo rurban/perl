@@ -26,7 +26,7 @@ conversions.
 
 To limit the number of decimal places in your numbers, you can use the
 C<printf> or C<sprintf> function.  See
-L<perlop/"Floating Point Arithmetic"> for more details.
+L<perlop/"Floating-point Arithmetic"> for more details.
 
 	printf "%.2f", 10/3;
 
@@ -2482,7 +2482,7 @@ required work for you.
 (contributed by brian d foy)
 
 The trick to this problem is avoiding accidental autovivification. If 
-you want to check three keys deep, you might naïvely try this:
+you want to check three keys deep, you might naE<0xEF>vely try this:
 
 	my %hash;
 	if( exists $hash{key1}{key2}{key3} ) {

@@ -925,29 +925,6 @@ fileno FOO; tie @a, "FOO"
 EXPECT
 Can't locate object method "TIEARRAY" via package "FOO" at - line 5.
 ########
-
-# Deprecation warnings for tie $handle
-
-use warnings 'deprecated';
-$SIG{__WARN__} = sub { $w = shift };
-$handle = *foo;
-eval { tie $handle, "" };
-print $w =~ /^Use of tie on a handle without \* is deprecated/
-  ? "ok tie\n" : "$w\n";
-$handle = *bar;
-tied $handle;
-print $w =~ /^Use of tied on a handle without \* is deprecated/
-  ? "ok tied\n" : "$w\n";
-$handle = *baz;
-untie $handle;
-print $w =~ /^Use of untie on a handle without \* is deprecated/
-  ? "ok untie\n" : "$w\n";
-
-EXPECT
-ok tie
-ok tied
-ok untie
-########
 #
 # STORE freeing tie'd AV
 sub TIEARRAY  { bless [] }
@@ -1014,3 +991,84 @@ print "ok\n";
 
 EXPECT
 ok
+########
+#
+# Localising a tied COW scalar should not make it read-only.
+
+sub TIESCALAR { bless [] }
+sub FETCH { __PACKAGE__ }
+sub STORE {}
+tie $x, "";
+"$x";
+{
+    local $x;
+    $x = 3;
+}
+print "ok\n";
+EXPECT
+ok
+########
+
+# tied() should still work on tied scalars after glob assignment
+sub TIESCALAR {bless[]}
+sub FETCH {*foo}
+sub f::TIEHANDLE{bless[],f}
+tie *foo, "f";
+tie $rin, "";
+[$rin]; # call FETCH
+print ref tied $rin, "\n";
+print ref tied *$rin, "\n";
+EXPECT
+main
+f
+########
+
+# (un)tie $glob_copy vs (un)tie *$glob_copy
+sub TIESCALAR { print "TIESCALAR\n"; bless [] }
+sub TIEHANDLE{ print "TIEHANDLE\n"; bless [] }
+sub FETCH { print "never called\n" }
+$f = *foo;
+tie *$f, "";
+tie $f, "";
+untie $f;
+print "ok 1\n" if !tied $f;
+() = $f; # should not call FETCH
+untie *$f;
+print "ok 2\n" if !tied *foo;
+EXPECT
+TIEHANDLE
+TIESCALAR
+ok 1
+ok 2
+########
+
+# RT #8611 mustn't goto outside the magic stack
+sub TIESCALAR { warn "tiescalar\n"; bless [] }
+sub FETCH { warn "fetch()\n"; goto FOO; }
+tie $f, "";
+warn "before fetch\n";
+my $a = "$f";
+warn "before FOO\n";
+FOO:
+warn "after FOO\n";
+EXPECT
+tiescalar
+before fetch
+fetch()
+Can't find label FOO at - line 4.
+########
+
+# RT #8611 mustn't goto outside the magic stack
+sub TIEHANDLE { warn "tiehandle\n"; bless [] }
+sub PRINT { warn "print()\n"; goto FOO; }
+tie *F, "";
+warn "before print\n";
+print F "abc";
+warn "before FOO\n";
+FOO:
+warn "after FOO\n";
+EXPECT
+tiehandle
+before print
+print()
+Can't find label FOO at - line 4.

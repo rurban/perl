@@ -2,9 +2,49 @@ package charnames;
 use strict;
 use warnings;
 use File::Spec;
-our $VERSION = '1.18';
+our $VERSION = '1.22';
 
 use bytes ();          # for $bytes::hint_bits
+
+# Translate between Unicode character names and their code points.
+#
+# The official names with their code points are stored in a table in
+# lib/unicore/Name.pl which is read in as a large string (almost 3/4 Mb in
+# Unicode 6.0).  Each code point/name combination is separated by a \n in the
+# string.  (Some of the CJK and the Hangul syllable names are determined
+# instead algorithmically via subroutines also stored in Name.pl).  Because of
+# the large size of this table, it isn't converted into hashes for faster
+# lookup.
+#
+# But, user defined aliases are stored in their own hashes, as are Perl
+# extensions to the official names.  These are checked first before looking at
+# the official table.
+#
+# Basically, the table is grepped for the input code point (viacode()) or
+# name (the other functions), and the corresponding value on the same line is
+# returned.  The grepping is done by turning the input into a regular
+# expression.  Thus, the same table does double duty, used by both name and
+# code point lookup.  (If we were to have hashes, we would need two, one for
+# each lookup direction.)
+#
+# For loose name matching, the logical thing would be to have a table
+# with all the ignorable characters squeezed out, and then grep it with the
+# similiarly-squeezed input name.  (And this is in fact how the lookups are
+# done with the small Perl extension hashes.)  But since we need to be able to
+# go from code point to official name, the original table would still need to
+# exist.  Due to the large size of the table, it was decided to not read
+# another very large string into memory for a second table.  Instead, the
+# regular expression of the input name is modified to have optional spaces and
+# dashes between characters.  For example, in strict matching, the regular
+# expression would be:
+#   qr/\tDIGIT ONE$/m
+# Under loose matching, the blank would be squeezed out, and the re would be:
+#   qr/\tD[- ]?I[- ]?G[- ]?I[- ]?T[- ]?O[- ]?N[- ]?E$/m
+# which matches a blank or dash between any characters in the official table.
+#
+# This is also how script lookup is done.  Basically the re looks like
+#   qr/ (?:LATIN|GREEK|CYRILLIC) (?:SMALL )?LETTER $name/
+# where $name is the loose or strict regex for the remainder of the name.
 
 # The hashes are stored as utf8 strings.  This makes it easier to deal with
 # sequences.  I (khw) also tried making Name.pl utf8, but it slowed things
@@ -13,7 +53,7 @@ use bytes ();          # for $bytes::hint_bits
 # it alone, but since that is harder for a human to parse, I left it as-is.
 
 my %system_aliases = (
-    # Icky 3.2 names with parentheses.
+    # Synonyms for the icky 3.2 names that have parentheses.
     'LINE FEED'             => pack("U", 0x0A), # LINE FEED (LF)
     'FORM FEED'             => pack("U", 0x0C), # FORM FEED (FF)
     'CARRIAGE RETURN'       => pack("U", 0x0D), # CARRIAGE RETURN (CR)
@@ -71,7 +111,7 @@ my %system_aliases = (
     'VTS'           => pack("U", 0x8A), # LINE TABULATION SET
     'PLD'           => pack("U", 0x8B), # PARTIAL LINE FORWARD
     'PLU'           => pack("U", 0x8C), # PARTIAL LINE BACKWARD
-    'RI '           => pack("U", 0x8D), # REVERSE LINE FEED
+    'RI'            => pack("U", 0x8D), # REVERSE LINE FEED
     'SS2'           => pack("U", 0x8E), # SINGLE SHIFT TWO
     'SS3'           => pack("U", 0x8F), # SINGLE SHIFT THREE
     'DCS'           => pack("U", 0x90), # DEVICE CONTROL STRING
@@ -79,15 +119,15 @@ my %system_aliases = (
     'PU2'           => pack("U", 0x92), # PRIVATE USE TWO
     'STS'           => pack("U", 0x93), # SET TRANSMIT STATE
     'CCH'           => pack("U", 0x94), # CANCEL CHARACTER
-    'MW '           => pack("U", 0x95), # MESSAGE WAITING
+    'MW'            => pack("U", 0x95), # MESSAGE WAITING
     'SPA'           => pack("U", 0x96), # START OF GUARDED AREA
     'EPA'           => pack("U", 0x97), # END OF GUARDED AREA
     'SOS'           => pack("U", 0x98), # START OF STRING
     'SCI'           => pack("U", 0x9A), # SINGLE CHARACTER INTRODUCER
     'CSI'           => pack("U", 0x9B), # CONTROL SEQUENCE INTRODUCER
-    'ST '           => pack("U", 0x9C), # STRING TERMINATOR
+    'ST'            => pack("U", 0x9C), # STRING TERMINATOR
     'OSC'           => pack("U", 0x9D), # OPERATING SYSTEM COMMAND
-    'PM '           => pack("U", 0x9E), # PRIVACY MESSAGE
+    'PM'            => pack("U", 0x9E), # PRIVACY MESSAGE
     'APC'           => pack("U", 0x9F), # APPLICATION PROGRAM COMMAND
 
     # There are no names for these in the Unicode standard; perhaps should be
@@ -386,6 +426,25 @@ my %system_aliases = (
     'ZWSP'  => pack("U", 0x200B), # ZERO WIDTH SPACE
 );
 
+# These are the aliases above that differ under :loose and :full matching
+# because the :full versions have blanks or hyphens in them.
+my %loose_system_aliases = (
+    'LINEFEED'                         => pack("U", 0x0A),
+    'FORMFEED'                         => pack("U", 0x0C),
+    'CARRIAGERETURN'                   => pack("U", 0x0D),
+    'NEXTLINE'                         => pack("U", 0x85),
+    'SINGLESHIFT2'                     => pack("U", 0x8E),
+    'SINGLESHIFT3'                     => pack("U", 0x8F),
+    'PRIVATEUSE1'                      => pack("U", 0x91),
+    'PRIVATEUSE2'                      => pack("U", 0x92),
+    'STARTOFPROTECTEDAREA'             => pack("U", 0x96),
+    'ENDOFPROTECTEDAREA'               => pack("U", 0x97),
+    'PADDINGCHARACTER'                 => pack("U", 0x80),
+    'HIGHOCTETPRESET'                  => pack("U", 0x81),
+    'SINGLEGRAPHICCHARACTERINTRODUCER' => pack("U", 0x99),
+    'BYTEORDERMARK'                    => pack("U", 0xFEFF),
+);
+
 my %deprecated_aliases = (
     # Pre-3.2 compatibility (only for the first 256 characters).
     # Use of these gives deprecated message.
@@ -405,6 +464,26 @@ my %deprecated_aliases = (
     # Unicode 6.0 co-opted this for U+1F514, so deprecate it for now.
     'BELL'                    => pack("U", 0x07),
 );
+
+my %loose_deprecated_aliases = (
+    'HORIZONTALTABULATION'                  => pack("U", 0x09),
+    'VERTICALTABULATION'                    => pack("U", 0x0B),
+    'FILESEPARATOR'                         => pack("U", 0x1C),
+    'GROUPSEPARATOR'                        => pack("U", 0x1D),
+    'RECORDSEPARATOR'                       => pack("U", 0x1E),
+    'UNITSEPARATOR'                         => pack("U", 0x1F),
+    'HORIZONTALTABULATIONSET'               => pack("U", 0x88),
+    'HORIZONTALTABULATIONWITHJUSTIFICATION' => pack("U", 0x89),
+    'PARTIALLINEDOWN'                       => pack("U", 0x8B),
+    'PARTIALLINEUP'                         => pack("U", 0x8C),
+    'VERTICALTABULATIONSET'                 => pack("U", 0x8A),
+    'REVERSEINDEX'                          => pack("U", 0x8D),
+);
+
+# These are special cased in :loose matching, differing only in a medial
+# hyphen
+my $HANGUL_JUNGSEONG_O_E_utf8 = pack("U", 0x1180);
+my $HANGUL_JUNGSEONG_OE_utf8 = pack("U", 0x116C);
 
 
 my $txt;  # The table of official character names
@@ -435,6 +514,12 @@ my %full_names_cache; # Holds already-looked-up names, so don't have to
 # being a hash for a script named in a 'use charnames' statement.  I
 # decided not to do that for now, just because it's added complication,
 # and because I'm just trying to maintain parity, not extend it.
+
+# Like %full_names_cache, but for use when :loose is in effect.  There needs
+# to be two caches because :loose may not be in effect for a scope, and a
+# loose name could inappropriately be returned when only exact matching is
+# called for.
+my %loose_names_cache;
 
 # Designed so that test decimal first, and then hex.  Leading zeros
 # imply non-decimal, as do non-[0-9]
@@ -468,7 +553,7 @@ sub alias (@) # Set up a single alias
       $value = CORE::hex $1;
     }
     if ($value =~ $decimal_qr) {
-        no warnings 'utf8'; # Allow even illegal characters
+        no warnings qw(non_unicode surrogate nonchar); # Allow any non-malformed
         $^H{charnames_ord_aliases}{$name} = pack("U", $value);
 
         # Use a canonical form.
@@ -524,6 +609,7 @@ my %dummy_H = (
                 charnames_stringified_ords => "",
                 charnames_scripts => "",
                 charnames_full => 1,
+                charnames_loose => 0,
                 charnames_short => 0,
               );
 
@@ -553,7 +639,8 @@ sub lookup_name ($$$) {
     # If we didn't import anything (which happens with 'use charnames ()',
     # substitute a dummy structure.
     $hints_ref = \%dummy_H if ! defined $hints_ref
-                              || ! defined $hints_ref->{charnames_full};
+                              || (! defined $hints_ref->{charnames_full}
+                                  && ! defined $hints_ref->{charnames_loose});
 
     # At runtime, but currently not at compile time, $^H gets
     # stringified, so un-stringify back to the original data structures.
@@ -567,8 +654,13 @@ sub lookup_name ($$$) {
                                       $hints_ref->{charnames_stringified_ords};
     $^H{charnames_scripts} = $hints_ref->{charnames_scripts};
     $^H{charnames_full} = $hints_ref->{charnames_full};
+    $^H{charnames_loose} = $hints_ref->{charnames_loose};
     $^H{charnames_short} = $hints_ref->{charnames_short};
   }
+
+  my $loose = $^H{charnames_loose};
+  my $lookup_name;  # Input name suitably modified for grepping for in the
+                    # table
 
   # User alias should be checked first or else can't override ours, and if we
   # were to add any, could conflict with theirs.
@@ -577,26 +669,83 @@ sub lookup_name ($$$) {
   }
   elsif (exists $^H{charnames_name_aliases}{$name}) {
     $name = $^H{charnames_name_aliases}{$name};
-    $save_input = $name;  # Cache the result for any error message
+    $save_input = $lookup_name = $name;  # Cache the result for any error
+                                         # message
+    # The aliases are documented to not match loosely, so change loose match
+    # into full.
+    if ($loose) {
+      $loose = 0;
+      $^H{charnames_full} = 1;
+    }
   }
-  elsif (exists $system_aliases{$name}) {
-    $utf8 = $system_aliases{$name};
-  }
-  elsif (exists $deprecated_aliases{$name}) {
-    require warnings;
-    warnings::warnif('deprecated', "Unicode character name \"$name\" is deprecated, use \"" . viacode(ord $deprecated_aliases{$name}) . "\" instead");
-    $utf8 = $deprecated_aliases{$name};
+  else {
+
+    # Here, not a user alias.  That means that loose matching may be in
+    # effect; will have to modify the input name.
+    $lookup_name = $name;
+    if ($loose) {
+      $lookup_name = uc $lookup_name;
+
+      # Squeeze out all underscores
+      $lookup_name =~ s/_//g;
+
+      # Remove all medial hyphens
+      $lookup_name =~ s/ (?<= \S  ) - (?= \S  )//gx;
+
+      # Squeeze out all spaces
+      $lookup_name =~ s/\s//g;
+    }
+
+    # Here, $lookup_name has been modified as necessary for looking in the
+    # hashes.  Check the system alias files next.  Most of these aliases are
+    # the same for both strict and loose matching.  To save space, the ones
+    # which differ are in their own separate hash, which is checked if loose
+    # matching is selected and the regular match fails.  To save time, the
+    # loose hashes could be expanded to include all aliases, and there would
+    # only have to be one check.  But if someone specifies :loose, they are
+    # interested in convenience over speed, and the time for this second check
+    # is miniscule compared to the rest of the routine.
+    if (exists $system_aliases{$lookup_name}) {
+      $utf8 = $system_aliases{$lookup_name};
+    }
+    elsif ($loose && exists $loose_system_aliases{$lookup_name}) {
+      $utf8 = $loose_system_aliases{$lookup_name};
+    }
+    elsif (exists $deprecated_aliases{$lookup_name}) {
+      require warnings;
+      warnings::warnif('deprecated',
+                       "Unicode character name \"$name\" is deprecated, use \""
+                       . viacode(ord $deprecated_aliases{$lookup_name})
+                       . "\" instead");
+      $utf8 = $deprecated_aliases{$lookup_name};
+    }
+    elsif ($loose && exists $loose_deprecated_aliases{$lookup_name}) {
+      require warnings;
+      warnings::warnif('deprecated',
+                       "Unicode character name \"$name\" is deprecated, use \""
+                       . viacode(ord $loose_deprecated_aliases{$lookup_name})
+                       . "\" instead");
+      $utf8 = $loose_deprecated_aliases{$lookup_name};
+    }
   }
 
-  my @off;
+  my @off;  # Offsets into table of pattern match begin and end
 
+  # If haven't found it yet...
   if (! defined $utf8) {
 
     # See if has looked this input up earlier.
-    if ($^H{charnames_full} && exists $full_names_cache{$name}) {
+    if (! $loose && $^H{charnames_full} && exists $full_names_cache{$name}) {
       $utf8 = $full_names_cache{$name};
     }
-    else {
+    elsif ($loose && exists $loose_names_cache{$name}) {
+      $utf8 = $loose_names_cache{$name};
+    }
+    else { # Here, must do a look-up
+
+      # If full or loose matching succeeded, points to where to cache the
+      # result
+      my $cache_ref;
 
       ## Suck in the code/name list as a big string.
       ## Lines look like:
@@ -608,66 +757,113 @@ sub lookup_name ($$$) {
       ## @off will hold the index into the code/name string of the start and
       ## end of the name as we find it.
 
-      ## If :full, look for the name exactly; runtime implies full
-      my $found_full_in_table = 0;  # Tells us if can cache the result
-      if ($^H{charnames_full}) {
+      ## If :loose, look for a loose match; if :full, look for the name
+      ## exactly
+      # First, see if the name is one which is algorithmically determinable.
+      # The subroutine is included in Name.pl.  The table contained in
+      # $txt doesn't contain these.  Experiments show that checking
+      # for these before checking for the regular names has no
+      # noticeable impact on performance for the regular names, but
+      # the other way around slows down finding these immensely.
+      # Algorithmically determinables are not placed in the cache because
+      # that uses up memory, and finding these again is fast.
+      if (($loose || $^H{charnames_full})
+          && (defined (my $ord = name_to_code_point_special($lookup_name, $loose))))
+      {
+        $utf8 = pack("U", $ord);
+      }
+      else {
 
-        # See if the name is one which is algorithmically determinable.
-        # The subroutine is included in Name.pl.  The table contained in
-        # $txt doesn't contain these.  Experiments show that checking
-        # for these before checking for the regular names has no
-        # noticeable impact on performance for the regular names, but
-        # the other way around slows down finding these immensely.
-        # Algorithmically determinables are not placed in the cache (that
-        # $found_full_in_table indicates) because that uses up memory,
-        # and finding these again is fast.
-        if (defined (my $ord = name_to_code_point_special($name))) {
-          $utf8 = pack("U", $ord);
+        # Not algorithmically determinable; look up in the table.  The name
+        # will be turned into a regex, so quote any meta characters.
+        $lookup_name = quotemeta $lookup_name;
+
+        if ($loose) {
+
+          # For loose matches, $lookup_name has already squeezed out the
+          # non-essential characters.  We have to add in code to make the
+          # squeezed version match the non-squeezed equivalent in the table.
+          # The only remaining hyphens are ones that start or end a word in
+          # the original.  They have been quoted in $lookup_name so they look
+          # like "\-".  Change all other characters except the backslash
+          # quotes for any metacharacters, and the final character, so that
+          # e.g., COLON gets transformed into: /C[- ]?O[- ]?L[- ]?O[- ]?N/
+          $lookup_name =~ s/ (?! \\ -)    # Don't do this to the \- sequence
+                             ( [^-\\] )   # Nor the "-" within that sequence,
+                                          # nor the "\" that quotes metachars,
+                                          # but otherwise put the char into $1
+                             (?=.)        # And don't do it for the final char
+                           /$1\[- \]?/gx; # And add an optional blank or
+                                          # '-' after each $1 char
+
+          # Those remaining hyphens were originally at the beginning or end of
+          # a word, so they can match either a blank before or after, but not
+          # both.  (Keep in mind that they have been quoted, so are a '\-'
+          # sequence)
+          $lookup_name =~ s/\\ -/(?:- | -)/xg;
+        }
+
+        # Do the lookup in the full table if asked for, and if succeeds
+        # save the offsets and set where to cache the result.
+        if (($loose || $^H{charnames_full}) && $txt =~ /\t$lookup_name$/m) {
+          @off = ($-[0] + 1, $+[0]);    # The 1 is for the tab
+          $cache_ref = ($loose) ? \%loose_names_cache : \%full_names_cache;
         }
         else {
 
-          # Not algorithmically determinable; look up in the table.
-          if ($txt =~ /\t\Q$name\E$/m) {
-            @off = ($-[0] + 1, $+[0]);    # The 1 is for the tab
-            $found_full_in_table = 1;
+          # Here, didn't look for, or didn't find the name.
+          # If :short is allowed, see if input is like "greek:Sigma".
+          # Keep in mind that $lookup_name has had the metas quoted.
+          my $scripts_trie = "";
+          my $name_has_uppercase;
+          if (($^H{charnames_short})
+              && $lookup_name =~ /^ (?: \\ \s)*   # Quoted space
+                                    (.+?)         # $1 = the script
+                                    (?: \\ \s)*
+                                    \\ :          # Quoted colon
+                                    (?: \\ \s)*
+                                    (.+?)         # $2 = the name
+                                    (?: \\ \s)* $
+                                  /xs)
+          {
+              # Even in non-loose matching, the script traditionally has been
+              # case insensitve
+              $scripts_trie = "\U$1";
+              $lookup_name = $2;
+
+              # Use original name to find its input casing, but ignore the
+              # script part of that to make the determination.
+              $save_input = $name if ! defined $save_input;
+              $name =~ s/.*?://;
+              $name_has_uppercase = $name =~ /[[:upper:]]/;
           }
-        }
-      }
+          else { # Otherwise look in allowed scripts
+              $scripts_trie = $^H{charnames_scripts};
 
-      # If we didn't get it above, keep looking
-      if (! $found_full_in_table && ! defined $utf8) {
+              # Use original name to find its input casing
+              $name_has_uppercase = $name =~ /[[:upper:]]/;
+          }
 
-        # If :short is allowed, see if input is like "greek:Sigma".
-        my $scripts_trie;
-        if (($^H{charnames_short})
-            && $name =~ /^ \s* (.+?) \s* : \s* (.+?) \s* $ /xs)
-        {
-            $scripts_trie = "\U\Q$1";
-            $name = $2;
-        }
-        else { # Otherwise look in allowed scripts
-            $scripts_trie = $^H{charnames_scripts};
-        }
+          my $case = $name_has_uppercase ? "CAPITAL" : "SMALL";
+          if (! $scripts_trie
+              || $txt !~
+              /\t (?: $scripts_trie ) \ (?:$case\ )? LETTER \ \U$lookup_name $/xm)
+          {
+            # Here we still don't have it, give up.
+            return if $runtime;
 
-        my $case = $name =~ /[[:upper:]]/ ? "CAPITAL" : "SMALL";
-        if ($txt !~
-            /\t (?: $scripts_trie ) \ (?:$case\ )? LETTER \ \U\Q$name\E $/xm)
-        {
-          # Here we still don't have it, give up.
-          return if $runtime;
+            # May have zapped input name, get it again.
+            $name = (defined $save_input) ? $save_input : $_[0];
+            carp "Unknown charname '$name'";
+            return ($wants_ord) ? 0xFFFD : pack("U", 0xFFFD);
+          }
 
-          # May have zapped input name, get it again.
-          $name = (defined $save_input) ? $save_input : $_[0];
-          carp "Unknown charname '$name'";
-          return ($wants_ord) ? 0xFFFD : pack("U", 0xFFFD);
+          # Here have found the input name in the table.
+          @off = ($-[0] + 1, $+[0]);  # The 1 is for the tab
         }
 
-        @off = ($-[0] + 1, $+[0]);  # The 1 is for the tab
-      }
-
-      if (! defined $utf8) {
-
-        # Here, we haven't set up the output, but we know where in the string
+        # Here, the input name has been found; we haven't set up the output,
+        # but we know where in the string
         # the name starts.  The string is set up so that for single characters
         # (and not named sequences), the name is preceded immediately by a
         # tab and 5 hex digits for its code, with a \n before those.  Named
@@ -678,6 +874,16 @@ sub lookup_name ($$$) {
         # also be a \n, so the statement works anyway.)
         if (substr($txt, $off[0] - 7, 1) eq "\n") {
           $utf8 = pack("U", CORE::hex substr($txt, $off[0] - 6, 5));
+
+          # Handle the single loose matching special case, in which two names
+          # differ only by a single medial hyphen.  If the original had a
+          # hyphen (or more) in the right place, then it is that one.
+          $utf8 = $HANGUL_JUNGSEONG_O_E_utf8
+                  if $loose
+                     && $utf8 eq $HANGUL_JUNGSEONG_OE_utf8
+                     && $name =~ m/O \s* - [-\s]* E/ix;
+                     # Note that this wouldn't work if there were a 2nd
+                     # OE in the name
         }
         else {
 
@@ -693,7 +899,9 @@ sub lookup_name ($$$) {
 
       # Cache the input so as to not have to search the large table
       # again, but only if it came from the one search that we cache.
-      $full_names_cache{$name} = $utf8 if $found_full_in_table;
+      # (Haven't bothered with the pain of sorting out scoping issues for the
+      # scripts searches.)
+      $cache_ref->{$name} = $utf8 if defined $cache_ref;
     }
   }
 
@@ -782,7 +990,7 @@ sub import
         next;
       }
       if ($alias =~ m{:(\w+)$}) {
-        $1 eq "full" || $1 eq "short" and
+        $1 eq "full" || $1 eq "loose" || $1 eq "short" and
           croak ":alias cannot use existing pragma :$1 (reversed order?)";
         alias_file ($1) and $promote = 1;
         next;
@@ -790,7 +998,9 @@ sub import
       alias_file ($alias);
       next;
     }
-    if (substr($arg, 0, 1) eq ':' and ! ($arg eq ":full" || $arg eq ":short")) {
+    if (substr($arg, 0, 1) eq ':'
+      and ! ($arg eq ":full" || $arg eq ":short" || $arg eq ":loose"))
+    {
       warn "unsupported special '$arg' in charnames";
       next;
     }
@@ -799,11 +1009,11 @@ sub import
   @args == 0 && $promote and @args = (":full");
   @h{@args} = (1) x @args;
 
-  $^H{charnames_full} = delete $h{':full'} || 0;  # Don't leave undefined,
-                                                  # as tested for in
-                                                  # lookup_names
+  # Don't leave these undefined as are tested for in lookup_names
+  $^H{charnames_full} = delete $h{':full'} || 0;
+  $^H{charnames_loose} = delete $h{':loose'} || 0;
   $^H{charnames_short} = delete $h{':short'} || 0;
-  my @scripts = map uc, keys %h;
+  my @scripts = map { uc quotemeta } keys %h;
 
   ##
   ## If utf8? warnings are enabled, and some scripts were given,
@@ -825,6 +1035,20 @@ sub import
   $^H{charnames_stringified_ords} = join ",", %{$^H{charnames_ord_aliases}};
   $^H{charnames_stringified_names} = join ",", %{$^H{charnames_name_aliases}};
   $^H{charnames_stringified_inverse_ords} = join ",", %{$^H{charnames_inverse_ords}};
+
+  # Modify the input script names for loose name matching if that is also
+  # specified, similar to the way the base character name is prepared.  They
+  # don't (currently, and hopefully never will) have dashes.  These go into a
+  # regex, and have already been uppercased and quotemeta'd.  Squeeze out all
+  # input underscores, blanks, and dashes.  Then convert so will match a blank
+  # between any characters.
+  if ($^H{charnames_loose}) {
+    for (my $i = 0; $i < @scripts; $i++) {
+      $scripts[$i] =~ s/[_ -]//g;
+      $scripts[$i] =~ s/ ( [^\\] ) (?= . ) /$1\\ ?/gx;
+    }
+  }
+
   $^H{charnames_scripts} = join "|", @scripts;  # Stringifiy them as a trie
 } # import
 
@@ -976,6 +1200,11 @@ charnames - access to Unicode character names and named character sequences; als
  print "\N{LATIN CAPITAL LETTER E WITH VERTICAL LINE BELOW}",
        " is an officially named sequence of two Unicode characters\n";
 
+ use charnames ':loose';
+ print "\N{Greek small-letter  sigma}",
+        "can be used to ignore case, underscores, most blanks,"
+        "and when you aren't sure if the official name has hyphens\n";
+
  use charnames ':short';
  print "\N{greek:Sigma} is an upper-case sigma.\n";
 
@@ -987,7 +1216,7 @@ charnames - access to Unicode character names and named character sequences; als
    mychar => 0xE8000,  # Private use area
  };
  print "\N{e_ACUTE} is a small letter e with an acute.\n";
- print "\\N{mychar} allows me to name private use characters.\n";
+ print "\N{mychar} allows me to name private use characters.\n";
 
  use charnames ();
  print charnames::viacode(0x1234); # prints "ETHIOPIC SYLLABLE SEE"
@@ -1042,27 +1271,37 @@ Also, C<\N{I<...>}> can mean a regex quantifier instead of a character
 name, when the I<...> is a number (or comma separated pair of numbers
 (see L<perlreref/QUANTIFIERS>), and is not related to this pragma.
 
-The C<charnames> pragma supports arguments C<:full>, C<:short>, script
-names and customized aliases.  If C<:full> is present, for expansion of
+The C<charnames> pragma supports arguments C<:full>, C<:loose>, C<:short>,
+script names and L<customized aliases|/CUSTOM ALIASES>.
+
+If C<:full> is present, for expansion of
 C<\N{I<CHARNAME>}>, the string I<CHARNAME> is first looked up in the list of
-standard Unicode character names.  If C<:short> is present, and
+standard Unicode character names.
+
+C<:loose> is a variant of C<:full> which allows I<CHARNAME> to be less
+precisely specified.  Details are in L</LOOSE MATCHES>.
+
+If C<:short> is present, and
 I<CHARNAME> has the form C<I<SCRIPT>:I<CNAME>>, then I<CNAME> is looked up
-as a letter in script I<SCRIPT>.  If C<use charnames> is used
+as a letter in script I<SCRIPT>, as described in the next paragraph.
+Or, if C<use charnames> is used
 with script name arguments, then for C<\N{I<CHARNAME>}> the name
 I<CHARNAME> is looked up as a letter in the given scripts (in the
 specified order). Customized aliases can override these, and are explained in
 L</CUSTOM ALIASES>.
 
 For lookup of I<CHARNAME> inside a given script I<SCRIPTNAME>
-this pragma looks for the names
+this pragma looks in the table of standard Unicode names for the names
 
   SCRIPTNAME CAPITAL LETTER CHARNAME
   SCRIPTNAME SMALL LETTER CHARNAME
   SCRIPTNAME LETTER CHARNAME
 
-in the table of standard Unicode names.  If I<CHARNAME> is lowercase,
+If I<CHARNAME> is all lowercase,
 then the C<CAPITAL> variant is ignored, otherwise the C<SMALL> variant
-is ignored.
+is ignored, and both I<CHARNAME> and I<SCRIPTNAME> are converted to all
+uppercase for look-up.  Other than that, both of them follow L<loose|/LOOSE
+MATCHES> rules if C<:loose> is also specified; strict otherwise.
 
 Note that C<\N{...}> is compile-time; it's a special form of string
 constant used inside double-quotish strings; this means that you cannot
@@ -1074,7 +1313,8 @@ For the C0 and C1 control characters (U+0000..U+001F, U+0080..U+009F)
 there are no official Unicode names but you can use instead the ISO 6429
 names (LINE FEED, ESCAPE, and so forth, and their abbreviations, LF,
 ESC, ...).  In Unicode 3.2 (as of Perl 5.8) some naming changes took
-place, and ISO 6429 was updated, see L</ALIASES>.
+place, and ISO 6429 was updated, see L</ALIASES>.  Since Unicode 6.0, it
+is deprecated to use C<BELL>.  Instead use C<ALERT> (but C<BEL> works).
 
 If the input name is unknown, C<\N{NAME}> raises a warning and
 substitutes the Unicode REPLACEMENT CHARACTER (U+FFFD).
@@ -1087,10 +1327,36 @@ Otherwise, any string that includes a C<\N{I<charname>}> or
 C<S<\N{U+I<code point>}>> will automatically have Unicode semantics (see
 L<perlunicode/Byte and Character Semantics>).
 
+=head1 LOOSE MATCHES
+
+By specifying C<:loose>, Unicode's L<loose character name
+matching|http://www.unicode.org/reports/tr44/Matching_Rules> rules are
+selected instead of the strict exact match used otherwise.
+That means that I<CHARNAME> doesn't have to be so precisely specified.
+Upper/lower case doesn't matter (except with scripts as mentioned above), nor
+do any underscores, and the only hyphens that matter are those at the
+beginning or end of a word in the name (with one exception:  the hyphen in
+U+1180 C<HANGUL JUNGSEONG O-E> does matter).
+Also, blanks not adjacent to hyphens don't matter.
+The official Unicode names are quite variable as to where they use hyphens
+versus spaces to separate word-like units, and this option allows you to not
+have to care as much.
+The reason non-medial hyphens matter is because of cases like
+U+0F60 C<TIBETAN LETTER -A> versus U+0F68 C<TIBETAN LETTER A>.
+The hyphen here is significant, as is the space before it, and so both must be
+included.
+
+C<:loose> slows down look-ups by a factor of 2 to 3 versus
+C<:full>, but the trade-off may be worth it to you.  Each individual look-up
+takes very little time, and the results are cached, so the speed difference
+would become a factor only in programs that do look-ups of many different
+spellings, and probably only when those look-ups are through vianame() and
+string_vianame(), since C<\N{...}> look-ups are done at compile time.
+
 =head1 ALIASES
 
-A few aliases have been defined for convenience: instead of having
-to use the official names
+A few aliases have been defined for convenience; instead of having
+to use the official names,
 
     LINE FEED (LF)
     FORM FEED (FF)
@@ -1203,7 +1469,8 @@ other than an alphabetic character and from containing anything other
 than alphanumerics, spaces, dashes, parentheses, and underscores.
 Currently they must be ASCII.
 
-An alias can map to either an official Unicode character name or to a
+An alias can map to either an official Unicode character name (not a loose
+matched name) or to a
 numeric code point (ordinal).  The latter is useful for assigning names
 to code points in Unicode private use areas such as U+E800 through
 U+F8FF.
@@ -1245,7 +1512,10 @@ well, like
 
     use charnames ":full", ":alias" => "pro";
 
-Also, both these methods currently allow only a single character to be named.
+C<":loose"> has no effect with these.  Input names must match exactly, using
+C<":full"> rules.
+
+Also, both these methods currently allow only single characters to be named.
 To name a sequence of characters, use a
 L<custom translator|/CUSTOM TRANSLATORS> (described below).
 
@@ -1261,7 +1531,7 @@ prints "FOUR TEARDROP-SPOKED ASTERISK".
 The name returned is the official name for the code point, if
 available; otherwise your custom alias for it.  This means that your
 alias will only be returned for code points that don't have an official
-Unicode name (nor Unicode version 1 name), such as private use code
+Unicode name (nor a Unicode version 1 name), such as private use code
 points, and the 4 control characters U+0080, U+0081, U+0084, and U+0099.
 If you define more than one name for the code point, it is indeterminate
 which one will be returned.
@@ -1286,9 +1556,9 @@ SPACE", not "BYTE ORDER MARK".
 This is a runtime equivalent to C<\N{...}>.  I<name> can be any expression
 that evaluates to a name accepted by C<\N{...}> under the L<C<:full>
 option|/DESCRIPTION> to C<charnames>.  In addition, any other options for the
-controlling C<"use charnames"> in the same scope apply, like any L<script
-list, C<:short> option|/DESCRIPTION>, or L<custom aliases|/CUSTOM ALIASES> you
-may have defined.
+controlling C<"use charnames"> in the same scope apply, like C<:loose> or any
+L<script list, C<:short> option|/DESCRIPTION>, or L<custom aliases|/CUSTOM
+ALIASES> you may have defined.
 
 The only difference is that if the input name is unknown, C<string_vianame>
 returns C<undef> instead of the REPLACEMENT CHARACTER and does not raise a
@@ -1306,13 +1576,15 @@ prints "U+2722".
 
 This leads to the other two differences.  Since a single code point is
 returned, the function can't handle named character sequences, as these are
-composed of multiple characters.  And, the code point can be that of any
+composed of multiple characters (it returns C<undef> for these.  And, the code
+point can be that of any
 character, even ones that aren't legal under the C<S<use bytes>> pragma,
 
 =head1 CUSTOM TRANSLATORS
 
 The mechanism of translation of C<\N{...}> escapes is general and not
-hardwired into F<charnames.pm>.  A module can install custom
+hardwired into F<charnames.pm>.  This is the only way you can create
+a custom named sequence of code points.  A module can install custom
 translations (inside the scope which C<use>s the module) with the
 following magic incantation:
 
@@ -1339,12 +1611,12 @@ state of C<bytes>-flag as in:
 
 See L</CUSTOM ALIASES> above for restrictions on I<CHARNAME>.
 
-Of course, C<vianame> and C<viacode> would need to be overridden as
-well.
+Of course, C<vianame>, C<viacode>, and C<string_vianame> would need to be
+overridden as well.
 
 =head1 BUGS
 
-vianame normally returns an ordinal code point, but when the input name is of
+vianame() normally returns an ordinal code point, but when the input name is of
 the form C<U+...>, it returns a chr instead.  In this case, if C<use bytes> is
 in effect and the character won't fit into a byte, it returns C<undef> and
 raises a warning.

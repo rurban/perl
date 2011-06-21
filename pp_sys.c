@@ -419,7 +419,6 @@ PP(pp_warn)
 {
     dVAR; dSP; dMARK;
     SV *exsv;
-    const char *pv;
     STRLEN len;
     if (SP - MARK > 1) {
 	dTARGET;
@@ -436,7 +435,7 @@ PP(pp_warn)
 	exsv = TOPs;
     }
 
-    if (SvROK(exsv) || (pv = SvPV_const(exsv, len), len)) {
+    if (SvROK(exsv) || (SvPV_const(exsv, len), len)) {
 	/* well-formed exception supplied */
     }
     else if (SvROK(ERRSV)) {
@@ -459,7 +458,6 @@ PP(pp_die)
 {
     dVAR; dSP; dMARK;
     SV *exsv;
-    const char *pv;
     STRLEN len;
 #ifdef VMS
     VMSISH_HUSHED  = VMSISH_HUSHED || (PL_op->op_private & OPpHUSH_VMSISH);
@@ -474,7 +472,7 @@ PP(pp_die)
 	exsv = TOPs;
     }
 
-    if (SvROK(exsv) || (pv = SvPV_const(exsv, len), len)) {
+    if (SvROK(exsv) || (SvPV_const(exsv, len), len)) {
 	/* well-formed exception supplied */
     }
     else if (SvROK(ERRSV)) {
@@ -513,6 +511,9 @@ OP *
 Perl_tied_method(pTHX_ const char *const methname, SV **sp, SV *const sv,
 		 const MAGIC *const mg, const U32 flags, U32 argc, ...)
 {
+    SV **orig_sp = sp;
+    I32 ret_args;
+
     PERL_ARGS_ASSERT_TIED_METHOD;
 
     /* Ensure that our flag bits do not overlap.  */
@@ -520,10 +521,15 @@ Perl_tied_method(pTHX_ const char *const methname, SV **sp, SV *const sv,
     assert((TIED_METHOD_ARGUMENTS_ON_STACK & G_WANT) == 0);
     assert((TIED_METHOD_SAY & G_WANT) == 0);
 
+    PUTBACK; /* sp is at *foot* of args, so this pops args from old stack */
+    PUSHSTACKi(PERLSI_MAGIC);
+    EXTEND(SP, argc+1); /* object + args */
     PUSHMARK(sp);
     PUSHs(SvTIED_obj(sv, mg));
-    if (flags & TIED_METHOD_ARGUMENTS_ON_STACK)
+    if (flags & TIED_METHOD_ARGUMENTS_ON_STACK) {
+	Copy(orig_sp + 2, sp + 1, argc, SV*); /* copy args to new stack */
 	sp += argc;
+    }
     else if (argc) {
 	const U32 mortalize_not_needed
 	    = flags & TIED_METHOD_MORTALIZE_NOT_NEEDED;
@@ -546,7 +552,17 @@ Perl_tied_method(pTHX_ const char *const methname, SV **sp, SV *const sv,
 	SAVEGENERICSV(PL_ors_sv);
 	PL_ors_sv = newSVpvs("\n");
     }
-    call_method(methname, flags & G_WANT);
+    ret_args = call_method(methname, flags & G_WANT);
+    SPAGAIN;
+    orig_sp = sp;
+    POPSTACK;
+    SPAGAIN;
+    if (ret_args) { /* copy results back to original stack */
+	EXTEND(sp, ret_args);
+	Copy(orig_sp - ret_args + 1, sp + 1, ret_args, SV*);
+	sp += ret_args;
+	PUTBACK;
+    }
     LEAVE_with_name("call_tied_method");
     return NORMAL;
 }
@@ -838,11 +854,7 @@ PP(pp_tie)
 	    break;
 	case SVt_PVGV:
 	case SVt_PVLV:
-	    if (isGV_with_GP(varsv)) {
-		if (SvFAKE(varsv) && !(GvFLAGS(varsv) & GVf_TIEWARNED)) {
-		    deprecate("tie on a handle without *");
-		    GvFLAGS(varsv) |= GVf_TIEWARNED;
-		}
+	    if (isGV_with_GP(varsv) && !SvFAKE(varsv)) {
 		methname = "TIEHANDLE";
 		how = PERL_MAGIC_tiedscalar;
 		/* For tied filehandles, we apply tiedscalar magic to the IO
@@ -919,14 +931,8 @@ PP(pp_untie)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv)) {
-      if (SvFAKE(sv) && !(GvFLAGS(sv) & GVf_TIEWARNED)) {
-	deprecate("untie on a handle without *");
-	GvFLAGS(sv) |= GVf_TIEWARNED;
-      }
-      if (!(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv) && !SvFAKE(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHYES;
-    }
 
     if ((mg = SvTIED_mg(sv, how))) {
 	SV * const obj = SvRV(SvTIED_obj(sv, mg));
@@ -963,14 +969,8 @@ PP(pp_tied)
     const char how = (SvTYPE(sv) == SVt_PVHV || SvTYPE(sv) == SVt_PVAV)
 		? PERL_MAGIC_tied : PERL_MAGIC_tiedscalar;
 
-    if (isGV_with_GP(sv)) {
-      if (SvFAKE(sv) && !(GvFLAGS(sv) & GVf_TIEWARNED)) {
-	deprecate("tied on a handle without *");
-	GvFLAGS(sv) |= GVf_TIEWARNED;
-      }
-      if (!(sv = MUTABLE_SV(GvIOp(sv))))
+    if (isGV_with_GP(sv) && !SvFAKE(sv) && !(sv = MUTABLE_SV(GvIOp(sv))))
 	RETPUSHUNDEF;
-    }
 
     if ((mg = SvTIED_mg(sv, how))) {
 	SV *osv = SvTIED_obj(sv, mg);
@@ -4019,12 +4019,6 @@ PP(pp_fork)
     if (childpid < 0)
 	RETSETUNDEF;
     if (!childpid) {
-	GV * const tmpgv = gv_fetchpvs("$", GV_ADD|GV_NOTQUAL, SVt_PV);
-	if (tmpgv) {
-            SvREADONLY_off(GvSV(tmpgv));
-	    sv_setiv(GvSV(tmpgv), (IV)PerlProc_getpid());
-            SvREADONLY_on(GvSV(tmpgv));
-        }
 #ifdef THREADS_HAVE_PIDS
 	PL_ppid = (IV)getppid();
 #endif

@@ -40,17 +40,16 @@ my $unflagged_pointers;
 # implicit interpreter context argument.
 #
 
-sub do_not_edit ($)
-{
-    my $file = shift;
+sub open_print_header {
+    my ($file, $quote) = @_;
 
-    return read_only_top(lang => ($file =~ /\.[ch]$/ ? 'C' : 'Perl'),
-			 file => $file, style => '*', by => 'regen/embed.pl',
-			 from => ['data in embed.fnc', 'regen/embed.pl',
-				  'regen/opcodes', 'intrpvar.h', 'perlvars.h'],
-			 final => "\nEdit those files and run 'make regen_headers' to effect changes.\n",
-			 copyright => [1993 .. 2009]);
-} # do_not_edit
+    return open_new($file, '>',
+		    { file => $file, style => '*', by => 'regen/embed.pl',
+		      from => ['data in embed.fnc', 'regen/embed.pl',
+			       'regen/opcodes', 'intrpvar.h', 'perlvars.h'],
+		      final => "\nEdit those files and run 'make regen_headers' to effect changes.\n",
+		      copyright => [1993 .. 2009], quote => $quote });
+}
 
 open IN, "embed.fnc" or die $!;
 
@@ -187,8 +186,7 @@ sub walk_table (&@) {
 	$F = $filename;
     }
     else {
-	$F = safer_open("$filename-new", $filename);
-	print $F do_not_edit ($filename);
+	$F = open_print_header($filename);
     }
     foreach (@embed) {
 	my @outs = &{$function}(@$_);
@@ -202,8 +200,8 @@ sub walk_table (&@) {
 
 # generate proto.h
 {
-    my $pr = safer_open('proto.h-new', 'proto.h');
-    print $pr do_not_edit ("proto.h"), "START_EXTERN_C\n";
+    my $pr = open_print_header("proto.h");
+    print $pr "START_EXTERN_C\n";
     my $ret;
 
     foreach (@embed) {
@@ -369,7 +367,7 @@ sub readvars(\%$$@) {
 	or die "embed.pl: Can't open $file: $!\n";
     while (<FILE>) {
 	s/[ \t]*#.*//;		# Delete comments.
-	if (/PERLVARA?I?S?C?\($pre(\w+)/) {
+	if (/PERLVARA?I?C?\($pre(\w+)/) {
 	    my $sym = $1;
 	    $sym = $pre . $sym if $keep_pre;
 	    warn "duplicate symbol $sym while processing $file line $.\n"
@@ -416,9 +414,9 @@ sub multoff ($$) {
     return hide("PL_$pre$sym", "PL_$sym");
 }
 
-my $em = safer_open('embed.h-new', 'embed.h');
+my $em = open_print_header('embed.h');
 
-print $em do_not_edit ("embed.h"), <<'END';
+print $em <<'END';
 /* (Doing namespace management portably in C is really gross.) */
 
 /* By defining PERL_NO_SHORT_NAMES (not done by default) the short forms
@@ -575,9 +573,9 @@ END
 
 read_only_bottom_close_and_rename($em);
 
-$em = safer_open('embedvar.h-new', 'embedvar.h');
+$em = open_print_header('embedvar.h');
 
-print $em do_not_edit ("embedvar.h"), <<'END';
+print $em <<'END';
 /* (Doing namespace management portably in C is really gross.) */
 
 /*
@@ -633,8 +631,10 @@ print $em <<'END';
 END
 
 for $sym (sort keys %globvar) {
+    print $em "#ifdef OS2\n" if $sym eq 'sh_path';
     print $em multon($sym,   'G','my_vars->');
     print $em multon("G$sym",'', 'my_vars->');
+    print $em "#endif\n" if $sym eq 'sh_path';
 }
 
 print $em <<'END';
@@ -644,7 +644,9 @@ print $em <<'END';
 END
 
 for $sym (sort keys %globvar) {
+    print $em "#ifdef OS2\n" if $sym eq 'sh_path';
     print $em multoff($sym,'G');
+    print $em "#endif\n" if $sym eq 'sh_path';
 }
 
 print $em <<'END';
@@ -654,10 +656,9 @@ END
 
 read_only_bottom_close_and_rename($em);
 
-my $capi = safer_open('perlapi.c-new', 'perlapi.c');
-my $capih = safer_open('perlapi.h-new', 'perlapi.h');
+my $capih = open_print_header('perlapi.h');
 
-print $capih do_not_edit ("perlapi.h"), <<'EOT';
+print $capih <<'EOT';
 /* declare accessor functions for Perl variables */
 #ifndef __perlapi_h__
 #define __perlapi_h__
@@ -670,14 +671,11 @@ START_EXTERN_C
 #undef PERLVARA
 #undef PERLVARI
 #undef PERLVARIC
-#undef PERLVARISC
 #define PERLVAR(v,t)	EXTERN_C t* Perl_##v##_ptr(pTHX);
 #define PERLVARA(v,n,t)	typedef t PL_##v##_t[n];			\
 			EXTERN_C PL_##v##_t* Perl_##v##_ptr(pTHX);
 #define PERLVARI(v,t,i)	PERLVAR(v,t)
 #define PERLVARIC(v,t,i) PERLVAR(v, const t)
-#define PERLVARISC(v,i)	typedef const char PL_##v##_t[sizeof(i)];	\
-			EXTERN_C PL_##v##_t* Perl_##v##_ptr(pTHX);
 
 #include "perlvars.h"
 
@@ -685,7 +683,6 @@ START_EXTERN_C
 #undef PERLVARA
 #undef PERLVARI
 #undef PERLVARIC
-#undef PERLVARISC
 
 END_EXTERN_C
 
@@ -712,7 +709,6 @@ EXTCONST void * const PL_force_link_funcs[] = {
 #define PERLVARA(v,n,t)	PERLVAR(v,t)
 #define PERLVARI(v,t,i)	PERLVAR(v,t)
 #define PERLVARIC(v,t,i) PERLVAR(v,t)
-#define PERLVARISC(v,i) PERLVAR(v,char)
 
 /* In Tru64 (__DEC && __osf__) the cc option -std1 causes that one
  * cannot cast between void pointers and function pointers without
@@ -737,7 +733,6 @@ EXTCONST void * const PL_force_link_funcs[] = {
 #undef PERLVARA
 #undef PERLVARI
 #undef PERLVARIC
-#undef PERLVARISC
 };
 #endif	/* DOINIT */
 
@@ -763,8 +758,8 @@ EOT
 
 read_only_bottom_close_and_rename($capih);
 
-my $warning = do_not_edit ("perlapi.c");
-$warning =~ s! \*/\n! *
+my $capi = open_print_header('perlapi.c', <<'EOQ');
+ *
  *
  * Up to the threshold of the door there mounted a flight of twenty-seven
  * broad stairs, hewn by some unknown art of the same black stone.  This
@@ -773,9 +768,9 @@ $warning =~ s! \*/\n! *
  *     [p.577 of _The Lord of the Rings_, III/x: "The Voice of Saruman"]
  *
  */
-!;
+EOQ
 
-print $capi $warning, <<'EOT';
+print $capi <<'EOT';
 #include "EXTERN.h"
 #include "perl.h"
 #include "perlapi.h"
@@ -795,19 +790,15 @@ START_EXTERN_C
 #define PERLVARA(v,n,t)	PL_##v##_t* Perl_##v##_ptr(pTHX)		\
 			{ dVAR; PERL_UNUSED_CONTEXT; return &(PL_##v); }
 #undef PERLVARIC
-#undef PERLVARISC
 #define PERLVARIC(v,t,i)	\
 			const t* Perl_##v##_ptr(pTHX)		\
 			{ PERL_UNUSED_CONTEXT; return (const t *)&(PL_##v); }
-#define PERLVARISC(v,i)	PL_##v##_t* Perl_##v##_ptr(pTHX)	\
-			{ dVAR; PERL_UNUSED_CONTEXT; return &(PL_##v); }
 #include "perlvars.h"
 
 #undef PERLVAR
 #undef PERLVARA
 #undef PERLVARI
 #undef PERLVARIC
-#undef PERLVARISC
 
 END_EXTERN_C
 

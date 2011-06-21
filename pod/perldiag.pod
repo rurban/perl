@@ -2485,12 +2485,6 @@ possible. To make the subroutine an lvalue subroutine add the
 lvalue attribute to the definition, or put the declaration before
 the definition.
 
-=item Lvalue subs returning %s not implemented yet
-
-(F) Due to limitations in the current implementation, array and hash
-values cannot be returned in subroutines used in lvalue context.  See
-L<perlsub/"Lvalue subroutines">.
-
 =item Malformed integer in [] in pack
 
 (F) Between the brackets enclosing a numeric repeat count only digits
@@ -3422,13 +3416,6 @@ and then discovered it wasn't a context we know how to do a goto in.
 repeatedly, but each time something re-created entries in the glob. Most
 likely the glob contains an object with a reference back to the glob and a
 destructor that adds a new object to the glob.
-
-=item panic: hfreeentries failed to free hash
-
-(P) The internal routine used to clear a hash's entries tried repeatedly,
-but each time something added more entries to the hash. Most likely the hash
-contains an object with a reference back to the hash and a destructor that
-adds a new object to the hash.
 
 =item panic: INTERPCASEMOD
 
@@ -4981,6 +4968,12 @@ See L<POSIX/FUNCTIONS> for more information.
 (F) You called a Win32 function with incorrect arguments.
 See L<Win32> for more information.
 
+=item Useless assignment to a temporary
+
+(W misc) You assigned to an lvalue subroutine, but what
+the subroutine returned was a temporary scalar about to
+be discarded, so the assignment had no effect.
+
 =item Useless (?-%s) - don't use /%s modifier in regex; marked by <-- HERE in m/%s/
 
 (W regexp) You have used an internal modifier such as (?-o) that has no
@@ -5532,6 +5525,6 @@ Something Very Wrong.
 
 =head1 SEE ALSO
 
-L<warnings>, L<perllexwarn>.
+L<warnings>, L<perllexwarn>, L<diagnostics>.
 
 =cut

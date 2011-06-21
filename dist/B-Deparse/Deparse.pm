@@ -26,7 +26,7 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 ($] < 5.009 ? 'PMf_SKIPWHITE' : qw(RXf_SKIPWHITE)),
 	 ($] < 5.011 ? 'CVf_LOCKED' : 'OPpREVERSE_INPLACE'),
 	 ($] < 5.013 ? () : 'PMf_NONDESTRUCT');
-$VERSION = "1.03";
+$VERSION = "1.05";
 use strict;
 use vars qw/$AUTOLOAD/;
 use warnings ();
@@ -243,7 +243,8 @@ BEGIN {
 #
 # subs_declared
 # keys are names of subs for which we've printed declarations.
-# That means we can omit parentheses from the arguments.
+# That means we can omit parentheses from the arguments. It also means we
+# need to put CORE:: on core functions of the same name.
 #
 # subs_deparsed
 # Keeps track of fully qualified names of all deparsed subs.
@@ -480,7 +481,7 @@ sub stash_subs {
     else {
 	$pack =~ s/(::)?$/::/;
 	no strict 'refs';
-	$stash = \%$pack;
+	$stash = \%{"main::$pack"};
     }
     my %stash = svref_2object($stash)->ARRAY;
     while (my ($key, $val) = each %stash) {
@@ -1017,12 +1018,13 @@ sub maybe_parens_unop {
  	if ($name eq "umask" && $kid =~ /^\d+$/) {
 	    $kid = sprintf("%#o", $kid);
 	}
-	return "$name($kid)";
+	return $self->keyword($name) . "($kid)";
     } else {
 	$kid = $self->deparse($kid, 16);
  	if ($name eq "umask" && $kid =~ /^\d+$/) {
 	    $kid = sprintf("%#o", $kid);
 	}
+	$name = $self->keyword($name);
 	if (substr($kid, 0, 1) eq "\cS") {
 	    # use kid's parens
 	    return $name . substr($kid, 1);
@@ -1093,7 +1095,9 @@ sub maybe_my {
     my $self = shift;
     my($op, $cx, $text) = @_;
     if ($op->private & OPpLVAL_INTRO and not $self->{'avoid_local'}{$$op}) {
-	my $my = $op->private & OPpPAD_STATE ? "state" : "my";
+	my $my = $op->private & OPpPAD_STATE
+	    ? $self->keyword("state")
+	    : "my";
 	if (want_scalar($op)) {
 	    return "$my $text";
 	} else {
@@ -1521,10 +1525,45 @@ sub pp_setstate { pp_nextstate(@_) }
 
 sub pp_unstack { return "" } # see also leaveloop
 
+my %feature_keywords = (
+  # keyword => 'feature',
+    state   => 'state',
+    say     => 'say',
+    given   => 'switch',
+    when    => 'switch',
+    default => 'switch',
+    break   => 'switch',
+);
+
+sub keyword {
+    my $self = shift;
+    my $name = shift;
+    return $name if $name =~ /^CORE::/; # just in case
+    if (exists $feature_keywords{$name}) {
+	return
+	  $self->{'hinthash'}
+	   && $self->{'hinthash'}{"feature_$feature_keywords{$name}"}
+	    ? $name
+	    : "CORE::$name";
+    }
+    if (
+      $name !~ /^(?:chom?p|exec|system)\z/
+       && !defined eval{prototype "CORE::$name"}
+    ) { return $name }
+    if (
+	exists $self->{subs_declared}{$name}
+	 or
+	exists &{"$self->{curstash}::$name"}
+    ) {
+	return "CORE::$name"
+    }
+    return $name;
+}
+
 sub baseop {
     my $self = shift;
     my($op, $cx, $name) = @_;
-    return $name;
+    return $self->keyword($name);
 }
 
 sub pp_stub {
@@ -1600,7 +1639,7 @@ sub pp_not {
     my $self = shift;
     my($op, $cx) = @_;
     if ($cx <= 4) {
-	$self->pfixop($op, $cx, "not ", 4);
+	$self->pfixop($op, $cx, $self->keyword("not")." ", 4);
     } else {
 	$self->pfixop($op, $cx, "!", 21);	
     }
@@ -1626,7 +1665,8 @@ sub unop {
 
 	return $self->maybe_parens_unop($name, $kid, $cx);
     } else {
-	return $name .  ($op->flags & OPf_SPECIAL ? "()" : "");
+	return $self->keyword($name)
+	  . ($op->flags & OPf_SPECIAL ? "()" : "");
     }
 }
 
@@ -1659,6 +1699,7 @@ sub pp_chr { maybe_targmy(@_, \&unop, "chr") }
 sub pp_each { unop(@_, "each") }
 sub pp_values { unop(@_, "values") }
 sub pp_keys { unop(@_, "keys") }
+{ no strict 'refs'; *{"pp_r$_"} = *{"pp_$_"} for qw< keys each values >; }
 sub pp_boolkeys { 
     # no name because its an optimisation op that has no keyword
     unop(@_,"");
@@ -1731,7 +1772,7 @@ sub givwhen {
     my $enterop = $op->first;
     my ($head, $block);
     if ($enterop->flags & OPf_SPECIAL) {
-	$head = "default";
+	$head = $self->keyword("default");
 	$block = $self->deparse($enterop->first, 0);
     }
     else {
@@ -1746,8 +1787,8 @@ sub givwhen {
 	"\b}\cK";
 }
 
-sub pp_leavegiven { givwhen(@_, "given"); }
-sub pp_leavewhen  { givwhen(@_, "when"); }
+sub pp_leavegiven { givwhen(@_, $_[0]->keyword("given")); }
+sub pp_leavewhen  { givwhen(@_, $_[0]->keyword("when")); }
 
 sub pp_exists {
     my $self = shift;
@@ -1950,7 +1991,7 @@ sub pp_last { loopex(@_, "last") }
 sub pp_next { loopex(@_, "next") }
 sub pp_redo { loopex(@_, "redo") }
 sub pp_goto { loopex(@_, "goto") }
-sub pp_dump { loopex(@_, "dump") }
+sub pp_dump { loopex(@_, $_[0]->keyword("dump")) }
 
 sub ftst {
     my $self = shift;
@@ -2283,9 +2324,10 @@ sub listop {
     my(@exprs);
     my $parens = ($cx >= 5) || $self->{'parens'};
     my $kid = $op->first->sibling;
-    return $name if null $kid;
+    return $self->keyword($name) if null $kid;
     my $first;
     $name = "socketpair" if $name eq "sockpair";
+    my $fullname = $self->keyword($name);
     my $proto = prototype("CORE::$name");
     if (defined $proto
 	&& $proto =~ /^;?\*/
@@ -2309,12 +2351,13 @@ sub listop {
 	push @exprs, $self->deparse($kid, 6);
     }
     if ($name eq "reverse" && ($op->private & OPpREVERSE_INPLACE)) {
-	return "$exprs[0] = $name" . ($parens ? "($exprs[0])" : " $exprs[0]");
+	return "$exprs[0] = $fullname"
+	         . ($parens ? "($exprs[0])" : " $exprs[0]");
     }
     if ($parens) {
-	return "$name(" . join(", ", @exprs) . ")";
+	return "$fullname(" . join(", ", @exprs) . ")";
     } else {
-	return "$name " . join(", ", @exprs);
+	return "$fullname " . join(", ", @exprs);
     }
 }
 
@@ -2432,10 +2475,11 @@ sub pp_truncate {
         $fh = "+$fh" if not $parens and substr($fh, 0, 1) eq "(";
     }
     my $len = $self->deparse($kid->sibling, 6);
+    my $name = $self->keyword('truncate');
     if ($parens) {
-	return "truncate($fh, $len)";
+	return "$name($fh, $len)";
     } else {
-	return "truncate $fh, $len";
+	return "$name $fh, $len";
     }
 }
 
@@ -2470,10 +2514,11 @@ sub indirop {
 	$expr = $self->deparse($kid, 6);
 	push @exprs, $expr;
     }
-    my $name2 = $name;
+    my $name2;
     if ($name eq "sort" && $op->private & OPpSORT_REVERSE) {
-	$name2 = 'reverse sort';
+	$name2 = $self->keyword('reverse') . ' ' . $self->keyword('sort');
     }
+    else { $name2 = $self->keyword($name) }
     if ($name eq "sort" && ($op->private & OPpSORT_INPLACE)) {
 	return "$exprs[0] = $name2 $indir $exprs[0]";
     }
@@ -2783,10 +2828,9 @@ sub pp_leavetry {
     return "eval {\n\t" . $self->pp_leave(@_) . "\n\b}";
 }
 
-BEGIN { eval "sub OP_CONST () {" . opnumber("const") . "}" }
-BEGIN { eval "sub OP_STRINGIFY () {" . opnumber("stringify") . "}" }
-BEGIN { eval "sub OP_RV2SV () {" . opnumber("rv2sv") . "}" }
-BEGIN { eval "sub OP_LIST () {" . opnumber("list") . "}" }
+BEGIN { for (qw[ const stringify rv2sv list glob ]) {
+    eval "sub OP_\U$_ () { " . opnumber($_) . "}"
+}}
 
 sub pp_null {
     my $self = shift;
@@ -2804,6 +2848,14 @@ sub pp_null {
 	return $self->pp_scope($op->first, $cx);
     } elsif ($op->targ == OP_STRINGIFY) {
 	return $self->dquote($op, $cx);
+    } elsif ($op->targ == OP_GLOB) {
+	return $self->pp_glob(
+	         $op->first    # entersub
+	            ->first    # ex-list
+	            ->first    # pushmark
+	            ->sibling, # glob
+	         $cx
+	       );
     } elsif (!null($op->first->sibling) and
 	     $op->first->sibling->name eq "readline" and
 	     $op->first->sibling->flags & OPf_STACKED) {
@@ -2884,22 +2936,25 @@ sub pp_gv {
     return $self->gv_name($gv);
 }
 
+sub pp_aelemfast_lex {
+    my $self = shift;
+    my($op, $cx) = @_;
+    my $name = $self->padname($op->targ);
+    $name =~ s/^@/\$/;
+    return $name . "[" .  ($op->private + $self->{'arybase'}) . "]";
+}
+
 sub pp_aelemfast {
     my $self = shift;
     my($op, $cx) = @_;
-    my $name;
-    if ($op->flags & OPf_SPECIAL) { # optimised PADAV
-	$name = $self->padname($op->targ);
-	$name =~ s/^@/\$/;
-    }
-    else {
-	my $gv = $self->gv_or_padgv($op);
-	$name = $self->gv_name($gv);
-	$name = $self->{'curstash'}."::$name"
-	    if $name !~ /::/ && $self->lex_in_scope('@'.$name);
-	$name = '$' . $name;
-    }
+    # optimised PADAV, pre 5.15
+    return $self->pp_aelemfast_lex(@_) if ($op->flags & OPf_SPECIAL);
 
+    my $gv = $self->gv_or_padgv($op);
+    my $name = $self->gv_name($gv);
+    $name = $self->{'curstash'}."::$name"
+	if $name !~ /::/ && $self->lex_in_scope('@'.$name);
+    $name = '$' . $name;
     return $name . "[" .  ($op->private + $self->{'arybase'}) . "]";
 }
 
@@ -3189,7 +3244,7 @@ sub _method {
     } else {
 	$obj = $kid;
 	$kid = $kid->sibling;
-	for (; !null ($kid->sibling) && $kid->name ne "method_named";
+	for (; !null ($kid->sibling) && $kid->name!~/^method(?:_named)?\z/;
 	      $kid = $kid->sibling) {
 	    push @exprs, $kid
 	}
@@ -3393,15 +3448,7 @@ sub pp_entersub {
 	    return $prefix . $amper. $kid;
 	}
     } else {
-	# glob() invocations can be translated into calls of
-	# CORE::GLOBAL::glob with a second parameter, a number.
-	# Reverse this.
-	if ($kid eq "CORE::GLOBAL::glob") {
-	    $kid = "glob";
-	    $args =~ s/\s*,[^,]+$//;
-	}
-
-	# It's a syntax error to call CORE::GLOBAL::foo without a prefix,
+	# It's a syntax error to call CORE::GLOBAL::foo with a prefix,
 	# so it must have been translated from a keyword call. Translate
 	# it back.
 	$kid =~ s/^CORE::GLOBAL:://;
@@ -3838,7 +3885,10 @@ sub pp_backtick {
     # skip pushmark if it exists (readpipe() vs ``)
     my $child = $op->first->sibling->isa('B::NULL')
 	? $op->first : $op->first->sibling;
-    return single_delim("qx", '`', $self->dq($child));
+    if ($self->pure_string($child)) {
+	return single_delim("qx", '`', $self->dq($child, 1));
+    }
+    unop($self, @_, "readpipe");
 }
 
 sub dquote {
@@ -4842,14 +4892,6 @@ then the output code might not work as intended.
 
 This is the most serious outstanding problem, and will require some help
 from the Perl core to fix.
-
-=item *
-
-If a keyword is over-ridden, and your program explicitly calls
-the built-in version by using CORE::keyword, the output of B::Deparse
-will not reflect this. If you run the resulting code, it will call
-the over-ridden version rather than the built-in one. (Maybe there
-should be an option to B<always> print keyword calls as C<CORE::name>.)
 
 =item *
 

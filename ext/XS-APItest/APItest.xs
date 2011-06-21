@@ -2781,6 +2781,28 @@ BOOT:
     cv_set_call_checker(asscv, THX_ck_entersub_postinc, (SV*)asscv);
 }
 
+SV *
+lv_temp_object()
+CODE:
+    RETVAL =
+	  sv_bless(
+	    newRV_noinc(newSV(0)),
+	    gv_stashpvs("XS::APItest::TempObj",GV_ADD)
+	  );             /* Package defined in test script */
+OUTPUT:
+    RETVAL
+
+void
+fill_hash_with_nulls(HV *hv)
+PREINIT:
+    UV i = 0;
+CODE:
+    for(; i < 1000; ++i) {
+	HE *entry = hv_fetch_ent(hv, sv_2mortal(newSVuv(i)), 1, 0);
+	SvREFCNT_dec(HeVAL(entry));
+	HeVAL(entry) = NULL;
+    }
+
 MODULE = XS::APItest		PACKAGE = XS::APItest::Magic
 
 PROTOTYPES: DISABLE
@@ -2808,3 +2830,50 @@ ALIAS:
     sv_unmagic_bar = 1
 CODE:
     sv_unmagicext(SvRV(sv), PERL_MAGIC_ext, ix ? &vtbl_bar : &vtbl_foo);
+
+UV
+test_get_vtbl()
+    PREINIT:
+	MGVTBL *have;
+	MGVTBL *want;
+    CODE:
+#define test_get_this_vtable(name) \
+	want = CAT2(&PL_vtbl_, name); \
+	have = get_vtbl(CAT2(want_vtbl_, name)); \
+	if (have != want) \
+	    croak("fail %p!=%p for get_vtbl(want_vtbl_" STRINGIFY(name) ") at " __FILE__ " line %d", have, want, __LINE__)
+
+	test_get_this_vtable(sv);
+	test_get_this_vtable(env);
+	test_get_this_vtable(envelem);
+	test_get_this_vtable(sigelem);
+	test_get_this_vtable(pack);
+	test_get_this_vtable(packelem);
+	test_get_this_vtable(dbline);
+	test_get_this_vtable(isa);
+	test_get_this_vtable(isaelem);
+	test_get_this_vtable(arylen);
+	test_get_this_vtable(mglob);
+	test_get_this_vtable(nkeys);
+	test_get_this_vtable(taint);
+	test_get_this_vtable(substr);
+	test_get_this_vtable(vec);
+	test_get_this_vtable(pos);
+	test_get_this_vtable(bm);
+	test_get_this_vtable(fm);
+	test_get_this_vtable(uvar);
+	test_get_this_vtable(defelem);
+	test_get_this_vtable(regexp);
+	test_get_this_vtable(regdata);
+	test_get_this_vtable(regdatum);
+#ifdef USE_LOCALE_COLLATE
+	test_get_this_vtable(collxfrm);
+#endif
+	test_get_this_vtable(amagic);
+	test_get_this_vtable(amagicelem);
+	test_get_this_vtable(backref);
+	test_get_this_vtable(utf8);
+
+	RETVAL = PTR2UV(get_vtbl(-1));
+    OUTPUT:
+	RETVAL

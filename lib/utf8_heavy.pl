@@ -63,14 +63,19 @@ sub croak { require Carp; Carp::croak(@_) }
         ## $none is undocumented, so I'm (khw) trying to do some documentation
         ## of it now.  It appears to be if there is a mapping in an input file
         ## that maps to 'XXXX', then that is replaced by $none+1, expressed in
-        ## hexadecimal.  The only place I found it possibly used was in
-        ## S_pmtrans in op.c.
+        ## hexadecimal.  It is used somehow in tr///.
         ##
         ## To make the parsing of $type clear, this code takes the a rather
         ## unorthodox approach of last'ing out of the block once we have the
         ## info we need. Were this to be a subroutine, the 'last' would just
         ## be a 'return'.
         ##
+        #   If a problem is found $type is returned;
+        #   Upon success, a new (or cached) blessed object is returned with
+        #   keys TYPE, BITS, EXTRAS, LIST, and NONE with values having the
+        #   same meanings as the input parameters.
+        #   And if there is a special-treatment hash in the file, a reference
+        #   to it is returned in the entry with key SPECIALS
         my $file; ## file to load data from, and also part of the %Cache key.
         my $ListSorted = 0;
 
@@ -537,6 +542,15 @@ sub croak { require Carp; Carp::croak(@_) }
 
         if ($file) {
             $Cache{$class, $file} = $SWASH;
+            if ($type
+                && exists $utf8::SwashInfo{$type}
+                && exists $utf8::SwashInfo{$type}{'specials_name'})
+            {
+                my $specials_name = $utf8::SwashInfo{$type}{'specials_name'};
+                no strict "refs";
+                print STDERR "\nspecials_name => $SWASH->{'SPECIALS'}\n" if DEBUG;
+                $SWASH->{'SPECIALS'} = \%$specials_name;
+            }
         }
 
         pop @recursed if @recursed && $type;

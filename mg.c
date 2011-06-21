@@ -164,42 +164,6 @@ Perl_mg_magical(pTHX_ SV *sv)
     }
 }
 
-
-/* is this container magic (%ENV, $1 etc), or value magic (pos, taint etc)? */
-
-STATIC bool
-S_is_container_magic(const MAGIC *mg)
-{
-    assert(mg);
-    switch (mg->mg_type) {
-    case PERL_MAGIC_bm:
-    case PERL_MAGIC_fm:
-    case PERL_MAGIC_regex_global:
-    case PERL_MAGIC_nkeys:
-#ifdef USE_LOCALE_COLLATE
-    case PERL_MAGIC_collxfrm:
-#endif
-    case PERL_MAGIC_qr:
-    case PERL_MAGIC_taint:
-    case PERL_MAGIC_vec:
-    case PERL_MAGIC_vstring:
-    case PERL_MAGIC_utf8:
-    case PERL_MAGIC_substr:
-    case PERL_MAGIC_defelem:
-    case PERL_MAGIC_arylen:
-    case PERL_MAGIC_pos:
-    case PERL_MAGIC_backref:
-    case PERL_MAGIC_arylen_p:
-    case PERL_MAGIC_rhash:
-    case PERL_MAGIC_symtab:
-    case PERL_MAGIC_tied: /* treat as value, so 'local @tied' isn't tied */
-    case PERL_MAGIC_checkcall:
-	return 0;
-    default:
-	return 1;
-    }
-}
-
 /*
 =for apidoc mg_get
 
@@ -296,7 +260,8 @@ Perl_mg_set(pTHX_ SV *sv)
 	    mg->mg_flags &= ~MGf_GSKIP;	/* setting requires another read */
 	    (SSPTR(mgs_ix, MGS*))->mgs_magical = 0;
 	}
-	if (PL_localizing == 2 && (!S_is_container_magic(mg) || sv == DEFSV))
+	if (PL_localizing == 2
+	    && (PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type) || sv == DEFSV))
 	    continue;
 	if (vtbl && vtbl->svt_set)
 	    vtbl->svt_set(aTHX_ sv, mg);
@@ -412,7 +377,7 @@ Perl_mg_clear(pTHX_ SV *sv)
     return 0;
 }
 
-MAGIC*
+static MAGIC*
 S_mg_findext_flags(pTHX_ const SV *sv, int type, const MGVTBL *vtbl, U32 flags)
 {
     PERL_UNUSED_CONTEXT;
@@ -526,7 +491,7 @@ Perl_mg_localize(pTHX_ SV *sv, SV *nsv, bool setmagic)
 
     for (mg = SvMAGIC(sv); mg; mg = mg->mg_moremagic) {
 	const MGVTBL* const vtbl = mg->mg_virtual;
-	if (!S_is_container_magic(mg))
+	if (PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type))
 	    continue;
 		
 	if ((mg->mg_flags & MGf_LOCAL) && vtbl->svt_local)
@@ -536,7 +501,7 @@ Perl_mg_localize(pTHX_ SV *sv, SV *nsv, bool setmagic)
 			    mg->mg_ptr, mg->mg_len);
 
 	/* container types should remain read-only across localization */
-	SvFLAGS(nsv) |= SvREADONLY(sv);
+	if (!SvIsCOW(sv)) SvFLAGS(nsv) |= SvREADONLY(sv);
     }
 
     if (SvTYPE(nsv) >= SVt_PVMG && SvMAGIC(nsv)) {
@@ -1114,6 +1079,16 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
 	if (PL_ors_sv)
 	    sv_copypv(sv, PL_ors_sv);
 	break;
+    case '$': /* $$ */
+	{
+	    IV const pid = (IV)PerlProc_getpid();
+	    if (isGV(mg->mg_obj) || SvIV(mg->mg_obj) != pid)
+		/* never set manually, or at least not since last fork */
+		sv_setiv(sv, pid);
+	    /* else a value has been assigned manually, so do nothing */
+	}
+	break;
+
     case '!':
 	{
 	dSAVE_ERRNO;
@@ -1362,7 +1337,6 @@ int
 Perl_magic_clearsig(pTHX_ SV *sv, MAGIC *mg)
 {
     PERL_ARGS_ASSERT_MAGIC_CLEARSIG;
-    PERL_UNUSED_ARG(sv);
 
     magic_setsig(NULL, mg);
     return sv_unmagic(sv, mg->mg_type);
@@ -1732,7 +1706,7 @@ Perl_magic_getnkeys(pTHX_ SV *sv, MAGIC *mg)
     if (hv) {
          (void) hv_iterinit(hv);
          if (! SvTIED_mg((const SV *)hv, PERL_MAGIC_tied))
-	     i = HvKEYS(hv);
+	     i = HvUSEDKEYS(hv);
          else {
 	     while (hv_iternext(hv))
 	         i++;
@@ -2415,7 +2389,6 @@ Perl_magic_setregexp(pTHX_ SV *sv, MAGIC *mg)
 	SvVALID_off(sv);
     } else {
 	assert(type == PERL_MAGIC_fm);
-	SvCOMPILED_off(sv);
     }
     return sv_unmagic(sv, type);
 }
@@ -2913,6 +2886,17 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	break;
     case ':':
 	PL_chopset = SvPV_force(sv,len);
+	break;
+    case '$': /* $$ */
+	/* Store the pid in mg->mg_obj so we can tell when a fork has
+	   occurred.  mg->mg_obj points to *$ by default, so clear it. */
+	if (isGV(mg->mg_obj)) {
+	    if (mg->mg_flags & MGf_REFCOUNTED) /* probably never true */
+		SvREFCNT_dec(mg->mg_obj);
+	    mg->mg_flags |= MGf_REFCOUNTED;
+	    mg->mg_obj = newSViv((IV)PerlProc_getpid());
+	}
+	else sv_setiv(mg->mg_obj, (IV)PerlProc_getpid());
 	break;
     case '0':
 	LOCK_DOLLARZERO_MUTEX;

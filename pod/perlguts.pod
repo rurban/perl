@@ -619,41 +619,45 @@ L<Stashes and Globs> for information on converting class names into stashes.
 
 /* Still under construction */
 
-Upgrades rv to reference if not already one.  Creates new SV for rv to
-point to.  If C<classname> is non-null, the SV is blessed into the specified
-class.  SV is returned.
+The following function upgrades rv to reference if not already one.
+Creates a new SV for rv to point to.  If C<classname> is non-null, the SV
+is blessed into the specified class.  SV is returned.
 
 	SV* newSVrv(SV* rv, const char* classname);
 
-Copies integer, unsigned integer or double into an SV whose reference is C<rv>.  SV is blessed
-if C<classname> is non-null.
+The following three functions copy integer, unsigned integer or double
+into an SV whose reference is C<rv>.  SV is blessed if C<classname> is
+non-null.
 
 	SV* sv_setref_iv(SV* rv, const char* classname, IV iv);
 	SV* sv_setref_uv(SV* rv, const char* classname, UV uv);
 	SV* sv_setref_nv(SV* rv, const char* classname, NV iv);
 
-Copies the pointer value (I<the address, not the string!>) into an SV whose
-reference is rv.  SV is blessed if C<classname> is non-null.
+The following function copies the pointer value (I<the address, not the
+string!>) into an SV whose reference is rv.  SV is blessed if C<classname>
+is non-null.
 
-	SV* sv_setref_pv(SV* rv, const char* classname, PV iv);
+	SV* sv_setref_pv(SV* rv, const char* classname, void* pv);
 
-Copies string into an SV whose reference is C<rv>.  Set length to 0 to let
-Perl calculate the string length.  SV is blessed if C<classname> is non-null.
+The following function copies string into an SV whose reference is C<rv>.
+Set length to 0 to let Perl calculate the string length.  SV is blessed if
+C<classname> is non-null.
 
-	SV* sv_setref_pvn(SV* rv, const char* classname, PV iv, STRLEN length);
+	SV* sv_setref_pvn(SV* rv, const char* classname, char* pv, STRLEN length);
 
-Tests whether the SV is blessed into the specified class.  It does not
-check inheritance relationships.
+The following function tests whether the SV is blessed into the specified
+class.  It does not check inheritance relationships.
 
 	int  sv_isa(SV* sv, const char* name);
 
-Tests whether the SV is a reference to a blessed object.
+The following function tests whether the SV is a reference to a blessed object.
 
 	int  sv_isobject(SV* sv);
 
-Tests whether the SV is derived from the specified class. SV can be either
-a reference to a blessed object or a string containing a class name. This
-is the function implementing the C<UNIVERSAL::isa> functionality.
+The following function tests whether the SV is derived from the specified
+class. SV can be either a reference to a blessed object or a string
+containing a class name. This is the function implementing the
+C<UNIVERSAL::isa> functionality.
 
 	bool sv_derived_from(SV* sv, const char* name);
 
@@ -1031,18 +1035,26 @@ The current kinds of Magic Virtual Tables are:
     (old-style char and macro)   MGVTBL          Type of magic
     --------------------------   ------          -------------
     \0 PERL_MAGIC_sv             vtbl_sv         Special scalar variable
+    #  PERL_MAGIC_arylen         vtbl_arylen     Array length ($#ary)
+    %  PERL_MAGIC_rhash          (none)          extra data for restricted
+                                                 hashes
+    .  PERL_MAGIC_pos            vtbl_pos        pos() lvalue
+    :  PERL_MAGIC_symtab         (none)          extra data for symbol tables
+    <  PERL_MAGIC_backref        vtbl_backref    for weak ref data
+    @  PERL_MAGIC_arylen_p       (none)          to move arylen out of XPVAV
     A  PERL_MAGIC_overload       vtbl_amagic     %OVERLOAD hash
     a  PERL_MAGIC_overload_elem  vtbl_amagicelem %OVERLOAD hash element
-    c  PERL_MAGIC_overload_table (none)          Holds overload table (AMT)
-                                                 on stash
-    B  PERL_MAGIC_bm             vtbl_bm         Boyer-Moore (fast string search)
-    D  PERL_MAGIC_regdata        vtbl_regdata    Regex match position data
+    B  PERL_MAGIC_bm             vtbl_regexp     Boyer-Moore 
+                                                 (fast string search)
+    c  PERL_MAGIC_overload_table vtbl_ovrld      Holds overload table 
+                                                 (AMT) on stash
+    D  PERL_MAGIC_regdata        vtbl_regdata    Regex match position data 
                                                  (@+ and @- vars)
     d  PERL_MAGIC_regdatum       vtbl_regdatum   Regex match position data
                                                  element
     E  PERL_MAGIC_env            vtbl_env        %ENV hash
     e  PERL_MAGIC_envelem        vtbl_envelem    %ENV hash element
-    f  PERL_MAGIC_fm             vtbl_fm         Formline ('compiled' format)
+    f  PERL_MAGIC_fm             vtbl_regdata    Formline ('compiled' format)
     g  PERL_MAGIC_regex_global   vtbl_mglob      m//g target / study()ed string
     H  PERL_MAGIC_hints          vtbl_hints      %^H hash
     h  PERL_MAGIC_hintselem      vtbl_hintselem  %^H hash element
@@ -1051,29 +1063,28 @@ The current kinds of Magic Virtual Tables are:
     k  PERL_MAGIC_nkeys          vtbl_nkeys      scalar(keys()) lvalue
     L  PERL_MAGIC_dbfile         (none)          Debugger %_<filename
     l  PERL_MAGIC_dbline         vtbl_dbline     Debugger %_<filename element
-    o  PERL_MAGIC_collxfrm       vtbl_collxfrm   Locale collate transformation
+    N  PERL_MAGIC_shared         (none)          Shared between threads
+    n  PERL_MAGIC_shared_scalar  (none)          Shared between threads
+    o  PERL_MAGIC_collxfrm       vtbl_collxfrm   Locale transformation
     P  PERL_MAGIC_tied           vtbl_pack       Tied array or hash
     p  PERL_MAGIC_tiedelem       vtbl_packelem   Tied array or hash element
     q  PERL_MAGIC_tiedscalar     vtbl_packelem   Tied scalar or handle
-    r  PERL_MAGIC_qr             vtbl_qr         precompiled qr// regex
-    S  PERL_MAGIC_sig            vtbl_sig        %SIG hash
+    r  PERL_MAGIC_qr             vtbl_regexp     precompiled qr// regex
+    S  PERL_MAGIC_sig            (none)          %SIG hash
     s  PERL_MAGIC_sigelem        vtbl_sigelem    %SIG hash element
     t  PERL_MAGIC_taint          vtbl_taint      Taintedness
     U  PERL_MAGIC_uvar           vtbl_uvar       Available for use by extensions
+    u  PERL_MAGIC_uvar_elem      (none)          Reserved for use by extensions
+    V  PERL_MAGIC_vstring        (none)          SV was vstring literal
     v  PERL_MAGIC_vec            vtbl_vec        vec() lvalue
-    V  PERL_MAGIC_vstring        (none)          v-string scalars
-    w  PERL_MAGIC_utf8           vtbl_utf8       UTF-8 length+offset cache
+    w  PERL_MAGIC_utf8           vtbl_utf8       Cached UTF-8 information
     x  PERL_MAGIC_substr         vtbl_substr     substr() lvalue
     y  PERL_MAGIC_defelem        vtbl_defelem    Shadow "foreach" iterator
                                                  variable / smart parameter
                                                  vivification
-    #  PERL_MAGIC_arylen         vtbl_arylen     Array length ($#ary)
-    .  PERL_MAGIC_pos            vtbl_pos        pos() lvalue
-    <  PERL_MAGIC_backref        vtbl_backref    back pointer to a weak ref 
+    ]  PERL_MAGIC_checkcall      (none)          inlining/mutation of call to
+                                                 this CV
     ~  PERL_MAGIC_ext            (none)          Available for use by extensions
-    :  PERL_MAGIC_symtab         (none)          hash used as symbol table
-    %  PERL_MAGIC_rhash          (none)          hash used as restricted hash
-    @  PERL_MAGIC_arylen_p       vtbl_arylen_p   pointer to $#a from @a
 
 
 When an uppercase and lowercase letter both exist in the table, then the
@@ -1125,7 +1136,7 @@ is activated whenever the hash is accessed with a key specified as
 an C<SV> through the functions C<hv_store_ent>, C<hv_fetch_ent>,
 C<hv_delete_ent>, and C<hv_exists_ent>.  Accessing the key as a string
 through the functions without the C<..._ent> suffix circumvents the
-hook.  See L<Hash::Util::Fieldhash/Guts> for a detailed description.
+hook.  See L<Hash::Util::FieldHash/GUTS> for a detailed description.
 
 Note that because multiple extensions may be using C<PERL_MAGIC_ext>
 or C<PERL_MAGIC_uvar> magic, it is important for extensions to take
@@ -2361,7 +2372,7 @@ usually called within the sources as C<whatever(...)>.
 
 This does not need a interpreter context, so the definition has no
 C<pTHX>, and it follows that callers don't use C<aTHX>.  (See
-L<perlguts/Background and PERL_IMPLICIT_CONTEXT>.)
+L</Background and PERL_IMPLICIT_CONTEXT>.)
 
 =item r
 

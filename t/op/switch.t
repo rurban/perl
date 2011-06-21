@@ -9,11 +9,19 @@ BEGIN {
 use strict;
 use warnings;
 
-plan tests => 164;
+plan tests => 168;
 
-# The behaviour of the feature pragma should be tested by lib/switch.t
-# using the tests in t/lib/switch/*. This file tests the behaviour of
+# The behaviour of the feature pragma should be tested by lib/feature.t
+# using the tests in t/lib/feature/*. This file tests the behaviour of
 # the switch ops themselves.
+
+
+# Before loading feature, test the switch ops with CORE::
+CORE::given(3) {
+    CORE::when(3) { pass "CORE::given and CORE::when"; continue }
+    CORE::default { pass "continue (without feature) and CORE::default" }
+}
+
 
 use feature 'switch';
 
@@ -1198,6 +1206,16 @@ unreified_check(undef,"");
     }
     is("@in_list", "a e", "when(hash)");
     is("@in_slice", "a", "when(hash slice)");
+}
+
+{ # RT#84526 - Handle magical TARG
+    my $x = my $y = "aaa";
+    for ($x, $y) {
+	given ($_) {
+	    is(pos, undef, "handle magical TARG");
+            pos = 1;
+	}
+    }
 }
 
 # Okay, that'll do for now. The intricacies of the smartmatch

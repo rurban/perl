@@ -294,11 +294,16 @@ Perl_safesyscalloc(MEM_SIZE count, MEM_SIZE size)
     dTHX;
 #endif
     Malloc_t ptr;
+#if defined(PERL_TRACK_MEMPOOL) || defined(HAS_64K_LIMIT) || defined(DEBUGGING)
     MEM_SIZE total_size = 0;
+#endif
 
     /* Even though calloc() for zero bytes is strange, be robust. */
-    if (size && (count <= MEM_SIZE_MAX / size))
+    if (size && (count <= MEM_SIZE_MAX / size)) {
+#if defined(PERL_TRACK_MEMPOOL) || defined(HAS_64K_LIMIT) || defined(DEBUGGING)
 	total_size = size * count;
+#endif
+    }
     else
 	Perl_croak_nocontext("%s", PL_memory_wrap);
 #ifdef PERL_TRACK_MEMPOOL
@@ -540,12 +545,23 @@ Perl_fbm_compile(pTHX_ SV *sv, U32 flags)
 {
     dVAR;
     register const U8 *s;
-    register U32 i;
+    STRLEN i;
     STRLEN len;
-    U32 rarest = 0;
+    STRLEN rarest = 0;
     U32 frequency = 256;
+    MAGIC *mg;
 
     PERL_ARGS_ASSERT_FBM_COMPILE;
+
+    /* Refuse to fbm_compile a studied scalar, as this gives more flexibility in
+       SV flag usage.  No real-world code would ever end up using a studied
+       scalar as a compile-time second argument to index, so this isn't a real
+       pessimisation.  */
+    if (SvSCREAM(sv))
+	return;
+
+    if (SvVALID(sv))
+	return;
 
     if (flags & FBMcf_TAIL) {
 	MAGIC * const mg = SvUTF8(sv) && SvMAGICAL(sv) ? mg_find(sv, PERL_MAGIC_utf8) : NULL;
@@ -556,31 +572,49 @@ Perl_fbm_compile(pTHX_ SV *sv, U32 flags)
     s = (U8*)SvPV_force_mutable(sv, len);
     if (len == 0)		/* TAIL might be on a zero-length string. */
 	return;
-    SvUPGRADE(sv, SVt_PVGV);
+    SvUPGRADE(sv, SVt_PVMG);
     SvIOK_off(sv);
     SvNOK_off(sv);
     SvVALID_on(sv);
+
+    /* "deep magic", the comment used to add. The use of MAGIC itself isn't
+       really. MAGIC was originally added in 79072805bf63abe5 (perl 5.0 alpha 2)
+       to call SvVALID_off() if the scalar was assigned to.
+
+       The comment itself (and "deeper magic" below) date back to
+       378cc40b38293ffc (perl 2.0). "deep magic" was an annotation on
+       str->str_pok |= 2;
+       where the magic (presumably) was that the scalar had a BM table hidden
+       inside itself.
+
+       As MAGIC is always present on BMs [in Perl 5 :-)], we can use it to store
+       the table instead of the previous (somewhat hacky) approach of co-opting
+       the string buffer and storing it after the string.  */
+
+    assert(!mg_find(sv, PERL_MAGIC_bm));
+    mg = sv_magicext(sv, NULL, PERL_MAGIC_bm, &PL_vtbl_bm, NULL, 0);
+    assert(mg);
+
     if (len > 2) {
-	const unsigned char *sb;
+	/* Shorter strings are special-cased in Perl_fbm_instr(), and don't use
+	   the BM table.  */
 	const U8 mlen = (len>255) ? 255 : (U8)len;
+	const unsigned char *const sb = s + len - mlen; /* first char (maybe) */
 	register U8 *table;
 
-	Sv_Grow(sv, len + 256 + PERL_FBM_TABLE_OFFSET);
-	table
-	    = (unsigned char*)(SvPVX_mutable(sv) + len + PERL_FBM_TABLE_OFFSET);
-	s = table - 1 - PERL_FBM_TABLE_OFFSET;	/* last char */
+	Newx(table, 256, U8);
 	memset((void*)table, mlen, 256);
+	mg->mg_ptr = (char *)table;
+	mg->mg_len = 256;
+
+	s += len - 1; /* last char */
 	i = 0;
-	sb = s - mlen + 1;			/* first char (maybe) */
 	while (s >= sb) {
 	    if (table[*s] == mlen)
 		table[*s] = (U8)i;
 	    s--, i++;
 	}
-    } else {
-	Sv_Grow(sv, len + PERL_FBM_TABLE_OFFSET);
     }
-    sv_magic(sv, NULL, PERL_MAGIC_bm, NULL, 0);	/* deep magic */
 
     s = (const unsigned char*)(SvPVX_const(sv));	/* deeper magic */
     for (i = 0; i < len; i++) {
@@ -589,14 +623,13 @@ Perl_fbm_compile(pTHX_ SV *sv, U32 flags)
 	    frequency = PL_freq[s[i]];
 	}
     }
-    BmFLAGS(sv) = (U8)flags;
     BmRARE(sv) = s[rarest];
     BmPREVIOUS(sv) = rarest;
     BmUSEFUL(sv) = 100;			/* Initial value */
     if (flags & FBMcf_TAIL)
 	SvTAIL_on(sv);
-    DEBUG_r(PerlIO_printf(Perl_debug_log, "rarest char %c at %lu\n",
-			  BmRARE(sv),(unsigned long)BmPREVIOUS(sv)));
+    DEBUG_r(PerlIO_printf(Perl_debug_log, "rarest char %c at %"UVuf"\n",
+			  BmRARE(sv), BmPREVIOUS(sv)));
 }
 
 /* If SvTAIL(littlestr), it has a fake '\n' at end. */
@@ -636,9 +669,10 @@ Perl_fbm_instr(pTHX_ unsigned char *big, register unsigned char *bigend, SV *lit
 	return NULL;
     }
 
-    if (littlelen <= 2) {		/* Special-cased */
-
-	if (littlelen == 1) {
+    switch (littlelen) { /* Special cases for 0, 1 and 2  */
+    case 0:
+	return (char*)big;		/* Cannot be SvTAIL! */
+    case 1:
 	    if (SvTAIL(littlestr) && !multiline) { /* Anchor only! */
 		/* Know that bigend != big.  */
 		if (bigend[-1] == '\n')
@@ -654,11 +688,7 @@ Perl_fbm_instr(pTHX_ unsigned char *big, register unsigned char *bigend, SV *lit
 	    if (SvTAIL(littlestr))
 		return (char *) bigend;
 	    return NULL;
-	}
-	if (!littlelen)
-	    return (char*)big;		/* Cannot be SvTAIL! */
-
-	/* littlelen is 2 */
+    case 2:
 	if (SvTAIL(littlestr) && !multiline) {
 	    if (bigend[-1] == '\n' && bigend[-2] == *little)
 		return (char*)bigend - 2;
@@ -718,7 +748,10 @@ Perl_fbm_instr(pTHX_ unsigned char *big, register unsigned char *bigend, SV *lit
 	if (SvTAIL(littlestr) && (*bigend == *little))
 	    return (char *)bigend;	/* bigend is already decremented. */
 	return NULL;
+    default:
+	break; /* Only lengths 0 1 and 2 have special-case code.  */
     }
+
     if (SvTAIL(littlestr) && !multiline) {	/* tail anchored? */
 	s = bigend - littlelen;
 	if (s >= big && bigend[-1] == '\n' && *s == *little
@@ -756,8 +789,8 @@ Perl_fbm_instr(pTHX_ unsigned char *big, register unsigned char *bigend, SV *lit
 	return NULL;
 
     {
-	register const unsigned char * const table
-	    = little + littlelen + PERL_FBM_TABLE_OFFSET;
+	const MAGIC *const mg = mg_find(littlestr, PERL_MAGIC_bm);
+	const unsigned char * const table = (const unsigned char *) mg->mg_ptr;
 	register const unsigned char *oldlittle;
 
 	--littlelen;			/* Last char found by table lookup */
@@ -793,7 +826,7 @@ Perl_fbm_instr(pTHX_ unsigned char *big, register unsigned char *bigend, SV *lit
 	}
       check_end:
 	if ( s == bigend
-	     && (BmFLAGS(littlestr) & FBMcf_TAIL)
+	     && SvTAIL(littlestr)
 	     && memEQ((char *)(bigend - littlelen),
 		      (char *)(oldlittle - littlelen), littlelen) )
 	    return (char*)bigend - littlelen;
@@ -831,7 +864,7 @@ Perl_screaminstr(pTHX_ SV *bigstr, SV *littlestr, I32 start_shift, I32 end_shift
 
     PERL_ARGS_ASSERT_SCREAMINSTR;
 
-    assert(SvTYPE(littlestr) == SVt_PVGV);
+    assert(SvTYPE(littlestr) == SVt_PVMG);
     assert(SvVALID(littlestr));
 
     if (*old_posp == -1
@@ -2708,7 +2741,6 @@ Perl_my_popen(pTHX_ const char *cmd, const char *mode)
 	sleep(5);
     }
     if (pid == 0) {
-	GV* tmpgv;
 
 #undef THIS
 #undef THAT
@@ -2754,12 +2786,6 @@ Perl_my_popen(pTHX_ const char *cmd, const char *mode)
       default, binary, low-level mode; see PerlIOBuf_open(). */
    PerlLIO_setmode((*mode == 'r'), O_BINARY);
 #endif 
-
-	if ((tmpgv = gv_fetchpvs("$", GV_ADD|GV_NOTQUAL, SVt_PV))) {
-	    SvREADONLY_off(GvSV(tmpgv));
-	    sv_setiv(GvSV(tmpgv), PerlProc_getpid());
-	    SvREADONLY_on(GvSV(tmpgv));
-	}
 #ifdef THREADS_HAVE_PIDS
 	PL_ppid = (IV)getppid();
 #endif
@@ -3710,104 +3736,10 @@ Perl_getenv_len(pTHX_ const char *env_elem, unsigned long *len)
 MGVTBL*
 Perl_get_vtbl(pTHX_ int vtbl_id)
 {
-    const MGVTBL* result;
     PERL_UNUSED_CONTEXT;
 
-    switch(vtbl_id) {
-    case want_vtbl_sv:
-	result = &PL_vtbl_sv;
-	break;
-    case want_vtbl_env:
-	result = &PL_vtbl_env;
-	break;
-    case want_vtbl_envelem:
-	result = &PL_vtbl_envelem;
-	break;
-    case want_vtbl_sig:
-	result = &PL_vtbl_sig;
-	break;
-    case want_vtbl_sigelem:
-	result = &PL_vtbl_sigelem;
-	break;
-    case want_vtbl_pack:
-	result = &PL_vtbl_pack;
-	break;
-    case want_vtbl_packelem:
-	result = &PL_vtbl_packelem;
-	break;
-    case want_vtbl_dbline:
-	result = &PL_vtbl_dbline;
-	break;
-    case want_vtbl_isa:
-	result = &PL_vtbl_isa;
-	break;
-    case want_vtbl_isaelem:
-	result = &PL_vtbl_isaelem;
-	break;
-    case want_vtbl_arylen:
-	result = &PL_vtbl_arylen;
-	break;
-    case want_vtbl_mglob:
-	result = &PL_vtbl_mglob;
-	break;
-    case want_vtbl_nkeys:
-	result = &PL_vtbl_nkeys;
-	break;
-    case want_vtbl_taint:
-	result = &PL_vtbl_taint;
-	break;
-    case want_vtbl_substr:
-	result = &PL_vtbl_substr;
-	break;
-    case want_vtbl_vec:
-	result = &PL_vtbl_vec;
-	break;
-    case want_vtbl_pos:
-	result = &PL_vtbl_pos;
-	break;
-    case want_vtbl_bm:
-	result = &PL_vtbl_bm;
-	break;
-    case want_vtbl_fm:
-	result = &PL_vtbl_fm;
-	break;
-    case want_vtbl_uvar:
-	result = &PL_vtbl_uvar;
-	break;
-    case want_vtbl_defelem:
-	result = &PL_vtbl_defelem;
-	break;
-    case want_vtbl_regexp:
-	result = &PL_vtbl_regexp;
-	break;
-    case want_vtbl_regdata:
-	result = &PL_vtbl_regdata;
-	break;
-    case want_vtbl_regdatum:
-	result = &PL_vtbl_regdatum;
-	break;
-#ifdef USE_LOCALE_COLLATE
-    case want_vtbl_collxfrm:
-	result = &PL_vtbl_collxfrm;
-	break;
-#endif
-    case want_vtbl_amagic:
-	result = &PL_vtbl_amagic;
-	break;
-    case want_vtbl_amagicelem:
-	result = &PL_vtbl_amagicelem;
-	break;
-    case want_vtbl_backref:
-	result = &PL_vtbl_backref;
-	break;
-    case want_vtbl_utf8:
-	result = &PL_vtbl_utf8;
-	break;
-    default:
-	result = NULL;
-	break;
-    }
-    return (MGVTBL*)result;
+    return (vtbl_id < 0 || vtbl_id >= magic_vtable_max)
+	? NULL : PL_magic_vtables + vtbl_id;
 }
 
 I32
@@ -5868,18 +5800,15 @@ Perl_init_global_struct(pTHX)
 #  undef PERLVARA
 #  undef PERLVARI
 #  undef PERLVARIC
-#  undef PERLVARISC
 #  define PERLVAR(var,type) /**/
 #  define PERLVARA(var,n,type) /**/
 #  define PERLVARI(var,type,init) plvarsp->var = init;
 #  define PERLVARIC(var,type,init) plvarsp->var = init;
-#  define PERLVARISC(var,init) Copy(init, plvarsp->var, sizeof(init), char);
 #  include "perlvars.h"
 #  undef PERLVAR
 #  undef PERLVARA
 #  undef PERLVARI
 #  undef PERLVARIC
-#  undef PERLVARISC
 #  ifdef PERL_GLOBAL_STRUCT
     plvarsp->Gppaddr =
 	(Perl_ppaddr_t*)

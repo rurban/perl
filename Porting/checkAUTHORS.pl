@@ -560,6 +560,7 @@ david.dyck\100fluke.com                 dcd\100tc.fluke.com
 david\100kineticode.com                 david\100wheeler.com
 +                                       david\100wheeler.net
 dennis\100booking.com                   dennis\100camel.ams6.corp.booking.com
++                                       dennis\100kaarsemaker.net
 dev-perl\100pimb.org                    knew-p5p\100pimb.org
 +                                       lists-p5p\100pimb.org
 djberg86\100attbi.com                   djberg96\100attbi.com
@@ -598,6 +599,7 @@ hansmu\100xs4all.nl                     hansm\100icgroup.nl
 hio\100ymir.co.jp                       hio\100hio.jp
 hops\100sco.com                         hops\100scoot.pdev.sco.com
 
+ian.goodacre\100xtra.co.nz              ian\100debian.lan
 ingo_weinhold\100gmx.de                 bonefish\100cs.tu-berlin.de
 
 james\100mastros.biz                    theorb\100desert-island.me.uk
@@ -677,6 +679,7 @@ me\100davidglasser.net                  glasser\100tang-eleven-seventy-nine.mit.
 merijnb\100iloquent.nl                  merijnb\100ms.com
 +                                       merijnb\100iloquent.com
 merlyn\100stonehenge.com                merlyn\100gadget.cscaper.com
+mestre.smash\100gmail.com               smash\100cpan.org
 mgjv\100comdyn.com.au                   mgjv\100tradingpost.com.au
 mlh\100swl.msd.ray.com                  webtools\100uewrhp03.msd.ray.com
 michael.schroeder\100informatik.uni-erlangen.de mls\100suse.de
@@ -784,6 +787,7 @@ rootbeer\100teleport.com                rootbeer\100redcat.com
 +                                       tomphoenix\100unknown
 rurban\100x-ray.at                      rurban\100cpan.org
 
+sartak\100bestpractical.com             sartak\100gmail.com
 sadinoff\100olf.com                     danny-cpan\100sadinoff.com
 schubiger\100cpan.org                   steven\100accognoscere.org
 +                                       sts\100accognoscere.org
@@ -799,7 +803,9 @@ schwab\100suse.de                       schwab\100issan.informatik.uni-dortmund.
 +                                       schwab\100ls5.informatik.uni-dortmund.de
 sebastien\100aperghis.net               maddingue\100free.fr
 +                                       saper\100cpan.org
+shigeya\100wide.ad.jp                   shigeya\100foretune.co.jp
 shlomif\100vipe.technion.ac.il          shlomif\100iglu.org.il
++                                       shlomif+processed-by-perl\100gmail.com
 simon\100simon-cozens.org               simon\100pembro4.pmb.ox.ac.uk
 +                                       simon\100brecon.co.uk
 +                                       simon\100othersideofthe.earth.li
@@ -830,6 +836,7 @@ stef\100mongueurs.net                   stef\100payrard.net
 +                                       properler\100freesurf.fr
 +                                       stef\100francenet.fr
 sthoenna\100efn.org                     ysth\100raven.shiftboard.com
+sisyphus1\100optusnet.com.au            sisyphus\100cpan.org
 
 tassilo.parseval\100post.rwth-aachen.de tassilo.von.parseval\100rwth-aachen.de
 tchrist\100perl.com                     tchrist\100mox.perl.com

@@ -72,7 +72,11 @@ are split between groupings, or when one or more are quantified.  Thus
  # be even if it did!!
  "\N{LATIN SMALL LIGATURE FI}" =~ /(f)(i)/i;      # Doesn't match!
 
-Also, this matching doesn't fully conform to the current Unicode
+Perl doesn't match multiple characters in an inverted bracketed
+character class, which otherwise could be highly confusing.  See
+L<perlrecharclass/Negation>.
+
+Also, Perl matching doesn't fully conform to the current Unicode C</i>
 recommendations, which ask that the matching be made upon the NFD
 (Normalization Form Decomposed) of the text.  However, Unicode is
 in the process of reconsidering and revising their recommendations.
@@ -212,7 +216,7 @@ a number is a different quantity than it really is.  For example,
 C<BENGALI DIGIT FOUR> (U+09EA) looks very much like an
 C<ASCII DIGIT EIGHT> (U+0038).  And, C<\d+>, may match strings of digits
 that are a mixture from different writing systems, creating a security
-issue.  L<Unicode::UCD/num()> can be used to sort this out.
+issue.  L<Unicode::UCDE<sol>num()|Unicode::UCD/num> can be used to sort this out.
 
 Also, case-insensitive matching works on the full set of Unicode
 characters.  The C<KELVIN SIGN>, for example matches the letters "k" and
@@ -333,7 +337,7 @@ The innermost always has priority over any outer ones, and one applying
 to the whole expression has priority over any of the default settings that are
 described in the remainder of this section.
 
-The C<L<use re 'E<sol>foo'|re/'E<sol>flags' mode">> pragma can be used to set
+The C<L<use re 'E<sol>foo'|re/"'/flags' mode">> pragma can be used to set
 default modifiers (including these) for regular expressions compiled
 within its scope.  This pragma has precedence over the other pragmas
 listed below that change the defaults.
@@ -846,7 +850,7 @@ construct because 1) question marks are rare in older regular
 expressions, and 2) whenever you see one, you should stop and
 "question" exactly what is going on.  That's psychology....
 
-=over 10
+=over 4
 
 =item C<(?#text)>
 X<(?#)>
@@ -1164,16 +1168,17 @@ C<local>ization are undone, so that
 
   $_ = 'a' x 8;
   m<
-     (?{ $cnt = 0 })                   # Initialize $cnt.
+     (?{ $cnt = 0 })               # Initialize $cnt.
      (
        a
        (?{
-           local $cnt = $cnt + 1;      # Update $cnt, backtracking-safe.
+           local $cnt = $cnt + 1;  # Update $cnt,
+                                   # backtracking-safe.
        })
      )*
      aaaa
-     (?{ $res = $cnt })                # On success copy to
-                                       # non-localized location.
+     (?{ $res = $cnt })            # On success copy to
+                                   # non-localized location.
    >x;
 
 will set C<$res = 4>.  Note that after the match, C<$cnt> returns to the globally
@@ -1249,15 +1254,15 @@ where the C<code> ends are currently somewhat convoluted.
 
 The following pattern matches a parenthesized group:
 
-  $re = qr{
-             \(
-             (?:
-                (?> [^()]+ )       # Non-parens without backtracking
-              |
-                (??{ $re })        # Group with matching parens
-             )*
-             \)
-          }x;
+ $re = qr{
+            \(
+            (?:
+               (?> [^()]+ )  # Non-parens without backtracking
+             |
+               (??{ $re })   # Group with matching parens
+            )*
+            \)
+         }x;
 
 See also C<(?PARNO)> for a different, more efficient way to accomplish
 the same task.
@@ -1301,15 +1306,15 @@ included.
 The following pattern matches a function foo() which may contain
 balanced parentheses as the argument.
 
-  $re = qr{ (                    # paren group 1 (full function)
+  $re = qr{ (                   # paren group 1 (full function)
               foo
-              (                  # paren group 2 (parens)
+              (                 # paren group 2 (parens)
                 \(
-                  (              # paren group 3 (contents of parens)
+                  (             # paren group 3 (contents of parens)
                   (?:
-                   (?> [^()]+ )  # Non-parens without backtracking
+                   (?> [^()]+ ) # Non-parens without backtracking
                   |
-                   (?2)          # Recurse to start of paren group 2
+                   (?2)         # Recurse to start of paren group 2
                   )*
                   )
                 \)
@@ -1614,7 +1619,7 @@ Use C<local> to localize changes to them to a specific scope if necessary.
 If a pattern does not contain a special backtracking verb that allows an
 argument, then C<$REGERROR> and C<$REGMARK> are not touched at all.
 
-=over 4
+=over 3
 
 =item Verbs that take an argument
 
@@ -1692,8 +1697,8 @@ executing the (*SKIP) pattern.
 Compare the following to the examples in C<(*PRUNE)>; note the string
 is twice as long:
 
-    'aaabaaab' =~ /a+b?(*SKIP)(?{print "$&\n"; $count++})(*FAIL)/;
-    print "Count=$count\n";
+ 'aaabaaab' =~ /a+b?(*SKIP)(?{print "$&\n"; $count++})(*FAIL)/;
+ print "Count=$count\n";
 
 outputs
 
@@ -1706,7 +1711,7 @@ executed, the next starting point will be where the cursor was when the
 C<(*SKIP)> was executed.
 
 =item C<(*MARK:NAME)> C<(*:NAME)>
-X<(*MARK)> C<(*MARK:NAME)> C<(*:NAME)>
+X<(*MARK)> X<(*MARK:NAME)> X<(*:NAME)>
 
 This zero-width pattern can be used to mark the point reached in a string
 when a certain part of the pattern has been successfully matched. This
@@ -1734,7 +1739,7 @@ failing the match and has provided its own name to use, the C<$REGERROR>
 variable will be set to the name of the most recently executed
 C<(*MARK:NAME)>.
 
-See C<(*SKIP)> for more details.
+See L</(*SKIP)> for more details.
 
 As a shortcut C<(*MARK:NAME)> can be written C<(*:NAME)>.
 
@@ -1771,6 +1776,12 @@ is not the same as
 as after matching the A but failing on the B the C<(*THEN)> verb will
 backtrack and try C; but the C<(*PRUNE)> verb will simply fail.
 
+=back
+
+=item Verbs without an argument
+
+=over 4
+
 =item C<(*COMMIT)>
 X<(*COMMIT)>
 
@@ -1780,8 +1791,8 @@ into on failure it causes the match to fail outright. No further attempts
 to find a valid match by advancing the start pointer will occur again.
 For example,
 
-    'aaabaaab' =~ /a+b?(*COMMIT)(?{print "$&\n"; $count++})(*FAIL)/;
-    print "Count=$count\n";
+ 'aaabaaab' =~ /a+b?(*COMMIT)(?{print "$&\n"; $count++})(*FAIL)/;
+ print "Count=$count\n";
 
 outputs
 
@@ -1791,12 +1802,6 @@ outputs
 In other words, once the C<(*COMMIT)> has been entered, and if the pattern
 does not match, the regex engine will not try any further matching on the
 rest of the string.
-
-=back
-
-=item Verbs without an argument
-
-=over 4
 
 =item C<(*FAIL)> C<(*F)>
 X<(*FAIL)> X<(*F)>
@@ -2177,7 +2182,7 @@ However, long experience has shown that many programming tasks may
 be significantly simplified by using repeated subexpressions that
 may match zero-length substrings.  Here's a simple example being:
 
-    @chars = split //, $string;                  # // is not magic in split
+    @chars = split //, $string;           # // is not magic in split
     ($whitewashed = $string) =~ s/()/ /g; # parens avoid magic s// /
 
 Thus Perl allows such constructs, by I<forcefully breaking

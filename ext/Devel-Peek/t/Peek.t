@@ -253,7 +253,8 @@ do_test('reference to hash',
     EITER = 0x0
     Elt "123" HASH = $ADDR' . $c_pattern,
 	'',
-	$] > 5.009 && 'The hash iterator used in dump.c sets the OOK flag');
+	$] > 5.009 && $] < 5.015
+	 && 'The hash iterator used in dump.c sets the OOK flag');
 
 do_test('reference to anon sub with empty prototype',
         sub(){@_},
@@ -394,7 +395,10 @@ do_test('reference to blessed hash',
     MAX = 7
     RITER = -1
     EITER = 0x0', '',
-	$] > 5.009 ? 'The hash iterator used in dump.c sets the OOK flag'
+	$] > 5.009
+	? $] >= 5.015
+	     ? 0
+	     : 'The hash iterator used in dump.c sets the OOK flag'
 	: "Something causes the HV's array to become allocated");
 
 do_test('typeglob',
@@ -474,7 +478,10 @@ do_test('reference to hash containing Unicode',
       PV = $ADDR "\\\235\\\101"\\\0 \[UTF8 "\\\x\{200\}"\]
       CUR = 2
       LEN = \\d+',
-	$] > 5.009 ? 'The hash iterator used in dump.c sets the OOK flag'
+	$] > 5.009
+	? $] >= 5.015
+	    ?  0
+	    : 'The hash iterator used in dump.c sets the OOK flag'
 	: 'sv_length has been called on the element, and cached the result in MAGIC');
 } else {
 do_test('reference to hash containing Unicode',
@@ -502,7 +509,10 @@ do_test('reference to hash containing Unicode',
       PV = $ADDR "\\\310\\\200"\\\0 \[UTF8 "\\\x\{200\}"\]
       CUR = 2
       LEN = \\d+', '',
-	$] > 5.009 ? 'The hash iterator used in dump.c sets the OOK flag'
+	$] > 5.009
+	? $] >= 5.015
+	    ?  0
+	    : 'The hash iterator used in dump.c sets the OOK flag'
 	: 'sv_length has been called on the element, and cached the result in MAGIC');
 }
 
@@ -699,7 +709,10 @@ do_test('blessing to a class with embedded NUL characters',
     MAX = 7
     RITER = -1
     EITER = 0x0', '',
-	$] > 5.009 ? 'The hash iterator used in dump.c sets the OOK flag'
+	$] > 5.009
+	? $] >= 5.015
+	    ?  0
+	    : 'The hash iterator used in dump.c sets the OOK flag'
 	: "Something causes the HV's array to become allocated");
 
 do_test('ENAME on a stash',
@@ -769,5 +782,119 @@ do_test('ENAMEs on a stash with no NAME',
     NAMECOUNT = -3				# $] > 5.012
     ENAME = "RWOM", "KLANK"			# $] > 5.012
 ');
+
+SKIP: {
+    skip "Not built with usemymalloc", 1
+      unless $Config{usemymalloc} eq 'y';
+    my $x = __PACKAGE__;
+    ok eval { fill_mstats($x); 1 }, 'fill_mstats on COW scalar'
+     or diag $@;
+}
+
+# This is more a test of fbm_compile/pp_study (non) interaction than dumping
+# prowess, but short of duplicating all the gubbins of this file, I can't see
+# a way to make a better place for it:
+
+use constant {
+    perl => 'rules',
+    beer => 'foamy',
+};
+
+unless ($Config{useithreads}) {
+    # These end up as copies in pads under ithreads, which rather defeats the
+    # the point of what we're trying to test here.
+
+    do_test('regular string constant', perl,
+'SV = PV\\($ADDR\\) at $ADDR
+  REFCNT = 5
+  FLAGS = \\(PADMY,POK,READONLY,pPOK\\)
+  PV = $ADDR "rules"\\\0
+  CUR = 5
+  LEN = \d+
+');
+
+    eval 'index "", perl';
+
+    # FIXME - really this shouldn't say EVALED. It's a false posistive on
+    # 0x40000000 being used for several things, not a flag for "I'm in a string
+    # eval"
+
+    do_test('string constant now an FBM', perl,
+'SV = PVMG\\($ADDR\\) at $ADDR
+  REFCNT = 5
+  FLAGS = \\(PADMY,SMG,POK,READONLY,pPOK,VALID,EVALED\\)
+  PV = $ADDR "rules"\\\0
+  CUR = 5
+  LEN = \d+
+  MAGIC = $ADDR
+    MG_VIRTUAL = &PL_vtbl_regexp
+    MG_TYPE = PERL_MAGIC_bm\\(B\\)
+    MG_LEN = 256
+    MG_PTR = $ADDR "(?:\\\\\d){256}"
+  RARE = \d+
+  PREVIOUS = 1
+  USEFUL = 100
+');
+
+    is(study perl, '', "Not allowed to study an FBM");
+
+    do_test('string constant still an FBM', perl,
+'SV = PVMG\\($ADDR\\) at $ADDR
+  REFCNT = 5
+  FLAGS = \\(PADMY,SMG,POK,READONLY,pPOK,VALID,EVALED\\)
+  PV = $ADDR "rules"\\\0
+  CUR = 5
+  LEN = \d+
+  MAGIC = $ADDR
+    MG_VIRTUAL = &PL_vtbl_regexp
+    MG_TYPE = PERL_MAGIC_bm\\(B\\)
+    MG_LEN = 256
+    MG_PTR = $ADDR "(?:\\\\\d){256}"
+  RARE = \d+
+  PREVIOUS = 1
+  USEFUL = 100
+');
+
+    do_test('regular string constant', beer,
+'SV = PV\\($ADDR\\) at $ADDR
+  REFCNT = 5
+  FLAGS = \\(PADMY,POK,READONLY,pPOK\\)
+  PV = $ADDR "foamy"\\\0
+  CUR = 5
+  LEN = \d+
+');
+
+    is(study beer, 1, "Our studies were successful");
+
+    do_test('string constant now studied', beer,
+'SV = PVMG\\($ADDR\\) at $ADDR
+  REFCNT = 6
+  FLAGS = \\(PADMY,SMG,POK,READONLY,pPOK,SCREAM\\)
+  IV = 0
+  NV = 0
+  PV = $ADDR "foamy"\\\0
+  CUR = 5
+  LEN = \d+
+  MAGIC = $ADDR
+    MG_VIRTUAL = &PL_vtbl_mglob
+    MG_TYPE = PERL_MAGIC_regex_global\\(g\\)
+');
+
+    is (eval 'index "not too foamy", beer', 8, 'correct index');
+
+    do_test('string constant still studied', beer,
+'SV = PVMG\\($ADDR\\) at $ADDR
+  REFCNT = 6
+  FLAGS = \\(PADMY,SMG,POK,READONLY,pPOK,SCREAM\\)
+  IV = 0
+  NV = 0
+  PV = $ADDR "foamy"\\\0
+  CUR = 5
+  LEN = \d+
+  MAGIC = $ADDR
+    MG_VIRTUAL = &PL_vtbl_mglob
+    MG_TYPE = PERL_MAGIC_regex_global\\(g\\)
+');
+}
 
 done_testing();

@@ -562,7 +562,8 @@ ApPR	|bool	|is_uni_xdigit	|UV c
 Ap	|UV	|to_uni_upper	|UV c|NN U8 *p|NN STRLEN *lenp
 Ap	|UV	|to_uni_title	|UV c|NN U8 *p|NN STRLEN *lenp
 Ap	|UV	|to_uni_lower	|UV c|NN U8 *p|NN STRLEN *lenp
-Ap	|UV	|to_uni_fold	|UV c|NN U8 *p|NN STRLEN *lenp
+Amp	|UV	|to_uni_fold	|UV c|NN U8 *p|NN STRLEN *lenp
+AMp	|UV	|_to_uni_fold_flags|UV c|NN U8 *p|NN STRLEN *lenp|U8 flags
 ApPR	|bool	|is_uni_alnum_lc|UV c
 ApPR	|bool	|is_uni_idfirst_lc|UV c
 ApPR	|bool	|is_uni_alpha_lc|UV c
@@ -1309,7 +1310,6 @@ EsM	|void	|invlist_extend    |NN HV* const invlist|const UV len
 EsMR	|HV*	|invlist_intersection	|NN HV* const a|NN HV* const b
 EiMR	|UV	|invlist_len	|NN HV* const invlist
 EiMR	|UV	|invlist_max	|NN HV* const invlist
-EiM	|void	|invlist_set_array	|NN HV* const invlist|NN const UV* const array
 EiM	|void	|invlist_set_len	|NN HV* const invlist|const UV len
 EiM	|void	|invlist_set_max	|NN HV* const invlist|const UV max
 EiM	|void	|invlist_trim	|NN HV* const invlist
@@ -1318,11 +1318,12 @@ EsMR	|HV*	|invlist_union	|NN HV* const a|NN HV* const b
 Ap	|void	|taint_env
 Ap	|void	|taint_proper	|NULLOK const char* f|NN const char *const s
 Apd	|UV	|to_utf8_case	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp \
-				|NN SV **swashp|NN const char *normal|NN const char *special
+				|NN SV **swashp|NN const char *normal|NULLOK const char *special
 Apd	|UV	|to_utf8_lower	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
 Apd	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
 Apd	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-Apd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+Ampd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags
 #if defined(UNLINK_ALL_VERSIONS)
 Ap	|I32	|unlnk		|NN const char* f
 #endif
@@ -1581,9 +1582,14 @@ s	|HV*	|require_tie_mod|NN GV *gv|NN const char *varpv|NN SV* namesv \
 				|NN const char *methpv|const U32 flags
 #endif
 
+#if defined(PERL_IN_HV_C) || defined(PERL_IN_SV_C)
+po	|SV*	|hfree_next_entry	|NN HV *hv|NN STRLEN *indexp
+#endif
+
 #if defined(PERL_IN_HV_C)
 s	|void	|hsplit		|NN HV *hv
 s	|void	|hfreeentries	|NN HV *hv
+s	|SV*	|hv_free_ent_ret|NN HV *hv|NULLOK HE *entryK
 sa	|HE*	|new_he
 sanR	|HEK*	|save_hek_flags	|NN const char *str|I32 len|U32 hash|int flags
 sn	|void	|hv_magic_check	|NN HV *hv|NN bool *needs_copy|NN bool *needs_store
@@ -1719,7 +1725,7 @@ snR	|char *	|bytes_to_uni	|NN const U8 *start|STRLEN len|NN char *dest
 #if defined(PERL_IN_PP_CTL_C)
 sR	|OP*	|docatch	|NULLOK OP *o
 sR	|OP*	|dofindlabel	|NN OP *o|NN const char *label|NN OP **opstack|NN OP **oplimit
-sR	|OP*	|doparseform	|NN SV *sv
+s	|MAGIC *|doparseform	|NN SV *sv
 snR	|bool	|num_overflow	|NV value|I32 fldsize|I32 frcsize
 sR	|I32	|dopoptoeval	|I32 startingblock
 sR	|I32	|dopoptogiven	|I32 startingblock

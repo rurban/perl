@@ -27,6 +27,8 @@
 /* Hide global symbols */
 
 #define Gv_AMupdate(a,b)	Perl_Gv_AMupdate(aTHX_ a,b)
+#define _to_uni_fold_flags(a,b,c,d)	Perl__to_uni_fold_flags(aTHX_ a,b,c,d)
+#define _to_utf8_fold_flags(a,b,c,d)	Perl__to_utf8_fold_flags(aTHX_ a,b,c,d)
 #define amagic_call(a,b,c,d)	Perl_amagic_call(aTHX_ a,b,c,d)
 #define amagic_deref_call(a,b)	Perl_amagic_deref_call(aTHX_ a,b)
 #define apply_attrs_string(a,b,c,d)	Perl_apply_attrs_string(aTHX_ a,b,c,d)
@@ -623,7 +625,6 @@
 #define taint_env()		Perl_taint_env(aTHX)
 #define taint_proper(a,b)	Perl_taint_proper(aTHX_ a,b)
 #define tmps_grow(a)		Perl_tmps_grow(aTHX_ a)
-#define to_uni_fold(a,b,c)	Perl_to_uni_fold(aTHX_ a,b,c)
 #define to_uni_lower(a,b,c)	Perl_to_uni_lower(aTHX_ a,b,c)
 #define to_uni_lower_lc(a)	Perl_to_uni_lower_lc(aTHX_ a)
 #define to_uni_title(a,b,c)	Perl_to_uni_title(aTHX_ a,b,c)
@@ -631,7 +632,6 @@
 #define to_uni_upper(a,b,c)	Perl_to_uni_upper(aTHX_ a,b,c)
 #define to_uni_upper_lc(a)	Perl_to_uni_upper_lc(aTHX_ a)
 #define to_utf8_case(a,b,c,d,e,f)	Perl_to_utf8_case(aTHX_ a,b,c,d,e,f)
-#define to_utf8_fold(a,b,c)	Perl_to_utf8_fold(aTHX_ a,b,c)
 #define to_utf8_lower(a,b,c)	Perl_to_utf8_lower(aTHX_ a,b,c)
 #define to_utf8_title(a,b,c)	Perl_to_utf8_title(aTHX_ a,b,c)
 #define to_utf8_upper(a,b,c)	Perl_to_utf8_upper(aTHX_ a,b,c)
@@ -882,7 +882,6 @@
 #define invlist_intersection(a,b)	S_invlist_intersection(aTHX_ a,b)
 #define invlist_len(a)		S_invlist_len(aTHX_ a)
 #define invlist_max(a)		S_invlist_max(aTHX_ a)
-#define invlist_set_array(a,b)	S_invlist_set_array(aTHX_ a,b)
 #define invlist_set_len(a,b)	S_invlist_set_len(aTHX_ a,b)
 #define invlist_set_max(a,b)	S_invlist_set_max(aTHX_ a,b)
 #define invlist_trim(a)		S_invlist_trim(aTHX_ a)
@@ -1286,6 +1285,7 @@
 #define hsplit(a)		S_hsplit(aTHX_ a)
 #define hv_auxinit		S_hv_auxinit
 #define hv_delete_common(a,b,c,d,e,f,g)	S_hv_delete_common(aTHX_ a,b,c,d,e,f,g)
+#define hv_free_ent_ret(a,b)	S_hv_free_ent_ret(aTHX_ a,b)
 #define hv_magic_check		S_hv_magic_check
 #define hv_notallowed(a,b,c,d)	S_hv_notallowed(aTHX_ a,b,c,d)
 #define new_he()		S_new_he(aTHX)

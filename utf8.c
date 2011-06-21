@@ -1341,12 +1341,12 @@ Perl_to_uni_lower(pTHX_ UV c, U8* p, STRLEN *lenp)
 }
 
 UV
-Perl_to_uni_fold(pTHX_ UV c, U8* p, STRLEN *lenp)
+Perl__to_uni_fold_flags(pTHX_ UV c, U8* p, STRLEN *lenp, U8 flags)
 {
-    PERL_ARGS_ASSERT_TO_UNI_FOLD;
+    PERL_ARGS_ASSERT__TO_UNI_FOLD_FLAGS;
 
     uvchr_to_utf8(p, c);
-    return to_utf8_fold(p, p, lenp);
+    return _to_utf8_fold_flags(p, p, lenp, flags);
 }
 
 /* for now these all assume no locale info available for Unicode > 255 */
@@ -1799,7 +1799,7 @@ of the result.
 
 The "swashp" is a pointer to the swash to use.
 
-Both the special and normal mappings are stored lib/unicore/To/Foo.pl,
+Both the special and normal mappings are stored in lib/unicore/To/Foo.pl,
 and loaded by SWASHNEW, using lib/utf8_heavy.pl.  The special (usually,
 but not always, a multicharacter mapping), is tried first.
 
@@ -1853,22 +1853,6 @@ Perl_to_utf8_case(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp,
 
     if (!*swashp) /* load on-demand */
          *swashp = swash_init("utf8", normal, &PL_sv_undef, 4, 0);
-    /* This is the beginnings of a skeleton of code to read the info section
-     * that is in all the swashes in case we ever want to do that, so one can
-     * read things whose maps aren't code points, and whose default if missing
-     * is not to the code point itself.  This was just to see if it actually
-     * worked.  Details on what the possibilities are are in perluniprops.pod
-	HV * const hv = get_hv("utf8::SwashInfo", 0);
-	if (hv) {
-	 SV **svp;
-	 svp = hv_fetch(hv, (const char*)normal, strlen(normal), FALSE);
-	     const char *s;
-
-	      HV * const this_hash = SvRV(*svp);
-		svp = hv_fetch(this_hash, "type", strlen("type"), FALSE);
-	      s = SvPV_const(*svp, len);
-	}
-    }*/
 
     if (special) {
          /* It might be "special" (sometimes, but not always,
@@ -2026,15 +2010,20 @@ The first character of the foldcased version is returned
 
 =cut */
 
+/* Not currently externally documented is 'flags', which currently is non-zero
+ * if full case folds are to be used; otherwise simple folds */
+
 UV
-Perl_to_utf8_fold(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
+Perl__to_utf8_fold_flags(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp, U8 flags)
 {
+    const char *specials = (flags) ? "utf8::ToSpecFold" : NULL;
+
     dVAR;
 
-    PERL_ARGS_ASSERT_TO_UTF8_FOLD;
+    PERL_ARGS_ASSERT__TO_UTF8_FOLD_FLAGS;
 
     return Perl_to_utf8_case(aTHX_ p, ustrp, lenp,
-                             &PL_utf8_tofold, "ToFold", "utf8::ToSpecFold");
+                             &PL_utf8_tofold, "ToFold", specials);
 }
 
 /* Note:
@@ -2614,7 +2603,11 @@ HV*
 Perl__swash_inversion_hash(pTHX_ SV* const swash)
 {
 
-   /* Subject to change or removal.  For use only in one place in regexec.c
+   /* Subject to change or removal.  For use only in one place in regcomp.c.
+    * Can't be used on a property that is subject to user override, as it
+    * relies on the value of SPECIALS in the swash which would be set by
+    * utf8_heavy.pl to the hash in the non-overriden file, and hence is not set
+    * for overridden properties
     *
     * Returns a hash which is the inversion and closure of a swash mapping.
     * For example, consider the input lines:
@@ -2630,8 +2623,22 @@ Perl__swash_inversion_hash(pTHX_ SV* const swash)
     * Essentially, for any code point, it gives all the code points that map to
     * it, or the list of 'froms' for that point.
     *
-    * Currently it only looks at the main body of the swash, and ignores any
-    * additions or deletions from other swashes */
+    * Currently it ignores any additions or deletions from other swashes,
+    * looking at just the main body of the swash, and if there are SPECIALS
+    * in the swash, at that hash
+    *
+    * The specials hash can be extra code points, and most likely consists of
+    * maps from single code points to multiple ones (each expressed as a string
+    * of utf8 characters).   This function currently returns only 1-1 mappings.
+    * However consider this possible input in the specials hash:
+    * "\xEF\xAC\x85" => "\x{0073}\x{0074}",         # U+FB05 => 0073 0074
+    * "\xEF\xAC\x86" => "\x{0073}\x{0074}",         # U+FB06 => 0073 0074
+    *
+    * Both FB05 and FB06 map to the same multi-char sequence, which we don't
+    * currently handle.  But it also means that FB05 and FB06 are equivalent in
+    * a 1-1 mapping which we should handle, and this relationship may not be in
+    * the main table.  Therefore this function examines all the multi-char
+    * sequences and adds the 1-1 mappings that come out of that.  */
 
     U8 *l, *lend;
     STRLEN lcur;
@@ -2648,6 +2655,7 @@ Perl__swash_inversion_hash(pTHX_ SV* const swash)
     const STRLEN bits  = SvUV(*bitssvp);
     const STRLEN octets = bits >> 3; /* if bits == 1, then octets == 0 */
     const UV     none  = SvUV(*nonesvp);
+    SV **specials_p = hv_fetchs(hv, "SPECIALS", 0);
 
     HV* ret = newHV();
 
@@ -2658,6 +2666,114 @@ Perl__swash_inversion_hash(pTHX_ SV* const swash)
 	Perl_croak(aTHX_ "panic: swash_inversion_hash doesn't expect bits %"UVuf,
 						 (UV)bits);
     }
+
+    if (specials_p) { /* It might be "special" (sometimes, but not always, a
+			mapping to more than one character */
+
+	/* Construct an inverse mapping hash for the specials */
+	HV * const specials_hv = MUTABLE_HV(SvRV(*specials_p));
+	HV * specials_inverse = newHV();
+	char *char_from; /* the lhs of the map */
+	I32 from_len;   /* its byte length */
+	char *char_to;  /* the rhs of the map */
+	I32 to_len;	/* its byte length */
+	SV *sv_to;	/* and in a sv */
+	AV* from_list;  /* list of things that map to each 'to' */
+
+	hv_iterinit(specials_hv);
+
+	/* The keys are the characters (in utf8) that map to the corresponding
+	 * utf8 string value.  Iterate through the list creating the inverse
+	 * list. */
+	while ((sv_to = hv_iternextsv(specials_hv, &char_from, &from_len))) {
+	    SV** listp;
+	    if (! SvPOK(sv_to)) {
+		Perl_croak(aTHX_ "panic: value returned from hv_iternextsv() unexpectedly is not a string");
+	    }
+	    /*DEBUG_U(PerlIO_printf(Perl_debug_log, "Found mapping from %"UVXf", First char of to is %"UVXf"\n", utf8_to_uvchr((U8*) char_from, 0), utf8_to_uvchr((U8*) SvPVX(sv_to), 0)));*/
+
+	    /* Each key in the inverse list is a mapped-to value, and the key's
+	     * hash value is a list of the strings (each in utf8) that map to
+	     * it.  Those strings are all one character long */
+	    if ((listp = hv_fetch(specials_inverse,
+				    SvPVX(sv_to),
+				    SvCUR(sv_to), 0)))
+	    {
+		from_list = (AV*) *listp;
+	    }
+	    else { /* No entry yet for it: create one */
+		from_list = newAV();
+		if (! hv_store(specials_inverse,
+				SvPVX(sv_to),
+				SvCUR(sv_to),
+				(SV*) from_list, 0))
+		{
+		    Perl_croak(aTHX_ "panic: hv_store() unexpectedly failed");
+		}
+	    }
+
+	    /* Here have the list associated with this 'to' (perhaps newly
+	     * created and empty).  Just add to it.  Note that we ASSUME that
+	     * the input is guaranteed to not have duplications, so we don't
+	     * check for that.  Duplications just slow down execution time. */
+	    av_push(from_list, newSVpvn_utf8(char_from, from_len, TRUE));
+	}
+
+	/* Here, 'specials_inverse' contains the inverse mapping.  Go through
+	 * it looking for cases like the FB05/FB06 examples above.  There would
+	 * be an entry in the hash like
+	*	'st' => [ FB05, FB06 ]
+	* In this example we will create two lists that get stored in the
+	* returned hash, 'ret':
+	*	FB05 => [ FB05, FB06 ]
+	*	FB06 => [ FB05, FB06 ]
+	*
+	* Note that there is nothing to do if the array only has one element.
+	* (In the normal 1-1 case handled below, we don't have to worry about
+	* two lists, as everything gets tied to the single list that is
+	* generated for the single character 'to'.  But here, we are omitting
+	* that list, ('st' in the example), so must have multiple lists.) */
+	while ((from_list = (AV *) hv_iternextsv(specials_inverse,
+						 &char_to, &to_len)))
+	{
+	    if (av_len(from_list) > 0) {
+		int i;
+
+		/* We iterate over all combinations of i,j to place each code
+		 * point on each list */
+		for (i = 0; i <= av_len(from_list); i++) {
+		    int j;
+		    AV* i_list = newAV();
+		    SV** entryp = av_fetch(from_list, i, FALSE);
+		    if (entryp == NULL) {
+			Perl_croak(aTHX_ "panic: av_fetch() unexpectedly failed");
+		    }
+		    if (hv_fetch(ret, SvPVX(*entryp), SvCUR(*entryp), FALSE)) {
+			Perl_croak(aTHX_ "panic: unexpected entry for %s", SvPVX(*entryp));
+		    }
+		    if (! hv_store(ret, SvPVX(*entryp), SvCUR(*entryp),
+				   (SV*) i_list, FALSE))
+		    {
+			Perl_croak(aTHX_ "panic: hv_store() unexpectedly failed");
+		    }
+
+		    /* For debugging: UV u = utf8_to_uvchr((U8*) SvPVX(*entryp), 0);*/
+		    for (j = 0; j <= av_len(from_list); j++) {
+			entryp = av_fetch(from_list, j, FALSE);
+			if (entryp == NULL) {
+			    Perl_croak(aTHX_ "panic: av_fetch() unexpectedly failed");
+			}
+
+			/* When i==j this adds itself to the list */
+			av_push(i_list, newSVuv(utf8_to_uvchr(
+						(U8*) SvPVX(*entryp), 0)));
+			/*DEBUG_U(PerlIO_printf(Perl_debug_log, "Adding %"UVXf" to list for %"UVXf"\n", utf8_to_uvchr((U8*) SvPVX(*entryp), 0), u));*/
+		    }
+		}
+	    }
+	}
+	SvREFCNT_dec(specials_inverse); /* done with it */
+    } /* End of specials */
 
     /* read $swash->{LIST} */
     l = (U8*)SvPV(*listsvp, lcur);
@@ -2676,10 +2792,10 @@ Perl__swash_inversion_hash(pTHX_ SV* const swash)
 	/* Each element in the range is to be inverted */
 	for (inverse = min; inverse <= max; inverse++) {
 	    AV* list;
-	    SV* element;
 	    SV** listp;
 	    IV i;
 	    bool found_key = FALSE;
+	    bool found_inverse = FALSE;
 
 	    /* The key is the inverse mapping */
 	    char key[UTF8_MAXBYTES+1];
@@ -2697,37 +2813,51 @@ Perl__swash_inversion_hash(pTHX_ SV* const swash)
 		}
 	    }
 
-	    for (i = 0; i < av_len(list); i++) {
+	    /* Look through list to see if this inverse mapping already is
+	     * listed, or if there is a mapping to itself already */
+	    for (i = 0; i <= av_len(list); i++) {
 		SV** entryp = av_fetch(list, i, FALSE);
 		SV* entry;
 		if (entryp == NULL) {
 		    Perl_croak(aTHX_ "panic: av_fetch() unexpectedly failed");
 		}
 		entry = *entryp;
+		/*DEBUG_U(PerlIO_printf(Perl_debug_log, "list for %"UVXf" contains %"UVXf"\n", val, SvUV(entry)));*/
 		if (SvUV(entry) == val) {
 		    found_key = TRUE;
+		}
+		if (SvUV(entry) == inverse) {
+		    found_inverse = TRUE;
+		}
+
+		/* No need to continue searching if found everything we are
+		 * looking for */
+		if (found_key && found_inverse) {
 		    break;
 		}
 	    }
 
 	    /* Make sure there is a mapping to itself on the list */
 	    if (! found_key) {
-		element = newSVuv(val);
-		av_push(list, element);
+		av_push(list, newSVuv(val));
+		/*DEBUG_U(PerlIO_printf(Perl_debug_log, "Adding %"UVXf" to list for %"UVXf"\n", val, val));*/
 	    }
 
 
 	    /* Simply add the value to the list */
-	    element = newSVuv(inverse);
-	    av_push(list, element);
+	    if (! found_inverse) {
+		av_push(list, newSVuv(inverse));
+		/*DEBUG_U(PerlIO_printf(Perl_debug_log, "Adding %"UVXf" to list for %"UVXf"\n", inverse, val));*/
+	    }
 
 	    /* swash_get() increments the value of val for each element in the
 	     * range.  That makes more compact tables possible.  You can
 	     * express the capitalization, for example, of all consecutive
 	     * letters with a single line: 0061\t007A\t0041 This maps 0061 to
 	     * 0041, 0062 to 0042, etc.  I (khw) have never understood 'none',
-	     * and it's not documented, and perhaps not even currently used,
-	     * but I copied the semantics from swash_get(), just in case */
+	     * and it's not documented; it appears to be used only in
+	     * implementing tr//; I copied the semantics from swash_get(), just
+	     * in case */
 	    if (!none || val < none) {
 		++val;
 	    }

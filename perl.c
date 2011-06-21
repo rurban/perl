@@ -1706,6 +1706,18 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef USE_FAST_STDIO
 			     " USE_FAST_STDIO"
 #  endif	       
+#  ifdef USE_LOCALE
+			     " USE_LOCALE"
+#  endif
+#  ifdef USE_LOCALE_COLLATE
+			     " USE_LOCALE_COLLATE"
+#  endif
+#  ifdef USE_LOCALE_CTYPE
+			     " USE_LOCALE_CTYPE"
+#  endif
+#  ifdef USE_LOCALE_NUMERIC
+			     " USE_LOCALE_NUMERIC"
+#  endif
 #  ifdef USE_PERL_ATOF
 			     " USE_PERL_ATOF"
 #  endif	       
@@ -4143,11 +4155,6 @@ S_init_postdump_symbols(pTHX_ register int argc, register char **argv, register 
 #endif /* !PERL_MICRO */
     }
     TAINT_NOT;
-    if ((tmpgv = gv_fetchpvs("$", GV_ADD|GV_NOTQUAL, SVt_PV))) {
-        SvREADONLY_off(GvSV(tmpgv));
-	sv_setiv(GvSV(tmpgv), (IV)PerlProc_getpid());
-        SvREADONLY_on(GvSV(tmpgv));
-    }
 #ifdef THREADS_HAVE_PIDS
     PL_ppid = (IV)getppid();
 #endif

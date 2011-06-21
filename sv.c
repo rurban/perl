@@ -552,7 +552,6 @@ do_clean_named_io_objs(pTHX_ SV *const sv)
 }
 
 /* Void wrapper to pass to visit() */
-/* XXX
 static void
 do_curse(pTHX_ SV * const sv) {
     if ((PL_stderrgv && GvGP(PL_stderrgv) && (SV*)GvIO(PL_stderrgv) == sv)
@@ -560,7 +559,6 @@ do_curse(pTHX_ SV * const sv) {
 	return;
     (void)curse(sv, 0);
 }
-*/
 
 /*
 =for apidoc sv_clean_objs
@@ -584,9 +582,7 @@ Perl_sv_clean_objs(pTHX)
     visit(do_clean_named_io_objs, SVt_PVGV|SVpgv_GP, SVTYPEMASK|SVp_POK|SVpgv_GP);
     /* And if there are some very tenacious barnacles clinging to arrays,
        closures, or what have you.... */
-    /* XXX This line breaks Tk and Gtk2. See [perl #82542].
     visit(do_curse, SVs_OBJECT, SVs_OBJECT);
-    */
     olddef = PL_defoutgv;
     PL_defoutgv = NULL; /* disable skip of PL_defoutgv */
     if (olddef && isGV_with_GP(olddef))
@@ -2271,11 +2267,13 @@ Perl_sv_2iv_flags(pTHX_ register SV *const sv, const I32 flags)
     dVAR;
     if (!sv)
 	return 0;
-    if (SvGMAGICAL(sv) || (SvTYPE(sv) == SVt_PVGV && SvVALID(sv))) {
-	/* FBMs use the same flag bit as SVf_IVisUV, so must let them
-	   cache IVs just in case. In practice it seems that they never
-	   actually anywhere accessible by user Perl code, let alone get used
-	   in anything other than a string context.  */
+    if (SvGMAGICAL(sv) || SvVALID(sv)) {
+	/* FBMs use the space for SvIVX and SvNVX for other purposes, and use
+	   the same flag bit as SVf_IVisUV, so must not let them cache IVs.
+	   In practice they are extremely unlikely to actually get anywhere
+	   accessible by user Perl code - the only way that I'm aware of is when
+	   a constant subroutine which is used as the second argument to index.
+	*/
 	if (flags & SV_GMAGIC)
 	    mg_get(sv);
 	if (SvIOKp(sv))
@@ -2358,9 +2356,9 @@ Perl_sv_2uv_flags(pTHX_ register SV *const sv, const I32 flags)
     dVAR;
     if (!sv)
 	return 0;
-    if (SvGMAGICAL(sv) || (SvTYPE(sv) == SVt_PVGV && SvVALID(sv))) {
-	/* FBMs use the same flag bit as SVf_IVisUV, so must let them
-	   cache IVs just in case.  */
+    if (SvGMAGICAL(sv) || SvVALID(sv)) {
+	/* FBMs use the space for SvIVX and SvNVX for other purposes, and use
+	   the same flag bit as SVf_IVisUV, so must not let them cache IVs.  */
 	if (flags & SV_GMAGIC)
 	    mg_get(sv);
 	if (SvIOKp(sv))
@@ -2438,9 +2436,9 @@ Perl_sv_2nv_flags(pTHX_ register SV *const sv, const I32 flags)
     dVAR;
     if (!sv)
 	return 0.0;
-    if (SvGMAGICAL(sv) || (SvTYPE(sv) == SVt_PVGV && SvVALID(sv))) {
-	/* FBMs use the same flag bit as SVf_IVisUV, so must let them
-	   cache IVs just in case.  */
+    if (SvGMAGICAL(sv) || SvVALID(sv)) {
+	/* FBMs use the space for SvIVX and SvNVX for other purposes, and use
+	   the same flag bit as SVf_IVisUV, so must not let them cache NVs.  */
 	if (flags & SV_GMAGIC)
 	    mg_get(sv);
 	if (SvNOKp(sv))
@@ -3560,7 +3558,7 @@ Perl_sv_utf8_encode(pTHX_ register SV *const sv)
 If the PV of the SV is an octet sequence in UTF-8
 and contains a multiple-byte character, the C<SvUTF8> flag is turned on
 so that it looks like a character. If the PV contains only single-byte
-characters, the C<SvUTF8> flag stays being off.
+characters, the C<SvUTF8> flag stays off.
 Scans PV for validity and returns false if the PV is invalid UTF-8.
 
 =cut
@@ -4090,8 +4088,6 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
 	/* case SVt_BIND: */
     case SVt_PVLV:
     case SVt_PVGV:
-	/* SvVALID means that this PVGV is playing at being an FBM.  */
-
     case SVt_PVMG:
 	if (SvGMAGICAL(sstr) && (flags & SV_GMAGIC)) {
 	    mg_get(sstr);
@@ -5243,8 +5239,24 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
     dVAR;
     const MGVTBL *vtable;
     MAGIC* mg;
+    unsigned int flags;
+    unsigned int vtable_index;
 
     PERL_ARGS_ASSERT_SV_MAGIC;
+
+    if (how < 0 || how > C_ARRAY_LENGTH(PL_magic_data)
+	|| ((flags = PL_magic_data[how]),
+	    (vtable_index = flags & PERL_MAGIC_VTABLE_MASK)
+	    > magic_vtable_max))
+	Perl_croak(aTHX_ "Don't know how to handle magic of type \\%o", how);
+
+    /* PERL_MAGIC_ext is reserved for use by extensions not perl internals.
+       Useful for attaching extension internal data to perl vars.
+       Note that multiple extensions may clash if magical scalars
+       etc holding private data from one are passed to another. */
+
+    vtable = (vtable_index == magic_vtable_max)
+	? NULL : PL_magic_vtables + vtable_index;
 
 #ifdef PERL_OLD_COPY_ON_WRITE
     if (SvIsCOW(sv))
@@ -5257,11 +5269,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
 	    !(SvFAKE(sv) && SvTYPE(sv) < SVt_PVMG)
 
 	    && IN_PERL_RUNTIME
-	    && how != PERL_MAGIC_regex_global
-	    && how != PERL_MAGIC_bm
-	    && how != PERL_MAGIC_fm
-	    && how != PERL_MAGIC_sv
-	    && how != PERL_MAGIC_backref
+	    && !PERL_MAGIC_TYPE_READONLY_ACCEPTABLE(how)
 	   )
 	{
 	    Perl_croak_no_modify(aTHX);
@@ -5283,127 +5291,6 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
 	}
     }
 
-    switch (how) {
-    case PERL_MAGIC_sv:
-	vtable = &PL_vtbl_sv;
-	break;
-    case PERL_MAGIC_overload:
-        vtable = &PL_vtbl_amagic;
-        break;
-    case PERL_MAGIC_overload_elem:
-        vtable = &PL_vtbl_amagicelem;
-        break;
-    case PERL_MAGIC_overload_table:
-        vtable = &PL_vtbl_ovrld;
-        break;
-    case PERL_MAGIC_bm:
-	vtable = &PL_vtbl_bm;
-	break;
-    case PERL_MAGIC_regdata:
-	vtable = &PL_vtbl_regdata;
-	break;
-    case PERL_MAGIC_regdatum:
-	vtable = &PL_vtbl_regdatum;
-	break;
-    case PERL_MAGIC_env:
-	vtable = &PL_vtbl_env;
-	break;
-    case PERL_MAGIC_fm:
-	vtable = &PL_vtbl_fm;
-	break;
-    case PERL_MAGIC_envelem:
-	vtable = &PL_vtbl_envelem;
-	break;
-    case PERL_MAGIC_regex_global:
-	vtable = &PL_vtbl_mglob;
-	break;
-    case PERL_MAGIC_isa:
-	vtable = &PL_vtbl_isa;
-	break;
-    case PERL_MAGIC_isaelem:
-	vtable = &PL_vtbl_isaelem;
-	break;
-    case PERL_MAGIC_nkeys:
-	vtable = &PL_vtbl_nkeys;
-	break;
-    case PERL_MAGIC_dbfile:
-	vtable = NULL;
-	break;
-    case PERL_MAGIC_dbline:
-	vtable = &PL_vtbl_dbline;
-	break;
-#ifdef USE_LOCALE_COLLATE
-    case PERL_MAGIC_collxfrm:
-        vtable = &PL_vtbl_collxfrm;
-        break;
-#endif /* USE_LOCALE_COLLATE */
-    case PERL_MAGIC_tied:
-	vtable = &PL_vtbl_pack;
-	break;
-    case PERL_MAGIC_tiedelem:
-    case PERL_MAGIC_tiedscalar:
-	vtable = &PL_vtbl_packelem;
-	break;
-    case PERL_MAGIC_qr:
-	vtable = &PL_vtbl_regexp;
-	break;
-    case PERL_MAGIC_sig:
-	vtable = &PL_vtbl_sig;
-	break;
-    case PERL_MAGIC_sigelem:
-	vtable = &PL_vtbl_sigelem;
-	break;
-    case PERL_MAGIC_taint:
-	vtable = &PL_vtbl_taint;
-	break;
-    case PERL_MAGIC_uvar:
-	vtable = &PL_vtbl_uvar;
-	break;
-    case PERL_MAGIC_vec:
-	vtable = &PL_vtbl_vec;
-	break;
-    case PERL_MAGIC_arylen_p:
-    case PERL_MAGIC_rhash:
-    case PERL_MAGIC_symtab:
-    case PERL_MAGIC_vstring:
-    case PERL_MAGIC_checkcall:
-	vtable = NULL;
-	break;
-    case PERL_MAGIC_utf8:
-	vtable = &PL_vtbl_utf8;
-	break;
-    case PERL_MAGIC_substr:
-	vtable = &PL_vtbl_substr;
-	break;
-    case PERL_MAGIC_defelem:
-	vtable = &PL_vtbl_defelem;
-	break;
-    case PERL_MAGIC_arylen:
-	vtable = &PL_vtbl_arylen;
-	break;
-    case PERL_MAGIC_pos:
-	vtable = &PL_vtbl_pos;
-	break;
-    case PERL_MAGIC_backref:
-	vtable = &PL_vtbl_backref;
-	break;
-    case PERL_MAGIC_hintselem:
-	vtable = &PL_vtbl_hintselem;
-	break;
-    case PERL_MAGIC_hints:
-	vtable = &PL_vtbl_hints;
-	break;
-    case PERL_MAGIC_ext:
-	/* Reserved for use by extensions not perl internals.	        */
-	/* Useful for attaching extension internal data to perl vars.	*/
-	/* Note that multiple extensions may clash if magical scalars	*/
-	/* etc holding private data from one are passed to another.	*/
-	vtable = NULL;
-	break;
-    default:
-	Perl_croak(aTHX_ "Don't know how to handle magic of type \\%o", how);
-    }
-
     /* Rest of work is done else where */
     mg = sv_magicext(sv,obj,how,vtable,name,namlen);
 
@@ -5418,7 +5305,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
     }
 }
 
-int
+static int
 S_sv_unmagicext_flags(pTHX_ SV *const sv, const int type, MGVTBL *vtbl, const U32 flags)
 {
     MAGIC* mg;
@@ -5532,16 +5419,13 @@ Perl_sv_rvweaken(pTHX_ SV *const sv)
  * store it directly in the HvAUX or mg_obj slot, avoiding the need to
  * allocate an AV. (Whether the slot holds an AV tells us whether this is
  * active.)
- *
- * If an HV's backref is stored in magic, it is moved back to HvAUX.
  */
 
 /* A discussion about the backreferences array and its refcount:
  *
  * The AV holding the backreferences is pointed to either as the mg_obj of
- * PERL_MAGIC_backref, or in the specific case of a HV that has the hv_aux
- * structure, from the xhv_backreferences field. (A HV without hv_aux will
- * have the standard magic instead.) The array is created with a refcount
+ * PERL_MAGIC_backref, or in the specific case of a HV, from the
+ * xhv_backreferences field. The array is created with a refcount
  * of 2. This means that if during global destruction the array gets
  * picked on before its parent to have its refcount decremented by the
  * random zapper, it won't actually be freed, meaning it's still there for
@@ -5569,21 +5453,6 @@ Perl_sv_add_backref(pTHX_ SV *const tsv, SV *const sv)
 
     if (SvTYPE(tsv) == SVt_PVHV) {
 	svp = (SV**)Perl_hv_backreferences_p(aTHX_ MUTABLE_HV(tsv));
-
-	if (!*svp) {
-	    if ((mg = mg_find(tsv, PERL_MAGIC_backref))) {
-		/* Aha. They've got it stowed in magic instead.
-		 * Move it back to xhv_backreferences */
-		*svp = mg->mg_obj;
-		/* Stop mg_free decreasing the reference count.  */
-		mg->mg_obj = NULL;
-		/* Stop mg_free even calling the destructor, given that
-		   there's no AV to free up.  */
-		mg->mg_virtual = 0;
-		sv_unmagic(tsv, PERL_MAGIC_backref);
-		mg = NULL;
-	    }
-	}
     } else {
 	if (! ((mg =
 	    (SvMAGICAL(tsv) ? mg_find(tsv, PERL_MAGIC_backref) : NULL))))
@@ -5641,10 +5510,11 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 
     PERL_ARGS_ASSERT_SV_DEL_BACKREF;
 
-    if (SvTYPE(tsv) == SVt_PVHV && SvOOK(tsv)) {
-	svp = (SV**)Perl_hv_backreferences_p(aTHX_ MUTABLE_HV(tsv));
+    if (SvTYPE(tsv) == SVt_PVHV) {
+	if (SvOOK(tsv))
+	    svp = (SV**)Perl_hv_backreferences_p(aTHX_ MUTABLE_HV(tsv));
     }
-    if (!svp || !*svp) {
+    else {
 	MAGIC *const mg
 	    = SvMAGICAL(tsv) ? mg_find(tsv, PERL_MAGIC_backref) : NULL;
 	svp =  mg ? &(mg->mg_obj) : NULL;
@@ -6044,6 +5914,7 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
     SV* iter_sv = NULL;
     SV* next_sv = NULL;
     register SV *sv = orig_sv;
+    STRLEN hash_index;
 
     PERL_ARGS_ASSERT_SV_CLEAR;
 
@@ -6069,15 +5940,21 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 	    goto free_head;
 	}
 
-	if (SvOBJECT(sv)) {
-	    if (!curse(sv, 1)) goto get_next_sv;
-	}
+	assert(!SvOBJECT(sv) || type >= SVt_PVMG); /* objs are always >= MG */
+
 	if (type >= SVt_PVMG) {
+	    if (SvOBJECT(sv)) {
+		if (!curse(sv, 1)) goto get_next_sv;
+		type = SvTYPE(sv); /* destructor may have changed it */
+	    }
 	    /* Free back-references before magic, in case the magic calls
 	     * Perl code that has weak references to sv. */
-	    if (type == SVt_PVHV)
+	    if (type == SVt_PVHV) {
 		Perl_hv_kill_backrefs(aTHX_ MUTABLE_HV(sv));
-	    if (type == SVt_PVMG && SvPAD_OUR(sv)) {
+		if (SvMAGIC(sv))
+		    mg_free(sv);
+	    }
+	    else if (type == SVt_PVMG && SvPAD_OUR(sv)) {
 		SvREFCNT_dec(SvOURSTASH(sv));
 	    } else if (SvMAGIC(sv)) {
 		/* Free back-references before other types of magic. */
@@ -6122,7 +5999,38 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 	    if (PL_last_swash_hv == (const HV *)sv) {
 		PL_last_swash_hv = NULL;
 	    }
+	    if (HvTOTALKEYS((HV*)sv) > 0) {
+		const char *name;
+		/* this statement should match the one at the beginning of
+		 * hv_undef_flags() */
+		if (   PL_phase != PERL_PHASE_DESTRUCT
+		    && (name = HvNAME((HV*)sv)))
+		{
+		    if (PL_stashcache)
+			(void)hv_delete(PL_stashcache, name,
+			    HvNAMELEN_get((HV*)sv), G_DISCARD);
+		    hv_name_set((HV*)sv, NULL, 0, 0);
+		}
+
+		/* save old iter_sv in unused SvSTASH field */
+		assert(!SvOBJECT(sv));
+		SvSTASH(sv) = (HV*)iter_sv;
+		iter_sv = sv;
+
+		/* XXX ideally we should save the old value of hash_index
+		 * too, but I can't think of any place to hide it. The
+		 * effect of not saving it is that for freeing hashes of
+		 * hashes, we become quadratic in scanning the HvARRAY of
+		 * the top hash looking for new entries to free; but
+		 * hopefully this will be dwarfed by the freeing of all
+		 * the nested hashes. */
+		hash_index = 0;
+		next_sv = Perl_hfree_next_entry(aTHX_ (HV*)sv, &hash_index);
+		goto get_next_sv; /* process this new sv */
+	    }
+	    /* free empty hash */
 	    Perl_hv_undef_flags(aTHX_ MUTABLE_HV(sv), HV_NAME_SETALL);
+	    assert(!HvARRAY((HV*)sv));
 	    break;
 	case SVt_PVAV:
 	    {
@@ -6271,6 +6179,25 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 		    Safefree(AvALLOC(av));
 		    goto free_body;
 		}
+	    } else if (SvTYPE(iter_sv) == SVt_PVHV) {
+		if (!HvTOTALKEYS((HV *)iter_sv)) {
+		    /* no more elements of current HV to free */
+		    sv = iter_sv;
+		    type = SvTYPE(sv);
+		    /* Restore previous value of iter_sv, squirrelled away */
+		    assert(!SvOBJECT(sv));
+		    iter_sv = (SV*)SvSTASH(sv);
+
+		    /* ideally we should restore the old hash_index here,
+		     * but we don't currently save the old value */
+		    hash_index = 0;
+
+		    /* free any remaining detritus from the hash struct */
+		    Perl_hv_undef_flags(aTHX_ MUTABLE_HV(sv), HV_NAME_SETALL);
+		    assert(!HvARRAY((HV*)sv));
+		    goto free_body;
+		}
+		sv = Perl_hfree_next_entry(aTHX_ (HV*)iter_sv, &hash_index);
 	    }
 
 	    /* unrolled SvREFCNT_dec and sv_free2 follows: */
@@ -12785,6 +12712,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PoisonNew(my_perl, 1, PerlInterpreter);
     PL_op = NULL;
     PL_curcop = NULL;
+    PL_defstash = NULL; /* may be used by perl malloc() */
     PL_markstack = 0;
     PL_scopestack = 0;
     PL_scopestack_name = 0;
@@ -12838,6 +12766,250 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_hash_seed	= proto_perl->Ihash_seed;
     PL_rehash_seed	= proto_perl->Irehash_seed;
 
+    SvANY(&PL_sv_undef)		= NULL;
+    SvREFCNT(&PL_sv_undef)	= (~(U32)0)/2;
+    SvFLAGS(&PL_sv_undef)	= SVf_READONLY|SVt_NULL;
+    SvREFCNT(&PL_sv_no)		= (~(U32)0)/2;
+    SvFLAGS(&PL_sv_no)		= SVp_IOK|SVf_IOK|SVp_NOK|SVf_NOK
+				  |SVp_POK|SVf_POK|SVf_READONLY|SVt_PVNV;
+
+    SvANY(&PL_sv_yes)		= new_XPVNV();
+    SvREFCNT(&PL_sv_yes)	= (~(U32)0)/2;
+    SvFLAGS(&PL_sv_yes)		= SVp_IOK|SVf_IOK|SVp_NOK|SVf_NOK
+				  |SVp_POK|SVf_POK|SVf_READONLY|SVt_PVNV;
+
+    /* dbargs array probably holds garbage */
+    PL_dbargs		= NULL;
+
+    PL_compiling = proto_perl->Icompiling;
+
+#ifdef PERL_DEBUG_READONLY_OPS
+    PL_slabs = NULL;
+    PL_slab_count = 0;
+#endif
+
+    /* pseudo environmental stuff */
+    PL_origargc		= proto_perl->Iorigargc;
+    PL_origargv		= proto_perl->Iorigargv;
+
+    /* Set tainting stuff before PerlIO_debug can possibly get called */
+    PL_tainting		= proto_perl->Itainting;
+    PL_taint_warn	= proto_perl->Itaint_warn;
+
+    PL_minus_c		= proto_perl->Iminus_c;
+
+    PL_localpatches	= proto_perl->Ilocalpatches;
+    PL_splitstr		= proto_perl->Isplitstr;
+    PL_minus_n		= proto_perl->Iminus_n;
+    PL_minus_p		= proto_perl->Iminus_p;
+    PL_minus_l		= proto_perl->Iminus_l;
+    PL_minus_a		= proto_perl->Iminus_a;
+    PL_minus_E		= proto_perl->Iminus_E;
+    PL_minus_F		= proto_perl->Iminus_F;
+    PL_doswitches	= proto_perl->Idoswitches;
+    PL_dowarn		= proto_perl->Idowarn;
+    PL_sawampersand	= proto_perl->Isawampersand;
+    PL_unsafe		= proto_perl->Iunsafe;
+    PL_perldb		= proto_perl->Iperldb;
+    PL_perl_destruct_level = proto_perl->Iperl_destruct_level;
+    PL_exit_flags       = proto_perl->Iexit_flags;
+
+    /* XXX time(&PL_basetime) when asked for? */
+    PL_basetime		= proto_perl->Ibasetime;
+
+    PL_maxsysfd		= proto_perl->Imaxsysfd;
+    PL_statusvalue	= proto_perl->Istatusvalue;
+#ifdef VMS
+    PL_statusvalue_vms	= proto_perl->Istatusvalue_vms;
+#else
+    PL_statusvalue_posix = proto_perl->Istatusvalue_posix;
+#endif
+
+    /* RE engine related */
+    Zero(&PL_reg_state, 1, struct re_save_state);
+    PL_reginterp_cnt	= 0;
+    PL_regmatch_slab	= NULL;
+
+    PL_sub_generation	= proto_perl->Isub_generation;
+
+    /* funky return mechanisms */
+    PL_forkprocess	= proto_perl->Iforkprocess;
+
+    /* internal state */
+    PL_maxo		= proto_perl->Imaxo;
+
+    PL_main_start	= proto_perl->Imain_start;
+    PL_eval_root	= proto_perl->Ieval_root;
+    PL_eval_start	= proto_perl->Ieval_start;
+
+    PL_filemode		= proto_perl->Ifilemode;
+    PL_lastfd		= proto_perl->Ilastfd;
+    PL_oldname		= proto_perl->Ioldname;		/* XXX not quite right */
+    PL_Argv		= NULL;
+    PL_Cmd		= NULL;
+    PL_gensym		= proto_perl->Igensym;
+
+    PL_laststatval	= proto_perl->Ilaststatval;
+    PL_laststype	= proto_perl->Ilaststype;
+    PL_mess_sv		= NULL;
+
+    PL_profiledata	= NULL;
+
+    PL_generation	= proto_perl->Igeneration;
+
+    PL_in_clean_objs	= proto_perl->Iin_clean_objs;
+    PL_in_clean_all	= proto_perl->Iin_clean_all;
+
+    PL_uid		= proto_perl->Iuid;
+    PL_euid		= proto_perl->Ieuid;
+    PL_gid		= proto_perl->Igid;
+    PL_egid		= proto_perl->Iegid;
+    PL_nomemok		= proto_perl->Inomemok;
+    PL_an		= proto_perl->Ian;
+    PL_evalseq		= proto_perl->Ievalseq;
+    PL_origenviron	= proto_perl->Iorigenviron;	/* XXX not quite right */
+    PL_origalen		= proto_perl->Iorigalen;
+
+    PL_sighandlerp	= proto_perl->Isighandlerp;
+
+    PL_runops		= proto_perl->Irunops;
+
+    PL_subline		= proto_perl->Isubline;
+
+#ifdef FCRYPT
+    PL_cryptseen	= proto_perl->Icryptseen;
+#endif
+
+    PL_hints		= proto_perl->Ihints;
+
+    PL_amagic_generation	= proto_perl->Iamagic_generation;
+
+#ifdef USE_LOCALE_COLLATE
+    PL_collation_ix	= proto_perl->Icollation_ix;
+    PL_collation_standard	= proto_perl->Icollation_standard;
+    PL_collxfrm_base	= proto_perl->Icollxfrm_base;
+    PL_collxfrm_mult	= proto_perl->Icollxfrm_mult;
+#endif /* USE_LOCALE_COLLATE */
+
+#ifdef USE_LOCALE_NUMERIC
+    PL_numeric_standard	= proto_perl->Inumeric_standard;
+    PL_numeric_local	= proto_perl->Inumeric_local;
+#endif /* !USE_LOCALE_NUMERIC */
+
+    /* Did the locale setup indicate UTF-8? */
+    PL_utf8locale	= proto_perl->Iutf8locale;
+    /* Unicode features (see perlrun/-C) */
+    PL_unicode		= proto_perl->Iunicode;
+
+    /* Pre-5.8 signals control */
+    PL_signals		= proto_perl->Isignals;
+
+    /* times() ticks per second */
+    PL_clocktick	= proto_perl->Iclocktick;
+
+    /* Recursion stopper for PerlIO_find_layer */
+    PL_in_load_module	= proto_perl->Iin_load_module;
+
+    /* sort() routine */
+    PL_sort_RealCmp	= proto_perl->Isort_RealCmp;
+
+    /* Not really needed/useful since the reenrant_retint is "volatile",
+     * but do it for consistency's sake. */
+    PL_reentrant_retint	= proto_perl->Ireentrant_retint;
+
+    /* Hooks to shared SVs and locks. */
+    PL_sharehook	= proto_perl->Isharehook;
+    PL_lockhook		= proto_perl->Ilockhook;
+    PL_unlockhook	= proto_perl->Iunlockhook;
+    PL_threadhook	= proto_perl->Ithreadhook;
+    PL_destroyhook	= proto_perl->Idestroyhook;
+    PL_signalhook	= proto_perl->Isignalhook;
+
+#ifdef THREADS_HAVE_PIDS
+    PL_ppid		= proto_perl->Ippid;
+#endif
+
+    /* swatch cache */
+    PL_last_swash_hv	= NULL;	/* reinits on demand */
+    PL_last_swash_klen	= 0;
+    PL_last_swash_key[0]= '\0';
+    PL_last_swash_tmps	= (U8*)NULL;
+    PL_last_swash_slen	= 0;
+
+    PL_glob_index	= proto_perl->Iglob_index;
+    PL_srand_called	= proto_perl->Isrand_called;
+
+    if (flags & CLONEf_COPY_STACKS) {
+	/* next allocation will be PL_tmps_stack[PL_tmps_ix+1] */
+	PL_tmps_ix		= proto_perl->Itmps_ix;
+	PL_tmps_max		= proto_perl->Itmps_max;
+	PL_tmps_floor		= proto_perl->Itmps_floor;
+
+	/* next push_scope()/ENTER sets PL_scopestack[PL_scopestack_ix]
+	 * NOTE: unlike the others! */
+	PL_scopestack_ix	= proto_perl->Iscopestack_ix;
+	PL_scopestack_max	= proto_perl->Iscopestack_max;
+
+	/* next SSPUSHFOO() sets PL_savestack[PL_savestack_ix]
+	 * NOTE: unlike the others! */
+	PL_savestack_ix		= proto_perl->Isavestack_ix;
+	PL_savestack_max	= proto_perl->Isavestack_max;
+    }
+
+    PL_start_env	= proto_perl->Istart_env;	/* XXXXXX */
+    PL_top_env		= &PL_start_env;
+
+    PL_op		= proto_perl->Iop;
+
+    PL_Sv		= NULL;
+    PL_Xpv		= (XPV*)NULL;
+    my_perl->Ina	= proto_perl->Ina;
+
+    PL_statbuf		= proto_perl->Istatbuf;
+    PL_statcache	= proto_perl->Istatcache;
+
+#ifdef HAS_TIMES
+    PL_timesbuf		= proto_perl->Itimesbuf;
+#endif
+
+    PL_tainted		= proto_perl->Itainted;
+    PL_curpm		= proto_perl->Icurpm;	/* XXX No PMOP ref count */
+
+    PL_chopset		= proto_perl->Ichopset;	/* XXX never deallocated */
+
+    PL_restartjmpenv	= proto_perl->Irestartjmpenv;
+    PL_restartop	= proto_perl->Irestartop;
+    PL_in_eval		= proto_perl->Iin_eval;
+    PL_delaymagic	= proto_perl->Idelaymagic;
+    PL_phase		= proto_perl->Iphase;
+    PL_localizing	= proto_perl->Ilocalizing;
+
+    PL_hv_fetch_ent_mh	= NULL;
+    PL_modcount		= proto_perl->Imodcount;
+    PL_lastgotoprobe	= NULL;
+    PL_dumpindent	= proto_perl->Idumpindent;
+
+    PL_efloatbuf	= NULL;		/* reinits on demand */
+    PL_efloatsize	= 0;			/* reinits on demand */
+
+    /* regex stuff */
+
+    PL_screamfirst	= NULL;
+    PL_screamnext	= NULL;
+    PL_maxscream	= -1;			/* reinits on demand */
+    PL_lastscream	= NULL;
+
+
+    PL_regdummy		= proto_perl->Iregdummy;
+    PL_colorset		= 0;		/* reinits PL_colors[] */
+    /*PL_colors[6]	= {0,0,0,0,0,0};*/
+
+    /* Pluggable optimizer */
+    PL_peepp		= proto_perl->Ipeepp;
+    PL_rpeepp		= proto_perl->Irpeepp;
+    /* op_free() hook */
+    PL_opfreehook	= proto_perl->Iopfreehook;
+
 #ifdef USE_REENTRANT_API
     /* XXX: things like -Dm will segfault here in perlio, but doing
      *  PERL_SET_CONTEXT(proto_perl);
@@ -12850,15 +13022,9 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_ptr_table = ptr_table_new();
 
     /* initialize these special pointers as early as possible */
-    SvANY(&PL_sv_undef)		= NULL;
-    SvREFCNT(&PL_sv_undef)	= (~(U32)0)/2;
-    SvFLAGS(&PL_sv_undef)	= SVf_READONLY|SVt_NULL;
     ptr_table_store(PL_ptr_table, &proto_perl->Isv_undef, &PL_sv_undef);
 
     SvANY(&PL_sv_no)		= new_XPVNV();
-    SvREFCNT(&PL_sv_no)		= (~(U32)0)/2;
-    SvFLAGS(&PL_sv_no)		= SVp_IOK|SVf_IOK|SVp_NOK|SVf_NOK
-				  |SVp_POK|SVf_POK|SVf_READONLY|SVt_PVNV;
     SvPV_set(&PL_sv_no, savepvn(PL_No, 0));
     SvCUR_set(&PL_sv_no, 0);
     SvLEN_set(&PL_sv_no, 1);
@@ -12866,10 +13032,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     SvNV_set(&PL_sv_no, 0);
     ptr_table_store(PL_ptr_table, &proto_perl->Isv_no, &PL_sv_no);
 
-    SvANY(&PL_sv_yes)		= new_XPVNV();
-    SvREFCNT(&PL_sv_yes)	= (~(U32)0)/2;
-    SvFLAGS(&PL_sv_yes)		= SVp_IOK|SVf_IOK|SVp_NOK|SVf_NOK
-				  |SVp_POK|SVf_POK|SVf_READONLY|SVt_PVNV;
     SvPV_set(&PL_sv_yes, savepvn(PL_Yes, 1));
     SvCUR_set(&PL_sv_yes, 1);
     SvLEN_set(&PL_sv_yes, 2);
@@ -12877,16 +13039,11 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     SvNV_set(&PL_sv_yes, 1);
     ptr_table_store(PL_ptr_table, &proto_perl->Isv_yes, &PL_sv_yes);
 
-    /* dbargs array probably holds garbage */
-    PL_dbargs		= NULL;
-
     /* create (a non-shared!) shared string table */
     PL_strtab		= newHV();
     HvSHAREKEYS_off(PL_strtab);
     hv_ksplit(PL_strtab, HvTOTALKEYS(proto_perl->Istrtab));
     ptr_table_store(PL_ptr_table, proto_perl->Istrtab, PL_strtab);
-
-    PL_compiling = proto_perl->Icompiling;
 
     /* These two PVs will be free'd special way so must set them same way op.c does */
     PL_compiling.cop_stashpv = savesharedpv(PL_compiling.cop_stashpv);
@@ -12899,14 +13056,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_compiling.cop_warnings = DUP_WARNINGS(PL_compiling.cop_warnings);
     CopHINTHASH_set(&PL_compiling, cophh_copy(CopHINTHASH_get(&PL_compiling)));
     PL_curcop		= (COP*)any_dup(proto_perl->Icurcop, proto_perl);
-#ifdef PERL_DEBUG_READONLY_OPS
-    PL_slabs = NULL;
-    PL_slab_count = 0;
-#endif
-
-    /* pseudo environmental stuff */
-    PL_origargc		= proto_perl->Iorigargc;
-    PL_origargv		= proto_perl->Iorigargv;
 
     param->stashes      = newAV();  /* Setup array of objects to call clone on */
     /* This makes no difference to the implementation, as it always pushes
@@ -12921,10 +13070,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 	param->unreferenced = newAV();
     }
 
-    /* Set tainting stuff before PerlIO_debug can possibly get called */
-    PL_tainting		= proto_perl->Itainting;
-    PL_taint_warn	= proto_perl->Itaint_warn;
-
 #ifdef PERLIO_LAYERS
     /* Clone PerlIO tables as soon as we can handle general xx_dup() */
     PerlIO_clone(aTHX_ proto_perl, param);
@@ -12938,39 +13083,14 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_warnhook		= sv_dup_inc(proto_perl->Iwarnhook, param);
 
     /* switches */
-    PL_minus_c		= proto_perl->Iminus_c;
     PL_patchlevel	= sv_dup_inc(proto_perl->Ipatchlevel, param);
     PL_apiversion	= sv_dup_inc(proto_perl->Iapiversion, param);
-    PL_localpatches	= proto_perl->Ilocalpatches;
-    PL_splitstr		= proto_perl->Isplitstr;
-    PL_minus_n		= proto_perl->Iminus_n;
-    PL_minus_p		= proto_perl->Iminus_p;
-    PL_minus_l		= proto_perl->Iminus_l;
-    PL_minus_a		= proto_perl->Iminus_a;
-    PL_minus_E		= proto_perl->Iminus_E;
-    PL_minus_F		= proto_perl->Iminus_F;
-    PL_doswitches	= proto_perl->Idoswitches;
-    PL_dowarn		= proto_perl->Idowarn;
-    PL_sawampersand	= proto_perl->Isawampersand;
-    PL_unsafe		= proto_perl->Iunsafe;
     PL_inplace		= SAVEPV(proto_perl->Iinplace);
     PL_e_script		= sv_dup_inc(proto_perl->Ie_script, param);
-    PL_perldb		= proto_perl->Iperldb;
-    PL_perl_destruct_level = proto_perl->Iperl_destruct_level;
-    PL_exit_flags       = proto_perl->Iexit_flags;
 
     /* magical thingies */
-    /* XXX time(&PL_basetime) when asked for? */
-    PL_basetime		= proto_perl->Ibasetime;
     PL_formfeed		= sv_dup(proto_perl->Iformfeed, param);
 
-    PL_maxsysfd		= proto_perl->Imaxsysfd;
-    PL_statusvalue	= proto_perl->Istatusvalue;
-#ifdef VMS
-    PL_statusvalue_vms	= proto_perl->Istatusvalue_vms;
-#else
-    PL_statusvalue_posix = proto_perl->Istatusvalue_posix;
-#endif
     PL_encoding		= sv_dup(proto_perl->Iencoding, param);
 
     sv_setpvs(PERL_DEBUG_PAD(0), "");	/* For regex debugging. */
@@ -12978,11 +13098,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     sv_setpvs(PERL_DEBUG_PAD(2), "");	/* even without DEBUGGING. */
 
    
-    /* RE engine related */
-    Zero(&PL_reg_state, 1, struct re_save_state);
-    PL_reginterp_cnt	= 0;
-    PL_regmatch_slab	= NULL;
-    
     /* Clone the regex array */
     /* ORANGE FIXME for plugins, probably in the SV dup code.
        newSViv(PTR2IV(CALLREGDUPE(
@@ -13030,17 +13145,11 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_checkav		= av_dup_inc(proto_perl->Icheckav, param);
     PL_initav		= av_dup_inc(proto_perl->Iinitav, param);
 
-    PL_sub_generation	= proto_perl->Isub_generation;
     PL_isarev		= hv_dup_inc(proto_perl->Iisarev, param);
-
-    /* funky return mechanisms */
-    PL_forkprocess	= proto_perl->Iforkprocess;
 
     /* subprocess state */
     PL_fdpid		= av_dup_inc(proto_perl->Ifdpid, param);
 
-    /* internal state */
-    PL_maxo		= proto_perl->Imaxo;
     if (proto_perl->Iop_mask)
 	PL_op_mask	= SAVEPVN(proto_perl->Iop_mask, PL_maxo);
     else
@@ -13052,23 +13161,11 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     OP_REFCNT_LOCK;
     PL_main_root	= OpREFCNT_inc(proto_perl->Imain_root);
     OP_REFCNT_UNLOCK;
-    PL_main_start	= proto_perl->Imain_start;
-    PL_eval_root	= proto_perl->Ieval_root;
-    PL_eval_start	= proto_perl->Ieval_start;
 
     /* runtime control stuff */
     PL_curcopdb		= (COP*)any_dup(proto_perl->Icurcopdb, proto_perl);
 
-    PL_filemode		= proto_perl->Ifilemode;
-    PL_lastfd		= proto_perl->Ilastfd;
-    PL_oldname		= proto_perl->Ioldname;		/* XXX not quite right */
-    PL_Argv		= NULL;
-    PL_Cmd		= NULL;
-    PL_gensym		= proto_perl->Igensym;
     PL_preambleav	= av_dup_inc(proto_perl->Ipreambleav, param);
-    PL_laststatval	= proto_perl->Ilaststatval;
-    PL_laststype	= proto_perl->Ilaststype;
-    PL_mess_sv		= NULL;
 
     PL_ors_sv		= sv_dup_inc(proto_perl->Iors_sv, param);
 
@@ -13101,8 +13198,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_custom_op_descs  = hv_dup_inc(proto_perl->Icustom_op_descs,param);
     PL_custom_ops	= hv_dup_inc(proto_perl->Icustom_ops, param);
 
-    PL_profiledata	= NULL;
-
     PL_compcv			= cv_dup(proto_perl->Icompcv, param);
 
     PAD_CLONE_VARS(proto_perl, param);
@@ -13111,30 +13206,12 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     sys_intern_dup(&proto_perl->Isys_intern, &PL_sys_intern);
 #endif
 
-    /* more statics moved here */
-    PL_generation	= proto_perl->Igeneration;
     PL_DBcv		= cv_dup(proto_perl->IDBcv, param);
 
-    PL_in_clean_objs	= proto_perl->Iin_clean_objs;
-    PL_in_clean_all	= proto_perl->Iin_clean_all;
-
-    PL_uid		= proto_perl->Iuid;
-    PL_euid		= proto_perl->Ieuid;
-    PL_gid		= proto_perl->Igid;
-    PL_egid		= proto_perl->Iegid;
-    PL_nomemok		= proto_perl->Inomemok;
-    PL_an		= proto_perl->Ian;
-    PL_evalseq		= proto_perl->Ievalseq;
-    PL_origenviron	= proto_perl->Iorigenviron;	/* XXX not quite right */
-    PL_origalen		= proto_perl->Iorigalen;
 #ifdef PERL_USES_PL_PIDSTATUS
     PL_pidstatus	= newHV();			/* XXX flag for cloning? */
 #endif
     PL_osname		= SAVEPV(proto_perl->Iosname);
-    PL_sighandlerp	= proto_perl->Isighandlerp;
-
-    PL_runops		= proto_perl->Irunops;
-
     PL_parser		= parser_dup(proto_perl->Iparser, param);
 
     /* XXX this only works if the saved cop has already been cloned */
@@ -13144,29 +13221,14 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 				    proto_perl);
     }
 
-    PL_subline		= proto_perl->Isubline;
     PL_subname		= sv_dup_inc(proto_perl->Isubname, param);
 
-#ifdef FCRYPT
-    PL_cryptseen	= proto_perl->Icryptseen;
-#endif
-
-    PL_hints		= proto_perl->Ihints;
-
-    PL_amagic_generation	= proto_perl->Iamagic_generation;
-
 #ifdef USE_LOCALE_COLLATE
-    PL_collation_ix	= proto_perl->Icollation_ix;
     PL_collation_name	= SAVEPV(proto_perl->Icollation_name);
-    PL_collation_standard	= proto_perl->Icollation_standard;
-    PL_collxfrm_base	= proto_perl->Icollxfrm_base;
-    PL_collxfrm_mult	= proto_perl->Icollxfrm_mult;
 #endif /* USE_LOCALE_COLLATE */
 
 #ifdef USE_LOCALE_NUMERIC
     PL_numeric_name	= SAVEPV(proto_perl->Inumeric_name);
-    PL_numeric_standard	= proto_perl->Inumeric_standard;
-    PL_numeric_local	= proto_perl->Inumeric_local;
     PL_numeric_radix_sv	= sv_dup_inc(proto_perl->Inumeric_radix_sv, param);
 #endif /* !USE_LOCALE_NUMERIC */
 
@@ -13204,48 +13266,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_utf8_xidcont	= sv_dup_inc(proto_perl->Iutf8_xidcont, param);
     PL_utf8_foldable	= hv_dup_inc(proto_perl->Iutf8_foldable, param);
 
-    /* Did the locale setup indicate UTF-8? */
-    PL_utf8locale	= proto_perl->Iutf8locale;
-    /* Unicode features (see perlrun/-C) */
-    PL_unicode		= proto_perl->Iunicode;
-
-    /* Pre-5.8 signals control */
-    PL_signals		= proto_perl->Isignals;
-
-    /* times() ticks per second */
-    PL_clocktick	= proto_perl->Iclocktick;
-
-    /* Recursion stopper for PerlIO_find_layer */
-    PL_in_load_module	= proto_perl->Iin_load_module;
-
-    /* sort() routine */
-    PL_sort_RealCmp	= proto_perl->Isort_RealCmp;
-
-    /* Not really needed/useful since the reenrant_retint is "volatile",
-     * but do it for consistency's sake. */
-    PL_reentrant_retint	= proto_perl->Ireentrant_retint;
-
-    /* Hooks to shared SVs and locks. */
-    PL_sharehook	= proto_perl->Isharehook;
-    PL_lockhook		= proto_perl->Ilockhook;
-    PL_unlockhook	= proto_perl->Iunlockhook;
-    PL_threadhook	= proto_perl->Ithreadhook;
-    PL_destroyhook	= proto_perl->Idestroyhook;
-    PL_signalhook	= proto_perl->Isignalhook;
-
-#ifdef THREADS_HAVE_PIDS
-    PL_ppid		= proto_perl->Ippid;
-#endif
-
-    /* swatch cache */
-    PL_last_swash_hv	= NULL;	/* reinits on demand */
-    PL_last_swash_klen	= 0;
-    PL_last_swash_key[0]= '\0';
-    PL_last_swash_tmps	= (U8*)NULL;
-    PL_last_swash_slen	= 0;
-
-    PL_glob_index	= proto_perl->Iglob_index;
-    PL_srand_called	= proto_perl->Isrand_called;
 
     if (proto_perl->Ipsig_pend) {
 	Newxz(PL_psig_pend, SIG_SIZE, int);
@@ -13265,13 +13285,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 	PL_psig_name	= (SV**)NULL;
     }
 
-    /* intrpvar.h stuff */
-
     if (flags & CLONEf_COPY_STACKS) {
-	/* next allocation will be PL_tmps_stack[PL_tmps_ix+1] */
-	PL_tmps_ix		= proto_perl->Itmps_ix;
-	PL_tmps_max		= proto_perl->Itmps_max;
-	PL_tmps_floor		= proto_perl->Itmps_floor;
 	Newx(PL_tmps_stack, PL_tmps_max, SV*);
 	sv_dup_inc_multiple(proto_perl->Itmps_stack, PL_tmps_stack,
 			    PL_tmps_ix+1, param);
@@ -13288,8 +13302,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
 	/* next push_scope()/ENTER sets PL_scopestack[PL_scopestack_ix]
 	 * NOTE: unlike the others! */
-	PL_scopestack_ix	= proto_perl->Iscopestack_ix;
-	PL_scopestack_max	= proto_perl->Iscopestack_max;
 	Newxz(PL_scopestack, PL_scopestack_max, I32);
 	Copy(proto_perl->Iscopestack, PL_scopestack, PL_scopestack_ix, I32);
 
@@ -13310,10 +13322,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 						   - proto_perl->Istack_base);
 	PL_stack_max		= PL_stack_base + AvMAX(PL_curstack);
 
-	/* next SSPUSHFOO() sets PL_savestack[PL_savestack_ix]
-	 * NOTE: unlike the others! */
-	PL_savestack_ix		= proto_perl->Isavestack_ix;
-	PL_savestack_max	= proto_perl->Isavestack_max;
 	/*Newxz(PL_savestack, PL_savestack_max, ANY);*/
 	PL_savestack		= ss_dup(proto_perl, param);
     }
@@ -13322,72 +13330,22 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 	ENTER;			/* perl_destruct() wants to LEAVE; */
     }
 
-    PL_start_env	= proto_perl->Istart_env;	/* XXXXXX */
-    PL_top_env		= &PL_start_env;
-
-    PL_op		= proto_perl->Iop;
-
-    PL_Sv		= NULL;
-    PL_Xpv		= (XPV*)NULL;
-    my_perl->Ina	= proto_perl->Ina;
-
-    PL_statbuf		= proto_perl->Istatbuf;
-    PL_statcache	= proto_perl->Istatcache;
     PL_statgv		= gv_dup(proto_perl->Istatgv, param);
     PL_statname		= sv_dup_inc(proto_perl->Istatname, param);
-#ifdef HAS_TIMES
-    PL_timesbuf		= proto_perl->Itimesbuf;
-#endif
 
-    PL_tainted		= proto_perl->Itainted;
-    PL_curpm		= proto_perl->Icurpm;	/* XXX No PMOP ref count */
     PL_rs		= sv_dup_inc(proto_perl->Irs, param);
     PL_last_in_gv	= gv_dup(proto_perl->Ilast_in_gv, param);
     PL_defoutgv		= gv_dup_inc(proto_perl->Idefoutgv, param);
-    PL_chopset		= proto_perl->Ichopset;	/* XXX never deallocated */
     PL_toptarget	= sv_dup_inc(proto_perl->Itoptarget, param);
     PL_bodytarget	= sv_dup_inc(proto_perl->Ibodytarget, param);
     PL_formtarget	= sv_dup(proto_perl->Iformtarget, param);
 
-    PL_restartjmpenv	= proto_perl->Irestartjmpenv;
-    PL_restartop	= proto_perl->Irestartop;
-    PL_in_eval		= proto_perl->Iin_eval;
-    PL_delaymagic	= proto_perl->Idelaymagic;
-    PL_phase		= proto_perl->Iphase;
-    PL_localizing	= proto_perl->Ilocalizing;
-
     PL_errors		= sv_dup_inc(proto_perl->Ierrors, param);
-    PL_hv_fetch_ent_mh	= NULL;
-    PL_modcount		= proto_perl->Imodcount;
-    PL_lastgotoprobe	= NULL;
-    PL_dumpindent	= proto_perl->Idumpindent;
 
     PL_sortcop		= (OP*)any_dup(proto_perl->Isortcop, proto_perl);
     PL_sortstash	= hv_dup(proto_perl->Isortstash, param);
     PL_firstgv		= gv_dup(proto_perl->Ifirstgv, param);
     PL_secondgv		= gv_dup(proto_perl->Isecondgv, param);
-    PL_efloatbuf	= NULL;		/* reinits on demand */
-    PL_efloatsize	= 0;			/* reinits on demand */
-
-    /* regex stuff */
-
-    PL_screamfirst	= NULL;
-    PL_screamnext	= NULL;
-    PL_maxscream	= -1;			/* reinits on demand */
-    PL_lastscream	= NULL;
-
-
-    PL_regdummy		= proto_perl->Iregdummy;
-    PL_colorset		= 0;		/* reinits PL_colors[] */
-    /*PL_colors[6]	= {0,0,0,0,0,0};*/
-
-
-
-    /* Pluggable optimizer */
-    PL_peepp		= proto_perl->Ipeepp;
-    PL_rpeepp		= proto_perl->Irpeepp;
-    /* op_free() hook */
-    PL_opfreehook	= proto_perl->Iopfreehook;
 
     PL_stashcache       = newHV();
 
@@ -13908,21 +13866,20 @@ S_find_uninit_var(pTHX_ const OP *const obase, const SV *const uninit_sv,
 	    break;
 	return varname(gv, '$', 0, NULL, 0, FUV_SUBSCRIPT_NONE);
 
-    case OP_AELEMFAST:
-	if (obase->op_flags & OPf_SPECIAL) { /* lexical array */
-	    if (match) {
-		SV **svp;
-		AV *av = MUTABLE_AV(PAD_SV(obase->op_targ));
-		if (!av || SvRMAGICAL(av))
-		    break;
-		svp = av_fetch(av, (I32)obase->op_private, FALSE);
-		if (!svp || *svp != uninit_sv)
-		    break;
-	    }
-	    return varname(NULL, '$', obase->op_targ,
-		    NULL, (I32)obase->op_private, FUV_SUBSCRIPT_ARRAY);
+    case OP_AELEMFAST_LEX:
+	if (match) {
+	    SV **svp;
+	    AV *av = MUTABLE_AV(PAD_SV(obase->op_targ));
+	    if (!av || SvRMAGICAL(av))
+		break;
+	    svp = av_fetch(av, (I32)obase->op_private, FALSE);
+	    if (!svp || *svp != uninit_sv)
+		break;
 	}
-	else {
+	return varname(NULL, '$', obase->op_targ,
+		       NULL, (I32)obase->op_private, FUV_SUBSCRIPT_ARRAY);
+    case OP_AELEMFAST:
+	{
 	    gv = cGVOPx_gv(obase);
 	    if (!gv)
 		break;

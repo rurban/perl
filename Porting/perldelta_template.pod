@@ -96,7 +96,7 @@ XXX
 
 =item *
 
-XXX
+L<XXX> has been upgraded from version 0.69 to version 0.70.
 
 =back
 
@@ -148,17 +148,35 @@ diagnostic messages, see L<perldiag>.
 XXX New or changed warnings emitted by the core's C<C> code go here. Also
 include any changes in L<perldiag> that reconcile it to the C<C> code.
 
-[ Within each section, list entries as a =item entry ]
+[ Within each section, list entries as a =item entry that links to perldiag,
+  e.g.
+
+  =item *
+
+  L<Invalid version object|perldiag/"Invalid version object">
+]
 
 =head2 New Diagnostics
 
 XXX Newly added diagnostic messages go here
 
+=head3 New Errors
+
 =over 4
 
 =item *
 
-XXX
+XXX L<message|perldiag/"message">
+
+=back
+
+=head3 New Warnings
+
+=over 4
+
+=item *
+
+XXX L<message|perldiag/"message">
 
 =back
 
@@ -170,7 +188,7 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-XXX
+XXX Describe change here
 
 =back
 
@@ -283,7 +301,7 @@ XXX Changes which affect the interface available to C<XS> code go here.
 Other significant internal changes for future core maintainers should
 be noted as well.
 
-[ List each test improvement as a =item entry ]
+[ List each change as a =item entry ]
 
 =over 4
 
@@ -353,7 +371,8 @@ analysed by the Perl porting team.
 If the bug you are reporting has security implications, which make it
 inappropriate to send to a publicly archived mailing list, then please send
 it to perl5-security-report@perl.org. This points to a closed subscription
-unarchived mailing list, which includes all the core committers, who be able
+unarchived mailing list, which includes
+all the core committers, who will be able
 to help assess the impact of issues, figure out a resolution, and help
 co-ordinate the release of patches to mitigate or fix the problem across all
 platforms on which Perl is supported. Please only use this address for

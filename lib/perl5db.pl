@@ -512,8 +512,14 @@ package DB;
 
 BEGIN {eval 'use IO::Handle'};	# Needed for flush only? breaks under miniperl
 
+BEGIN {
+    require feature;
+    $^V =~ /^v(\d+\.\d+)/;
+    feature->import(":$1");
+}
+
 # Debugger for Perl 5.00x; perl5db.pl patch level:
-$VERSION = '1.33';
+$VERSION = '1.34';
 
 $header = "perl5db.pl version $VERSION";
 
@@ -1475,7 +1481,7 @@ if ( defined $ENV{PERLDB_OPTS} ) {
 
 The last thing we do during initialization is determine which subroutine is
 to be used to obtain a new terminal when a new debugger is started. Right now,
-the debugger only handles TCP sockets, X Windows, OS/2, amd Mac OS X
+the debugger only handles TCP sockets, X11, OS/2, amd Mac OS X
 (darwin).
 
 =cut
@@ -3319,7 +3325,7 @@ Return to any given position in the B<true>-history list
 
                     my $max_fd = 1024; # default if POSIX can't be loaded
                     if (eval { require POSIX }) {
-                        $max_fd = POSIX::sysconf(POSIX::_SC_OPEN_MAX());
+                        eval { $max_fd = POSIX::sysconf(POSIX::_SC_OPEN_MAX()) };
                     }
 
                     if (defined $max_fd) {
@@ -4071,7 +4077,7 @@ sub cmd_b {
     my $dbline = shift;
 
     # Make . the current line number if it's there..
-    $line =~ s/^\./$dbline/;
+    $line =~ s/^\.\b/$dbline/;
 
     # No line number, no condition. Simple break on current line.
     if ( $line =~ /^\s*$/ ) {
@@ -4109,7 +4115,15 @@ sub cmd_b {
         # Save the break type for this sub.
         $postponed{$subname} = $break ? "break +0 if $cond" : "compile";
     } ## end elsif ($line =~ ...
-
+    # b <filename>:<line> [<condition>]
+    elsif ($line =~ /\A(\S+[^:]):(\d+)\s*(.*)/ms) {
+        my ($filename, $line_num, $cond) = ($1, $2, $3);
+        cmd_b_filename_line(
+            $filename,
+            $line_num, 
+            (length($cond) ? $cond : '1'),
+        );
+    }
     # b <sub name> [<condition>]
     elsif ( $line =~ /^([':A-Za-z_][':\w]*(?:\[.*\])?)\s*(.*)/ ) {
 
@@ -4402,6 +4416,20 @@ sub cmd_b_line {
         print $OUT $@ and return;
     };
 } ## end sub cmd_b_line
+
+=head3 cmd_b_filename_line(line, [condition]) (command)
+
+Wrapper for C<break_on_filename_line>. Prints the failure message if it 
+doesn't work.
+
+=cut 
+
+sub cmd_b_filename_line {
+    eval { break_on_filename_line(@_); 1 } or do {
+        local $\ = '';
+        print $OUT $@ and return;
+    };
+}
 
 =head3 break_on_filename_line(file, line, [condition]) (API)
 
@@ -6124,7 +6152,7 @@ TTY (and probably another window) and to direct the new debugger to read and
 write there.
 
 The debugger provides C<get_fork_TTY> functions which work for TCP
-socket servers, X Windows, OS/2, and Mac OS X. Other systems are not
+socket servers, X11, OS/2, and Mac OS X. Other systems are not
 supported. You are encouraged to write C<get_fork_TTY> functions which
 work for I<your> platform and contribute them.
 
@@ -6157,7 +6185,7 @@ sub socket_get_fork_TTY {
 
 =head3 C<xterm_get_fork_TTY>
 
-This function provides the C<get_fork_TTY> function for X windows. If a 
+This function provides the C<get_fork_TTY> function for X11. If a 
 program running under the debugger forks, a new <xterm> window is opened and
 the subsidiary debugger is directed there.
 
@@ -9260,7 +9288,6 @@ sub cmd_pre580_b {
         my $cond = length $2 ? $2 : '1';
         &cmd_b_sub( $subname, $cond );
     }
-
     # b <line> [<condition>].
     elsif ( $cmd =~ /^(\d*)\s*(.*)/ ) {
         my $i = $1 || $dbline;

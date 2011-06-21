@@ -51,12 +51,11 @@ ok($s eq '0', 'multiple magic in core functions');
 expected_tie_calls(tied $c, 1, 1);
 
 # was a glob
-my $tied_to = tied $c;
 $c = *strat;
 $s = $c;
 ok($s eq *strat,
    'Assignment should not ignore magic when the last thing assigned was a glob');
-expected_tie_calls($tied_to, 1, 1);
+expected_tie_calls(tied $c, 1, 1);
 
 # A plain *foo should not call get-magic on *foo.
 # This method of scalar-tying an immutable glob relies on details of the
@@ -68,6 +67,17 @@ eval '$tyre->init(0); () = \*gelp';
 my($rgot, $wgot) = $tyre->init(0);
 ok($rgot == 0, 'a plain *foo causes no get-magic');
 ok($wgot == 0, 'a plain *foo causes no set-magic');
+
+# get-magic when exiting a non-lvalue sub in potentially autovivify-
+# ing context
+my $tied_to = tie $_{elem}, "Tie::Monitor";
+eval { () = sub { delete $_{elem} }->()->[3] };
+ok +($tied_to->init)[0],
+ 'get-magic is called on mortal magic var on sub exit in autoviv context';
+$tied_to = tie $_{elem}, "Tie::Monitor";
+eval { () = sub { return delete $_{elem} }->()->[3] };
+ok +($tied_to->init)[0],
+ 'get-magic is called on mortal magic var on return in autoviv context';
 
 done_testing();
 

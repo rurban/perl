@@ -960,6 +960,7 @@ Perl_gv_stashpvn(pTHX_ const char *name, U32 namelen, I32 flags)
 	return NULL;
     stash = GvHV(tmpgv);
     if (!(flags & ~GV_NOADD_MASK) && !stash) return NULL;
+    assert(stash);
     if (!HvNAME_get(stash)) {
 	hv_name_set(stash, name, namelen, 0);
 	
@@ -969,7 +970,6 @@ Perl_gv_stashpvn(pTHX_ const char *name, U32 namelen, I32 flags)
 	if (HvAUX(GvSTASH(tmpgv))->xhv_name_count)
 	    mro_package_moved(stash, NULL, tmpgv, 1);
     }
-    assert(stash);
     return stash;
 }
 
@@ -1064,9 +1064,10 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
     }
 
     for (name_cursor = name; name_cursor < name_end; name_cursor++) {
-	if ((*name_cursor == ':' && name_cursor < name_em1
+	if (name_cursor < name_em1 &&
+	    ((*name_cursor == ':'
 	     && name_cursor[1] == ':')
-	    || (*name_cursor == '\'' && name_cursor[1]))
+	    || *name_cursor == '\''))
 	{
 	    if (!stash)
 		stash = PL_defstash;
@@ -1540,6 +1541,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	case '>':		/* $> */
 	case '\\':		/* $\ */
 	case '/':		/* $/ */
+	case '$':		/* $$ */
 	case '\001':	/* $^A */
 	case '\003':	/* $^C */
 	case '\004':	/* $^D */

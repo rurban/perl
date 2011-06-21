@@ -2289,7 +2289,7 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
 #ifdef HAS_RESTRICTED_HASHES
             HvTOTALKEYS(hv);
 #else
-            HvKEYS(hv);
+            HvUSEDKEYS(hv);
 #endif
 	I32 i;
 	int ret = 0;
@@ -2435,7 +2435,8 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
 			 
                         /* Implementation of restricted hashes isn't nicely
                            abstracted:  */
-			if ((hash_flags & SHV_RESTRICTED) && SvREADONLY(val)) {
+			if ((hash_flags & SHV_RESTRICTED)
+			 && SvREADONLY(val) && !SvIsCOW(val)) {
 				flags |= SHV_K_LOCKED;
 			}
 
@@ -2527,7 +2528,7 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
                            abstracted:  */
                         flags
                             = (((hash_flags & SHV_RESTRICTED)
-                                && SvREADONLY(val))
+                                && SvREADONLY(val) && !SvIsCOW(val))
                                              ? SHV_K_LOCKED : 0);
 
                         if (val == &PL_sv_placeholder) {

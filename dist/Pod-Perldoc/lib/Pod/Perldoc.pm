@@ -12,7 +12,7 @@ use File::Spec::Functions qw(catfile catdir splitdir);
 use vars qw($VERSION @Pagers $Bindir $Pod2man
   $Temp_Files_Created $Temp_File_Lifetime
 );
-$VERSION = '3.15_03';
+$VERSION = '3.15_05';
 #..........................................................................
 
 BEGIN {  # Make a DEBUG constant very first thing...
@@ -246,7 +246,7 @@ perldoc [options] -v PerlVariable
 
 Options:
     -h   Display this help message
-    -V   report version
+    -V   Report version
     -r   Recursive search (slow)
     -i   Ignore case
     -t   Display pod using pod2text instead of pod2man and nroff
@@ -263,7 +263,7 @@ Options:
     -M FormatterModuleNameToUse
     -w formatter_option:option_value
     -L translation_code   Choose doc translation (if any)
-    -X   use index if present (looks for pod.idx at $Config{archlib})
+    -X   Use index if present (looks for pod.idx at $Config{archlib})
     -q   Search the text of questions (not answers) in perlfaq[1-9]
     -f   Search Perl built-in functions
     -v   Search predefined Perl variables
@@ -292,18 +292,27 @@ EOF
 
 #..........................................................................
 
-sub usage_brief {
+sub program_name {
   my $me = $0;		# Editing $0 is unportable
 
   $me =~ s,.*[/\\],,; # get basename
-  
+
+  return $me;
+}
+
+#..........................................................................
+
+sub usage_brief {
+  my $self = shift;
+  my $me = $self->program_name;
+
   die <<"EOUSAGE";
 Usage: $me [-h] [-V] [-r] [-i] [-D] [-t] [-u] [-m] [-n nroffer_program] [-l] [-T] [-d output_filename] [-o output_format] [-M FormatterModuleNameToUse] [-w formatter_option:option_value] [-L translation_code] [-F] [-X] PageName|ModuleName|ProgramName
        $me -f PerlFunc
        $me -q FAQKeywords
        $me -v PerlVar
 
-The -h option prints more help.  Also try "perldoc perldoc" to get
+The -h option prints more help.  Also try "$me perldoc" to get
 acquainted with the system.                        [Perldoc v$VERSION]
 EOUSAGE
 
@@ -484,7 +493,7 @@ sub find_good_formatter_class {
       
     } elsif(
       (IS_VMS or IS_MSWin32 or IS_Dos or IS_OS2)
-       # the alway case-insensitive fs's
+       # the always case-insensitive filesystems
       and $class_seen{lc("~$c")}++
     ) {
       DEBUG > 4 and print
@@ -549,10 +558,11 @@ sub formatter_sanity_check {
      ) || '';
     $ext = ".$ext" if length $ext;
     
+    my $me = $self->program_name;
     die
        "When using Perldoc to format with $formatter_class, you have to\n"
      . "specify -T or -dsomefile$ext\n"
-     . "See `perldoc perldoc' for more information on those switches.\n"
+     . "See `$me perldoc' for more information on those switches.\n"
     ;
   }
 }
@@ -746,7 +756,7 @@ sub grand_search_init {
                 for ($i = 0; $trn = $ENV{'DCL$PATH;'.$i}; $i++) {
                     push(@searchdirs,$trn);
                 }
-                push(@searchdirs,'perl_root:[lib.pod]')  # installed pods
+                push(@searchdirs,'perl_root:[lib.pods]')  # installed pods
             }
             else {
                 push(@searchdirs, grep(-d, split($Config{path_sep},
@@ -773,12 +783,13 @@ sub grand_search_init {
                     ($self->opt_m ? "module" : "documentation") . " found for \"$_\".\n";
                 if ( @{ $self->{'found'} } ) {
                     print STDERR "However, try\n";
+                    my $me = $self->program_name;
                     for my $dir (@{ $self->{'found'} }) {
                         opendir(DIR, $dir) or die "opendir $dir: $!";
                         while (my $file = readdir(DIR)) {
                             next if ($file =~ /^\./s);
                             $file =~ s/\.(pm|pod)\z//;  # XXX: badfs
-                            print STDERR "\tperldoc $_\::$file\n";
+                            print STDERR "\t$me $_\::$file\n";
                         }
                         closedir(DIR)    or die "closedir $dir: $!";
                     }

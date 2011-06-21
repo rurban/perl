@@ -290,7 +290,7 @@ XS(XS_UNIVERSAL_DOES)
     PERL_UNUSED_ARG(cv);
 
     if (items != 2)
-	Perl_croak(aTHX_ "Usage: invocand->DOES(kind)");
+	Perl_croak(aTHX_ "Usage: invocant->DOES(kind)");
     else {
 	SV * const sv = ST(0);
 	const char *name;
@@ -695,9 +695,10 @@ XS(XS_utf8_decode)
 	croak_xs_usage(cv, "sv");
     else {
 	SV * const sv = ST(0);
-	const bool RETVAL = sv_utf8_decode(sv);
+	bool RETVAL;
+	if (SvIsCOW(sv)) sv_force_normal(sv);
+	RETVAL = sv_utf8_decode(sv);
 	ST(0) = boolSV(RETVAL);
-	sv_2mortal(ST(0));
     }
     XSRETURN(1);
 }
@@ -731,7 +732,6 @@ XS(XS_utf8_downgrade)
         const bool RETVAL = sv_utf8_downgrade(sv, failok);
 
 	ST(0) = boolSV(RETVAL);
-	sv_2mortal(ST(0));
     }
     XSRETURN(1);
 }

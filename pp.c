@@ -71,11 +71,14 @@ PP(pp_padav)
     if (PL_op->op_flags & OPf_REF) {
 	PUSHs(TARG);
 	RETURN;
-    } else if (LVRET) {
+    } else if (PL_op->op_private & OPpMAYBE_LVSUB) {
+       const I32 flags = is_lvalue_sub();
+       if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
 	    Perl_croak(aTHX_ "Can't return array to lvalue scalar context");
 	PUSHs(TARG);
 	RETURN;
+       }
     }
     gimme = GIMME_V;
     if (gimme == G_ARRAY) {
@@ -114,10 +117,13 @@ PP(pp_padhv)
 	    SAVECLEARSV(PAD_SVl(PL_op->op_targ));
     if (PL_op->op_flags & OPf_REF)
 	RETURN;
-    else if (LVRET) {
+    else if (PL_op->op_private & OPpMAYBE_LVSUB) {
+      const I32 flags = is_lvalue_sub();
+      if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
 	    Perl_croak(aTHX_ "Can't return hash to lvalue scalar context");
 	RETURN;
+      }
     }
     gimme = GIMME_V;
     if (gimme == G_ARRAY) {
@@ -712,15 +718,18 @@ PP(pp_study)
 	    RETPUSHYES;
     }
     s = (unsigned char*)(SvPV(sv, len));
-    pos = len;
-    if (pos <= 0 || !SvPOK(sv) || SvUTF8(sv)) {
+    if (len == 0 || len > I32_MAX || !SvPOK(sv) || SvUTF8(sv) || SvVALID(sv)) {
 	/* No point in studying a zero length string, and not safe to study
 	   anything that doesn't appear to be a simple scalar (and hence might
 	   change between now and when the regexp engine runs without our set
 	   magic ever running) such as a reference to an object with overloaded
-	   stringification.  */
+	   stringification.  Also refuse to study an FBM scalar, as this gives
+	   more flexibility in SV flag usage.  No real-world code would ever
+	   end up studying an FBM scalar, so this isn't a real pessimisation.
+	*/
 	RETPUSHNO;
     }
+    pos = len;
 
     if (PL_lastscream) {
 	SvSCREAM_off(PL_lastscream);
@@ -728,10 +737,6 @@ PP(pp_study)
     }
     PL_lastscream = SvREFCNT_inc_simple(sv);
 
-    s = (unsigned char*)(SvPV(sv, len));
-    pos = len;
-    if (pos <= 0)
-	RETPUSHNO;
     if (pos > PL_maxscream) {
 	if (PL_maxscream < 0) {
 	    PL_maxscream = pos + 80;
@@ -6339,7 +6344,7 @@ PP(pp_boolkeys)
         }	    
     }
 
-    XPUSHs(boolSV(HvKEYS(hv) != 0));
+    XPUSHs(boolSV(HvUSEDKEYS(hv) != 0));
     RETURN;
 }
 

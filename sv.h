@@ -367,8 +367,21 @@ perform the upgrade if necessary.  See C<svtype>.
 
 /* PVHV */
 #define SVphv_SHAREKEYS 0x20000000  /* PVHV keys live on shared string table */
-/* PVNV, PVMG, presumably only inside pads */
-#define SVpad_NAME	0x40000000  /* This SV is a name in the PAD, so
+
+/* PVNV, PVMG only, and only used in pads. Should be safe to test on any scalar
+   SV, as the core is careful to avoid setting both.
+
+   SVf_POK, SVp_POK also set:
+   0x00004400   Normal
+   0x0000C400   Studied (SvSCREAM)
+   0x40004400   FBM compiled (SvVALID)
+   0x4000C400   pad name.
+
+   0x00008000   GV with GP
+   0x00008800   RV with PCS imported
+*/
+#define SVpad_NAME	(SVp_SCREAM|SVpbm_VALID)
+				    /* This SV is a name in the PAD, so
 				       SVpad_TYPED, SVpad_OUR and SVpad_STATE
 				       apply */
 /* PVAV */
@@ -378,18 +391,15 @@ perform the upgrade if necessary.  See C<svtype>.
 /* This is only set true on a PVGV when it's playing "PVBM", but is tested for
    on any regular scalar (anything <= PVLV) */
 #define SVpbm_VALID	0x40000000
-/* ??? */
+/* Only used in toke.c on an SV stored in PL_lex_repl */
 #define SVrepl_EVAL	0x40000000  /* Replacement part of s///e */
 
 /* IV, PVIV, PVNV, PVMG, PVGV and (I assume) PVLV  */
-/* Presumably IVs aren't stored in pads */
 #define SVf_IVisUV	0x80000000  /* use XPVUV instead of XPVIV */
 /* PVAV */
 #define SVpav_REIFY 	0x80000000  /* can become real */
 /* PVHV */
 #define SVphv_HASKFLAGS	0x80000000  /* keys have flag byte after hash */
-/* PVFM */
-#define SVpfm_COMPILED	0x80000000  /* FORMLINE is compiled */
 /* PVGV when SVpbm_VALID is true */
 #define SVpbm_TAIL	0x80000000
 /* RV upwards. However, SVf_ROK and SVp_IOK are exclusive  */
@@ -409,8 +419,7 @@ union _xnvu {
 	U32 xhigh;
     }	    xpad_cop_seq;	/* used by pad.c for cop_sequence */
     struct {
-	U32 xbm_previous;	/* how many characters in string before rare? */
-	U8  xbm_flags;
+	I32 xbm_useful;
 	U8  xbm_rare;		/* rarest character in string */
     }	    xbm_s;		/* fields from PVBM */
 };
@@ -418,7 +427,6 @@ union _xnvu {
 union _xivu {
     IV	    xivu_iv;		/* integer value */
     UV	    xivu_uv;
-    I32	    xivu_i32;		/* BmUSEFUL */
     HEK *   xivu_namehek;	/* xpvlv, xpvgv: GvNAME */
 };
 
@@ -923,9 +931,11 @@ the scalar's value cannot change unless written to.
 #define SvSCREAM_on(sv)		(SvFLAGS(sv) |= SVp_SCREAM)
 #define SvSCREAM_off(sv)	(SvFLAGS(sv) &= ~SVp_SCREAM)
 
-#define SvCOMPILED(sv)		(SvFLAGS(sv) & SVpfm_COMPILED)
-#define SvCOMPILED_on(sv)	(SvFLAGS(sv) |= SVpfm_COMPILED)
-#define SvCOMPILED_off(sv)	(SvFLAGS(sv) &= ~SVpfm_COMPILED)
+#ifndef PERL_CORE
+#  define SvCOMPILED(sv)	0
+#  define SvCOMPILED_on(sv)
+#  define SvCOMPILED_off(sv)
+#endif
 
 #define SvEVALED(sv)		(SvFLAGS(sv) & SVrepl_EVAL)
 #define SvEVALED_on(sv)		(SvFLAGS(sv) |= SVrepl_EVAL)
@@ -1003,9 +1013,6 @@ the scalar's value cannot change unless written to.
 	    ((XPVMG*) SvANY(sv))->xmg_u.xmg_ourstash = st;	\
 	} STMT_END
 
-#ifdef PERL_DEBUG_COW
-#else
-#endif
 #define SvRVx(sv) SvRV(sv)
 
 #ifdef PERL_DEBUG_COW
@@ -1280,42 +1287,38 @@ the scalar's value cannot change unless written to.
 		 } STMT_END
 #endif
 
-#define PERL_FBM_TABLE_OFFSET 1	/* Number of bytes between EOS and table */
-
 /* SvPOKp not SvPOK in the assertion because the string can be tainted! eg
    perl -T -e '/$^X/'
 */
+
+#ifndef PERL_CORE
+#  define BmFLAGS(sv)		(SvTAIL(sv) ? FBMcf_TAIL : 0)
+#endif
+
 #if defined (DEBUGGING) && defined(__GNUC__) && !defined(PERL_GCC_BRACE_GROUPS_FORBIDDEN)
-#  define BmFLAGS(sv)							\
-	(*({ SV *const _bmflags = MUTABLE_SV(sv);			\
-		assert(SvTYPE(_bmflags) == SVt_PVGV);			\
-		assert(SvVALID(_bmflags));				\
-	    &(((XPVGV*) SvANY(_bmflags))->xnv_u.xbm_s.xbm_flags);	\
-	 }))
 #  define BmRARE(sv)							\
 	(*({ SV *const _bmrare = MUTABLE_SV(sv);			\
-		assert(SvTYPE(_bmrare) == SVt_PVGV);			\
+		assert(SvTYPE(_bmrare) == SVt_PVMG);			\
 		assert(SvVALID(_bmrare));				\
-	    &(((XPVGV*) SvANY(_bmrare))->xnv_u.xbm_s.xbm_rare);		\
+	    &(((XPVMG*) SvANY(_bmrare))->xnv_u.xbm_s.xbm_rare);		\
 	 }))
 #  define BmUSEFUL(sv)							\
 	(*({ SV *const _bmuseful = MUTABLE_SV(sv);			\
-	    assert(SvTYPE(_bmuseful) == SVt_PVGV);			\
+	    assert(SvTYPE(_bmuseful) == SVt_PVMG);			\
 	    assert(SvVALID(_bmuseful));					\
 	    assert(!SvIOK(_bmuseful));					\
-	    &(((XPVGV*) SvANY(_bmuseful))->xiv_u.xivu_i32);		\
+	    &(((XPVMG*) SvANY(_bmuseful))->xnv_u.xbm_s.xbm_useful);	\
 	 }))
 #  define BmPREVIOUS(sv)						\
     (*({ SV *const _bmprevious = MUTABLE_SV(sv);			\
-		assert(SvTYPE(_bmprevious) == SVt_PVGV);		\
+		assert(SvTYPE(_bmprevious) == SVt_PVMG);		\
 		assert(SvVALID(_bmprevious));				\
-	    &(((XPVGV*) SvANY(_bmprevious))->xnv_u.xbm_s.xbm_previous);	\
+	    &(((XPVMG*) SvANY(_bmprevious))->xiv_u.xivu_uv);		\
 	 }))
 #else
-#  define BmFLAGS(sv)		((XPVGV*) SvANY(sv))->xnv_u.xbm_s.xbm_flags
-#  define BmRARE(sv)		((XPVGV*) SvANY(sv))->xnv_u.xbm_s.xbm_rare
-#  define BmUSEFUL(sv)		((XPVGV*) SvANY(sv))->xiv_u.xivu_i32
-#  define BmPREVIOUS(sv)	((XPVGV*) SvANY(sv))->xnv_u.xbm_s.xbm_previous
+#  define BmRARE(sv)		((XPVMG*) SvANY(sv))->xnv_u.xbm_s.xbm_rare
+#  define BmUSEFUL(sv)		((XPVMG*) SvANY(sv))->xnv_u.xbm_s.xbm_useful
+#  define BmPREVIOUS(sv)	((XPVMG*) SvANY(sv))->xiv_u.xivu_uv
 
 #endif
 

@@ -709,14 +709,8 @@
 
 #if defined(PERL_GLOBAL_STRUCT)
 
-#define PL_No			(my_vars->GNo)
-#define PL_GNo			(my_vars->GNo)
-#define PL_Yes			(my_vars->GYes)
-#define PL_GYes			(my_vars->GYes)
 #define PL_appctx		(my_vars->Gappctx)
 #define PL_Gappctx		(my_vars->Gappctx)
-#define PL_charclass		(my_vars->Gcharclass)
-#define PL_Gcharclass		(my_vars->Gcharclass)
 #define PL_check		(my_vars->Gcheck)
 #define PL_Gcheck		(my_vars->Gcheck)
 #define PL_csighandlerp		(my_vars->Gcsighandlerp)
@@ -729,16 +723,8 @@
 #define PL_Gdollarzero_mutex	(my_vars->Gdollarzero_mutex)
 #define PL_fold_locale		(my_vars->Gfold_locale)
 #define PL_Gfold_locale		(my_vars->Gfold_locale)
-#define PL_global_struct_size	(my_vars->Gglobal_struct_size)
-#define PL_Gglobal_struct_size	(my_vars->Gglobal_struct_size)
-#define PL_hexdigit		(my_vars->Ghexdigit)
-#define PL_Ghexdigit		(my_vars->Ghexdigit)
 #define PL_hints_mutex		(my_vars->Ghints_mutex)
 #define PL_Ghints_mutex		(my_vars->Ghints_mutex)
-#define PL_interp_size		(my_vars->Ginterp_size)
-#define PL_Ginterp_size		(my_vars->Ginterp_size)
-#define PL_interp_size_5_10_0	(my_vars->Ginterp_size_5_10_0)
-#define PL_Ginterp_size_5_10_0	(my_vars->Ginterp_size_5_10_0)
 #define PL_keyword_plugin	(my_vars->Gkeyword_plugin)
 #define PL_Gkeyword_plugin	(my_vars->Gkeyword_plugin)
 #define PL_malloc_mutex		(my_vars->Gmalloc_mutex)
@@ -755,8 +741,6 @@
 #define PL_Gop_seq		(my_vars->Gop_seq)
 #define PL_op_sequence		(my_vars->Gop_sequence)
 #define PL_Gop_sequence		(my_vars->Gop_sequence)
-#define PL_patleave		(my_vars->Gpatleave)
-#define PL_Gpatleave		(my_vars->Gpatleave)
 #define PL_perlio_debug_fd	(my_vars->Gperlio_debug_fd)
 #define PL_Gperlio_debug_fd	(my_vars->Gperlio_debug_fd)
 #define PL_perlio_fd_refcnt	(my_vars->Gperlio_fd_refcnt)
@@ -767,14 +751,10 @@
 #define PL_Gperlio_mutex	(my_vars->Gperlio_mutex)
 #define PL_ppaddr		(my_vars->Gppaddr)
 #define PL_Gppaddr		(my_vars->Gppaddr)
-#define PL_revision		(my_vars->Grevision)
-#define PL_Grevision		(my_vars->Grevision)
-#define PL_runops_dbg		(my_vars->Grunops_dbg)
-#define PL_Grunops_dbg		(my_vars->Grunops_dbg)
-#define PL_runops_std		(my_vars->Grunops_std)
-#define PL_Grunops_std		(my_vars->Grunops_std)
+#ifdef OS2
 #define PL_sh_path		(my_vars->Gsh_path)
 #define PL_Gsh_path		(my_vars->Gsh_path)
+#endif
 #define PL_sig_defaulting	(my_vars->Gsig_defaulting)
 #define PL_Gsig_defaulting	(my_vars->Gsig_defaulting)
 #define PL_sig_handlers_initted	(my_vars->Gsig_handlers_initted)
@@ -785,8 +765,6 @@
 #define PL_Gsig_trapped		(my_vars->Gsig_trapped)
 #define PL_sigfpe_saved		(my_vars->Gsigfpe_saved)
 #define PL_Gsigfpe_saved	(my_vars->Gsigfpe_saved)
-#define PL_subversion		(my_vars->Gsubversion)
-#define PL_Gsubversion		(my_vars->Gsubversion)
 #define PL_sv_placeholder	(my_vars->Gsv_placeholder)
 #define PL_Gsv_placeholder	(my_vars->Gsv_placeholder)
 #define PL_thr_key		(my_vars->Gthr_key)
@@ -795,8 +773,6 @@
 #define PL_Gtimesbase		(my_vars->Gtimesbase)
 #define PL_use_safe_putenv	(my_vars->Guse_safe_putenv)
 #define PL_Guse_safe_putenv	(my_vars->Guse_safe_putenv)
-#define PL_version		(my_vars->Gversion)
-#define PL_Gversion		(my_vars->Gversion)
 #define PL_veto_cleanup		(my_vars->Gveto_cleanup)
 #define PL_Gveto_cleanup	(my_vars->Gveto_cleanup)
 #define PL_watch_pvx		(my_vars->Gwatch_pvx)
@@ -804,21 +780,14 @@
 
 #else /* !PERL_GLOBAL_STRUCT */
 
-#define PL_GNo			PL_No
-#define PL_GYes			PL_Yes
 #define PL_Gappctx		PL_appctx
-#define PL_Gcharclass		PL_charclass
 #define PL_Gcheck		PL_check
 #define PL_Gcsighandlerp	PL_csighandlerp
 #define PL_Gcurinterp		PL_curinterp
 #define PL_Gdo_undump		PL_do_undump
 #define PL_Gdollarzero_mutex	PL_dollarzero_mutex
 #define PL_Gfold_locale		PL_fold_locale
-#define PL_Gglobal_struct_size	PL_global_struct_size
-#define PL_Ghexdigit		PL_hexdigit
 #define PL_Ghints_mutex		PL_hints_mutex
-#define PL_Ginterp_size		PL_interp_size
-#define PL_Ginterp_size_5_10_0	PL_interp_size_5_10_0
 #define PL_Gkeyword_plugin	PL_keyword_plugin
 #define PL_Gmalloc_mutex	PL_malloc_mutex
 #define PL_Gmmap_page_size	PL_mmap_page_size
@@ -827,27 +796,23 @@
 #define PL_Gop_mutex		PL_op_mutex
 #define PL_Gop_seq		PL_op_seq
 #define PL_Gop_sequence		PL_op_sequence
-#define PL_Gpatleave		PL_patleave
 #define PL_Gperlio_debug_fd	PL_perlio_debug_fd
 #define PL_Gperlio_fd_refcnt	PL_perlio_fd_refcnt
 #define PL_Gperlio_fd_refcnt_size	PL_perlio_fd_refcnt_size
 #define PL_Gperlio_mutex	PL_perlio_mutex
 #define PL_Gppaddr		PL_ppaddr
-#define PL_Grevision		PL_revision
-#define PL_Grunops_dbg		PL_runops_dbg
-#define PL_Grunops_std		PL_runops_std
+#ifdef OS2
 #define PL_Gsh_path		PL_sh_path
+#endif
 #define PL_Gsig_defaulting	PL_sig_defaulting
 #define PL_Gsig_handlers_initted	PL_sig_handlers_initted
 #define PL_Gsig_ignoring	PL_sig_ignoring
 #define PL_Gsig_trapped		PL_sig_trapped
 #define PL_Gsigfpe_saved	PL_sigfpe_saved
-#define PL_Gsubversion		PL_subversion
 #define PL_Gsv_placeholder	PL_sv_placeholder
 #define PL_Gthr_key		PL_thr_key
 #define PL_Gtimesbase		PL_timesbase
 #define PL_Guse_safe_putenv	PL_use_safe_putenv
-#define PL_Gversion		PL_version
 #define PL_Gveto_cleanup	PL_veto_cleanup
 #define PL_Gwatch_pvx		PL_watch_pvx
 

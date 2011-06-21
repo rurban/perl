@@ -116,11 +116,11 @@ See the CPAN FAQ at http://www.cpan.org/misc/cpan-faq.html for answers
 to the most frequently asked questions about CPAN including how to
 become a mirror.
 
-C<CPAN/path/...> is a naming convention for files available on CPAN
+F<CPAN/path/...> is a naming convention for files available on CPAN
 sites. CPAN indicates the base directory of a CPAN mirror, and the
 rest of the path is the path from that directory to the file. For
 instance, if you're using ftp://ftp.funet.fi/pub/languages/perl/CPAN
-as your CPAN site, the file C<CPAN/misc/japh> is downloadable as
+as your CPAN site, the file F<CPAN/misc/japh> is downloadable as
 ftp://ftp.funet.fi/pub/languages/perl/CPAN/misc/japh .
 
 Considering that, as of 2006, there are over ten thousand existing
@@ -228,17 +228,13 @@ There are many good books on Perl. See the L<perlbook> documentation or
 
 =head2 Which magazines have Perl content?
 
-I<The Perl Review> ( http://www.theperlreview.com ) focuses on Perl
-almost completely (although it sometimes sneaks in an article about
-another language). There's also I<$foo Magazin>, a German magazine
-dedicated to Perl, at ( http://www.foo-magazin.de ).
+There's also I<$foo Magazin>, a German magazine dedicated to Perl, at
+( http://www.foo-magazin.de ). The I<Perl-Zeitung> is another
+German-speaking magazine for Perl beginners (see
+http://perl-zeitung.at.tf ). 
 
-The I<Perl-Zeitung> is a German-speaking magazine for Perl beginners
-(see http://perl-zeitung.at.tf ).
-
-Magazines that frequently carry quality articles on Perl include I<The
-Perl Review> ( http://www.theperlreview.com ), I<Unix Review> (
-http://www.unixreview.com/ ), I<Linux Magazine> (
+Magazines that frequently carry quality articles on Perl include
+I<Unix Review> ( http://www.unixreview.com/ ), I<Linux Magazine> (
 http://www.linuxmagazine.com/ ), and Usenix's newsletter/magazine to
 its members, I<login:> ( http://www.usenix.org/ ).
 
@@ -360,7 +356,8 @@ joining, starting, or requesting services for a Perl user group.
 
 CPAN, or the Comprehensive Perl Archive Network (
 http://www.cpan.org/ ), is a replicated, worldwide repository of Perl
-software. See I<What is CPAN?> in L<perlfaq2>.
+software.
+See L<What is CPAN?|/"What modules and extensions are available for Perl? What is CPAN? What does CPANE<sol>srcE<sol>... mean?">.
 
 =head1 AUTHOR AND COPYRIGHT
 

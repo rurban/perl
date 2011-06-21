@@ -130,7 +130,6 @@ Deprecated.  Use C<GIMME_V> instead.
 				    defined()*/
 				/*  On OP_DBSTATE, indicates breakpoint
 				 *    (runtime property) */
-				/*  On OP_AELEMFAST, indicates pad var */
 				/*  On OP_REQUIRE, was seen as CORE::require */
 				/*  On OP_ENTERWHEN, there's no condition */
 				/*  On OP_BREAK, an implicit break */
@@ -203,17 +202,21 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpENTERSUB_DB		16	/* Debug subroutine. */
 #define OPpENTERSUB_HASTARG	32	/* Called from OP tree. */
 #define OPpENTERSUB_NOMOD	64	/* Immune to op_lvalue() for :attrlist. */
-  /* OP_ENTERSUB and OP_RV2CV only */
+#define OPpENTERSUB_INARGS	4	/* Lval used as arg to a sub. */
+#define OPpENTERSUB_DEREF	1	/* Lval call that autovivifies. */
+  /* OP_RV2CV only */
 #define OPpENTERSUB_AMPER	8	/* Used & form to call. */
 #define OPpENTERSUB_NOPAREN	128	/* bare sub call (without parens) */
-#define OPpENTERSUB_INARGS	4	/* Lval used as arg to a sub. */
+#define OPpMAY_RETURN_CONSTANT	1	/* If a constant sub, return the constant */
+
   /* OP_GV only */
 #define OPpEARLY_CV		32	/* foo() called before sub foo was parsed */
   /* OP_?ELEM only */
 #define OPpLVAL_DEFER		16	/* Defer creation of array/hash elem */
   /* OP_RV2?V, OP_GVSV, OP_ENTERITER only */
 #define OPpOUR_INTRO		16	/* Variable was in an our() */
-  /* OP_RV2[AGH]V, OP_PAD[AH]V, OP_[AH]ELEM */
+  /* OP_RV2[AGH]V, OP_PAD[AH]V, OP_[AH]ELEM, OP_[AH]SLICE OP_AV2ARYLEN,
+     OP_R?KEYS, OP_SUBSTR, OP_POS, OP_VEC */
 #define OPpMAYBE_LVSUB		8	/* We might be an lvalue to return */
   /* OP_PADSV only */
 #define OPpPAD_STATE		16	/* is a "state" pad */
@@ -223,9 +226,6 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpDONT_INIT_GV		4	/* Call gv_fetchpv with GV_NOINIT */
 /* (Therefore will return whatever is currently in the symbol table, not
    guaranteed to be a PVGV)  */
-
-  /* OP_RV2CV only */
-#define OPpMAY_RETURN_CONSTANT	1	/* If a constant sub, return the constant */
 
 /* Private for OPs with TARGLEX */
   /* (lower bits may carry MAXARG) */
