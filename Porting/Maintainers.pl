@@ -145,9 +145,11 @@ use File::Glob qw(:case);
 # It defaults to the empty list.
 
 # CUSTOMIZED is a list of files that have been customized within the
-# Perl core.  They should also be listed in EXCLUDED, but this will
-# additionally suppress core-cpan-diff warnings that they differ from
-# the CPAN tarballs
+# Perl core.  Use this whenever patching a cpan upstream distribution
+# or whenever we expect to have a file that differs from the tarball.
+# If the file in blead matches the file in the tarball from CPAN,
+# Porting/core-cpan-diff will warn about it, as it indicates an expected
+# customization might have been lost when updating from upstream
 
 # DEPRECATED contains the *first* version of Perl in which the module
 # was considered deprecated.  It should only be present if the module is
@@ -251,6 +253,7 @@ use File::Glob qw(:case);
 			      )
 			   ],
 	'UPSTREAM'	=> 'cpan',
+        'CUSTOMIZED'	=> [qw( t/open.t )],
 	},
 
     'AutoLoader' =>
@@ -357,6 +360,7 @@ use File::Glob qw(:case);
 				)
 			   ],
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw( t/tmpdir.t)],
 	},
 
         'Class::Struct' =>
@@ -949,6 +953,7 @@ use File::Glob qw(:case);
 			     'lib/newgetopt.pl' => 'lib/newgetopt.pl',
 			   },
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [ qw( lib/newgetopt.pl t/gol-compat.t)],
 	},
 
     'Getopt::Std' =>
@@ -1213,6 +1218,7 @@ use File::Glob qw(:case);
 			       },
 			   ],
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw( t/Complex.t t/Trig.t )],
 	},
 
     'Memoize' =>
@@ -1300,6 +1306,7 @@ use File::Glob qw(:case);
 	'DISTRIBUTION'	=> 'SIMONW/Module-Pluggable-3.9.tar.gz',
 	'FILES'		=> q[cpan/Module-Pluggable],
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw(Makefile.PL)],
 	},
 
     'mro' =>
@@ -1584,7 +1591,11 @@ use File::Glob qw(:case);
 	# run to create pod2man and pod2text, while the CPAN distribution
 	# just has the post-generated pod2man and pod2text files.
 	# The following entries attempt to codify that odd fact.
-	'CUSTOMIZED'	=> [ qw{scripts/pod2man.PL scripts/pod2text.PL} ],
+	'CUSTOMIZED'	=> [ qw{
+		scripts/pod2man.PL
+		scripts/pod2text.PL
+		pod/perlpodstyle.pod
+	} ],
 	'MAP'		=> {
 		    '' => 'cpan/podlators/',
 		    'scripts/pod2man'  => 'cpan/podlators/scripts/pod2man.PL',
@@ -1688,9 +1699,11 @@ use File::Glob qw(:case);
 				t/podspell.t
 				t/portfs.t
 				win32/PerlLog.RES
+				win32/PerlLog_RES.uu
 			       },
 			   ],
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw( t/syslog.t )],
 	},
 
     'Term::ANSIColor' =>
@@ -1736,12 +1749,17 @@ use File::Glob qw(:case);
 			     qr{^t/lib/Test/},
 			     qr{^xt/},
 			     qw{Changes-2.64
+				NotBuild.PL
 				HACKING.pod
 				perlcriticrc
 				t/lib/if.pm
 			       }
 			   ],
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw(
+		t/source.t
+		t/testargs.t
+	)],
 	},
 
     'Test::Simple' =>
@@ -1806,6 +1824,10 @@ use File::Glob qw(:case);
 	'FILES'		=> q[cpan/Text-Tabs],
 	'EXCLUDED'	=> [ qw( t/dnsparks.t ) ], # see af6492bf9e
 	'UPSTREAM'	=> 'cpan',
+	'CUSTOMIZED'	=> [qw(
+		t/fill.t
+		t/tabs.t
+	)],
 	},
 
     'Thread::Queue' =>
