@@ -1,7 +1,8 @@
 /*    sv.h
  *
  *    Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
- *    2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 by Larry Wall and others
+ *    2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 by
+ *    Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
@@ -67,7 +68,7 @@ typedef enum {
 
 #ifndef PERL_CORE
 /* Although Fast Boyer Moore tables are now being stored in PVGVs, for most
-   purposes eternal code wanting to consider PVBM probably needs to think of
+   purposes external code wanting to consider PVBM probably needs to think of
    PVMG instead.  */
 #  define SVt_PVBM	SVt_PVMG
 /* Anything wanting to create a reference from clean should ensure that it has
