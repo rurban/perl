@@ -893,37 +893,31 @@ static const struct body_details bodies_by_type[] = {
       NOARENA /* IVS don't need an arena  */, 0
     },
 
-    /* 8 bytes on most ILP32 with IEEE doubles */
     { sizeof(NV), sizeof(NV),
       STRUCT_OFFSET(XPVNV, xnv_u),
       SVt_NV, FALSE, HADNV, HASARENA, FIT_ARENA(0, sizeof(NV)) },
 
-    /* 8 bytes on most ILP32 with IEEE doubles */
     { sizeof(XPV) - STRUCT_OFFSET(XPV, xpv_cur),
       copy_length(XPV, xpv_len) - STRUCT_OFFSET(XPV, xpv_cur),
       + STRUCT_OFFSET(XPV, xpv_cur),
       SVt_PV, FALSE, NONV, HASARENA,
       FIT_ARENA(0, sizeof(XPV) - STRUCT_OFFSET(XPV, xpv_cur)) },
 
-    /* 12 */
     { sizeof(XPVIV) - STRUCT_OFFSET(XPV, xpv_cur),
       copy_length(XPVIV, xiv_u) - STRUCT_OFFSET(XPV, xpv_cur),
       + STRUCT_OFFSET(XPV, xpv_cur),
       SVt_PVIV, FALSE, NONV, HASARENA,
       FIT_ARENA(0, sizeof(XPVIV) - STRUCT_OFFSET(XPV, xpv_cur)) },
 
-    /* 20 */
     { sizeof(XPVNV) - STRUCT_OFFSET(XPV, xpv_cur),
       copy_length(XPVNV, xnv_u) - STRUCT_OFFSET(XPV, xpv_cur),
       + STRUCT_OFFSET(XPV, xpv_cur),
       SVt_PVNV, FALSE, HADNV, HASARENA,
       FIT_ARENA(0, sizeof(XPVNV) - STRUCT_OFFSET(XPV, xpv_cur)) },
 
-    /* 28 */
     { sizeof(XPVMG), copy_length(XPVMG, xnv_u), 0, SVt_PVMG, FALSE, HADNV,
       HASARENA, FIT_ARENA(0, sizeof(XPVMG)) },
 
-    /* something big */
     { sizeof(regexp),
       sizeof(regexp),
       0,
@@ -931,11 +925,9 @@ static const struct body_details bodies_by_type[] = {
       FIT_ARENA(0, sizeof(regexp))
     },
 
-    /* 48 */
     { sizeof(XPVGV), sizeof(XPVGV), 0, SVt_PVGV, TRUE, HADNV,
       HASARENA, FIT_ARENA(0, sizeof(XPVGV)) },
     
-    /* 64 */
     { sizeof(XPVLV), sizeof(XPVLV), 0, SVt_PVLV, TRUE, HADNV,
       HASARENA, FIT_ARENA(0, sizeof(XPVLV)) },
 
@@ -951,7 +943,6 @@ static const struct body_details bodies_by_type[] = {
       SVt_PVHV, TRUE, NONV, HASARENA,
       FIT_ARENA(0, sizeof(XPVHV)) },
 
-    /* 56 */
     { sizeof(XPVCV),
       sizeof(XPVCV),
       0,
@@ -964,7 +955,6 @@ static const struct body_details bodies_by_type[] = {
       SVt_PVFM, TRUE, NONV, NOARENA,
       FIT_ARENA(20, sizeof(XPVFM)) },
 
-    /* XPVIO is 84 bytes, fits 48x */
     { sizeof(XPVIO),
       sizeof(XPVIO),
       0,
@@ -4776,7 +4766,7 @@ Perl_sv_force_normal_flags(pTHX_ register SV *const sv, const U32 flags)
     }
 #else
     if (SvREADONLY(sv)) {
-	if (SvFAKE(sv)) {
+	if (SvFAKE(sv) && !isGV_with_GP(sv)) {
 	    const char * const pvx = SvPVX_const(sv);
 	    const STRLEN len = SvCUR(sv);
 	    SvFAKE_off(sv);
@@ -5105,7 +5095,7 @@ space is allocated.)  The reference count for the new SV is set to 1.
 In 5.9.3, newSV() replaces the older NEWSV() API, and drops the first
 parameter, I<x>, a debug aid which allowed callers to identify themselves.
 This aid has been superseded by a new build option, PERL_MEM_LOG (see
-L<perlhack/PERL_MEM_LOG>).  The older API is still there for use in XS
+L<perlhacktips/PERL_MEM_LOG>).  The older API is still there for use in XS
 modules supporting older perls.
 
 =cut
@@ -5244,7 +5234,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
 
     PERL_ARGS_ASSERT_SV_MAGIC;
 
-    if (how < 0 || how > C_ARRAY_LENGTH(PL_magic_data)
+    if (how < 0 || (unsigned)how > C_ARRAY_LENGTH(PL_magic_data)
 	|| ((flags = PL_magic_data[how]),
 	    (vtable_index = flags & PERL_MAGIC_VTABLE_MASK)
 	    > magic_vtable_max))
@@ -6180,7 +6170,8 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 		    goto free_body;
 		}
 	    } else if (SvTYPE(iter_sv) == SVt_PVHV) {
-		if (!HvTOTALKEYS((HV *)iter_sv)) {
+		sv = Perl_hfree_next_entry(aTHX_ (HV*)iter_sv, &hash_index);
+		if (!sv && !HvTOTALKEYS((HV *)iter_sv)) {
 		    /* no more elements of current HV to free */
 		    sv = iter_sv;
 		    type = SvTYPE(sv);
@@ -6197,7 +6188,6 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 		    assert(!HvARRAY((HV*)sv));
 		    goto free_body;
 		}
-		sv = Perl_hfree_next_entry(aTHX_ (HV*)iter_sv, &hash_index);
 	    }
 
 	    /* unrolled SvREFCNT_dec and sv_free2 follows: */
@@ -9485,6 +9475,7 @@ Perl_sv_unref_flags(pTHX_ SV *const ref, const U32 flags)
 =for apidoc sv_untaint
 
 Untaint an SV. Use C<SvTAINTED_off> instead.
+
 =cut
 */
 
@@ -9504,6 +9495,7 @@ Perl_sv_untaint(pTHX_ SV *const sv)
 =for apidoc sv_tainted
 
 Test an SV for taintedness. Use C<SvTAINTED> instead.
+
 =cut
 */
 
@@ -12994,12 +12986,6 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
     /* regex stuff */
 
-    PL_screamfirst	= NULL;
-    PL_screamnext	= NULL;
-    PL_maxscream	= -1;			/* reinits on demand */
-    PL_lastscream	= NULL;
-
-
     PL_regdummy		= proto_perl->Iregdummy;
     PL_colorset		= 0;		/* reinits PL_colors[] */
     /*PL_colors[6]	= {0,0,0,0,0,0};*/
@@ -13264,7 +13250,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
     PL_utf8_xidstart	= sv_dup_inc(proto_perl->Iutf8_xidstart, param);
     PL_utf8_idcont	= sv_dup_inc(proto_perl->Iutf8_idcont, param);
     PL_utf8_xidcont	= sv_dup_inc(proto_perl->Iutf8_xidcont, param);
-    PL_utf8_foldable	= hv_dup_inc(proto_perl->Iutf8_foldable, param);
+    PL_utf8_foldable	= sv_dup_inc(proto_perl->Iutf8_foldable, param);
 
 
     if (proto_perl->Ipsig_pend) {

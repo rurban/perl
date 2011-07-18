@@ -155,10 +155,6 @@ PERLVAR(Iefloatsize,	STRLEN)
 
 /* regex stuff */
 
-PERLVAR(Iscreamfirst,	I32 *)
-PERLVAR(Iscreamnext,	I32 *)
-PERLVAR(Ilastscream,	SV *)
-
 PERLVAR(Ireg_state,	struct re_save_state)
 
 PERLVAR(Iregdummy,	regnode)	/* from regcomp.c */
@@ -233,7 +229,7 @@ When you replace this variable, it is considered a good practice to store the po
 
 PERLVARI(Iopfreehook,	Perl_ophook_t, 0) /* op_free() hook */
 
-PERLVARI(Imaxscream,	I32,	-1)
+/* Space for U32 */
 PERLVARI(Ireginterp_cnt,I32,	 0)	/* Whether "Regexp" was interpolated. */
 PERLVARI(Iwatchaddr,	char **, 0)
 PERLVAR(Iwatchok,	char *)
@@ -569,6 +565,8 @@ PERLVARI(Inumeric_standard,	bool,	TRUE)
 PERLVARI(Inumeric_local,	bool,	TRUE)
 					/* Assume local numerics */
 PERLVAR(Inumeric_name,	char *)		/* Name of current numeric locale */
+PERLVAR(Inumeric_radix_sv,	SV *)	/* The radix separator if not '.' */
+
 #endif /* !USE_LOCALE_NUMERIC */
 
 /* utf8 character classes */
@@ -644,12 +642,6 @@ PERLVARI(Ibeginav_save, AV*, NULL)	/* save BEGIN{}s when compiling */
 
 PERLVAR(Ibody_arenas, void*) /* pointer to list of body-arenas */
 
-
-#ifdef USE_LOCALE_NUMERIC
-
-PERLVAR(Inumeric_radix_sv,	SV *)	/* The radix separator if not '.' */
-
-#endif
 
 #if defined(USE_ITHREADS)
 PERLVAR(Iregex_pad,     SV**)		/* Shortcut into the array of
@@ -733,7 +725,7 @@ PERLVARI(Iutf8_foldclosures,	HV *, NULL)
 
 /* List of characters that participate in folds (except marks, etc in
  * multi-char folds) */
-PERLVARI(Iutf8_foldable,	HV *, NULL)
+PERLVARI(Iutf8_foldable,	SV *, NULL)
 
 PERLVAR(Icustom_ops, HV *)      /* custom op registrations */
 

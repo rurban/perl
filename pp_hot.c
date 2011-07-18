@@ -341,75 +341,17 @@ PP(pp_readline)
 PP(pp_eq)
 {
     dVAR; dSP;
+    SV *left, *right;
+
     tryAMAGICbin_MG(eq_amg, AMGf_set|AMGf_numeric);
-#ifndef NV_PRESERVES_UV
-    if (SvROK(TOPs) && !SvAMAGIC(TOPs) && SvROK(TOPm1s) && !SvAMAGIC(TOPm1s)) {
-        SP--;
-	SETs(boolSV(SvRV(TOPs) == SvRV(TOPp1s)));
-	RETURN;
-    }
-#endif
-#ifdef PERL_PRESERVE_IVUV
-    SvIV_please_nomg(TOPs);
-    if (SvIOK(TOPs)) {
-	/* Unless the left argument is integer in range we are going
-	   to have to use NV maths. Hence only attempt to coerce the
-	   right argument if we know the left is integer.  */
-      SvIV_please_nomg(TOPm1s);
-	if (SvIOK(TOPm1s)) {
-	    const bool auvok = SvUOK(TOPm1s);
-	    const bool buvok = SvUOK(TOPs);
-	
-	    if (auvok == buvok) { /* ## IV == IV or UV == UV ## */
-                /* Casting IV to UV before comparison isn't going to matter
-                   on 2s complement. On 1s complement or sign&magnitude
-                   (if we have any of them) it could to make negative zero
-                   differ from normal zero. As I understand it. (Need to
-                   check - is negative zero implementation defined behaviour
-                   anyway?). NWC  */
-		const UV buv = SvUVX(POPs);
-		const UV auv = SvUVX(TOPs);
-		
-		SETs(boolSV(auv == buv));
-		RETURN;
-	    }
-	    {			/* ## Mixed IV,UV ## */
-                SV *ivp, *uvp;
-		IV iv;
-		
-		/* == is commutative so doesn't matter which is left or right */
-		if (auvok) {
-		    /* top of stack (b) is the iv */
-                    ivp = *SP;
-                    uvp = *--SP;
-                } else {
-                    uvp = *SP;
-                    ivp = *--SP;
-                }
-                iv = SvIVX(ivp);
-		if (iv < 0)
-                    /* As uv is a UV, it's >0, so it cannot be == */
-                    SETs(&PL_sv_no);
-		else
-		    /* we know iv is >= 0 */
-		    SETs(boolSV((UV)iv == SvUVX(uvp)));
-		RETURN;
-	    }
-	}
-    }
-#endif
-    {
-#if defined(NAN_COMPARE_BROKEN) && defined(Perl_isnan)
-      dPOPTOPnnrl_nomg;
-      if (Perl_isnan(left) || Perl_isnan(right))
-	  RETSETNO;
-      SETs(boolSV(left == right));
-#else
-      dPOPnv_nomg;
-      SETs(boolSV(SvNV_nomg(TOPs) == value));
-#endif
-      RETURN;
-    }
+    right = POPs;
+    left  = TOPs;
+    SETs(boolSV(
+	(SvIOK_notUV(left) && SvIOK_notUV(right))
+	? (SvIVX(left) == SvIVX(right))
+	: ( do_ncmp(left, right) == 0)
+    ));
+    RETURN;
 }
 
 PP(pp_preinc)
@@ -1793,31 +1735,6 @@ Perl_do_readline(pTHX)
     }
 }
 
-PP(pp_enter)
-{
-    dVAR; dSP;
-    register PERL_CONTEXT *cx;
-    I32 gimme = OP_GIMME(PL_op, -1);
-
-    if (gimme == -1) {
-	if (cxstack_ix >= 0) {
-	    /* If this flag is set, we're just inside a return, so we should
-	     * store the caller's context */
-	    gimme = (PL_op->op_flags & OPf_SPECIAL)
-		? block_gimme()
-		: cxstack[cxstack_ix].blk_gimme;
-	} else
-	    gimme = G_SCALAR;
-    }
-
-    ENTER_with_name("block");
-
-    SAVETMPS;
-    PUSHBLOCK(cx, CXt_BLOCK, SP);
-
-    RETURN;
-}
-
 PP(pp_helem)
 {
     dVAR; dSP;
@@ -1894,57 +1811,6 @@ PP(pp_helem)
     if (!lval && SvRMAGICAL(hv) && SvGMAGICAL(sv))
 	mg_get(sv);
     PUSHs(sv);
-    RETURN;
-}
-
-PP(pp_leave)
-{
-    dVAR; dSP;
-    register PERL_CONTEXT *cx;
-    SV **newsp;
-    PMOP *newpm;
-    I32 gimme;
-
-    if (PL_op->op_flags & OPf_SPECIAL) {
-	cx = &cxstack[cxstack_ix];
-	cx->blk_oldpm = PL_curpm;	/* fake block should preserve $1 et al */
-    }
-
-    POPBLOCK(cx,newpm);
-
-    gimme = OP_GIMME(PL_op, (cxstack_ix >= 0) ? gimme : G_SCALAR);
-
-    TAINT_NOT;
-    if (gimme == G_VOID)
-	SP = newsp;
-    else if (gimme == G_SCALAR) {
-	register SV **mark;
-	MARK = newsp + 1;
-	if (MARK <= SP) {
-	    if (SvFLAGS(TOPs) & (SVs_PADTMP|SVs_TEMP))
-		*MARK = TOPs;
-	    else
-		*MARK = sv_mortalcopy(TOPs);
-	} else {
-	    MEXTEND(mark,0);
-	    *MARK = &PL_sv_undef;
-	}
-	SP = MARK;
-    }
-    else if (gimme == G_ARRAY) {
-	/* in case LEAVE wipes old return values */
-	register SV **mark;
-	for (mark = newsp + 1; mark <= SP; mark++) {
-	    if (!(SvFLAGS(*mark) & (SVs_PADTMP|SVs_TEMP))) {
-		*mark = sv_mortalcopy(*mark);
-		TAINT_NOT;	/* Each item is independent */
-	    }
-	}
-    }
-    PL_curpm = newpm;	/* Don't pop $1 et al till now */
-
-    LEAVE_with_name("block");
-
     RETURN;
 }
 
@@ -2196,11 +2062,6 @@ PP(pp_subst)
 	EXTEND(SP,1);
     }
 
-    /* In non-destructive replacement mode, duplicate target scalar so it
-     * remains unchanged. */
-    if (rpm->op_pmflags & PMf_NONDESTRUCT)
-	TARG = sv_2mortal(newSVsv(TARG));
-
 #ifdef PERL_OLD_COPY_ON_WRITE
     /* Awooga. Awooga. "bool" types that are actually char are dangerous,
        because they make integers such as 256 "false".  */
@@ -2209,14 +2070,14 @@ PP(pp_subst)
     if (SvIsCOW(TARG))
 	sv_force_normal_flags(TARG,0);
 #endif
-    if (
+    if (!(rpm->op_pmflags & PMf_NONDESTRUCT)
 #ifdef PERL_OLD_COPY_ON_WRITE
-	!is_cow &&
+	&& !is_cow
 #endif
-	(SvREADONLY(TARG)
-	 || ( ((SvTYPE(TARG) == SVt_PVGV && isGV_with_GP(TARG))
-	       || SvTYPE(TARG) > SVt_PVLV)
-	     && !(SvTYPE(TARG) == SVt_PVGV && SvFAKE(TARG)))))
+	&& (SvREADONLY(TARG)
+	    || ( ((SvTYPE(TARG) == SVt_PVGV && isGV_with_GP(TARG))
+		  || SvTYPE(TARG) > SVt_PVLV)
+		 && !(SvTYPE(TARG) == SVt_PVGV && SvFAKE(TARG)))))
 	Perl_croak_no_modify(aTHX);
     PUTBACK;
 
@@ -2338,7 +2199,8 @@ PP(pp_subst)
 #endif
 	&& (I32)clen <= RX_MINLENRET(rx) && (once || !(r_flags & REXEC_COPY_STR))
 	&& !(RX_EXTFLAGS(rx) & RXf_LOOKBEHIND_SEEN)
-	&& (!doutf8 || SvUTF8(TARG)))
+	&& (!doutf8 || SvUTF8(TARG))
+	&& !(rpm->op_pmflags & PMf_NONDESTRUCT))
     {
 
 #ifdef PERL_OLD_COPY_ON_WRITE
@@ -2391,7 +2253,7 @@ PP(pp_subst)
 		sv_chop(TARG, d);
 	    }
 	    SPAGAIN;
-	    PUSHs(rpm->op_pmflags & PMf_NONDESTRUCT ? TARG : &PL_sv_yes);
+	    PUSHs(&PL_sv_yes);
 	}
 	else {
 	    do {
@@ -2420,10 +2282,7 @@ PP(pp_subst)
 		Move(s, d, i+1, char);		/* include the NUL */
 	    }
 	    SPAGAIN;
-	    if (rpm->op_pmflags & PMf_NONDESTRUCT)
-		PUSHs(TARG);
-	    else
-		mPUSHi((I32)iters);
+	    mPUSHi((I32)iters);
 	}
     }
     else {
@@ -2480,34 +2339,42 @@ PP(pp_subst)
 	else
 	    sv_catpvn(dstr, s, strend - s);
 
+	if (rpm->op_pmflags & PMf_NONDESTRUCT) {
+	    /* From here on down we're using the copy, and leaving the original
+	       untouched.  */
+	    TARG = dstr;
+	    SPAGAIN;
+	    PUSHs(dstr);
+	} else {
 #ifdef PERL_OLD_COPY_ON_WRITE
-	/* The match may make the string COW. If so, brilliant, because that's
-	   just saved us one malloc, copy and free - the regexp has donated
-	   the old buffer, and we malloc an entirely new one, rather than the
-	   regexp malloc()ing a buffer and copying our original, only for
-	   us to throw it away here during the substitution.  */
-	if (SvIsCOW(TARG)) {
-	    sv_force_normal_flags(TARG, SV_COW_DROP_PV);
-	} else
+	    /* The match may make the string COW. If so, brilliant, because
+	       that's just saved us one malloc, copy and free - the regexp has
+	       donated the old buffer, and we malloc an entirely new one, rather
+	       than the regexp malloc()ing a buffer and copying our original,
+	       only for us to throw it away here during the substitution.  */
+	    if (SvIsCOW(TARG)) {
+		sv_force_normal_flags(TARG, SV_COW_DROP_PV);
+	    } else
 #endif
-	{
-	    SvPV_free(TARG);
-	}
-	SvPV_set(TARG, SvPVX(dstr));
-	SvCUR_set(TARG, SvCUR(dstr));
-	SvLEN_set(TARG, SvLEN(dstr));
-	doutf8 |= DO_UTF8(dstr);
-	SvPV_set(dstr, NULL);
+	    {
+		SvPV_free(TARG);
+	    }
+	    SvPV_set(TARG, SvPVX(dstr));
+	    SvCUR_set(TARG, SvCUR(dstr));
+	    SvLEN_set(TARG, SvLEN(dstr));
+	    doutf8 |= DO_UTF8(dstr);
+	    SvPV_set(dstr, NULL);
 
-	SPAGAIN;
-	if (rpm->op_pmflags & PMf_NONDESTRUCT)
-	    PUSHs(TARG);
-	else
+	    SPAGAIN;
 	    mPUSHi((I32)iters);
+	}
     }
-    (void)SvPOK_only_UTF8(TARG);
-    if (doutf8)
-	SvUTF8_on(TARG);
+
+    if (!(rpm->op_pmflags & PMf_NONDESTRUCT)) {
+	(void)SvPOK_only_UTF8(TARG);
+	if (doutf8)
+	    SvUTF8_on(TARG);
+    }
 
     /* See "how taint works" above */
     if (PL_tainting) {
@@ -2644,193 +2511,6 @@ PP(pp_leavesub)
 	    }
 	}
     }
-    PUTBACK;
-
-    LEAVE;
-    cxstack_ix--;
-    POPSUB(cx,sv);	/* Stack values are safe: release CV and @_ ... */
-    PL_curpm = newpm;	/* ... and pop $1 et al */
-
-    LEAVESUB(sv);
-    return cx->blk_sub.retop;
-}
-
-/* This duplicates the above code because the above code must not
- * get any slower by more conditions */
-PP(pp_leavesublv)
-{
-    dVAR; dSP;
-    SV **mark;
-    SV **newsp;
-    PMOP *newpm;
-    I32 gimme;
-    register PERL_CONTEXT *cx;
-    SV *sv;
-
-    if (CxMULTICALL(&cxstack[cxstack_ix]))
-	return 0;
-
-    POPBLOCK(cx,newpm);
-    cxstack_ix++; /* temporarily protect top context */
-
-    TAINT_NOT;
-
-    if (CxLVAL(cx) & OPpENTERSUB_INARGS) {
-	/* We are an argument to a function or grep().
-	 * This kind of lvalueness was legal before lvalue
-	 * subroutines too, so be backward compatible:
-	 * cannot report errors.  */
-
-	/* Scalar context *is* possible, on the LHS of ->. */
-	if (gimme == G_SCALAR)
-	    goto rvalue;
-	if (gimme == G_ARRAY) {
-	    mark = newsp + 1;
-	    if (!CvLVALUE(cx->blk_sub.cv))
-		goto rvalue_array;
-	    EXTEND_MORTAL(SP - newsp);
-	    for (mark = newsp + 1; mark <= SP; mark++) {
-		if (SvTEMP(*mark))
-		    NOOP;
-		else if (SvFLAGS(*mark) & SVs_PADTMP)
-		    *mark = sv_mortalcopy(*mark);
-		else {
-		    /* Can be a localized value subject to deletion. */
-		    PL_tmps_stack[++PL_tmps_ix] = *mark;
-		    SvREFCNT_inc_void(*mark);
-		}
-	    }
-	}
-    }
-    else if (CxLVAL(cx)) {     /* Leave it as it is if we can. */
-	/* Here we go for robustness, not for speed, so we change all
-	 * the refcounts so the caller gets a live guy. Cannot set
-	 * TEMP, so sv_2mortal is out of question. */
-	if (!CvLVALUE(cx->blk_sub.cv)) {
-	    LEAVE;
-	    cxstack_ix--;
-	    POPSUB(cx,sv);
-	    PL_curpm = newpm;
-	    LEAVESUB(sv);
-	    DIE(aTHX_ "Can't modify non-lvalue subroutine call");
-	}
-	if (gimme == G_SCALAR) {
-	    MARK = newsp + 1;
-	    EXTEND_MORTAL(1);
-	    if (MARK == SP) {
-		if ((SvPADTMP(TOPs) ||
-		     (SvFLAGS(TOPs) & (SVf_READONLY | SVf_FAKE))
-		       == SVf_READONLY
-		    ) &&
-		    !SvSMAGICAL(TOPs)) {
-		    LEAVE;
-		    cxstack_ix--;
-		    POPSUB(cx,sv);
-		    PL_curpm = newpm;
-		    LEAVESUB(sv);
-		    DIE(aTHX_ "Can't return %s from lvalue subroutine",
-			SvREADONLY(TOPs) ? (TOPs == &PL_sv_undef) ? "undef"
-			: "a readonly value" : "a temporary");
-		}
-		else {                  /* Can be a localized value
-					 * subject to deletion. */
-		    PL_tmps_stack[++PL_tmps_ix] = *mark;
-		    SvREFCNT_inc_void(*mark);
-		}
-	    }
-	    else {
-		/* sub:lvalue{} will take us here.
-		   Presumably the case of a non-empty array never happens.
-		 */
-		LEAVE;
-		cxstack_ix--;
-		POPSUB(cx,sv);
-		PL_curpm = newpm;
-		LEAVESUB(sv);
-		DIE(aTHX_ "%s",
-		    (MARK > SP
-		      ? "Can't return undef from lvalue subroutine"
-		      : "Array returned from lvalue subroutine in scalar "
-		        "context"
-		    )
-		);
-	    }
-	    SP = MARK;
-	}
-	else if (gimme == G_ARRAY) {
-	    EXTEND_MORTAL(SP - newsp);
-	    for (mark = newsp + 1; mark <= SP; mark++) {
-		if (*mark != &PL_sv_undef
-		    && (SvPADTMP(*mark)
-		       || (SvFLAGS(*mark) & (SVf_READONLY|SVf_FAKE))
-		             == SVf_READONLY
-		       )
-		) {
-		    /* Might be flattened array after $#array =  */
-		    PUTBACK;
-		    LEAVE;
-		    cxstack_ix--;
-		    POPSUB(cx,sv);
-		    PL_curpm = newpm;
-		    LEAVESUB(sv);
-		    DIE(aTHX_ "Can't return a %s from lvalue subroutine",
-			SvREADONLY(TOPs) ? "readonly value" : "temporary");
-		}
-		else {
-		    /* Can be a localized value subject to deletion. */
-		    PL_tmps_stack[++PL_tmps_ix] = *mark;
-		    SvREFCNT_inc_void(*mark);
-		}
-	    }
-	}
-    }
-    else {
-	if (gimme == G_SCALAR) {
-	  rvalue:
-	    MARK = newsp + 1;
-	    if (MARK <= SP) {
-		if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-			*MARK = SvREFCNT_inc(TOPs);
-			FREETMPS;
-			sv_2mortal(*MARK);
-		}
-		else
-		    *MARK = SvTEMP(TOPs)
-		              ? TOPs
-		              : sv_2mortal(SvREFCNT_inc_simple_NN(TOPs));
-	    }
-	    else {
-		MEXTEND(MARK, 0);
-		*MARK = &PL_sv_undef;
-	    }
-	    SP = MARK;
-	}
-	else if (gimme == G_ARRAY) {
-	  rvalue_array:
-	    for (MARK = newsp + 1; MARK <= SP; MARK++) {
-		if (!SvTEMP(*MARK))
-		    *MARK = sv_2mortal(SvREFCNT_inc_simple_NN(*MARK));
-	    }
-	}
-    }
-
-    if (CxLVAL(cx) & OPpENTERSUB_DEREF) {
-	assert(gimme == G_SCALAR);
-	SvGETMAGIC(TOPs);
-	if (!SvOK(TOPs)) {
-	    U8 deref_type;
-	    if (cx->blk_sub.retop->op_type == OP_RV2SV)
-		deref_type = OPpDEREF_SV;
-	    else if (cx->blk_sub.retop->op_type == OP_RV2AV)
-		deref_type = OPpDEREF_AV;
-	    else {
-		assert(cx->blk_sub.retop->op_type == OP_RV2HV);
-		deref_type = OPpDEREF_HV;
-	    }
-	    vivify_ref(TOPs, deref_type);
-	}
-    }
-
     PUTBACK;
 
     LEAVE;

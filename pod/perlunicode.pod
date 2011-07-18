@@ -301,7 +301,8 @@ This formality is needed when properties are not binary; that is, if they can
 take on more values than just True and False.  For example, the Bidi_Class (see
 L</"Bidirectional Character Types"> below), can take on several different
 values, such as Left, Right, Whitespace, and others.  To match these, one needs
-to specify the property name (Bidi_Class), AND the value being matched against
+to specify both the property name (Bidi_Class), AND the value being
+matched against
 (Left, Right, etc.).  This is done, as in the examples above, by having the
 two components separated by an equal sign (or interchangeably, a colon), like
 C<\p{Bidi_Class: Left}>.
@@ -469,11 +470,63 @@ The world's languages are written in many different scripts.  This sentence
 written in Cyrillic, and Greek is written in, well, Greek; Japanese mainly in
 Hiragana or Katakana.  There are many more.
 
-The Unicode Script property gives what script a given character is in,
-and the property can be specified with the compound form like
-C<\p{Script=Hebrew}> (short: C<\p{sc=hebr}>).  Perl furnishes shortcuts for all
-script names.  You can omit everything up through the equals (or colon), and
-simply write C<\p{Latin}> or C<\P{Cyrillic}>.
+The Unicode Script and Script_Extensions properties give what script a
+given character is in.  Either property can be specified with the
+compound form like
+C<\p{Script=Hebrew}> (short: C<\p{sc=hebr}>), or
+C<\p{Script_Extensions=Javanese}> (short: C<\p{scx=java}>).
+In addition, Perl furnishes shortcuts for all
+C<Script> property names.  You can omit everything up through the equals
+(or colon), and simply write C<\p{Latin}> or C<\P{Cyrillic}>.
+(This is not true for C<Script_Extensions>, which is required to be
+written in the compound form.)
+
+The difference between these two properties involves characters that are
+used in multiple scripts.  For example the digits '0' through '9' are
+used in many parts of the world.  These are placed in a script named
+C<Common>.  Other characters are used in just a few scripts.  For
+example, the "KATAKANA-HIRAGANA DOUBLE HYPHEN" is used in both Japanese
+scripts, Katakana and Hiragana, but nowhere else.  The C<Script>
+property places all characters that are used in multiple scripts in the
+C<Common> script, while the C<Script_Extensions> property places those
+that are used in only a few scripts into each of those scripts; while
+still using C<Common> for those used in many scripts.  Thus both these
+match:
+
+ "0" =~ /\p{sc=Common}/     # Matches
+ "0" =~ /\p{scx=Common}/    # Matches
+
+and only the first of these match:
+
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{sc=Common}  # Matches
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{scx=Common} # No match
+
+And only the last two of these match:
+
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{sc=Hiragana}  # No match
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{sc=Katakana}  # No match
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{scx=Hiragana} # Matches
+ "\N{KATAKANA-HIRAGANA DOUBLE HYPHEN}" =~ /\p{scx=Katakana} # Matches
+
+C<Script_Extensions> is thus an improved C<Script>, in which there are
+fewer characters in the C<Common> script, and correspondingly more in
+other scripts.  It is new in Unicode version 6.0, and its data are likely
+to change significantly in later releases, as things get sorted out.
+
+(Actually, besides C<Common>, the C<Inherited> script, contains
+characters that are used in multiple scripts.  These are modifier
+characters which modify other characters, and inherit the script value
+of the controlling character.  Some of these are used in many scripts,
+and so go into C<Inherited> in both C<Script> and C<Script_Extensions>.
+Others are used in just a few scripts, so are in C<Inherited> in
+C<Script>, but not in C<Script_Extensions>.)
+
+It is worth stressing that there are several different sets of digits in
+Unicode that are equivalent to 0-9 and are matchable by C<\d> in a
+regular expression.  If they are used in a single language only, they
+are in that language's C<Script> and C<Script_Extension>.  If they are
+used in more than one script, they will be in C<sc=Common>, but only
+if they are used in many scripts should they be in C<scx=Common>.
 
 A complete list of scripts and their shortcuts is in L<perluniprops>.
 
@@ -496,20 +549,14 @@ other words, the ASCII characters.  The "Latin" script contains some letters
 from this as well as several other blocks, like "Latin-1 Supplement",
 "Latin Extended-A", etc., but it does not contain all the characters from
 those blocks. It does not, for example, contain the digits 0-9, because
-those digits are shared across many scripts. The digits 0-9 and similar groups,
-like punctuation, are in the script called C<Common>.  There is also a
-script called C<Inherited> for characters that modify other characters,
-and inherit the script value of the controlling character.  (Note that
-there are several different sets of digits in Unicode that are
-equivalent to 0-9 and are matchable by C<\d> in a regular expression.
-If they are used in a single language only, they are in that language's
-script.  Only sets are used across several languages are in the
-C<Common> script.)
+those digits are shared across many scripts, and hence are in the
+C<Common> script.
 
 For more about scripts versus blocks, see UAX#24 "Unicode Script Property":
 L<http://www.unicode.org/reports/tr24>
 
-The Script property is likely to be the one you want to use when processing
+The C<Script> or C<Script_Extensions> properties are likely to be the
+ones you want to use when processing
 natural language; the Block property may occasionally be useful in working
 with the nuts and bolts of Unicode.
 
@@ -557,8 +604,9 @@ Unicode ones, but some are genuine extensions, including several that are in
 the compound form.  And quite a few of these are actually recommended by Unicode
 (in L<http://www.unicode.org/reports/tr18>).
 
-This section gives some details on all extensions that aren't synonyms for
-compound-form Unicode properties (for those, you'll have to refer to the
+This section gives some details on all extensions that aren't just
+synonyms for compound-form Unicode properties
+(for those properties, you'll have to refer to the
 L<Unicode Standard|http://www.unicode.org/reports/tr44>.
 
 =over
@@ -1017,8 +1065,9 @@ must be in utf8 by using C<use subs> (or by importing into C<CORE::GLOBAL>) by:
 
      # Unless an I is before a dot_above, it turns into a dotless i.
      # (The character class with the combining classes matches non-above
-     # marks following the I.  Any number of these may be between the 'I' and
-     # the dot_above, and the dot_above will still apply to the 'I'.
+     # marks following the I.  Any number of these may be between the
+     # 'I'and the dot_above, and the dot_above will still apply to the
+     # 'I'.
      use charnames ":full";
      $string =~
              s/I
@@ -1068,41 +1117,41 @@ and the section numbers refer to the Unicode Technical Standard #18,
 
 Level 1 - Basic Unicode Support
 
-        RL1.1   Hex Notation                     - done          [1]
-        RL1.2   Properties                       - done          [2][3]
-        RL1.2a  Compatibility Properties         - done          [4]
-        RL1.3   Subtraction and Intersection     - MISSING       [5]
-        RL1.4   Simple Word Boundaries           - done          [6]
-        RL1.5   Simple Loose Matches             - done          [7]
-        RL1.6   Line Boundaries                  - MISSING       [8][9]
-        RL1.7   Supplementary Code Points        - done          [10]
+ RL1.1   Hex Notation                     - done          [1]
+ RL1.2   Properties                       - done          [2][3]
+ RL1.2a  Compatibility Properties         - done          [4]
+ RL1.3   Subtraction and Intersection     - MISSING       [5]
+ RL1.4   Simple Word Boundaries           - done          [6]
+ RL1.5   Simple Loose Matches             - done          [7]
+ RL1.6   Line Boundaries                  - MISSING       [8][9]
+ RL1.7   Supplementary Code Points        - done          [10]
 
-        [1]  \x{...}
-        [2]  \p{...} \P{...}
-        [3]  supports not only minimal list, but all Unicode character
-             properties (see L</Unicode Character Properties>)
-        [4]  \d \D \s \S \w \W \X [:prop:] [:^prop:]
-        [5]  can use regular expression look-ahead [a] or
-             user-defined character properties [b] to emulate set
-             operations
-        [6]  \b \B
-        [7]  note that Perl does Full case-folding in matching (but with
-             bugs), not Simple: for example U+1F88 is equivalent to
-             U+1F00 U+03B9, not with 1F80.  This difference matters
-             mainly for certain Greek capital letters with certain
-             modifiers: the Full case-folding decomposes the letter,
-             while the Simple case-folding would map it to a single
-             character.
-        [8]  should do ^ and $ also on U+000B (\v in C), FF (\f), CR
-             (\r), CRLF (\r\n), NEL (U+0085), LS (U+2028), and PS
-             (U+2029); should also affect <>, $., and script line
-             numbers; should not split lines within CRLF [c] (i.e. there
-             is no empty line between \r and \n)
-	[9]  Linebreaking conformant with UAX#14 "Unicode Line Breaking
-	     Algorithm" is available through the Unicode::LineBreaking
-	     module.
-       [10]  UTF-8/UTF-EBDDIC used in Perl allows not only U+10000 to
-             U+10FFFF but also beyond U+10FFFF
+ [1]  \x{...}
+ [2]  \p{...} \P{...}
+ [3]  supports not only minimal list, but all Unicode character
+      properties (see Unicode Character Properties above)
+ [4]  \d \D \s \S \w \W \X [:prop:] [:^prop:]
+ [5]  can use regular expression look-ahead [a] or
+      user-defined character properties [b] to emulate set
+      operations
+ [6]  \b \B
+ [7]  note that Perl does Full case-folding in matching (but with
+      bugs), not Simple: for example U+1F88 is equivalent to
+      U+1F00 U+03B9, instead of just U+1F80.  This difference
+      matters mainly for certain Greek capital letters with certain
+      modifiers: the Full case-folding decomposes the letter,
+      while the Simple case-folding would map it to a single
+      character.
+ [8]  should do ^ and $ also on U+000B (\v in C), FF (\f), CR
+      (\r), CRLF (\r\n), NEL (U+0085), LS (U+2028), and PS
+      (U+2029); should also affect <>, $., and script line
+      numbers; should not split lines within CRLF [c] (i.e. there
+      is no empty line between \r and \n)
+ [9]  Linebreaking conformant with UAX#14 "Unicode Line Breaking
+      Algorithm" is available through the Unicode::LineBreaking
+      module.
+ [10] UTF-8/UTF-EBDDIC used in Perl allows not only U+10000 to
+      U+10FFFF but also beyond U+10FFFF
 
 [a] You can mimic class subtraction using lookahead.
 For example, what UTS#18 might write as
@@ -1120,7 +1169,7 @@ But in this particular example, you probably really want
 
 which will match assigned characters known to be part of the Greek script.
 
-Also see the Unicode::Regex::Set module, it does implement the full
+Also see the L<Unicode::Regex::Set> module, it does implement the full
 UTS#18 grouping, intersection, union, and removal (subtraction) syntax.
 
 [b] '+' for union, '-' for removal (set-difference), '&' for intersection
@@ -1132,43 +1181,43 @@ UTS#18 grouping, intersection, union, and removal (subtraction) syntax.
 
 Level 2 - Extended Unicode Support
 
-        RL2.1   Canonical Equivalents           - MISSING       [10][11]
-        RL2.2   Default Grapheme Clusters       - MISSING       [12]
-        RL2.3   Default Word Boundaries         - MISSING       [14]
-        RL2.4   Default Loose Matches           - MISSING       [15]
-        RL2.5   Name Properties                 - DONE
-        RL2.6   Wildcard Properties             - MISSING
+ RL2.1   Canonical Equivalents           - MISSING       [10][11]
+ RL2.2   Default Grapheme Clusters       - MISSING       [12]
+ RL2.3   Default Word Boundaries         - MISSING       [14]
+ RL2.4   Default Loose Matches           - MISSING       [15]
+ RL2.5   Name Properties                 - DONE
+ RL2.6   Wildcard Properties             - MISSING
 
-        [10] see UAX#15 "Unicode Normalization Forms"
-        [11] have Unicode::Normalize but not integrated to regexes
-        [12] have \X but we don't have a "Grapheme Cluster Mode"
-        [14] see UAX#29, Word Boundaries
-        [15] see UAX#21 "Case Mappings"
+ [10] see UAX#15 "Unicode Normalization Forms"
+ [11] have Unicode::Normalize but not integrated to regexes
+ [12] have \X but we don't have a "Grapheme Cluster Mode"
+ [14] see UAX#29, Word Boundaries
+ [15] see UAX#21 "Case Mappings"
 
 =item *
 
 Level 3 - Tailored Support
 
-        RL3.1   Tailored Punctuation            - MISSING
-        RL3.2   Tailored Grapheme Clusters      - MISSING       [17][18]
-        RL3.3   Tailored Word Boundaries        - MISSING
-        RL3.4   Tailored Loose Matches          - MISSING
-        RL3.5   Tailored Ranges                 - MISSING
-        RL3.6   Context Matching                - MISSING       [19]
-        RL3.7   Incremental Matches             - MISSING
+ RL3.1   Tailored Punctuation            - MISSING
+ RL3.2   Tailored Grapheme Clusters      - MISSING       [17][18]
+ RL3.3   Tailored Word Boundaries        - MISSING
+ RL3.4   Tailored Loose Matches          - MISSING
+ RL3.5   Tailored Ranges                 - MISSING
+ RL3.6   Context Matching                - MISSING       [19]
+ RL3.7   Incremental Matches             - MISSING
       ( RL3.8   Unicode Set Sharing )
-        RL3.9   Possible Match Sets             - MISSING
-        RL3.10  Folded Matching                 - MISSING       [20]
-        RL3.11  Submatchers                     - MISSING
+ RL3.9   Possible Match Sets             - MISSING
+ RL3.10  Folded Matching                 - MISSING       [20]
+ RL3.11  Submatchers                     - MISSING
 
-        [17] see UAX#10 "Unicode Collation Algorithms"
-        [18] have Unicode::Collate but not integrated to regexes
-        [19] have (?<=x) and (?=x), but look-aheads or look-behinds
-             should see outside of the target substring
-        [20] need insensitive matching for linguistic features other
-             than case; for example, hiragana to katakana, wide and
-             narrow, simplified Han to traditional Han (see UTR#30
-             "Character Foldings")
+ [17] see UAX#10 "Unicode Collation Algorithms"
+ [18] have Unicode::Collate but not integrated to regexes
+ [19] have (?<=x) and (?=x), but look-aheads or look-behinds
+      should see outside of the target substring
+ [20] need insensitive matching for linguistic features other
+      than case; for example, hiragana to katakana, wide and
+      narrow, simplified Han to traditional Han (see UTR#30
+      "Character Foldings")
 
 =back
 
@@ -1189,14 +1238,14 @@ encoding. For ASCII (and we really do mean 7-bit ASCII, not another
 
 The following table is from Unicode 3.2.
 
- Code Points            1st Byte  2nd Byte  3rd Byte  4th Byte
+ Code Points            1st Byte  2nd Byte  3rd Byte 4th Byte
 
    U+0000..U+007F       00..7F
    U+0080..U+07FF     * C2..DF    80..BF
    U+0800..U+0FFF       E0      * A0..BF    80..BF
    U+1000..U+CFFF       E1..EC    80..BF    80..BF
    U+D000..U+D7FF       ED        80..9F    80..BF
-   U+D800..U+DFFF       +++++++ utf16 surrogates, not legal utf8 +++++++
+   U+D800..U+DFFF       +++++ utf16 surrogates, not legal utf8 +++++
    U+E000..U+FFFF       EE..EF    80..BF    80..BF
   U+10000..U+3FFFF      F0      * 90..BF    80..BF    80..BF
   U+40000..U+FFFFF      F1..F3    80..BF    80..BF    80..BF
@@ -1210,12 +1259,12 @@ explicitly forbidden, and the shortest possible encoding should always be used
 
 Another way to look at it is via bits:
 
- Code Points                    1st Byte   2nd Byte  3rd Byte  4th Byte
+                Code Points  1st Byte  2nd Byte  3rd Byte  4th Byte
 
-                    0aaaaaaa     0aaaaaaa
-            00000bbbbbaaaaaa     110bbbbb  10aaaaaa
-            ccccbbbbbbaaaaaa     1110cccc  10bbbbbb  10aaaaaa
-  00000dddccccccbbbbbbaaaaaa     11110ddd  10cccccc  10bbbbbb  10aaaaaa
+                   0aaaaaaa  0aaaaaaa
+           00000bbbbbaaaaaa  110bbbbb  10aaaaaa
+           ccccbbbbbbaaaaaa  1110cccc  10bbbbbb  10aaaaaa
+ 00000dddccccccbbbbbbaaaaaa  11110ddd  10cccccc  10bbbbbb  10aaaaaa
 
 As you can see, the continuation bytes all begin with "10", and the
 leading bits of the start byte tell how many bytes there are in the
@@ -1812,7 +1861,7 @@ working with 5.6, you will need some of the following adjustments to
 your code. The examples are written such that the code will continue
 to work under 5.6, so you should be safe to try them out.
 
-=over 4
+=over 3
 
 =item *
 

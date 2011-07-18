@@ -7,7 +7,7 @@ require Exporter;
 
 our ($VERSION, @ISA, @EXPORT, %ZIP_CM_MIN_VERSIONS);
 
-$VERSION = '2.035';
+$VERSION = '2.037';
 
 @ISA = qw(Exporter);
 
@@ -39,6 +39,8 @@ $VERSION = '2.035';
     ZIP_EXTRA_ID_EXT_TIMESTAMP
     ZIP_EXTRA_ID_INFO_ZIP_UNIX2
     ZIP_EXTRA_ID_INFO_ZIP_UNIXn
+    ZIP_EXTRA_ID_INFO_ZIP_Upath
+    ZIP_EXTRA_ID_INFO_ZIP_Ucom        
     ZIP_EXTRA_ID_JAVA_EXE
 
     ZIP_OS_CODE_UNIX
@@ -72,6 +74,7 @@ use constant ZIP_IFA_TEXT_MASK                 => 1;
 # Signatures for each of the headers
 use constant ZIP_LOCAL_HDR_SIG                 => 0x04034b50;
 use constant ZIP_DATA_HDR_SIG                  => 0x08074b50;
+use constant packed_ZIP_DATA_HDR_SIG           => pack "V", ZIP_DATA_HDR_SIG;
 use constant ZIP_CENTRAL_HDR_SIG               => 0x02014b50;
 use constant ZIP_END_CENTRAL_HDR_SIG           => 0x06054b50;
 use constant ZIP64_END_CENTRAL_REC_HDR_SIG     => 0x06064b50;
@@ -87,6 +90,8 @@ use constant ZIP_EXTRA_ID_ZIP64                => pack "v", 1;
 use constant ZIP_EXTRA_ID_EXT_TIMESTAMP        => "UT";
 use constant ZIP_EXTRA_ID_INFO_ZIP_UNIX2       => "Ux";
 use constant ZIP_EXTRA_ID_INFO_ZIP_UNIXn       => "ux";
+use constant ZIP_EXTRA_ID_INFO_ZIP_Upath       => "up";
+use constant ZIP_EXTRA_ID_INFO_ZIP_Ucom        => "uc";
 use constant ZIP_EXTRA_ID_JAVA_EXE             => pack "v", 0xCAFE;
 
 use constant ZIP64_MIN_VERSION                 => 45;

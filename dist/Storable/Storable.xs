@@ -90,6 +90,11 @@ typedef double NV;			/* Older perls lack the NV type */
 #endif
 #endif
 
+/* perl <= 5.8.2 needs this */
+#ifndef SvIsCOW
+# define SvIsCOW(sv) 0
+#endif
+
 #ifndef SvRV_set
 #define SvRV_set(sv, val) \
     STMT_START { \
@@ -2117,9 +2122,9 @@ static int store_scalar(pTHX_ stcxt_t *cxt, SV *sv)
                 if (
 #ifdef SVf_IVisUV
                     /* Sorry. This isn't in 5.005_56 (IIRC) or earlier.  */
-                    ((flags & SVf_IVisUV) && SvUV(sv) > 0x7FFFFFFF) ||
+                    ((flags & SVf_IVisUV) && SvUV(sv) > (UV)0x7FFFFFFF) ||
 #endif
-                    (iv > 0x7FFFFFFF) || (iv < -0x80000000)) {
+                    (iv > (IV)0x7FFFFFFF) || (iv < -(IV)0x80000000)) {
                     /* Bigger than 32 bits.  */
                     TRACEME(("large network order integer as string, value = %"IVdf, iv));
                     goto string_readlen;
@@ -2289,7 +2294,7 @@ static int store_hash(pTHX_ stcxt_t *cxt, HV *hv)
 #ifdef HAS_RESTRICTED_HASHES
             HvTOTALKEYS(hv);
 #else
-            HvUSEDKEYS(hv);
+            HvKEYS(hv); /* Not HvUSEDKEYS, as 5.6 lacketh it */
 #endif
 	I32 i;
 	int ret = 0;

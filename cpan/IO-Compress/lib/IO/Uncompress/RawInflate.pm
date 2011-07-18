@@ -5,16 +5,16 @@ use strict ;
 use warnings;
 use bytes;
 
-use Compress::Raw::Zlib  2.035 ;
-use IO::Compress::Base::Common  2.035 qw(:Status createSelfTiedObject);
+use Compress::Raw::Zlib  2.037 ;
+use IO::Compress::Base::Common  2.037 qw(:Status createSelfTiedObject);
 
-use IO::Uncompress::Base  2.035 ;
-use IO::Uncompress::Adapter::Inflate  2.035 ;
+use IO::Uncompress::Base  2.037 ;
+use IO::Uncompress::Adapter::Inflate  2.037 ;
 
 require Exporter ;
 our ($VERSION, @ISA, @EXPORT_OK, %EXPORT_TAGS, %DEFLATE_CONSTANTS, $RawInflateError);
 
-$VERSION = '2.035';
+$VERSION = '2.037';
 $RawInflateError = '';
 
 @ISA    = qw( Exporter IO::Uncompress::Base );

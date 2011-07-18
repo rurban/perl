@@ -26,7 +26,7 @@ to mean just the bracketed form.  Certainly, most Perl documentation does that.
 
 The dot (or period), C<.> is probably the most used, and certainly
 the most well-known character class. By default, a dot matches any
-character, except for the newline. The default can be changed to
+character, except for the newline. That default can be changed to
 add matching the newline by using the I<single line> modifier: either
 for the entire regular expression with the C</s> modifier, or
 locally with C<(?s)>.  (The experimental C<\N> backslash sequence, described
@@ -89,7 +89,8 @@ names are respectively C<COLON>, C<4F>, and C<F4>.
 =head3 Digits
 
 C<\d> matches a single character considered to be a decimal I<digit>.
-If the C</a> modifier in effect, it matches [0-9].  Otherwise, it
+If the C</a> regular expression modifier is in effect, it matches [0-9].
+Otherwise, it
 matches anything that is matched by C<\p{Digit}>, which includes [0-9].
 (An unlikely possible exception is that under locale matching rules, the
 current locale might not have [0-9] matched by C<\d>, and/or might match
@@ -271,13 +272,13 @@ the same characters, without regard to other factors, such as whether the
 source string is in UTF-8 format.
 
 One might think that C<\s> is equivalent to C<[\h\v]>. This is not true.
-For example, the vertical tab (C<"\x0b">) is not matched by C<\s>, it is
-however considered vertical whitespace.
+The difference is that the vertical tab (C<"\x0b">) is not matched by
+C<\s>; it is however considered vertical whitespace.
 
 The following table is a complete listing of characters matched by
 C<\s>, C<\h> and C<\v> as of Unicode 6.0.
 
-The first column gives the code point of the character (in hex format),
+The first column gives the Unicode code point of the character (in hex format),
 the second column gives the (Unicode) name. The third column indicates
 by which class(es) the character is matched (assuming no locale or EBCDIC code
 page is in effect that changes the C<\s> matching).
@@ -548,17 +549,18 @@ the caret as one of the characters to match, either escape the caret or
 else don't list it first.
 
 In inverted bracketed character classes, Perl ignores the Unicode rules
-that normally say that a given character matches a sequence of multiple
-characters under caseless C</i> matching, which otherwise could be
-highly confusing:
+that normally say that certain characters should match a sequence of
+multiple characters under caseless C</i> matching.  Following those
+rules could lead to highly confusing situations:
 
- "ss" =~ /^[^\xDF]+$/ui;
+ "ss" =~ /^[^\xDF]+$/ui;   # Matches!
 
 This should match any sequences of characters that aren't C<\xDF> nor
 what C<\xDF> matches under C</i>.  C<"s"> isn't C<\xDF>, but Unicode
 says that C<"ss"> is what C<\xDF> matches under C</i>.  So which one
 "wins"? Do you fail the match because the string has C<ss> or accept it
-because it has an C<s> followed by another C<s>?
+because it has an C<s> followed by another C<s>?  Perl has chosen the
+latter.
 
 Examples:
 
@@ -650,8 +652,8 @@ The other counterpart, in the column labelled "Full-range Unicode", matches any
 appropriate characters in the full Unicode character set.  For example,
 C<\p{Alpha}> matches not just the ASCII alphabetic characters, but any
 character in the entire Unicode character set considered alphabetic.
-The column labelled "backslash sequence" is a (short) synonym for
-the Full-range Unicode form.
+An entry in the column labelled "backslash sequence" is a (short)
+equivalent.
 
  [[:...:]]      ASCII-range          Full-range  backslash  Note
                  Unicode              Unicode     sequence

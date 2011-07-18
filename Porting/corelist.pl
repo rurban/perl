@@ -7,6 +7,7 @@
 # With an optional arg specifying the root of a CPAN mirror, outputs the
 # %upstream and %bug_tracker hashes too.
 
+use autodie;
 use strict;
 use warnings;
 use File::Find;
@@ -17,6 +18,8 @@ use Maintainers qw(%Modules files_to_modules);
 use File::Spec;
 use Parse::CPAN::Meta;
 use IPC::Cmd 'can_run';
+use HTTP::Tiny;
+use IO::Uncompress::Gunzip;
 
 my $corelist_file = 'dist/Module-CoreList/lib/Module/CoreList.pm';
 
@@ -36,7 +39,7 @@ if ( !-f 'MANIFEST' ) {
     die "Must be run from the root of a clean perl tree\n";
 }
 
-open( my $corelist_fh, '<', $corelist_file ) || die "Could not open $corelist_file: $!";
+open( my $corelist_fh, '<', $corelist_file );
 my $corelist = join( '', <$corelist_fh> );
 
 if ($cpan) {
@@ -46,17 +49,19 @@ if ($cpan) {
     my $fh;
     if ( -e $modlistfile ) {
         warn "Reading the module list from $modlistfile";
-        open $fh, '<', $modlistfile or die "Couldn't open $modlistfile: $!";
+        open $fh, '<', $modlistfile;
     } elsif ( -e $modlistfile . ".gz" ) {
         my $zcat = can_run('gzcat') || can_run('zcat') or die "Can't find gzcat or zcat";
         warn "Reading the module list from $modlistfile.gz";
-        open $fh, '-|', "$zcat $modlistfile.gz" or die "Couldn't zcat $modlistfile.gz: $!";
+        open $fh, '-|', "$zcat $modlistfile.gz";
     } else {
         warn "About to fetch 02packages from ftp.funet.fi. This may take a few minutes\n";
-        $content = fetch_url('http://ftp.funet.fi/pub/CPAN/modules/02packages.details.txt');
-        unless ($content) {
+	my $gzipped_content = fetch_url('http://ftp.funet.fi/pub/CPAN/modules/02packages.details.txt.gz');
+	unless ($gzipped_content) {
             die "Unable to read 02packages.details.txt from either your CPAN mirror or ftp.funet.fi";
         }
+	IO::Uncompress::Gunzip::gunzip(\$gzipped_content, \$content, Transparent => 0)
+	    or die "Can't gunzip content: $IO::Uncompress::Gunzip::GunzipError";
     }
 
     if ( $fh and !$content ) {
@@ -96,7 +101,9 @@ find(
             $module =~ s{^Encode/encoding}{encoding},
             $module =~ s{^IPC-SysV/}{IPC/},
             $module =~ s{^MIME-Base64/QuotedPrint}{MIME/QuotedPrint},
-            $module =~ s{^(?:DynaLoader|Errno|Opcode)/}{},
+            $module =~ s{^(?:DynaLoader|Errno|Opcode|XSLoader)/}{},
+            $module =~ s{^Sys-Syslog/win32}{Sys-Syslog},
+            $module =~ s{^Time-Piece/Seconds}{Time/Seconds},
             );
         $module =~ s{^vms/ext}{VMS};
 		$module =~ s{^lib/}{}g;
@@ -251,19 +258,19 @@ warn "All done. Please check over $corelist_file carefully before committing. Th
 
 sub write_corelist {
     my $content = shift;
-    open (my $clfh, ">", $corelist_file) || die "Failed to open $corelist_file for writing: $!";
-    print $clfh $content || die "Failed to write the new CoreList.pm: $!";
+    open (my $clfh, ">", $corelist_file);
+    print $clfh $content;
     close($clfh);
 }
 
 sub fetch_url {
     my $url = shift;
-    eval { require LWP::Simple };
-    if ( LWP::Simple->can('get') ) {
-        return LWP::Simple::get($url);
-    } elsif (`which curl`) {
-        return `curl -s $url`;
-    } elsif (`which wget`) {
-        return `wget -q -O - $url`;
+    my $http = HTTP::Tiny->new;
+    my $response = $http->get($url);
+    if ($response->{success}) {
+	return $response->{content};
+    } else {
+	warn "Error fetching $url: $response->{status} $response->{reason}\n";
+        return;
     }
 }

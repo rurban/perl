@@ -779,6 +779,8 @@ push @tables_that_may_be_empty, 'Script=Common' if $v_version le v4.0.1;
 push @tables_that_may_be_empty, 'Title' if $v_version lt v2.0.0;
 push @tables_that_may_be_empty, 'Script=Katakana_Or_Hiragana'
                                                     if $v_version ge v4.1.0;
+push @tables_that_may_be_empty, 'Script_Extensions=Katakana_Or_Hiragana'
+                                                    if $v_version ge v6.0.0;
 
 # The lists below are hashes, so the key is the item in the list, and the
 # value is the reason why it is in the list.  This makes generation of
@@ -944,7 +946,11 @@ if ($v_version ge 5.2.0 && $v_version lt 6.0.0) {
 
 # Probably obsolete forever
 if ($v_version ge v4.1.0) {
-    $why_suppressed{'Script=Katakana_Or_Hiragana'} = 'Obsolete.  All code points previously matched by this have been moved to "Script=Common"';
+    $why_suppressed{'Script=Katakana_Or_Hiragana'} = 'Obsolete.  All code points previously matched by this have been moved to "Script=Common".';
+}
+if ($v_version ge v6.0.0) {
+    $why_suppressed{'Script=Katakana_Or_Hiragana'} .= '  Consider instead using Script_Extensions=Katakana or Script_Extensions=Hiragana (or both)"';
+    $why_suppressed{'Script_Extensions=Katakana_Or_Hiragana'} = 'All code points that would be matched by this are matched by either Script_Extensions=Katakana or Script_Extensions=Hiragana"';
 }
 
 # This program can create files for enumerated-like properties, such as
@@ -1063,7 +1069,6 @@ my %ignored_files = (
     'EmojiSources.txt' => 'Not of general utility: for Japanese legacy cell-phone applications',
     'IndicMatraCategory.txt' => 'Provisional',
     'IndicSyllabicCategory.txt' => 'Provisional',
-    'ScriptExtensions.txt' => 'Provisional',
 );
 
 ### End of externally interesting definitions, except for @input_file_objects
@@ -1288,6 +1293,7 @@ my $perl;
 my $block;
 my $perl_charname;
 my $print;
+my $Any;
 
 # Are there conflicting names because of beginning with 'In_', or 'Is_'
 my $has_In_conflicts = 0;
@@ -4973,6 +4979,23 @@ sub trace { return main::trace(@_); }
             # does.
             push @OUT, "!utf8::Any\n";
         }
+        elsif ($self->name eq 'N'
+
+               # To save disk space and table cache space, avoid putting out
+               # binary N tables, but instead create a file which just inverts
+               # the Y table.  Since the file will still exist and occupy a
+               # certain number of blocks, might as well output the whole
+               # thing if it all will fit in one block.   The number of
+               # ranges below is an approximate number for that.
+               && $self->property->type == $BINARY
+               # && $self->property->tables == 2  Can't do this because the
+               #        non-binary properties, like NFDQC aren't specifiable
+               #        by the notation
+               && $range_list{$addr}->ranges > 15
+               && ! $annotate)  # Under --annotate, want to see everything
+        {
+            push @OUT, "!utf8::" . $self->property->name . "\n";
+        }
         else {
             my $range_size_1 = $range_size_1{$addr};
             my $format;            # Used only in $annotate option
@@ -5214,10 +5237,11 @@ sub trace { return main::trace(@_); }
         my $pre_body = $self->pre_body;
         push @HEADER, $pre_body, "\n" if $pre_body;
 
-        # All these files have a .pl suffix
-        $file_path{$addr}->[-1] .= '.pl';
+        # All these files should have a .pl suffix added to them.
+        my @file_with_pl = @{$file_path{$addr}};
+        $file_with_pl[-1] .= '.pl';
 
-        main::write($file_path{$addr},
+        main::write(\@file_with_pl,
                     $annotate,      # utf8 iff annotating
                     \@HEADER,
                     \@OUT);
@@ -6447,6 +6471,11 @@ sub trace { return main::trace(@_); }
     # points.
     main::set_access('matches_all', \%matches_all, 'r');
 
+    my %complement;
+    # Points to the complement that this table is expressed in terms of; 0 if
+    # none.
+    main::set_access('complement', \%complement, 'r', 's' );
+
     sub new {
         my $class = shift;
 
@@ -6495,6 +6524,7 @@ sub trace { return main::trace(@_); }
         $matches_all{$addr} = $matches_all;
         $leader{$addr} = $self;
         $parent{$addr} = $self;
+        $complement{$addr} = 0;
 
         if (defined $format && $format ne $EMPTY_FORMAT) {
             Carp::my_carp_bug("'Format' must be '$EMPTY_FORMAT' in a match table instead of '$format'.  Using '$EMPTY_FORMAT'");
@@ -7251,6 +7281,12 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
     # have to keep more than three.
     main::set_access('unique_maps', \%unique_maps);
 
+    my %pre_declared_maps;
+    # A boolean that gives whether the input data should declare all the
+    # tables used, or not.  If the former, unknown ones raise a warning.
+    main::set_access('pre_declared_maps',
+                                    \%pre_declared_maps, 'r');
+
     sub new {
         # The only required parameter is the positionally first, name.  All
         # other parameters are key => value pairs.  See the documentation just
@@ -7278,6 +7314,11 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
         $full_name{$addr} = delete $args{'Full_Name'} || $name;
         $type{$addr} = delete $args{'Type'} || $UNKNOWN;
         $pseudo_map_type{$addr} = delete $args{'Map_Type'};
+        $pre_declared_maps{$addr} = delete $args{'Pre_Declared_Maps'}
+                                    # Starting in this release, property
+                                    # values should be defined for all
+                                    # properties, except those overriding this
+                                    // $v_version ge v5.1.0;
         # Rest of parameters passed on.
 
         $has_only_code_point_maps{$addr} = 1;
@@ -7403,6 +7444,25 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
         }
 
         return $table;
+    }
+
+    sub delete_match_table {
+        # Delete the table referred to by $2 from the property $1.
+
+        my $self = shift;
+        my $table_to_remove = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $addr = do { no overloading; pack 'J', $self; };
+
+        # Remove all names that refer to it.
+        foreach my $key (keys %{$table_ref{$addr}}) {
+            delete $table_ref{$addr}{$key}
+                                if $table_ref{$addr}{$key} == $table_to_remove;
+        }
+
+        $table_to_remove->DESTROY;
+        return;
     }
 
     sub table {
@@ -11080,6 +11140,35 @@ sub filter_old_style_normalization_lines {
     return;
 }
 
+sub setup_script_extensions {
+    # The Script_Extensions property starts out with a clone of the Script
+    # property.
+
+    my $sc = property_ref("Script");
+    my $scx = Property->new("scx", Full_Name => "Script_Extensions",
+                  Initialize => $sc,
+                  Default_Map => $sc->default_map,
+                  Pre_Declared_Maps => 0,
+                  );
+    $scx->add_comment(join_lines( <<END
+The values for code points that appear in one script are just the same as for
+the 'Script' property.  Likewise the values for those that appear in many
+scripts are either 'Common' or 'Inherited', same as with 'Script'.  But the
+values of code points that appear in a few scripts are a space separated list
+of those scripts.
+END
+    ));
+
+    # Make the scx's tables and aliases for them the same as sc's
+    foreach my $table ($sc->tables) {
+        my $scx_table = $scx->add_match_table($table->name,
+                                Full_Name => $table->full_name);
+        foreach my $alias ($table->aliases) {
+            $scx_table->add_alias($alias->name);
+        }
+    }
+}
+
 sub finish_Unicode() {
     # This routine should be called after all the Unicode files have been read
     # in.  It:
@@ -11169,27 +11258,47 @@ sub finish_Unicode() {
         # missing code points.
         if (defined (my $default_map = $property->default_map)) {
 
-            # This fills in any missing values with the default.
+            # Make sure there is a match table for the default
+            my $default_table;
+            if (! defined ($default_table = $property->table($default_map))) {
+                $default_table = $property->add_match_table($default_map);
+            }
+
+            # And, if the property is binary, the default table will just
+            # be the complement of the other table.
+            if ($property_type == $BINARY) {
+                my $non_default_table;
+
+                # Find the non-default table.
+                for my $table ($property->tables) {
+                    next if $table == $default_table;
+                    $non_default_table = $table;
+                }
+                $default_table->set_complement($non_default_table);
+            }
+
+            # This fills in any missing values with the default.  It's
+            # tempting to save some time and memory in running this program
+            # by skipping this step for binary tables where the default
+            # is easily calculated.  But it is needed for generating
+            # the test file, and other changes would also be required to do
+            # so.
             $property->add_map(0, $LAST_UNICODE_CODEPOINT,
                                $default_map, Replace => $NO);
-
-            # Make sure there is a match table for the default
-            if (! defined $property->table($default_map)) {
-                $property->add_match_table($default_map);
-            }
         }
 
         # Have all we need to populate the match tables.
         my $property_name = $property->name;
+        my $maps_should_be_defined = $property->pre_declared_maps;
         foreach my $range ($property->ranges) {
             my $map = $range->value;
             my $table = property_ref($property_name)->table($map);
             if (! defined $table) {
 
                 # Integral and rational property values are not necessarily
-                # defined in PropValueAliases, but all other ones should be,
-                # starting in 5.1
-                if ($v_version ge v5.1.0
+                # defined in PropValueAliases, but whether all the other ones
+                # should be depends on the property.
+                if ($maps_should_be_defined
                     && $map !~ /^ -? \d+ ( \/ \d+ )? $/x)
                 {
                     Carp::my_carp("Table '$property_name=$map' should have been defined.  Defining it now.")
@@ -11309,7 +11418,35 @@ END
             ));
         }
     }
-    return
+
+    # The Script_Extensions property started out as a clone of the Script
+    # property.  But processing its data file caused some elements to be
+    # replaced with different data.  (These elements were for the Common and
+    # Inherited properties.)  This data is a qw() list of all the scripts that
+    # the code points in the given range are in.  An example line is:
+    # 060C          ; Arab Syrc Thaa # Po       ARABIC COMMA
+    #
+    # The code above has created a new match table named "Arab Syrc Thaa"
+    # which contains 060C.  (The cloned table started out with this code point
+    # mapping to "Common".)  Now we add 060C to each of the Arab, Syrc, and
+    # Thaa match tables.  Then we delete the now spurious "Arab Syrc Thaa"
+    # match table.  This is repeated for all these tables and ranges.  The map
+    # data is retained in the map table for reference, but the spurious match
+    # tables are deleted.
+
+    my $scx = property_ref("Script_Extensions");
+    foreach my $table ($scx->tables) {
+        next unless $table->name =~ /\s/;   # Only the new tables have a space
+                                            # in their names, and all do
+        my @scripts = split /\s+/, $table->name;
+        foreach my $script (@scripts) {
+            my $script_table = $scx->table($script);
+            $script_table += $table;
+        }
+        $scx->delete_match_table($table);
+    }
+
+    return;
 }
 
 sub compile_perl() {
@@ -11327,7 +11464,7 @@ sub compile_perl() {
 
     # 'Any' is all code points.  As an error check, instead of just setting it
     # to be that, construct it to be the union of all the major categories
-    my $Any = $perl->add_match_table('Any',
+    $Any = $perl->add_match_table('Any',
             Description  => "[\\x{0000}-\\x{$LAST_UNICODE_CODEPOINT_STRING}]",
             Matches_All => 1);
 
@@ -12238,7 +12375,7 @@ sub register_file_for_name($$$) {
 
     my $table = shift;
     my $directory_ref = shift;   # Array of the directory path for the file
-    my $file = shift;            # The file name in the final directory, [-1].
+    my $file = shift;            # The file name in the final directory.
     Carp::carp_extra_args(\@_) if main::DEBUG && @_;
 
     trace "table=$table, file=$file, directory=@$directory_ref" if main::DEBUG && $to_trace;
@@ -12253,6 +12390,21 @@ sub register_file_for_name($$$) {
     # Do all of the work for all equivalent tables when called with the leader
     # table, so skip if isn't the leader.
     return if $table->leader != $table;
+
+    # If this is a complement of another file, use that other file instead,
+    # with a ! prepended to it.
+    my $complement;
+    if (($complement = $table->complement) != 0) {
+        my @directories = $complement->file_path;
+
+        # This assumes that the 0th element is something like 'lib',
+        # the 1th element the property name (in its own directory), like
+        # 'AHex', and the 2th element the file like 'Y' which will have a .pl
+        # appended to it later.
+        $directories[1] =~ s/^/!/;
+        $file = pop @directories;
+        $directory_ref =\@directories;
+    }
 
     # Join all the file path components together, using slashes.
     my $full_filename = join('/', @$directory_ref, $file);
@@ -12321,7 +12473,7 @@ sub register_file_for_name($$$) {
             }
 
             # Keep a list of the deprecated properties and their filenames
-            if ($deprecated) {
+            if ($deprecated && $complement == 0) {
                 $utf8::why_deprecated{$sub_filename} = $deprecated;
             }
 
@@ -13252,7 +13404,7 @@ B<Summary legend:>
 
 =over 4
 
-=item B<*> is a wild-card
+=item Z<>B<*> is a wild-card
 
 =item B<(\\d+)> in the info column gives the number of code points matched by
 this property.
@@ -13439,7 +13591,6 @@ END
     foreach my $cased (keys %caseless_equivalent_to) {
         my @path = $caseless_equivalent_to{$cased}->file_path;
         my $path = join '/', @path[1, -1];
-        $path =~ s/\.pl//;
         $utf8::caseless_equivalent_to{$cased} = $path;
     }
     push @heavy, simple_dumper (\%utf8::caseless_equivalent_to, ' ' x 4);
@@ -13468,9 +13619,16 @@ sub write_all_tables() {
     # (sort so that if there is an immutable file name, it has precedence, so
     # some other property can't come in and take over its file name.  If b's
     # file name is defined, will return 1, meaning to take it first; don't
-    # care if both defined, as they had better be different anyway)
+    # care if both defined, as they had better be different anyway.  And the
+    # property named 'Perl' needs to be first (it doesn't have any immutable
+    # file name) because empty properties are defined in terms of it's table
+    # named 'Any'.)
     PROPERTY:
-    foreach my $property (sort { defined $b->file } property_ref('*')) {
+    foreach my $property (sort { return -1 if $a == $perl;
+                                 return 1 if $b == $perl;
+                                 return defined $b->file
+                                } property_ref('*'))
+    {
         my $type = $property->type;
 
         # And for each table for that property, starting with the mapping
@@ -13488,6 +13646,14 @@ sub write_all_tables() {
                                 return 1 if ! defined $ext_a;
                                 my $ext_b = $b->external_name;
                                 return -1 if ! defined $ext_b;
+
+                                # But return the non-complement table before
+                                # the complement one, as the latter is defined
+                                # in terms of the former, and needs to have
+                                # the information for the former available.
+                                return 1 if $a->complement != 0;
+                                return -1 if $b->complement != 0;
+
                                 my $cmp = length $ext_a <=> length $ext_b;
 
                                 # Return result if lengths not equal
@@ -13583,6 +13749,9 @@ sub write_all_tables() {
                 {
                     push @unhandled_properties, "$table";
                 }
+
+                # An empty table is just the complement of everything.
+                $table->set_complement($Any) if $table != $property;
             }
             elsif ($expected_empty) {
                 my $because = "";
@@ -13780,7 +13949,8 @@ sub write_all_tables() {
 
         # Only need to write one file when shared by more than one
         # property
-        next if ! $is_property && $table->leader != $table;
+        next if ! $is_property
+                && ($table->leader != $table || $table->complement != 0);
 
         # Construct a nice comment to add to the file
         $table->set_final_comment;
@@ -14477,6 +14647,10 @@ my @input_file_objects = (
                     Optional => 1,
                     Each_Line_Handler => \&filter_unihan_line,
                     ),
+    Input_file->new('ScriptExtensions.txt', v6.0.0,
+                    Property => 'Script_Extensions',
+                    Pre_Handler => \&setup_script_extensions,
+                    ),
 );
 
 # End of all the preliminaries.
@@ -14758,7 +14932,7 @@ END
 }
 
 # Output these warnings unless -q explicitly specified.
-if ($verbosity >= $NORMAL_VERBOSITY) {
+if ($verbosity >= $NORMAL_VERBOSITY && ! $debug_skip) {
     if (@unhandled_properties) {
         print "\nProperties and tables that unexpectedly have no code points\n";
         foreach my $property (sort @unhandled_properties) {

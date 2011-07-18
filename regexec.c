@@ -692,11 +692,26 @@ Perl_re_intuit_start(pTHX_ REGEXP * const rx, SV *sv, char *strpos,
             (IV)prog->check_end_shift);
     });       
         
-    if (flags & REXEC_SCREAM) {
+    if ((flags & REXEC_SCREAM) && SvSCREAM(sv)) {
 	I32 p = -1;			/* Internal iterator of scream. */
 	I32 * const pp = data ? data->scream_pos : &p;
+	const MAGIC *mg;
+	bool found = FALSE;
 
-	if (PL_screamfirst[BmRARE(check)] >= 0
+	assert(SvMAGICAL(sv));
+	mg = mg_find(sv, PERL_MAGIC_study);
+	assert(mg);
+
+	if (mg->mg_private == 1) {
+	    found = ((U8 *)mg->mg_ptr)[BmRARE(check)] != (U8)~0;
+	} else if (mg->mg_private == 2) {
+	    found = ((U16 *)mg->mg_ptr)[BmRARE(check)] != (U16)~0;
+	} else {
+	    assert (mg->mg_private == 4);
+	    found = ((U32 *)mg->mg_ptr)[BmRARE(check)] != (U32)~0;
+	}
+
+	if (found
 	    || ( BmRARE(check) == '\n'
 		 && (BmPREVIOUS(check) == SvCUR(check) - 1)
 		 && SvTAIL(check) ))
@@ -2289,7 +2304,7 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, register char *stre
 	dontbother = end_shift;
 	strend = HOPc(strend, -dontbother);
 	while ( (s <= last) &&
-		((flags & REXEC_SCREAM)
+		((flags & REXEC_SCREAM) && SvSCREAM(sv)
 		 ? (s = screaminstr(sv, must, HOP3c(s, back_min, (back_min<0 ? strbeg : strend)) - strbeg,
 				    end_shift, &scream_pos, 0))
 		 : (s = fbm_instr((unsigned char*)HOP3(s, back_min, (back_min<0 ? strbeg : strend)),
@@ -2368,7 +2383,7 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, register char *stre
 		utf8_target ? to_utf8_substr(prog) : to_byte_substr(prog);
 	    float_real = utf8_target ? prog->float_utf8 : prog->float_substr;
 
-	    if (flags & REXEC_SCREAM) {
+	    if ((flags & REXEC_SCREAM) && SvSCREAM(sv)) {
 		last = screaminstr(sv, float_real, s - strbeg,
 				   end_shift, &scream_pos, 1); /* last one */
 		if (!last)
@@ -3816,17 +3831,17 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		   L* (L | LVT T* | V  V* T* | LV  V* T*)
 
 	       That means that if we have seen any L's at all we can quit
-	       there, but if the next character is a LVT, a V or and LV we
+	       there, but if the next character is an LVT, a V, or an LV we
 	       should keep going.
 
 	       There is a subtlety with Prepend* which showed up in testing.
 	       Note that the Begin, and only the Begin is required in:
 	        | Prepend* Begin Extend*
-	       Also, Begin contains '! Control'.  A Prepend must be a '!
-	       Control', which means it must be a Begin.  What it comes down to
-	       is that if we match Prepend* and then find no suitable Begin
-	       afterwards, that if we backtrack the last Prepend, that one will
-	       be a suitable Begin.
+	       Also, Begin contains '! Control'.  A Prepend must be a
+	       '!  Control', which means it must also be a Begin.  What it
+	       comes down to is that if we match Prepend* and then find no
+	       suitable Begin afterwards, that if we backtrack the last
+	       Prepend, that one will be a suitable Begin.
 	    */
 
 	    if (locinput >= PL_regeol)
@@ -3836,7 +3851,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		/* Match either CR LF  or '.', as all the other possibilities
 		 * require utf8 */
 		locinput++;	    /* Match the . or CR */
-		if (nextchr == '\r'
+		if (nextchr == '\r' /* And if it was CR, and the next is LF,
+				       match the LF */
 		    && locinput < PL_regeol
 		    && UCHARAT(locinput) == '\n') locinput++;
 	    }
@@ -4198,6 +4214,12 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		PL_op = (OP_4tree*)rexi->data->data[n];
 		DEBUG_STATE_r( PerlIO_printf(Perl_debug_log, 
 		    "  re_eval 0x%"UVxf"\n", PTR2UV(PL_op)) );
+		/* wrap the call in two SAVECOMPPADs. This ensures that
+		 * when the save stack is eventually unwound, all the
+		 * accumulated SAVEt_CLEARSV's will be processed with
+		 * interspersed SAVEt_COMPPAD's to ensure that lexicals
+		 * are cleared in the right pad */
+		SAVECOMPPAD();
 		PAD_SAVE_LOCAL(old_comppad, (PAD*)rexi->data->data[n + 2]);
 		PL_regoffs[0].end = PL_reg_magic->mg_len = locinput - PL_bostr;
 
@@ -4218,6 +4240,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 		Copy(&saved_state, &PL_reg_state, 1, struct re_save_state);
 
 		PL_op = oop;
+		SAVECOMPPAD();
 		PAD_RESTORE_LOCAL(old_comppad);
 		PL_curcop = ocurcop;
 		PL_regeol = saved_regeol;

@@ -17,7 +17,7 @@ BEGIN {
 use strict;
 use Config;
 
-plan tests => 774;
+plan tests => 784;
 
 $| = 1;
 
@@ -2143,6 +2143,44 @@ end
     $dest = ucfirst $source;
     is_tainted $dest, "ucfirst(tainted) taints its return value";
 }
+
+{
+    # Taintedness of values returned from given()
+    use feature 'switch';
+
+    my @descriptions = ('when', 'given end', 'default');
+
+    for (qw<x y z>) {
+	my $letter = "$_$TAINT";
+
+	my $desc = "tainted value returned from " . shift(@descriptions);
+
+	my $res = do {
+	    given ($_) {
+		when ('x') { $letter }
+		when ('y') { goto leavegiven }
+		default    { $letter }
+		leavegiven:  $letter
+	    }
+	};
+	is         $res, $letter, "$desc is correct";
+	is_tainted $res,          "$desc stays tainted";
+    }
+}
+
+
+# tainted constants and index()
+#  RT 64804; http://bugs.debian.org/291450
+{
+    ok(tainted $old_env_path, "initial taintedness");
+    BEGIN { no strict 'refs'; my $v = $old_env_path; *{"::C"} = sub () { $v }; }
+    ok(tainted C, "constant is tainted properly");
+    ok(!tainted "", "tainting not broken yet");
+    index(undef, C);
+    ok(!tainted "", "tainting still works after index() of the constant");
+}
+
+
 
 # This may bomb out with the alarm signal so keep it last
 SKIP: {

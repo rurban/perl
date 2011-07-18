@@ -1663,11 +1663,12 @@ S_hfreeentries(pTHX_ HV *hv)
 {
     STRLEN index = 0;
     XPVHV * const xhv = (XPVHV*)SvANY(hv);
+    SV *sv;
 
     PERL_ARGS_ASSERT_HFREEENTRIES;
 
-    while (xhv->xhv_keys) {
-	SvREFCNT_dec(Perl_hfree_next_entry(aTHX_ hv, &index));
+    while ((sv = Perl_hfree_next_entry(aTHX_ hv, &index))||xhv->xhv_keys) {
+	SvREFCNT_dec(sv);
     }
 }
 
@@ -3286,13 +3287,22 @@ Perl_refcounted_he_inc(pTHX_ struct refcounted_he *he)
     return he;
 }
 
+/*
+=for apidoc cop_fetch_label
+
+Returns the label attached to a cop.
+The flags pointer may be set to C<SVf_UTF8> or 0.
+
+=cut
+*/
+
 /* pp_entereval is aware that labels are stored with a key ':' at the top of
    the linked list.  */
 const char *
-Perl_fetch_cop_label(pTHX_ COP *const cop, STRLEN *len, U32 *flags) {
+Perl_cop_fetch_label(pTHX_ COP *const cop, STRLEN *len, U32 *flags) {
     struct refcounted_he *const chain = cop->cop_hints_hash;
 
-    PERL_ARGS_ASSERT_FETCH_COP_LABEL;
+    PERL_ARGS_ASSERT_COP_FETCH_LABEL;
 
     if (!chain)
 	return NULL;
@@ -3322,15 +3332,24 @@ Perl_fetch_cop_label(pTHX_ COP *const cop, STRLEN *len, U32 *flags) {
     return chain->refcounted_he_data + 1;
 }
 
+/*
+=for apidoc cop_store_label
+
+Save a label into a C<cop_hints_hash>. You need to set flags to C<SVf_UTF8>
+for a utf-8 label.
+
+=cut
+*/
+
 void
-Perl_store_cop_label(pTHX_ COP *const cop, const char *label, STRLEN len,
+Perl_cop_store_label(pTHX_ COP *const cop, const char *label, STRLEN len,
 		     U32 flags)
 {
     SV *labelsv;
-    PERL_ARGS_ASSERT_STORE_COP_LABEL;
+    PERL_ARGS_ASSERT_COP_STORE_LABEL;
 
     if (flags & ~(SVf_UTF8))
-	Perl_croak(aTHX_ "panic: store_cop_label illegal flag bits 0x%" UVxf,
+	Perl_croak(aTHX_ "panic: cop_store_label illegal flag bits 0x%" UVxf,
 		   (UV)flags);
     labelsv = newSVpvn_flags(label, len, SVs_TEMP);
     if (flags & SVf_UTF8)
