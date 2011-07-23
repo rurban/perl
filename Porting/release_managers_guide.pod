@@ -459,10 +459,6 @@ file.
 
 Add a perldelta entry for the new Module::CoreList version.
 
-You should also add the version you're about to release to the
-L<Module::CoreList/CAVEATS> section which enumerates the perl releases
-that Module::CoreList covers.
-
 In addition, if this is a final release (rather than a release candidate):
 
 =over 4 
@@ -579,7 +575,7 @@ and you'll need to use a new version number for your release.
 =head3 build the tarball
 
 Before you run the following, you might want to install 7-Zip (the
-C<p7-full> package under Debian or the C<p7zip> port on MacPorts) or
+C<p7zip-full> package under Debian or the C<p7zip> port on MacPorts) or
 the AdvanceCOMP suite (e.g. the C<advancecomp> package under Debian,
 or the C<advancecomp> port on macports - 7-Zip on Windows is the
 same code as AdvanceCOMP, so Windows users get the smallest files
@@ -934,6 +930,17 @@ copying the exiting entry, and bump the file's $VERSION; e.g.
 Then follow the section L<"Bump the version number"> to bump the version
 in the remaining files and test and commit.
 
+
+=head3 clean build and test
+
+Run a clean build and test to make sure nothing obvious is broken.
+
+In particular, F<Porting/perldelta_template.pod> is intentionally exempted
+from podchecker tests, to avoid false positives about placeholder text.
+However, once it's copied to F<pod/perldelta.pod> the contents can now
+cause test failures. Problems should resolved either by replacing placeholder
+text with correct text, or following the instructions output by
+F<t/porting/podcheck.t> on how to update its exceptions database.
 
 =head3 push commits
 

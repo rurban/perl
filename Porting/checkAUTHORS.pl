@@ -808,8 +808,10 @@ schwab\100suse.de                       schwab\100issan.informatik.uni-dortmund.
 sebastien\100aperghis.net               maddingue\100free.fr
 +                                       saper\100cpan.org
 shigeya\100wide.ad.jp                   shigeya\100foretune.co.jp
-shlomif\100vipe.technion.ac.il          shlomif\100iglu.org.il
+shlomif\100cpan.org                     shlomif\100vipe.technion.ac.il
++                                       shlomif\100iglu.org.il
 +                                       shlomif+processed-by-perl\100gmail.com
++                                       shlomif\100shlomifish.org
 simon\100simon-cozens.org               simon\100pembro4.pmb.ox.ac.uk
 +                                       simon\100brecon.co.uk
 +                                       simon\100othersideofthe.earth.li
@@ -832,6 +834,7 @@ spider\100orb.nashua.nh.us              spider\100web.zk3.dec.com
 +                                       spidb\100cpan.org
 +                                       spider.boardman\100orb.nashua.nh.us
 +                                       root\100peano.zk3.dec.com
+spiros\100lokku.com			s.denaxas\100gmail.com
 spp\100ds.net                           spp\100psa.pencom.com
 +                                       spp\100psasolar.colltech.com
 +                                       spp\100spotter.yi.org

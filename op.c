@@ -1878,7 +1878,7 @@ Perl_doref(pTHX_ OP *o, I32 type, bool set_op_ref)
 
     switch (o->op_type) {
     case OP_ENTERSUB:
-	if ((type == OP_EXISTS || type == OP_DEFINED || type == OP_LOCK) &&
+	if ((type == OP_EXISTS || type == OP_DEFINED) &&
 	    !(o->op_flags & OPf_STACKED)) {
 	    o->op_type = OP_RV2CV;             /* entersub => rv2cv */
 	    o->op_ppaddr = PL_ppaddr[OP_RV2CV];
@@ -9335,13 +9335,11 @@ Perl_rpeep(pTHX_ register OP *o)
     for (;; o = o->op_next) {
 	if (o && o->op_opt)
 	    o = NULL;
-	while (!o) {
-	    if (defer_ix < 0)
-		break;
-	    CALL_RPEEP(defer_queue[(defer_base + defer_ix--) % MAX_DEFERRED]);
-	}
-	if (!o)
+	if (!o) {
+	    while (defer_ix >= 0)
+		CALL_RPEEP(defer_queue[(defer_base + defer_ix--) % MAX_DEFERRED]);
 	    break;
+	}
 
 #if defined(PERL_MAD) && defined(USE_ITHREADS)
 	MADPROP *mp = o->op_madprop;
