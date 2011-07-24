@@ -311,7 +311,7 @@ Ap	|bool	|do_close	|NULLOK GV* gv|bool not_implicit
 p	|bool	|do_eof		|NN GV* gv
 
 #ifdef PERL_DEFAULT_DO_EXEC3_IMPLEMENTATION
-pmb	|bool	|do_exec	|NN const char* cmd
+pm	|bool	|do_exec	|NN const char* cmd
 #else
 p	|bool	|do_exec	|NN const char* cmd
 #endif
@@ -781,8 +781,10 @@ AnpP	|I32	|my_memcmp	|NN const char* s1|NN const char* s2|I32 len
 #if !defined(HAS_MEMSET)
 Anp	|void*	|my_memset	|NN char* loc|I32 ch|I32 len
 #endif
+#if !defined(PERL_IMPLICIT_SYS)
 Ap	|I32	|my_pclose	|NULLOK PerlIO* ptr
 Ap	|PerlIO*|my_popen	|NN const char* cmd|NN const char* mode
+#endif
 Ap	|PerlIO*|my_popen_list	|NN const char* mode|int n|NN SV ** args
 Ap	|void	|my_setenv	|NULLOK const char* nam|NULLOK const char* val
 Apmb	|I32	|my_stat
@@ -1300,10 +1302,10 @@ EiM	|void	|invlist_iterinit|NN SV* invlist
 EsMR	|bool	|invlist_iternext|NN SV* invlist|NN UV* start|NN UV* end
 #endif
 #if defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_UTF8_C)
-EpM	|void	|_invlist_intersection	|NN SV* const a|NN SV* const b|NN SV** i
-EpM	|void	|_invlist_union	|NN SV* const a|NN SV* const b|NN SV** output
-EpM	|void	|_invlist_subtract|NN SV* const a|NN SV* const b|NN SV** result
-EpM	|void	|_invlist_invert|NN SV* const invlist
+EXpM	|void	|_invlist_intersection	|NN SV* const a|NN SV* const b|NN SV** i
+EXpM	|void	|_invlist_union	|NN SV* const a|NN SV* const b|NN SV** output
+EXpM	|void	|_invlist_subtract|NN SV* const a|NN SV* const b|NN SV** result
+EXpM	|void	|_invlist_invert|NN SV* const invlist
 EXMpR	|HV*	|_swash_inversion_hash	|NN SV* const swash
 EXMpR	|SV*	|_new_invlist	|IV initial_size
 EXMpR	|SV*	|_swash_to_invlist	|NN SV* const swash

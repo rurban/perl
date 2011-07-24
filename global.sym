@@ -342,8 +342,6 @@ Perl_my_fflush_all
 Perl_my_fork
 Perl_my_lstat
 Perl_my_lstat_flags
-Perl_my_pclose
-Perl_my_popen
 Perl_my_popen_list
 Perl_my_setenv
 Perl_my_snprintf
@@ -806,6 +804,8 @@ Perl_signbit
 Perl_my_strlcat
 Perl_my_strlcpy
 Perl_my_chsize
+Perl_my_pclose
+Perl_my_popen
 Perl_my_sprintf
 Perl_my_bcopy
 Perl_hv_assert
@@ -820,7 +820,6 @@ Perl_get_mstats
 Perl_my_htonl
 Perl_my_ntohl
 Perl_my_swap
-Perl_do_exec
 Perl_gv_SVadd
 Perl_GetVars
 Perl_free_global_struct
@@ -844,6 +843,10 @@ Perl_warner_nocontext
 perl_alloc_using
 perl_clone_using
 Perl__append_range_to_invlist
+Perl__invlist_intersection
+Perl__invlist_invert
+Perl__invlist_subtract
+Perl__invlist_union
 Perl__new_invlist
 Perl__swash_inversion_hash
 Perl__swash_to_invlist
