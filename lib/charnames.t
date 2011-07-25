@@ -104,15 +104,54 @@ sub to_bytes {
     unpack"U0a*", shift;
 }
 
+sub get_loose_name ($) { # Modify name to stress the loose tests.
+
+    # First, all lower case,
+    my $loose_name = lc shift;
+
+    # Then squeeze out all the blanks not adjacent to hyphens, but make the
+    # spaces that are adjacent to hypens into two, to make sure the code isn't
+    # looking for just one when looking for non-medial hyphens.
+    $loose_name =~ s/ (?<! - ) \ + (?! - )//gx;
+    $loose_name =~ s/ /  /g;
+
+    # Similarly, double the hyphens
+    $loose_name =~ s/-/--/g;
+
+    # And convert ABC into "A B-C" to add medial hyphens and spaces.  Probably
+    # better to do this randomly, but  think this is sufficient.
+    $loose_name =~ s/ ([^-\s]) ([^-\s]) ([^-\s]) /$1 $2-$3/gx;
+
+    return $loose_name
+}
+
 sub test_vianame ($$$) {
 
-    # Run the vianame tests on a code point
+    # Run the vianame tests on a code point, both loose and full
 
+    my $all_pass = 1;
+
+    # $i is the code point in decimal; $hex in hexadecimal; $name is
+    # character name to test
     my ($i, $hex, $name) = @_;
 
-    # Half the time use vianame, and half string_vianame
-    return is(charnames::vianame($name), $i, "Verify vianame(\"$name\") is 0x$hex") if rand() < .5;
-    return is(charnames::string_vianame($name), chr($i), "Verify string_vianame(\"$name\") is chr(0x$hex)");
+    # Get a copy of the name modified to stress the loose tests.
+    my $loose_name = get_loose_name($name);
+
+    # Switch loose and full in vianame vs string_vianame half the time
+    if (rand() < .5) {
+        use charnames ":full";
+        $all_pass &= is(charnames::vianame($name), $i, "Verify vianame(\"$name\") is 0x$hex");
+        use charnames ":loose";
+        $all_pass &= is(charnames::string_vianame($loose_name), chr($i), "Verify string_vianame(\"$loose_name\") is chr(0x$hex)");
+    }
+    else {
+        use charnames ":loose";
+        $all_pass &= is(charnames::vianame($loose_name), $i, "Verify vianame(\"$loose_name\") is 0x$hex");
+        use charnames ":full";
+        $all_pass &= is(charnames::string_vianame($name), chr($i), "Verify string_vianame(\"$name\") is chr(0x$hex)");
+    }
+    return $all_pass;
 }
 
 {
@@ -335,7 +374,7 @@ is(charnames::viacode("U+00000000000FEED"), "ARABIC LETTER WAW ISOLATED FORM");
     is("\N{VTS}", "\N{LINE TABULATION SET}");
     is("\N{PLD}", "\N{PARTIAL LINE FORWARD}");
     is("\N{PLU}", "\N{PARTIAL LINE BACKWARD}");
-    is("\N{RI }", "\N{REVERSE LINE FEED}");
+    is("\N{RI}", "\N{REVERSE LINE FEED}");
     is("\N{SS2}", "\N{SINGLE SHIFT TWO}");
     is("\N{SS3}", "\N{SINGLE SHIFT THREE}");
     is("\N{DCS}", "\N{DEVICE CONTROL STRING}");
@@ -343,15 +382,15 @@ is(charnames::viacode("U+00000000000FEED"), "ARABIC LETTER WAW ISOLATED FORM");
     is("\N{PU2}", "\N{PRIVATE USE TWO}");
     is("\N{STS}", "\N{SET TRANSMIT STATE}");
     is("\N{CCH}", "\N{CANCEL CHARACTER}");
-    is("\N{MW }", "\N{MESSAGE WAITING}");
+    is("\N{MW}", "\N{MESSAGE WAITING}");
     is("\N{SPA}", "\N{START OF GUARDED AREA}");
     is("\N{EPA}", "\N{END OF GUARDED AREA}");
     is("\N{SOS}", "\N{START OF STRING}");
     is("\N{SCI}", "\N{SINGLE CHARACTER INTRODUCER}");
     is("\N{CSI}", "\N{CONTROL SEQUENCE INTRODUCER}");
-    is("\N{ST }", "\N{STRING TERMINATOR}");
+    is("\N{ST}", "\N{STRING TERMINATOR}");
     is("\N{OSC}", "\N{OPERATING SYSTEM COMMAND}");
-    is("\N{PM }", "\N{PRIVACY MESSAGE}");
+    is("\N{PM}", "\N{PRIVACY MESSAGE}");
     is("\N{APC}", "\N{APPLICATION PROGRAM COMMAND}");
     is("\N{PADDING CHARACTER}", "\N{PAD}");
     is("\N{HIGH OCTET PRESET}","\N{HOP}");
@@ -652,6 +691,14 @@ is(charnames::viacode("U+00000000000FEED"), "ARABIC LETTER WAW ISOLATED FORM");
     is("\N{VS254}", "\N{VARIATION SELECTOR-254}");
     is("\N{VS255}", "\N{VARIATION SELECTOR-255}");
     is("\N{VS256}", "\N{VARIATION SELECTOR-256}");
+
+    # Test a few of the above with :loose
+    use charnames ":loose";
+    is("\N{n-e xt l-i ne}", "\N{n-e xt l-i ne (-n-e l-)}");
+    is("\N{n e-l}", "\N{n e-xt l i-ne ( n e-l )}");
+    is("\N{p-a dd-i ng c-h ar-a ct-e r}", "\N{p-a d}");
+    is("\N{s i-ng l-e-s h-i f-t 3}", "\N{s i-ng l-e s h-i f-t t h-r e-e}");
+    is("\N{vs256}", "\N{v-a ri-a ti-o n s-e le-c t o-r-256}");
 }
 
 # [perl #30409] charnames.pm clobbers default variable
@@ -698,6 +745,10 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
     $res .= '-2' if ":" =~ /\N{COLON}/;
     $res .= '-3' if ":" =~ /\N{COLON}/i;
     is($res, "foo-foo-1--2-3");
+}
+
+{   use charnames qw(.*);
+    ok (! defined charnames::vianame("a"), "Verify that metachars in script names get quoted");
 }
 
 {
@@ -843,6 +894,20 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
     is("\N{Hiragana: BE}", $hiragana_be, "Outer block: verify that :short works with \\N");
     cmp_ok(charnames::vianame("Hiragana: BE"), "==", ord($hiragana_be), "Outer block: verify that :short works with vianame");
     cmp_ok(charnames::string_vianame("Hiragana: BE"), "==", $hiragana_be, "Outer block: verify that :short works with string_vianame");
+    {
+        use charnames qw(:loose new_tai_lue des_eret);
+        is("\N{latincapitallettera}", "A", "Verify that loose matching works");
+        cmp_ok("\N{high-qa}", "==", chr(0x1980), "Verify that loose script list matching works");
+        is(charnames::string_vianame("O-i"), chr(0x10426), "Verify that loose script list matching works with string_vianame");
+        is(charnames::vianame("o i"), 0x1044E, "Verify that loose script list matching works with vianame");
+    }
+    is ("\N{latincapitallettera}", "\x{FFFD}", "Verify that loose matching caching doesn't leak outside of scope");
+    {
+        use charnames qw(:loose :short);
+        cmp_ok("\N{co pt-ic:she-i}", "==", chr(0x3E3), "Verify that loose :short matching works");
+        is(charnames::string_vianame("co pt_ic: She i"), chr(0x3E2), "Verify that loose :short matching works with string_vianame");
+        is(charnames::vianame("  Arm-en-ian: x e h_"), 0x56D, "Verify that loose :short matching works with vianame");
+    }
 }
 
 {
@@ -876,7 +941,7 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
     # of the character.  The percentage of each type to test is
     # fuzzily independently settable.  This breaks down when the block size is
     # 1 or is large enough that both types of names occur in the same block
-    my $percentage_of_regular_names = ($run_slow_tests) ? 100 : 25;
+    my $percentage_of_regular_names = ($run_slow_tests) ? 100 : 13;
     my $percentage_of_algorithmic_names = (100 / $block_size); # 1 test/block
 
     # If wants everything tested, do so by changing the block size to 1 so
@@ -1086,7 +1151,9 @@ is("\N{U+1D0C5}", "\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS}");
         my ($name, $codes) = split ";";
         my $utf8 = pack("U*", map { hex } split " ", $codes);
         is(charnames::string_vianame($name), $utf8, "Verify string_vianame(\"$name\") is the proper utf8");
-        is(charnames::string_vianame($name), $utf8, "Verify string_vianame(\"$name\") is the proper utf8");
+        my $loose_name = get_loose_name($name);
+        use charnames ":loose";
+        is(charnames::string_vianame($loose_name), $utf8, "Verify string_vianame(\"$loose_name\") is the proper utf8");
         #diag("$name, $utf8");
     }
     close $fh;

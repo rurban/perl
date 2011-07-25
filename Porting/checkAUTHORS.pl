@@ -83,9 +83,9 @@ EOS
 sub list_authors {
     my ($patchers, $authors) = @_;
     binmode(STDOUT, ":utf8");
-    print "$_\n" for  sort { lc $a cmp lc $b }
+    print wrap '', '', join(', ', sort { lc $a cmp lc $b }
                       map { $authors->{$_} }
-                      keys %$patchers;
+                      keys %$patchers) . ".\n";
 }
 
 sub parse_commits_from_stdin {
@@ -536,6 +536,7 @@ brian.d.foy\100gmail.com                bdfoy\100cpan.org
 BQW10602\100nifty.com                   sadahiro\100cpan.org
 
 chromatic\100wgz.org                    chromatic\100rmci.net
+claes\100surfar.nu                      claes\100versed.se
 clintp\100geeksalad.org                 cpierce1\100ford.com
 clkao\100clkao.org                      clkao\100bestpractical.com
 corion\100corion.net                    corion\100cpan.org
@@ -560,6 +561,7 @@ david.dyck\100fluke.com                 dcd\100tc.fluke.com
 david\100kineticode.com                 david\100wheeler.com
 +                                       david\100wheeler.net
 dennis\100booking.com                   dennis\100camel.ams6.corp.booking.com
++                                       dennis\100kaarsemaker.net
 dev-perl\100pimb.org                    knew-p5p\100pimb.org
 +                                       lists-p5p\100pimb.org
 djberg86\100attbi.com                   djberg96\100attbi.com
@@ -598,6 +600,7 @@ hansmu\100xs4all.nl                     hansm\100icgroup.nl
 hio\100ymir.co.jp                       hio\100hio.jp
 hops\100sco.com                         hops\100scoot.pdev.sco.com
 
+ian.goodacre\100xtra.co.nz              ian\100debian.lan
 ingo_weinhold\100gmx.de                 bonefish\100cs.tu-berlin.de
 
 james\100mastros.biz                    theorb\100desert-island.me.uk
@@ -636,6 +639,7 @@ jpeacock\100rowman.com                  john.peacock\100havurah-software.org
 +                                       jpeacock\100havurah-software.org
 +                                       jpeacock\100dsl092-147-156.wdc1.dsl.speakeasy.net
 +                                       jpeacock\100jpeacock-hp.doesntexist.org
++                                       jpeacock\100cpan.org
 jql\100accessone.com                    jql\100jql.accessone.com
 jsm28\100hermes.cam.ac.uk               jsm28\100cam.ac.uk
 
@@ -647,6 +651,8 @@ kane\100dwim.org                        kane\100xs4all.net
 ken\100mathforum.org                    kenahoo\100gmail.com
 +                                       ken.williams\100thomsonreuters.com
 kroepke\100dolphin-services.de          kay\100dolphin-services.de
+kst\100mib.org                          kst\100cts.com
++                                       kst\100SDSC.EDU
 kstar\100wolfetech.com                  kstar\100cpan.org
 +                                       kurt_starsinic\100ml.com
 +                                       kstar\100www.chapin.edu
@@ -677,6 +683,7 @@ me\100davidglasser.net                  glasser\100tang-eleven-seventy-nine.mit.
 merijnb\100iloquent.nl                  merijnb\100ms.com
 +                                       merijnb\100iloquent.com
 merlyn\100stonehenge.com                merlyn\100gadget.cscaper.com
+mestre.smash\100gmail.com               smash\100cpan.org
 mgjv\100comdyn.com.au                   mgjv\100tradingpost.com.au
 mlh\100swl.msd.ray.com                  webtools\100uewrhp03.msd.ray.com
 michael.schroeder\100informatik.uni-erlangen.de mls\100suse.de
@@ -784,6 +791,7 @@ rootbeer\100teleport.com                rootbeer\100redcat.com
 +                                       tomphoenix\100unknown
 rurban\100x-ray.at                      rurban\100cpan.org
 
+sartak\100bestpractical.com             sartak\100gmail.com
 sadinoff\100olf.com                     danny-cpan\100sadinoff.com
 schubiger\100cpan.org                   steven\100accognoscere.org
 +                                       sts\100accognoscere.org
@@ -799,7 +807,11 @@ schwab\100suse.de                       schwab\100issan.informatik.uni-dortmund.
 +                                       schwab\100ls5.informatik.uni-dortmund.de
 sebastien\100aperghis.net               maddingue\100free.fr
 +                                       saper\100cpan.org
-shlomif\100vipe.technion.ac.il          shlomif\100iglu.org.il
+shigeya\100wide.ad.jp                   shigeya\100foretune.co.jp
+shlomif\100cpan.org                     shlomif\100vipe.technion.ac.il
++                                       shlomif\100iglu.org.il
++                                       shlomif+processed-by-perl\100gmail.com
++                                       shlomif\100shlomifish.org
 simon\100simon-cozens.org               simon\100pembro4.pmb.ox.ac.uk
 +                                       simon\100brecon.co.uk
 +                                       simon\100othersideofthe.earth.li
@@ -822,6 +834,7 @@ spider\100orb.nashua.nh.us              spider\100web.zk3.dec.com
 +                                       spidb\100cpan.org
 +                                       spider.boardman\100orb.nashua.nh.us
 +                                       root\100peano.zk3.dec.com
+spiros\100lokku.com			s.denaxas\100gmail.com
 spp\100ds.net                           spp\100psa.pencom.com
 +                                       spp\100psasolar.colltech.com
 +                                       spp\100spotter.yi.org
@@ -830,6 +843,7 @@ stef\100mongueurs.net                   stef\100payrard.net
 +                                       properler\100freesurf.fr
 +                                       stef\100francenet.fr
 sthoenna\100efn.org                     ysth\100raven.shiftboard.com
+sisyphus1\100optusnet.com.au            sisyphus\100cpan.org
 
 tassilo.parseval\100post.rwth-aachen.de tassilo.von.parseval\100rwth-aachen.de
 tchrist\100perl.com                     tchrist\100mox.perl.com
@@ -855,3 +869,5 @@ wolfgang.laun\100alcatel.at             wolfgang.laun\100chello.at
 +                                       wolfgang.laun\100thalesgroup.com
 +                                       wolfgang.laun\100gmail.com
 yath\100yath.de                         yath-perlbug\100yath.de
+
+jkeen@verizon.net                       jkeenan@cpan.org

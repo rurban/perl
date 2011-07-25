@@ -2647,13 +2647,13 @@ S_join_exact(pTHX_ RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags
     }
     
 #ifdef DEBUGGING
-    /* Allow dumping */
+    /* Allow dumping but overwriting the collection of skipped
+     * ops and/or strings with fake optimized ops */
     n = scan + NODE_SZ_STR(scan);
     while (n <= stop) {
-        if (PL_regkind[OP(n)] != NOTHING || OP(n) == NOTHING) {
-            OP(n) = OPTIMIZED;
-            NEXT_OFF(n) = 0;
-        }
+	OP(n) = OPTIMIZED;
+	FLAGS(n) = 0;
+	NEXT_OFF(n) = 0;
         n++;
     }
 #endif
@@ -3048,20 +3048,17 @@ S_study_chunk(pTHX_ RExC_state_t *pRExC_state, regnode **scanp,
                                 }
                             } else {
 /* 
-    Currently we do not believe that the trie logic can
-    handle case insensitive matching properly when the
-    pattern is not unicode (thus forcing unicode semantics).
+    Currently the trie logic handles case insensitive matching properly only
+    when the pattern is UTF-8 and the node is EXACTFU (thus forcing unicode
+    semantics).
 
     If/when this is fixed the following define can be swapped
     in below to fully enable trie logic.
 
-    XXX It may work if not UTF and/or /a (AT_LEAST_UNI_SEMANTICS) but perhaps
-    not /aa
-
 #define TRIE_TYPE_IS_SAFE 1
 
 */
-#define TRIE_TYPE_IS_SAFE ((UTF && UNI_SEMANTICS) || optype==EXACT)
+#define TRIE_TYPE_IS_SAFE ((UTF && optype == EXACTFU) || optype==EXACT)
 
                                 if ( last && TRIE_TYPE_IS_SAFE ) {
                                     make_trie( pRExC_state, 
@@ -5827,123 +5824,179 @@ S_reg_scan_name(pTHX_ RExC_state_t *pRExC_state, U32 flags)
 
 /* This section of code defines the inversion list object and its methods.  The
  * interfaces are highly subject to change, so as much as possible is static to
- * this file.  An inversion list is here implemented as a malloc'd C array with
- * some added info.  More will be coming when functionality is added later.
+ * this file.  An inversion list is here implemented as a malloc'd C UV array
+ * with some added info that is placed as UVs at the beginning in a header
+ * portion.  An inversion list for Unicode is an array of code points, sorted
+ * by ordinal number.  The zeroth element is the first code point in the list.
+ * The 1th element is the first element beyond that not in the list.  In other
+ * words, the first range is
+ *  invlist[0]..(invlist[1]-1)
+ * The other ranges follow.  Thus every element that is divisible by two marks
+ * the beginning of a range that is in the list, and every element not
+ * divisible by two marks the beginning of a range not in the list.  A single
+ * element inversion list that contains the single code point N generally
+ * consists of two elements
+ *  invlist[0] == N
+ *  invlist[1] == N+1
+ * (The exception is when N is the highest representable value on the
+ * machine, in which case the list containing just it would be a single
+ * element, itself.  By extension, if the last range in the list extends to
+ * infinity, then the first element of that range will be in the inversion list
+ * at a position that is divisible by two, and is the final element in the
+ * list.)
+ * Taking the complement (inverting) an inversion list is quite simple, if the
+ * first element is 0, remove it; otherwise add a 0 element at the beginning.
+ * This implementation reserves an element at the beginning of each inversion list
+ * to contain 0 when the list contains 0, and contains 1 otherwise.  The actual
+ * beginning of the list is either that element if 0, or the next one if 1.
+ *
+ * More about inversion lists can be found in "Unicode Demystified"
+ * Chapter 13 by Richard Gillam, published by Addison-Wesley.
+ * More will be coming when functionality is added later.
+ *
+ * The inversion list data structure is currently implemented as an SV pointing
+ * to an array of UVs that the SV thinks are bytes.  This allows us to have an
+ * array of UV whose memory management is automatically handled by the existing
+ * facilities for SV's.
  *
  * Some of the methods should always be private to the implementation, and some
  * should eventually be made public */
 
+#define INVLIST_LEN_OFFSET 0	/* Number of elements in the inversion list */
+#define INVLIST_ITER_OFFSET 1	/* Current iteration position */
+
+#define INVLIST_ZERO_OFFSET 2	/* 0 or 1; must be last element in header */
+/* The UV at position ZERO contains either 0 or 1.  If 0, the inversion list
+ * contains the code point U+00000, and begins here.  If 1, the inversion list
+ * doesn't contain U+0000, and it begins at the next UV in the array.
+ * Inverting an inversion list consists of adding or removing the 0 at the
+ * beginning of it.  By reserving a space for that 0, inversion can be made
+ * very fast */
+
+#define HEADER_LENGTH (INVLIST_ZERO_OFFSET + 1)
+
+/* Internally things are UVs */
+#define TO_INTERNAL_SIZE(x) ((x + HEADER_LENGTH) * sizeof(UV))
+#define FROM_INTERNAL_SIZE(x) ((x / sizeof(UV)) - HEADER_LENGTH)
+
 #define INVLIST_INITIAL_LEN 10
-#define INVLIST_ARRAY_KEY "array"
-#define INVLIST_MAX_KEY "max"
-#define INVLIST_LEN_KEY "len"
 
 PERL_STATIC_INLINE UV*
-S_invlist_array(pTHX_ HV* const invlist)
+S__invlist_array_init(pTHX_ SV* const invlist, const bool will_have_0)
+{
+    /* Returns a pointer to the first element in the inversion list's array.
+     * This is called upon initialization of an inversion list.  Where the
+     * array begins depends on whether the list has the code point U+0000
+     * in it or not.  The other parameter tells it whether the code that
+     * follows this call is about to put a 0 in the inversion list or not.
+     * The first element is either the element with 0, if 0, or the next one,
+     * if 1 */
+
+    UV* zero = get_invlist_zero_addr(invlist);
+
+    PERL_ARGS_ASSERT__INVLIST_ARRAY_INIT;
+
+    /* Must be empty */
+    assert(! *get_invlist_len_addr(invlist));
+
+    /* 1^1 = 0; 1^0 = 1 */
+    *zero = 1 ^ will_have_0;
+    return zero + *zero;
+}
+
+PERL_STATIC_INLINE UV*
+S_invlist_array(pTHX_ SV* const invlist)
 {
     /* Returns the pointer to the inversion list's array.  Every time the
      * length changes, this needs to be called in case malloc or realloc moved
      * it */
 
-    SV** list_ptr = hv_fetchs(invlist, INVLIST_ARRAY_KEY, FALSE);
-
     PERL_ARGS_ASSERT_INVLIST_ARRAY;
 
-    if (list_ptr == NULL) {
-	Perl_croak(aTHX_ "panic: inversion list without a '%s' element",
-							    INVLIST_ARRAY_KEY);
-    }
+    /* Must not be empty */
+    assert(*get_invlist_len_addr(invlist));
+    assert(*get_invlist_zero_addr(invlist) == 0
+	   || *get_invlist_zero_addr(invlist) == 1);
 
-    return INT2PTR(UV *, SvUV(*list_ptr));
+    /* The array begins either at the element reserved for zero if the
+     * list contains 0 (that element will be set to 0), or otherwise the next
+     * element (in which case the reserved element will be set to 1). */
+    return (UV *) (get_invlist_zero_addr(invlist)
+		   + *get_invlist_zero_addr(invlist));
 }
 
-PERL_STATIC_INLINE void
-S_invlist_set_array(pTHX_ HV* const invlist, const UV* const array)
+PERL_STATIC_INLINE UV*
+S_get_invlist_len_addr(pTHX_ SV* invlist)
 {
-    PERL_ARGS_ASSERT_INVLIST_SET_ARRAY;
+    /* Return the address of the UV that contains the current number
+     * of used elements in the inversion list */
 
-    /* Sets the array stored in the inversion list to the memory beginning with
-     * the parameter */
+    PERL_ARGS_ASSERT_GET_INVLIST_LEN_ADDR;
 
-    if (hv_stores(invlist, INVLIST_ARRAY_KEY, newSVuv(PTR2UV(array))) == NULL) {
-	Perl_croak(aTHX_ "panic: can't store '%s' entry in inversion list",
-							    INVLIST_ARRAY_KEY);
-    }
+    return (UV *) (SvPVX(invlist) + (INVLIST_LEN_OFFSET * sizeof (UV)));
 }
 
 PERL_STATIC_INLINE UV
-S_invlist_len(pTHX_ HV* const invlist)
+S_invlist_len(pTHX_ SV* const invlist)
 {
     /* Returns the current number of elements in the inversion list's array */
 
-    SV** len_ptr = hv_fetchs(invlist, INVLIST_LEN_KEY, FALSE);
-
     PERL_ARGS_ASSERT_INVLIST_LEN;
 
-    if (len_ptr == NULL) {
-	Perl_croak(aTHX_ "panic: inversion list without a '%s' element",
-							    INVLIST_LEN_KEY);
-    }
-
-    return SvUV(*len_ptr);
-}
-
-PERL_STATIC_INLINE UV
-S_invlist_max(pTHX_ HV* const invlist)
-{
-    /* Returns the maximum number of elements storable in the inversion list's
-     * array, without having to realloc() */
-
-    SV** max_ptr = hv_fetchs(invlist, INVLIST_MAX_KEY, FALSE);
-
-    PERL_ARGS_ASSERT_INVLIST_MAX;
-
-    if (max_ptr == NULL) {
-	Perl_croak(aTHX_ "panic: inversion list without a '%s' element",
-							    INVLIST_MAX_KEY);
-    }
-
-    return SvUV(*max_ptr);
+    return *get_invlist_len_addr(invlist);
 }
 
 PERL_STATIC_INLINE void
-S_invlist_set_len(pTHX_ HV* const invlist, const UV len)
+S_invlist_set_len(pTHX_ SV* const invlist, const UV len)
 {
     /* Sets the current number of elements stored in the inversion list */
 
     PERL_ARGS_ASSERT_INVLIST_SET_LEN;
 
-    if (len != 0 && len > invlist_max(invlist)) {
-	Perl_croak(aTHX_ "panic: Can't make '%s=%"UVuf"' more than %s=%"UVuf" in inversion list", INVLIST_LEN_KEY, len, INVLIST_MAX_KEY, invlist_max(invlist));
-    }
+    *get_invlist_len_addr(invlist) = len;
 
-    if (hv_stores(invlist, INVLIST_LEN_KEY, newSVuv(len)) == NULL) {
-	Perl_croak(aTHX_ "panic: can't store '%s' entry in inversion list",
-							    INVLIST_LEN_KEY);
-    }
+    SvCUR_set(invlist, TO_INTERNAL_SIZE(len));
+    /* If the list contains U+0000, that element is part of the header,
+     * and should not be counted as part of the array.  It will contain
+     * 0 in that case, and 1 otherwise.  So we could flop 0=>1, 1=>0 and
+     * subtract:
+     *	SvCUR_set(invlist,
+     *		  TO_INTERNAL_SIZE(len
+     *				   - (*get_invlist_zero_addr(inv_list) ^ 1)));
+     * But, this is only valid if len is not 0.  The consequences of not doing
+     * this is that the memory allocation code may think that the 1 more UV
+     * is being used than actually is, and so might do an unnecessary grow.
+     * That seems worth not bothering to make this the precise amount.
+     *
+     * Note that when inverting, SvCUR shouldn't change */
 }
 
-PERL_STATIC_INLINE void
-S_invlist_set_max(pTHX_ HV* const invlist, const UV max)
+PERL_STATIC_INLINE UV
+S_invlist_max(pTHX_ SV* const invlist)
 {
+    /* Returns the maximum number of elements storable in the inversion list's
+     * array, without having to realloc() */
 
-    /* Sets the maximum number of elements storable in the inversion list
-     * without having to realloc() */
+    PERL_ARGS_ASSERT_INVLIST_MAX;
 
-    PERL_ARGS_ASSERT_INVLIST_SET_MAX;
+    return FROM_INTERNAL_SIZE(SvLEN(invlist));
+}
 
-    if (max < invlist_len(invlist)) {
-	Perl_croak(aTHX_ "panic: Can't make '%s=%"UVuf"' less than %s=%"UVuf" in inversion list", INVLIST_MAX_KEY, invlist_len(invlist), INVLIST_LEN_KEY, invlist_max(invlist));
-    }
+PERL_STATIC_INLINE UV*
+S_get_invlist_zero_addr(pTHX_ SV* invlist)
+{
+    /* Return the address of the UV that is reserved to hold 0 if the inversion
+     * list contains 0.  This has to be the last element of the heading, as the
+     * list proper starts with either it if 0, or the next element if not.
+     * (But we force it to contain either 0 or 1) */
 
-    if (hv_stores(invlist, INVLIST_MAX_KEY, newSVuv(max)) == NULL) {
-	Perl_croak(aTHX_ "panic: can't store '%s' entry in inversion list",
-							    INVLIST_LEN_KEY);
-    }
+    PERL_ARGS_ASSERT_GET_INVLIST_ZERO_ADDR;
+
+    return (UV *) (SvPVX(invlist) + (INVLIST_ZERO_OFFSET * sizeof (UV)));
 }
 
 #ifndef PERL_IN_XSUB_RE
-HV*
+SV*
 Perl__new_invlist(pTHX_ IV initial_size)
 {
 
@@ -5951,99 +6004,72 @@ Perl__new_invlist(pTHX_ IV initial_size)
      * space to store 'initial_size' elements.  If that number is negative, a
      * system default is used instead */
 
-    HV* invlist = newHV();
-    UV* list;
+    SV* new_list;
 
     if (initial_size < 0) {
 	initial_size = INVLIST_INITIAL_LEN;
     }
 
     /* Allocate the initial space */
-    Newx(list, initial_size, UV);
-    invlist_set_array(invlist, list);
+    new_list = newSV(TO_INTERNAL_SIZE(initial_size));
+    invlist_set_len(new_list, 0);
 
-    /* set_len has to come before set_max, as the latter inspects the len */
-    invlist_set_len(invlist, 0);
-    invlist_set_max(invlist, initial_size);
+    /* Force iterinit() to be used to get iteration to work */
+    *get_invlist_iter_addr(new_list) = UV_MAX;
 
-    return invlist;
+    /* This should force a segfault if a method doesn't initialize this
+     * properly */
+    *get_invlist_zero_addr(new_list) = UV_MAX;
+
+    return new_list;
 }
 #endif
 
-PERL_STATIC_INLINE void
-S_invlist_destroy(pTHX_ HV* const invlist)
-{
-   /* Inversion list destructor */
-
-    SV** list_ptr = hv_fetchs(invlist, INVLIST_ARRAY_KEY, FALSE);
-
-    PERL_ARGS_ASSERT_INVLIST_DESTROY;
-
-    if (list_ptr != NULL) {
-	UV *list = INT2PTR(UV *, SvUV(*list_ptr)); /* PERL_POISON needs lvalue */
-	Safefree(list);
-    }
-}
-
 STATIC void
-S_invlist_extend(pTHX_ HV* const invlist, const UV new_max)
+S_invlist_extend(pTHX_ SV* const invlist, const UV new_max)
 {
-    /* Change the maximum size of an inversion list (up or down) */
-
-    UV* orig_array;
-    UV* array;
-    const UV old_max = invlist_max(invlist);
+    /* Grow the maximum size of an inversion list */
 
     PERL_ARGS_ASSERT_INVLIST_EXTEND;
 
-    if (old_max == new_max) {	/* If a no-op */
-	return;
-    }
-
-    array = orig_array = invlist_array(invlist);
-    Renew(array, new_max, UV);
-
-    /* If the size change moved the list in memory, set the new one */
-    if (array != orig_array) {
-	invlist_set_array(invlist, array);
-    }
-
-    invlist_set_max(invlist, new_max);
-
+    SvGROW((SV *)invlist, TO_INTERNAL_SIZE(new_max));
 }
 
 PERL_STATIC_INLINE void
-S_invlist_trim(pTHX_ HV* const invlist)
+S_invlist_trim(pTHX_ SV* const invlist)
 {
     PERL_ARGS_ASSERT_INVLIST_TRIM;
 
     /* Change the length of the inversion list to how many entries it currently
      * has */
 
-    invlist_extend(invlist, invlist_len(invlist));
+    SvPV_shrink_to_cur((SV *) invlist);
 }
 
 /* An element is in an inversion list iff its index is even numbered: 0, 2, 4,
  * etc */
 
 #define ELEMENT_IN_INVLIST_SET(i) (! ((i) & 1))
+#define PREV_ELEMENT_IN_INVLIST_SET(i) (! ELEMENT_IN_INVLIST_SET(i))
 
 #ifndef PERL_IN_XSUB_RE
 void
-Perl__append_range_to_invlist(pTHX_ HV* const invlist, const UV start, const UV end)
+Perl__append_range_to_invlist(pTHX_ SV* const invlist, const UV start, const UV end)
 {
    /* Subject to change or removal.  Append the range from 'start' to 'end' at
     * the end of the inversion list.  The range must be above any existing
     * ones. */
 
-    UV* array = invlist_array(invlist);
+    UV* array;
     UV max = invlist_max(invlist);
     UV len = invlist_len(invlist);
 
     PERL_ARGS_ASSERT__APPEND_RANGE_TO_INVLIST;
 
-    if (len > 0) {
-
+    if (len == 0) { /* Empty lists must be initialized */
+        array = _invlist_array_init(invlist, start == 0);
+    }
+    else {
 	/* Here, the existing list is non-empty. The current max entry in the
 	 * list is generally the first value not in the set, except when the
 	 * set extends to the end of permissible values, in which case it is
@@ -6051,6 +6077,7 @@ Perl__append_range_to_invlist(pTHX_ HV* const invlist, const UV start, const UV 
 	 * append out-of-order */
 
 	UV final_element = len - 1;
+	array = invlist_array(invlist);
 	if (array[final_element] > start
 	    || ELEMENT_IN_INVLIST_SET(final_element))
 	{
@@ -6082,10 +6109,13 @@ Perl__append_range_to_invlist(pTHX_ HV* const invlist, const UV start, const UV 
      * moved */
     if (max < len) {
 	invlist_extend(invlist, len);
+	invlist_set_len(invlist, len);	/* Have to set len here to avoid assert
+					   failure in invlist_array() */
 	array = invlist_array(invlist);
     }
-
-    invlist_set_len(invlist, len);
+    else {
+	invlist_set_len(invlist, len);
+    }
 
     /* The next item on the list starts the range, the one after that is
      * one past the new range.  */
@@ -6099,12 +6129,13 @@ Perl__append_range_to_invlist(pTHX_ HV* const invlist, const UV start, const UV 
 	invlist_set_len(invlist, len - 1);
     }
 }
-#endif
 
-STATIC HV*
-S_invlist_union(pTHX_ HV* const a, HV* const b)
+void
+Perl__invlist_union(pTHX_ SV* const a, SV* const b, SV** output)
 {
-    /* Return a new inversion list which is the union of two inversion lists.
+    /* Take the union of two inversion lists and point 'result' to it.  If
+     * 'result' on input points to one of the two lists, the reference count to
+     * that list will be decremented.
      * The basis for this comes from "Unicode Demystified" Chapter 13 by
      * Richard Gillam, published by Addison-Wesley, and explained at some
      * length there.  The preface says to incorporate its examples into your
@@ -6115,14 +6146,15 @@ S_invlist_union(pTHX_ HV* const a, HV* const b)
      * XXX A potential performance improvement is to keep track as we go along
      * if only one of the inputs contributes to the result, meaning the other
      * is a subset of that one.  In that case, we can skip the final copy and
-     * return the larger of the input lists */
+     * return the larger of the input lists, but then outside code might need
+     * to keep track of whether to free the input list or not */
 
-    UV* array_a = invlist_array(a);   /* a's array */
-    UV* array_b = invlist_array(b);
-    UV len_a = invlist_len(a);	/* length of a's array */
-    UV len_b = invlist_len(b);
+    UV* array_a;    /* a's array */
+    UV* array_b;
+    UV len_a;	    /* length of a's array */
+    UV len_b;
 
-    HV* u;			/* the resulting union */
+    SV* u;			/* the resulting union */
     UV* array_u;
     UV len_u;
 
@@ -6138,12 +6170,42 @@ S_invlist_union(pTHX_ HV* const a, HV* const b)
      */
     UV count = 0;
 
-    PERL_ARGS_ASSERT_INVLIST_UNION;
+    PERL_ARGS_ASSERT__INVLIST_UNION;
+
+    /* If either one is empty, the union is the other one */
+    len_a = invlist_len(a);
+    if (len_a == 0) {
+	if (output == &a) {
+	    SvREFCNT_dec(a);
+	}
+	else if (output != &b) {
+	    *output = invlist_clone(b);
+	}
+	/* else *output already = b; */
+	return;
+    }
+    else if ((len_b = invlist_len(b)) == 0) {
+	if (output == &b) {
+	    SvREFCNT_dec(b);
+	}
+	else if (output != &a) {
+	    *output = invlist_clone(a);
+	}
+	/* else *output already = a; */
+	return;
+    }
+
+    /* Here both lists exist and are non-empty */
+    array_a = invlist_array(a);
+    array_b = invlist_array(b);
 
     /* Size the union for the worst case: that the sets are completely
      * disjoint */
     u = _new_invlist(len_a + len_b);
-    array_u = invlist_array(u);
+
+    /* Will contain U+0000 if either component does */
+    array_u = _invlist_array_init(u, (len_a > 0 && array_a[0] == 0)
+				      || (len_b > 0 && array_b[0] == 0));
 
     /* Go through each list item by item, stopping when exhausted one of
      * them */
@@ -6193,9 +6255,9 @@ S_invlist_union(pTHX_ HV* const a, HV* const b)
     /* Here, we are finished going through at least one of the lists, which
      * means there is something remaining in at most one.  We check if the list
      * that hasn't been exhausted is positioned such that we are in the middle
-     * of a range in its set or not.  (We are in the set if the next item in
-     * the array marks the beginning of something not in the set)   If in the
-     * set, we decrement 'count'; if 0, there is potentially more to output.
+     * of a range in its set or not.  (i_a and i_b point to the element beyond
+     * the one we care about.) If in the set, we decrement 'count'; if 0, there
+     * is potentially more to output.
      * There are four cases:
      *	1) Both weren't in their sets, count is 0, and remains 0.  What's left
      *	   in the union is entirely from the non-exhausted set.
@@ -6205,12 +6267,12 @@ S_invlist_union(pTHX_ HV* const a, HV* const b)
      *	   that
      *	3) the exhausted was in its set, non-exhausted isn't, count is 1.
      *	   Nothing further should be output because the union includes
-     *	   everything from the exhausted set.  Not decrementing insures that.
+     *	   everything from the exhausted set.  Not decrementing ensures that.
      *	4) the exhausted wasn't in its set, non-exhausted is, count is 1;
      *	   decrementing to 0 insures that we look at the remainder of the
      *	   non-exhausted set */
-    if ((i_a != len_a && ! ELEMENT_IN_INVLIST_SET(i_a))
-	|| (i_b != len_b && ! ELEMENT_IN_INVLIST_SET(i_b)))
+    if ((i_a != len_a && PREV_ELEMENT_IN_INVLIST_SET(i_a))
+	|| (i_b != len_b && PREV_ELEMENT_IN_INVLIST_SET(i_b)))
     {
 	count--;
     }
@@ -6249,27 +6311,36 @@ S_invlist_union(pTHX_ HV* const a, HV* const b)
 	}
     }
 
-    return u;
+    /*  We may be removing a reference to one of the inputs */
+    if (&a == output || &b == output) {
+	SvREFCNT_dec(*output);
+    }
+
+    *output = u;
+    return;
 }
 
-STATIC HV*
-S_invlist_intersection(pTHX_ HV* const a, HV* const b)
+void
+Perl__invlist_intersection(pTHX_ SV* const a, SV* const b, SV** i)
 {
-    /* Return the intersection of two inversion lists.  The basis for this
-     * comes from "Unicode Demystified" Chapter 13 by Richard Gillam, published
-     * by Addison-Wesley, and explained at some length there.  The preface says
-     * to incorporate its examples into your code at your own risk.
+    /* Take the intersection of two inversion lists and point 'i' to it.  If
+     * 'i' on input points to one of the two lists, the reference count to that
+     * list will be decremented.
+     * The basis for this comes from "Unicode Demystified" Chapter 13 by
+     * Richard Gillam, published by Addison-Wesley, and explained at some
+     * length there.  The preface says to incorporate its examples into your
+     * code at your own risk.  In fact, it had bugs
      *
      * The algorithm is like a merge sort, and is essentially the same as the
      * union above
      */
 
-    UV* array_a = invlist_array(a);   /* a's array */
-    UV* array_b = invlist_array(b);
-    UV len_a = invlist_len(a);	/* length of a's array */
-    UV len_b = invlist_len(b);
+    UV* array_a;		/* a's array */
+    UV* array_b;
+    UV len_a;	/* length of a's array */
+    UV len_b;
 
-    HV* r;		     /* the resulting intersection */
+    SV* r;		     /* the resulting intersection */
     UV* array_r;
     UV len_r;
 
@@ -6285,12 +6356,35 @@ S_invlist_intersection(pTHX_ HV* const a, HV* const b)
      */
     UV count = 0;
 
-    PERL_ARGS_ASSERT_INVLIST_INTERSECTION;
+    PERL_ARGS_ASSERT__INVLIST_INTERSECTION;
+
+    /* If either one is empty, the intersection is null */
+    len_a = invlist_len(a);
+    if ((len_a == 0) || ((len_b = invlist_len(b)) == 0)) {
+	*i = _new_invlist(0);
+
+	/* If the result is the same as one of the inputs, the input is being
+	 * overwritten */
+	if (i == &a) {
+	    SvREFCNT_dec(a);
+	}
+	else if (i == &b) {
+	    SvREFCNT_dec(b);
+	}
+	return;
+    }
+
+    /* Here both lists exist and are non-empty */
+    array_a = invlist_array(a);
+    array_b = invlist_array(b);
 
     /* Size the intersection for the worst case: that the intersection ends up
      * fragmenting everything to be completely disjoint */
     r= _new_invlist(len_a + len_b);
-    array_r = invlist_array(r);
+
+    /* Will contain U+0000 iff both components do */
+    array_r = _invlist_array_init(r, len_a > 0 && array_a[0] == 0
+				     && len_b > 0 && array_b[0] == 0);
 
     /* Go through each list item by item, stopping when exhausted one of
      * them */
@@ -6299,17 +6393,17 @@ S_invlist_intersection(pTHX_ HV* const a, HV* const b)
 		       array */
 	bool cp_in_set;	/* Is it in the input list's set or not */
 
-	/* We need to take one or the other of the two inputs for the union.
-	 * Since we are merging two sorted lists, we take the smaller of the
-	 * next items.  In case of a tie, we take the one that is not in its
-	 * set first (a difference from the union algorithm).  If we took one
-	 * in the set first, it would increment the count, possibly to 2 which
-	 * would cause it to be output as starting a range in the intersection,
-	 * and the next time through we would take that same number, and output
-	 * it again as ending the set.  By doing it the opposite of this, we
-	 * there is no possibility that the count will be momentarily
-	 * incremented to 2.  (In a tie and both are in the set or both not in
-	 * the set, it doesn't matter which we take first.) */
+	/* We need to take one or the other of the two inputs for the
+	 * intersection.  Since we are merging two sorted lists, we take the
+	 * smaller of the next items.  In case of a tie, we take the one that
+	 * is not in its set first (a difference from the union algorithm).  If
+	 * we took one in the set first, it would increment the count, possibly
+	 * to 2 which would cause it to be output as starting a range in the
+	 * intersection, and the next time through we would take that same
+	 * number, and output it again as ending the set.  By doing it the
+	 * opposite of this, there is no possibility that the count will be
+	 * momentarily incremented to 2.  (In a tie and both are in the set or
+	 * both not in the set, it doesn't matter which we take first.) */
 	if (array_a[i_a] < array_b[i_b]
 	    || (array_a[i_a] == array_b[i_b] && ! ELEMENT_IN_INVLIST_SET(i_a)))
 	{
@@ -6338,19 +6432,32 @@ S_invlist_intersection(pTHX_ HV* const a, HV* const b)
 	}
     }
 
-    /* Here, we are finished going through at least one of the sets, which
-     * means there is something remaining in at most one.  See the comments in
-     * the union code */
-    if ((i_a != len_a && ! ELEMENT_IN_INVLIST_SET(i_a))
-	|| (i_b != len_b && ! ELEMENT_IN_INVLIST_SET(i_b)))
+    /* Here, we are finished going through at least one of the lists, which
+     * means there is something remaining in at most one.  We check if the list
+     * that has been exhausted is positioned such that we are in the middle
+     * of a range in its set or not.  (i_a and i_b point to elements 1 beyond
+     * the ones we care about.)  There are four cases:
+     *	1) Both weren't in their sets, count is 0, and remains 0.  There's
+     *	   nothing left in the intersection.
+     *	2) Both were in their sets, count is 2 and perhaps is incremented to
+     *	   above 2.  What should be output is exactly that which is in the
+     *	   non-exhausted set, as everything it has is also in the intersection
+     *	   set, and everything it doesn't have can't be in the intersection
+     *	3) The exhausted was in its set, non-exhausted isn't, count is 1, and
+     *	   gets incremented to 2.  Like the previous case, the intersection is
+     *	   everything that remains in the non-exhausted set.
+     *	4) the exhausted wasn't in its set, non-exhausted is, count is 1, and
+     *	   remains 1.  And the intersection has nothing more. */
+    if ((i_a == len_a && PREV_ELEMENT_IN_INVLIST_SET(i_a))
+	|| (i_b == len_b && PREV_ELEMENT_IN_INVLIST_SET(i_b)))
     {
-	count--;
+	count++;
     }
 
     /* The final length is what we've output so far plus what else is in the
-     * intersection.  Only one of the subexpressions below will be non-zero */
+     * intersection.  At most one of the subexpressions below will be non-zero */
     len_r = i_r;
-    if (count == 2) {
+    if (count >= 2) {
 	len_r += (len_a - i_a) + (len_b - i_b);
     }
 
@@ -6363,7 +6470,7 @@ S_invlist_intersection(pTHX_ HV* const a, HV* const b)
     }
 
     /* Finish outputting any remaining */
-    if (count == 2) { /* Only one of will have a non-zero copy count */
+    if (count >= 2) { /* At most one will have a non-zero copy count */
 	IV copy_count;
 	if ((copy_count = len_a - i_a) > 0) {
 	    Copy(array_a + i_a, array_r + i_r, copy_count, UV);
@@ -6373,11 +6480,19 @@ S_invlist_intersection(pTHX_ HV* const a, HV* const b)
 	}
     }
 
-    return r;
+    /*  We may be removing a reference to one of the inputs */
+    if (&a == i || &b == i) {
+	SvREFCNT_dec(*i);
+    }
+
+    *i = r;
+    return;
 }
 
-STATIC HV*
-S_add_range_to_invlist(pTHX_ HV* invlist, const UV start, const UV end)
+#endif
+
+STATIC SV*
+S_add_range_to_invlist(pTHX_ SV* invlist, const UV start, const UV end)
 {
     /* Add the range from 'start' to 'end' inclusive to the inversion list's
      * set.  A pointer to the inversion list is returned.  This may actually be
@@ -6385,8 +6500,7 @@ S_add_range_to_invlist(pTHX_ HV* invlist, const UV start, const UV end)
      * passed in inversion list can be NULL, in which case a new one is created
      * with just the one range in it */
 
-    HV* range_invlist;
-    HV* added_invlist;
+    SV* range_invlist;
     UV len;
 
     if (invlist == NULL) {
@@ -6411,21 +6525,175 @@ S_add_range_to_invlist(pTHX_ HV* invlist, const UV start, const UV end)
     range_invlist = _new_invlist(2);
     _append_range_to_invlist(range_invlist, start, end);
 
-    added_invlist = invlist_union(invlist, range_invlist);
+    _invlist_union(invlist, range_invlist, &invlist);
 
-    /* The passed in list can be freed, as well as our temporary */
-    invlist_destroy(range_invlist);
-    if (invlist != added_invlist) {
-	invlist_destroy(invlist);
-    }
+    /* The temporary can be freed */
+    SvREFCNT_dec(range_invlist);
 
-    return added_invlist;
+    return invlist;
 }
 
-PERL_STATIC_INLINE HV*
-S_add_cp_to_invlist(pTHX_ HV* invlist, const UV cp) {
+PERL_STATIC_INLINE SV*
+S_add_cp_to_invlist(pTHX_ SV* invlist, const UV cp) {
     return add_range_to_invlist(invlist, cp, cp);
 }
+
+#ifndef PERL_IN_XSUB_RE
+void
+Perl__invlist_invert(pTHX_ SV* const invlist)
+{
+    /* Complement the input inversion list.  This adds a 0 if the list didn't
+     * have a zero; removes it otherwise.  As described above, the data
+     * structure is set up so that this is very efficient */
+
+    UV* len_pos = get_invlist_len_addr(invlist);
+
+    PERL_ARGS_ASSERT__INVLIST_INVERT;
+
+    /* The inverse of matching nothing is matching everything */
+    if (*len_pos == 0) {
+	_append_range_to_invlist(invlist, 0, UV_MAX);
+	return;
+    }
+
+    /* The exclusive or complents 0 to 1; and 1 to 0.  If the result is 1, the
+     * zero element was a 0, so it is being removed, so the length decrements
+     * by 1; and vice-versa.  SvCUR is unaffected */
+    if (*get_invlist_zero_addr(invlist) ^= 1) {
+	(*len_pos)--;
+    }
+    else {
+	(*len_pos)++;
+    }
+}
+#endif
+
+PERL_STATIC_INLINE SV*
+S_invlist_clone(pTHX_ SV* const invlist)
+{
+
+    /* Return a new inversion list that is a copy of the input one, which is
+     * unchanged */
+
+    SV* new_invlist = _new_invlist(SvCUR(invlist));
+
+    PERL_ARGS_ASSERT_INVLIST_CLONE;
+
+    Copy(SvPVX(invlist), SvPVX(new_invlist), SvCUR(invlist), char);
+    return new_invlist;
+}
+
+#ifndef PERL_IN_XSUB_RE
+void
+Perl__invlist_subtract(pTHX_ SV* const a, SV* const b, SV** result)
+{
+    /* Point result to an inversion list which consists of all elements in 'a'
+     * that aren't also in 'b' */
+
+    PERL_ARGS_ASSERT__INVLIST_SUBTRACT;
+
+    /* Subtracting nothing retains the original */
+    if (invlist_len(b) == 0) {
+
+	/* If the result is not to be the same variable as the original, create
+	 * a copy */
+	if (result != &a) {
+	    *result = invlist_clone(a);
+	}
+    } else {
+	SV *b_copy = invlist_clone(b);
+	_invlist_invert(b_copy);	/* Everything not in 'b' */
+	_invlist_intersection(a, b_copy, result);    /* Everything in 'a' not in
+						       'b' */
+	SvREFCNT_dec(b_copy);
+    }
+
+    if (result == &b) {
+	SvREFCNT_dec(b);
+    }
+
+    return;
+}
+#endif
+
+PERL_STATIC_INLINE UV*
+S_get_invlist_iter_addr(pTHX_ SV* invlist)
+{
+    /* Return the address of the UV that contains the current iteration
+     * position */
+
+    PERL_ARGS_ASSERT_GET_INVLIST_ITER_ADDR;
+
+    return (UV *) (SvPVX(invlist) + (INVLIST_ITER_OFFSET * sizeof (UV)));
+}
+
+PERL_STATIC_INLINE void
+S_invlist_iterinit(pTHX_ SV* invlist)	/* Initialize iterator for invlist */
+{
+    PERL_ARGS_ASSERT_INVLIST_ITERINIT;
+
+    *get_invlist_iter_addr(invlist) = 0;
+}
+
+STATIC bool
+S_invlist_iternext(pTHX_ SV* invlist, UV* start, UV* end)
+{
+    UV* pos = get_invlist_iter_addr(invlist);
+    UV len = invlist_len(invlist);
+    UV *array;
+
+    PERL_ARGS_ASSERT_INVLIST_ITERNEXT;
+
+    if (*pos >= len) {
+	*pos = UV_MAX;	/* Force iternit() to be required next time */
+	return FALSE;
+    }
+
+    array = invlist_array(invlist);
+
+    *start = array[(*pos)++];
+
+    if (*pos >= len) {
+	*end = UV_MAX;
+    }
+    else {
+	*end = array[(*pos)++] - 1;
+    }
+
+    return TRUE;
+}
+
+#if 0
+void
+S_invlist_dump(pTHX_ SV* const invlist, const char * const header)
+{
+    /* Dumps out the ranges in an inversion list.  The string 'header'
+     * if present is output on a line before the first range */
+
+    UV start, end;
+
+    if (header && strlen(header)) {
+	PerlIO_printf(Perl_debug_log, "%s\n", header);
+    }
+    invlist_iterinit(invlist);
+    while (invlist_iternext(invlist, &start, &end)) {
+	if (end == UV_MAX) {
+	    PerlIO_printf(Perl_debug_log, "0x%04"UVXf" .. INFINITY\n", start);
+	}
+	else {
+	    PerlIO_printf(Perl_debug_log, "0x%04"UVXf" .. 0x%04"UVXf"\n", start, end);
+	}
+    }
+}
+#endif
+
+#undef HEADER_LENGTH
+#undef INVLIST_INITIAL_LENGTH
+#undef TO_INTERNAL_SIZE
+#undef FROM_INTERNAL_SIZE
+#undef INVLIST_LEN_OFFSET
+#undef INVLIST_ZERO_OFFSET
+#undef INVLIST_ITER_OFFSET
 
 /* End of inversion list object */
 
@@ -6716,6 +6984,7 @@ S_reg(pTHX_ RExC_state_t *pRExC_state, I32 paren, I32 *flagp,U32 depth)
                             SvIV_set(sv_dat, 1);
                         }
 #ifdef DEBUGGING
+			/* Yes this does cause a memory leak in debugging Perls */
                         if (!av_store(RExC_paren_name_list, RExC_npar, SvREFCNT_inc(svname)))
                             SvREFCNT_dec(svname);
 #endif
@@ -7504,7 +7773,9 @@ S_regpiece(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
     const char * const origparse = RExC_parse;
     I32 min;
     I32 max = REG_INFTY;
+#ifdef RE_TRACK_PATTERN_OFFSETS
     char *parse_start;
+#endif
     const char *maxpos = NULL;
     GET_RE_DEBUG_FLAGS_DECL;
 
@@ -7523,7 +7794,9 @@ S_regpiece(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
 
     if (op == '{' && regcurly(RExC_parse)) {
 	maxpos = NULL;
+#ifdef RE_TRACK_PATTERN_OFFSETS
         parse_start = RExC_parse; /* MJD */
+#endif
 	next = RExC_parse + 1;
 	while (isDIGIT(*next) || *next == ',') {
 	    if (*next == ',') {
@@ -7619,7 +7892,9 @@ S_regpiece(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth)
       vFAIL("Regexp *+ operand could be empty");
 #endif
 
+#ifdef RE_TRACK_PATTERN_OFFSETS
     parse_start = RExC_parse;
+#endif
     nextchar(pRExC_state);
 
     *flagp = (op != '+') ? (WORST|SPSTART|HASWIDTH) : (WORST|HASWIDTH);
@@ -8761,6 +9036,7 @@ tryagain:
 			    break;
 			case 's':
 			case 'S':
+			case 0x17F: /* LATIN SMALL LETTER LONG S */
 			     if (AT_LEAST_UNI_SEMANTICS) {
 				if (latest_char_state == char_s) {  /* 'ss' */
 				    ender = LATIN_SMALL_LETTER_SHARP_S;
@@ -8818,6 +9094,9 @@ tryagain:
 			    latest_char_state = generic_char;
 			    break;
 			case 0x03C5:	/* First char in upsilon series */
+			case 0x03A5:	/* Also capital UPSILON, which folds to
+					   03C5, and hence exhibits the same
+					   problem */
 			    if (p < RExC_end - 4) { /* Need >= 4 bytes left */
 				latest_char_state = upsilon_1;
 				if (len != 0) {
@@ -8830,6 +9109,10 @@ tryagain:
 			    }
 			    break;
 			case 0x03B9:	/* First char in iota series */
+			case 0x0399:	/* Also capital IOTA */
+			case 0x1FBE:	/* GREEK PROSGEGRAMMENI folds to 3B9 */
+			case 0x0345:	/* COMBINING GREEK YPOGEGRAMMENI folds
+					   to 3B9 */
 			    if (p < RExC_end - 4) {
 				latest_char_state = iota_1;
 				if (len != 0) {
@@ -8865,13 +9148,14 @@ tryagain:
 			    break;
 
 			/* These are the tricky fold characters.  Flush any
-			 * buffer first. */
+			 * buffer first. (When adding to this list, also should
+			 * add them to fold_grind.t to make sure get tested) */
 			case GREEK_SMALL_LETTER_UPSILON_WITH_DIALYTIKA_AND_TONOS:
 			case GREEK_SMALL_LETTER_IOTA_WITH_DIALYTIKA_AND_TONOS:
 			case LATIN_SMALL_LETTER_SHARP_S:
 			case LATIN_CAPITAL_LETTER_SHARP_S:
-			case 0x1FD3:
-			case 0x1FE3:
+			case 0x1FD3: /* GREEK SMALL LETTER IOTA WITH DIALYTIKA AND OXIA */
+			case 0x1FE3: /* GREEK SMALL LETTER UPSILON WITH DIALYTIKA AND OXIA */
 			    if (len != 0) {
 				p = oldp;
 				goto loopdone;
@@ -9350,7 +9634,7 @@ case ANYOF_N##NAME:                                                            \
     break
 
 STATIC U8
-S_set_regclass_bit_fold(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8 value, HV** invlist_ptr, AV** alternate_ptr)
+S_set_regclass_bit_fold(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8 value, SV** invlist_ptr, AV** alternate_ptr)
 {
 
     /* Handle the setting of folds in the bitmap for non-locale ANYOF nodes.
@@ -9490,7 +9774,7 @@ S_set_regclass_bit_fold(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8
 
 
 PERL_STATIC_INLINE U8
-S_set_regclass_bit(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8 value, HV** invlist_ptr, AV** alternate_ptr)
+S_set_regclass_bit(pTHX_ RExC_state_t *pRExC_state, regnode* node, const U8 value, SV** invlist_ptr, AV** alternate_ptr)
 {
     /* This inline function sets a bit in the bitmap if not already set, and if
      * appropriate, its fold, returning the number of bits that actually
@@ -9552,13 +9836,14 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, U32 depth)
     IV namedclass;
     char *rangebegin = NULL;
     bool need_class = 0;
+    bool allow_full_fold = TRUE;   /* Assume wants multi-char folding */
     SV *listsv = NULL;
     STRLEN initial_listsv_len = 0; /* Kind of a kludge to see if it is more
 				      than just initialized.  */
     UV n;
 
     /* code points this node matches that can't be stored in the bitmap */
-    HV* nonbitmap = NULL;
+    SV* nonbitmap = NULL;
 
     /* The items that are to match that aren't stored in the bitmap, but are a
      * result of things that are stored there.  This is the fold closure of
@@ -9574,7 +9859,7 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, U32 depth)
      * that matches.  A 2nd list is used so that the 'nonbitmap' list is kept
      * empty unless there is something whose fold we don't know about, and will
      * have to go out to the disk to find. */
-    HV* l1_fold_invlist = NULL;
+    SV* l1_fold_invlist = NULL;
 
     /* List of multi-character folds that are matched by this node */
     AV* unicode_alternate  = NULL;
@@ -9608,6 +9893,16 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, U32 depth)
 	RExC_parse++;
 	if (!SIZE_ONLY)
 	    ANYOF_FLAGS(ret) |= ANYOF_INVERT;
+
+        /* We have decided to not allow multi-char folds in inverted character
+	 * classes, due to the confusion that can happen, especially with
+	 * classes that are designed for a non-Unicode world:  You have the
+	 * peculiar case that:
+            "s s" =~ /^[^\xDF]+$/i => Y
+            "ss"  =~ /^[^\xDF]+$/i => N
+         *
+         * See [perl #89750] */
+        allow_full_fold = FALSE;
     }
 
     if (SIZE_ONLY) {
@@ -10073,10 +10368,9 @@ parseit:
     /* If folding and there are code points above 255, we calculate all
      * characters that could fold to or from the ones already on the list */
     if (FOLD && nonbitmap) {
-	UV i;
+	UV start, end;	/* End points of code point ranges */
 
-	HV* fold_intersection;
-	UV* fold_list;
+	SV* fold_intersection;
 
 	/* This is a list of all the characters that participate in folds
 	    * (except marks, etc in multi-char folds */
@@ -10096,7 +10390,7 @@ parseit:
 	     * compilation of Perl itself before the Unicode tables are
 	     * generated) */
 	    if (invlist_len(PL_utf8_foldable) == 0) {
-		PL_utf8_foldclosures = _new_invlist(0);
+		PL_utf8_foldclosures = newHV();
 	    } else {
 		/* If the folds haven't been read in, call a fold function
 		    * to force that */
@@ -10113,22 +10407,12 @@ parseit:
 	    * be checked.  Get the intersection of this class and all the
 	    * possible characters that are foldable.  This can quickly narrow
 	    * down a large class */
-	fold_intersection = invlist_intersection(PL_utf8_foldable, nonbitmap);
+	_invlist_intersection(PL_utf8_foldable, nonbitmap, &fold_intersection);
 
 	/* Now look at the foldable characters in this class individually */
-	fold_list = invlist_array(fold_intersection);
-	for (i = 0; i < invlist_len(fold_intersection); i++) {
+	invlist_iterinit(fold_intersection);
+	while (invlist_iternext(fold_intersection, &start, &end)) {
 	    UV j;
-
-	    /* The next entry is the beginning of the range that is in the
-	     * class */
-	    UV start = fold_list[i++];
-
-
-	    /* The next entry is the beginning of the next range, which
-		* isn't in the class, so the end of the current range is one
-		* less than that */
-	    UV end = fold_list[i] - 1;
 
 	    /* Look at every character in the range */
 	    for (j = start; j <= end; j++) {
@@ -10136,7 +10420,8 @@ parseit:
 		/* Get its fold */
 		U8 foldbuf[UTF8_MAXBYTES_CASE+1];
 		STRLEN foldlen;
-		const UV f = to_uni_fold(j, foldbuf, &foldlen);
+		const UV f =
+                    _to_uni_fold_flags(j, foldbuf, &foldlen, allow_full_fold);
 
 		if (foldlen > (STRLEN)UNISKIP(f)) {
 
@@ -10250,13 +10535,14 @@ parseit:
 		}
 	    }
 	}
-	invlist_destroy(fold_intersection);
+	SvREFCNT_dec(fold_intersection);
     }
 
     /* Combine the two lists into one. */
     if (l1_fold_invlist) {
 	if (nonbitmap) {
-	    nonbitmap = invlist_union(nonbitmap, l1_fold_invlist);
+	    _invlist_union(nonbitmap, l1_fold_invlist, &nonbitmap);
+	    SvREFCNT_dec(l1_fold_invlist);
 	}
 	else {
 	    nonbitmap = l1_fold_invlist;
@@ -10274,18 +10560,45 @@ parseit:
      * nothing like \w in it; some thought also would have to be given to the
      * interaction with above 0x100 chars */
     if (! LOC
-	&& (ANYOF_FLAGS(ret) & ANYOF_FLAGS_ALL) == ANYOF_INVERT
+	&& (ANYOF_FLAGS(ret) & ANYOF_INVERT)
 	&& ! unicode_alternate
-	&& ! nonbitmap
+	/* In case of /d, there are some things that should match only when in
+	 * not in the bitmap, i.e., they require UTF8 to match.  These are
+	 * listed in nonbitmap. */
+	&& (! nonbitmap
+	    || ! DEPENDS_SEMANTICS
+	    || (ANYOF_FLAGS(ret) & ANYOF_NONBITMAP_NON_UTF8))
 	&& SvCUR(listsv) == initial_listsv_len)
     {
-	for (value = 0; value < ANYOF_BITMAP_SIZE; ++value)
-	    ANYOF_BITMAP(ret)[value] ^= 0xFF;
+	if (! nonbitmap) {
+	    for (value = 0; value < ANYOF_BITMAP_SIZE; ++value)
+		ANYOF_BITMAP(ret)[value] ^= 0xFF;
+	    /* The inversion means that everything above 255 is matched */
+	    ANYOF_FLAGS(ret) |= ANYOF_UNICODE_ALL;
+	}
+	else {
+	    /* Here, also has things outside the bitmap.  Go through each bit
+	     * individually and add it to the list to get rid of from those
+	     * things not in the bitmap */
+	    SV *remove_list = _new_invlist(2);
+	    _invlist_invert(nonbitmap);
+	    for (value = 0; value < 256; ++value) {
+		if (ANYOF_BITMAP_TEST(ret, value)) {
+		    ANYOF_BITMAP_CLEAR(ret, value);
+		    remove_list = add_cp_to_invlist(remove_list, value);
+		}
+		else {
+		    ANYOF_BITMAP_SET(ret, value);
+		}
+	    }
+	    _invlist_subtract(nonbitmap, remove_list, &nonbitmap);
+	    SvREFCNT_dec(remove_list);
+	}
+
 	stored = 256 - stored;
 
-	/* The inversion means that everything above 255 is matched; and at the
-	 * same time we clear the invert flag */
-	ANYOF_FLAGS(ret) = ANYOF_UNICODE_ALL;
+	/* Clear the invert flag since have just done it here */
+	ANYOF_FLAGS(ret) &= ~ANYOF_INVERT;
     }
 
     /* Folding in the bitmap is taken care of above, but not for locale (for
@@ -10380,33 +10693,9 @@ parseit:
     }
 
     if (nonbitmap) {
-	UV* nonbitmap_array = invlist_array(nonbitmap);
-	UV nonbitmap_len = invlist_len(nonbitmap);
-	UV i;
-
-	/*  Here have the full list of items to match that aren't in the
-	 *  bitmap.  Convert to the structure that the rest of the code is
-	 *  expecting.   XXX That rest of the code should convert to this
-	 *  structure */
-	for (i = 0; i < nonbitmap_len; i++) {
-
-	    /* The next entry is the beginning of the range that is in the
-	     * class */
-	    UV start = nonbitmap_array[i++];
-	    UV end;
-
-	    /* The next entry is the beginning of the next range, which isn't
-	     * in the class, so the end of the current range is one less than
-	     * that.  But if there is no next range, it means that the range
-	     * begun by 'start' extends to infinity, which for this platform
-	     * ends at UV_MAX */
-	    if (i == nonbitmap_len) {
-		end = UV_MAX;
-	    }
-	    else {
-		end = nonbitmap_array[i] - 1;
-	    }
-
+	UV start, end;
+	invlist_iterinit(nonbitmap);
+	while (invlist_iternext(nonbitmap, &start, &end)) {
 	    if (start == end) {
 		Perl_sv_catpvf(aTHX_ listsv, "%04"UVxf"\n", start);
 	    }
@@ -10417,7 +10706,7 @@ parseit:
 				   start, end);
 	    }
 	}
-	invlist_destroy(nonbitmap);
+	SvREFCNT_dec(nonbitmap);
     }
 
     if (SvCUR(listsv) == initial_listsv_len && ! unicode_alternate) {
@@ -10437,10 +10726,18 @@ parseit:
 	 * used later (regexec.c:S_reginclass()). */
 	av_store(av, 0, listsv);
 	av_store(av, 1, NULL);
-	av_store(av, 2, MUTABLE_SV(unicode_alternate));
-	if (unicode_alternate) { /* This node is variable length */
-	    OP(ret) = ANYOFV;
-	}
+
+        /* Store any computed multi-char folds only if we are allowing
+         * them */
+        if (allow_full_fold) {
+            av_store(av, 2, MUTABLE_SV(unicode_alternate));
+            if (unicode_alternate) { /* This node is variable length */
+                OP(ret) = ANYOFV;
+            }
+        }
+        else {
+            av_store(av, 2, NULL);
+        }
 	rv = newRV_noinc(MUTABLE_SV(av));
 	n = add_data(pRExC_state, 1, "s");
 	RExC_rxi->data->data[n] = (void*)rv;
@@ -11712,12 +12009,11 @@ Perl_regdupe_internal(pTHX_ REGEXP * const rx, CLONE_PARAMS *param)
     dVAR;
     struct regexp *const r = (struct regexp *)SvANY(rx);
     regexp_internal *reti;
-    int len, npar;
+    int len;
     RXi_GET_DECL(r,ri);
 
     PERL_ARGS_ASSERT_REGDUPE_INTERNAL;
     
-    npar = r->nparens+1;
     len = ProgLen(ri);
     
     Newxc(reti, sizeof(regexp_internal) + len*sizeof(regnode), char, regexp_internal);

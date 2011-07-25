@@ -268,7 +268,7 @@ is(B::opnumber("pp_null"), 0, "Testing opnumber with opname (pp_null)");
 
 is(B::class(bless {}, "Wibble::Bibble"), "Bibble", "Testing B::class()");
 is(B::cast_I32(3.14), 3, "Testing B::cast_I32()");
-is(B::opnumber("chop"), 38, "Testing opnumber with opname (chop)");
+is(B::opnumber("chop"), 39, "Testing opnumber with opname (chop)");
 
 {
     no warnings 'once';
@@ -294,5 +294,14 @@ is(B::svref_2object(sub {})->ROOT->ppaddr, 'PL_ppaddr[OP_LEAVESUB]',
 # This one crashes from perl 5.8.9 to B 1.24 (perl 5.13.6):
 B::svref_2object(sub{y/\x{100}//})->ROOT->first->first->sibling->sv;
 ok 1, 'B knows that UTF trans is a padop in 5.8.9, not an svop';
+
+{
+    format FOO =
+foo
+.
+    my $f = B::svref_2object(*FOO{FORMAT});
+    isa_ok $f, 'B::FM';
+    can_ok $f, 'LINES';
+}
 
 done_testing();

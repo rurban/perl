@@ -18,7 +18,6 @@ BEGIN {
 
 
 my $file = "META.yml";
-my $new_file = "META.yml-new";
 
 use Maintainers qw(%Modules get_module_files get_module_pat);
 
@@ -50,7 +49,7 @@ my %dirs;
 
 @dirs  = map { "    - $_" } sort { lc $a cmp lc $b } @dirs;
 
-my $fh = safer_open($new_file);
+my $fh = open_new($file);
 
 local $" = "\n";
 print $fh <<"EOI";
@@ -73,5 +72,4 @@ no_index:
 @files
 EOI
 
-safer_close($fh);
-rename_if_different($new_file, $file);
+close_and_rename($fh);

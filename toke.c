@@ -4792,12 +4792,12 @@ Perl_yylex(pTHX)
 		      *(U8*)s == 0xEF ||
 		      *(U8*)s >= 0xFE ||
 		      s[1] == 0)) {
-		IV offset = (IV)PerlIO_tell(PL_rsfp);
-		bof = (offset == SvCUR(PL_linestr));
+		Off_t offset = (IV)PerlIO_tell(PL_rsfp);
+		bof = (offset == (Off_t)SvCUR(PL_linestr));
 #if defined(PERLIO_USING_CRLF) && defined(PERL_TEXTMODE_SCRIPTS)
 		/* offset may include swallowed CR */
 		if (!bof)
-		    bof = (offset == SvCUR(PL_linestr)+1);
+		    bof = (offset == (Off_t)SvCUR(PL_linestr)+1);
 #endif
 		if (bof) {
 		    PL_bufend = SvPVX(PL_linestr) + SvCUR(PL_linestr);
@@ -7055,7 +7055,7 @@ Perl_yylex(pTHX)
 		s += 2;
 		d = s;
 		s = scan_word(s, PL_tokenbuf, sizeof PL_tokenbuf, FALSE, &len);
-		if (!(tmp = keyword(PL_tokenbuf, len, 0)))
+		if (!(tmp = keyword(PL_tokenbuf, len, 1)))
 		    Perl_croak(aTHX_ "CORE::%s is not a keyword", PL_tokenbuf);
 		if (tmp < 0)
 		    tmp = -tmp;
@@ -7099,12 +7099,6 @@ Perl_yylex(pTHX)
 	    UNI(OP_CHOP);
 
 	case KEY_continue:
-	    /* When 'use switch' is in effect, continue has a dual
-	       life as a control operator. */
-	    {
-		if (!FEATURE_IS_ENABLED("switch"))
-		    PREBLOCK(CONTINUE);
-		else {
 		    /* We have to disambiguate the two senses of
 		      "continue". If the next token is a '{' then
 		      treat it as the start of a continue block;
@@ -7115,8 +7109,6 @@ Perl_yylex(pTHX)
 	    PREBLOCK(CONTINUE);
 		    else
 			FUN0(OP_CONTINUE);
-		}
-	    }
 
 	case KEY_chdir:
 	    /* may use HOME */
@@ -7653,7 +7645,8 @@ Perl_yylex(pTHX)
 		missingterm(NULL);
 	    PL_expect = XOPERATOR;
 	    if (SvCUR(PL_lex_stuff)) {
-		int warned = 0;
+		int warned_comma = !ckWARN(WARN_QW);
+		int warned_comment = warned_comma;
 		d = SvPV_force(PL_lex_stuff, len);
 		while (len) {
 		    for (; isSPACE(*d) && len; --len, ++d)
@@ -7661,17 +7654,17 @@ Perl_yylex(pTHX)
 		    if (len) {
 			SV *sv;
 			const char *b = d;
-			if (!warned && ckWARN(WARN_QW)) {
+			if (!warned_comma || !warned_comment) {
 			    for (; !isSPACE(*d) && len; --len, ++d) {
-				if (*d == ',') {
+				if (!warned_comma && *d == ',') {
 				    Perl_warner(aTHX_ packWARN(WARN_QW),
 					"Possible attempt to separate words with commas");
-				    ++warned;
+				    ++warned_comma;
 				}
-				else if (*d == '#') {
+				else if (!warned_comment && *d == '#') {
 				    Perl_warner(aTHX_ packWARN(WARN_QW),
 					"Possible attempt to put comments in qw() list");
-				    ++warned;
+				    ++warned_comment;
 				}
 			    }
 			}
@@ -8322,7 +8315,7 @@ S_pending_ident(pTHX)
                 yyerror(Perl_form(aTHX_ "No package name allowed for "
                                   "variable %s in \"our\"",
                                   PL_tokenbuf));
-            tmp = allocmy(PL_tokenbuf, tokenbuf_len, 0);
+            tmp = allocmy(PL_tokenbuf, tokenbuf_len, UTF ? SVf_UTF8 : 0);
         }
         else {
             if (has_colon)
@@ -8330,7 +8323,8 @@ S_pending_ident(pTHX)
 			    PL_in_my == KEY_my ? "my" : "state", PL_tokenbuf));
 
             pl_yylval.opval = newOP(OP_PADANY, 0);
-            pl_yylval.opval->op_targ = allocmy(PL_tokenbuf, tokenbuf_len, 0);
+            pl_yylval.opval->op_targ = allocmy(PL_tokenbuf, tokenbuf_len,
+                                                        UTF ? SVf_UTF8 : 0);
             return PRIVATEREF;
         }
     }
@@ -8349,7 +8343,8 @@ S_pending_ident(pTHX)
 
     if (!has_colon) {
 	if (!PL_in_my)
-	    tmp = pad_findmy(PL_tokenbuf, tokenbuf_len, 0);
+	    tmp = pad_findmy_pvn(PL_tokenbuf, tokenbuf_len,
+                                    UTF ? SVf_UTF8 : 0);
         if (tmp != NOT_IN_PAD) {
             /* might be an "our" variable" */
             if (PAD_COMPNAME_FLAGS_isOUR(tmp)) {
@@ -9443,6 +9438,7 @@ S_scan_heredoc(pTHX_ register char *s)
 	if (*s == term && memEQ(s,PL_tokenbuf,len)) {
 	    STRLEN off = PL_bufend - 1 - SvPVX_const(PL_linestr);
 	    *(SvPVX(PL_linestr) + off ) = ' ';
+	    lex_grow_linestr(SvCUR(PL_linestr) + SvCUR(herewas) + 1);
 	    sv_catsv(PL_linestr,herewas);
 	    PL_bufend = SvPVX(PL_linestr) + SvCUR(PL_linestr);
 	    s = SvPVX(PL_linestr) + off; /* In case PV of PL_linestr moved. */
@@ -9568,7 +9564,7 @@ S_scan_inputsymbol(pTHX_ char *start)
 	    /* try to find it in the pad for this block, otherwise find
 	       add symbol table ops
 	    */
-	    const PADOFFSET tmp = pad_findmy(d, len, 0);
+	    const PADOFFSET tmp = pad_findmy_pvn(d, len, UTF ? SVf_UTF8 : 0);
 	    if (tmp != NOT_IN_PAD) {
 		if (PAD_COMPNAME_FLAGS_isOUR(tmp)) {
 		    HV * const stash = PAD_COMPNAME_OURSTASH(tmp);

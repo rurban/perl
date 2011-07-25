@@ -28,7 +28,7 @@ called instead.
 =item * An Event-Driven Program
 
 The classic example of where callbacks are used is when writing an
-event driven program, such as for an X windows application.  In this case
+event driven program, such as for an X11 application.  In this case
 you register functions to be called whenever specific events occur,
 e.g., a mouse button is pressed, the cursor moves into a window or a
 menu item is selected.
@@ -202,7 +202,6 @@ As with G_SCALAR, this flag has 2 effects:
 
 It indicates to the subroutine being called that it is executing in a
 list context (if it executes I<wantarray> the result will be true).
-
 
 =item 2.
 

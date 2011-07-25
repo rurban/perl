@@ -75,18 +75,6 @@ is needed to improve the cross-linking.
 The addition of C<Pod::Simple> and its related modules may make this task
 easier to complete.
 
-=head2 Make ExtUtils::ParseXS use strict;
-
-F<lib/ExtUtils/ParseXS.pm> contains this line
-
-    # use strict;  # One of these days...
-
-Simply uncomment it, and fix all the resulting issues :-)
-
-The more practical approach, to break the task down into manageable chunks, is
-to work your way though the code from bottom to top, or if necessary adding
-extra C<{ ... }> blocks, and turning on strict within them.
-
 =head2 Make Schwern poorer
 
 We should have tests for everything. When all the core's modules are tested,
@@ -175,6 +163,11 @@ that is taking so much CPU, and where possible address it.
 Currently, warnings can only be enabled or disabled by category. There
 are times when it would be useful to quash a single warning, not a
 whole category.
+
+=head2 document diagnostics
+
+Many diagnostic messages are not currently documented.  The list is at the end
+of t/porting/diag.t.
 
 =head1 Tasks that need a little sysadmin-type knowledge
 
@@ -395,15 +388,6 @@ see if there would be a way to use our existing metaconfig units to configure a
 Windows Perl or whether we go in a separate direction and make it so.  Of 
 course, we all know what step 3 is.
 
-=head2 decouple -g and -DDEBUGGING
-
-Currently F<Configure> automatically adds C<-DDEBUGGING> to the C compiler
-flags if it spots C<-g> in the optimiser flags. The pre-processor directive
-C<DEBUGGING> enables F<perl>'s command line C<-D> options, but in the process
-makes F<perl> slower. It would be good to disentangle this logic, so that
-C-level debugging with C<-g> and Perl level debugging with C<-D> can easily
-be enabled independently.
-
 =head1 Tasks that need a little C knowledge
 
 These tasks would need a little C knowledge, but don't need any specific
@@ -482,7 +466,7 @@ standpoint.  See L<Profile Perl - am I hot or not?>.
 =head2 Improve win32/wince.c
 
 Currently, numerous functions look virtually, if not completely,
-identical in both C<win32/wince.c> and C<win32/win32.c> files, which can't
+identical in both F<win32/wince.c> and F<win32/win32.c> files, which can't
 be good.
 
 =head2 Use secure CRT functions when building with VC8 on Win32

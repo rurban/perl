@@ -5,7 +5,7 @@ use warnings;
 use vars qw($TODO $Level $using_open);
 require "test.pl";
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 # now export checkOptree, and those test.pl functions used by tests
 our @EXPORT = qw( checkOptree plan skip skip_all pass is like unlike
@@ -975,7 +975,7 @@ sub OptreeCheck::gentest {
 sub OptreeCheck::processExamples {
     my @files = @_;
 
-    # gets array of paragraphs, which should be code-samples.  Theyre
+    # gets array of paragraphs, which should be code-samples.  They're
     # turned into optreeCheck tests,
 
     foreach my $file (@files) {

@@ -275,10 +275,19 @@ Possible attempt to separate words with commas at - line 3.
 ########
 # toke.c
 use warnings 'qw' ;
-@a = qw(a b #) ;
+@a = qw(a b c # #) ;
 no warnings 'qw' ;
-@a = qw(a b #) ;
+@a = qw(a b c # #) ;
 EXPECT
+Possible attempt to put comments in qw() list at - line 3.
+########
+# toke.c
+use warnings 'qw' ;
+@a = qw(a, b, c # #) ;
+no warnings 'qw' ;
+@a = qw(a, b, c # #) ;
+EXPECT
+Possible attempt to separate words with commas at - line 3.
 Possible attempt to put comments in qw() list at - line 3.
 ########
 # toke.c
@@ -972,3 +981,11 @@ Regexp modifiers "/l" and "/a" are mutually exclusive at - line 4, near "= "
 Regexp modifier "/l" may not appear twice at - line 5, near "= "
 Regexp modifier "/a" may appear a maximum of twice at - line 7, near "= "
 BEGIN not safe after errors--compilation aborted at - line 8.
+########
+# toke.c
+# [perl #4362]
+eval "print q\xabfoo";
+print "ok\n" if
+    $@ =~ /Can't find string terminator "\xab" anywhere before EOF/;
+EXPECT
+ok

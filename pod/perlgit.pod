@@ -466,6 +466,7 @@ the "first commit where the bug is solved".
 
 C<git help bisect> has much more information on how you can tweak your
 binary searches.
+
 =head1 Topic branches and rewriting history
 
 Individual committers should create topic branches under
@@ -543,7 +544,7 @@ deleted or modified. Think long and hard about whether you want to push
 a local tag to perl.git before doing so. (Pushing unannotated tags is
 not allowed.)
 
-=head3 Grafts
+=head2 Grafts
 
 The perl history contains one mistake which was not caught in the
 conversion: a merge was recorded in the history between blead and
@@ -556,83 +557,6 @@ C<.git/info/grafts> file:
 
 It is particularly important to have this graft line if any bisecting
 is done in the area of the "merge" in question.
-
-=head2 Topic branches and rewriting history
-
-Individual committers should create topic branches under
-B<yourname>/B<some_descriptive_name>. Other committers should check
-with a topic branch's creator before making any change to it.
-
-The simplest way to create a remote topic branch that works on all
-versions of git is to push the current head as a new branch on the
-remote, then check it out locally:
-
-  $ branch="$yourname/$some_descriptive_name"
-  $ git push origin HEAD:$branch
-  $ git checkout -b $branch origin/$branch
-
-Users of git 1.7 or newer can do it in a more obvious manner:
-
-  $ branch="$yourname/$some_descriptive_name"
-  $ git checkout -b $branch
-  $ git push origin -u $branch
-
-If you are not the creator of B<yourname>/B<some_descriptive_name>, you
-might sometimes find that the original author has edited the branch's
-history. There are lots of good reasons for this. Sometimes, an author
-might simply be rebasing the branch onto a newer source point.
-Sometimes, an author might have found an error in an early commit which
-they wanted to fix before merging the branch to blead.
-
-Currently the master repository is configured to forbid
-non-fast-forward merges. This means that the branches within can not be
-rebased and pushed as a single step.
-
-The only way you will ever be allowed to rebase or modify the history
-of a pushed branch is to delete it and push it as a new branch under
-the same name. Please think carefully about doing this. It may be
-better to sequentially rename your branches so that it is easier for
-others working with you to cherry-pick their local changes onto the new
-version. (XXX: needs explanation).
-
-If you want to rebase a personal topic branch, you will have to delete
-your existing topic branch and push as a new version of it. You can do
-this via the following formula (see the explanation about C<refspec>'s
-in the git push documentation for details) after you have rebased your
-branch:
-
-   # first rebase
-   $ git checkout $user/$topic
-   $ git fetch
-   $ git rebase origin/blead
-
-   # then "delete-and-push"
-   $ git push origin :$user/$topic
-   $ git push origin $user/$topic
-
-B<NOTE:> it is forbidden at the repository level to delete any of the
-"primary" branches. That is any branch matching
-C<m!^(blead|maint|perl)!>. Any attempt to do so will result in git
-producing an error like this:
-
-    $ git push origin :blead
-    *** It is forbidden to delete blead/maint branches in this repository
-    error: hooks/update exited with error code 1
-    error: hook declined to update refs/heads/blead
-    To ssh://perl5.git.perl.org/perl
-     ! [remote rejected] blead (hook declined)
-     error: failed to push some refs to 'ssh://perl5.git.perl.org/perl'
-
-As a matter of policy we do B<not> edit the history of the blead and
-maint-* branches. If a typo (or worse) sneaks into a commit to blead or
-maint-*, we'll fix it in another commit. The only types of updates
-allowed on these branches are "fast-forward's", where all history is
-preserved.
-
-Annotated tags in the canonical perl.git repository will never be
-deleted or modified. Think long and hard about whether you want to push
-a local tag to perl.git before doing so. (Pushing unannotated tags is
-not allowed.)
 
 =head1 WRITE ACCESS TO THE GIT REPOSITORY
 
@@ -667,6 +591,7 @@ to push your changes back with the C<camel> remote:
 
 The C<fetch> command just updates the C<camel> refs, as the objects
 themselves should have been fetched when pulling from C<origin>.
+
 =head1 Accepting a patch
 
 If you have received a patch file generated using the above section,
@@ -763,11 +688,70 @@ look in F<t/porting>.
 =item *
 
 If you make any changes that affect miniperl or core routines that have
-different code paths for miniperl, be sure to run C<make minitest>. 
+different code paths for miniperl, be sure to run C<make minitest>.
 This will catch problems that even the full test suite will not catch
 because it runs a subset of tests under miniperl rather than perl.
 
 =back
+
+=head3 On merging and rebasing
+
+Simple, one-off commits pushed to the 'blead' branch should be simple
+commits that apply cleanly.  In other words, you should make sure your
+work is committed against the current position of blead, so that you can
+push back to the master repository without merging.
+
+Sometimes, blead will move while you're building or testing your
+changes.  When this happens, your push will be rejected with a message
+like this:
+
+  To ssh://perl5.git.perl.org/perl.git
+   ! [rejected]        blead -> blead (non-fast-forward)
+  error: failed to push some refs to 'ssh://perl5.git.perl.org/perl.git'
+  To prevent you from losing history, non-fast-forward updates were rejected
+  Merge the remote changes (e.g. 'git pull') before pushing again.  See the
+  'Note about fast-forwards' section of 'git push --help' for details.
+
+When this happens, you can just I<rebase> your work against the new
+position of blead, like this (assuming your remote for the master
+repository is "p5p"):
+
+  $ git fetch p5p
+  $ git rebase p5p/blead
+
+You will see your commits being re-applied, and you will then be able to
+push safetly.  More information about rebasing can be found in the
+documentation for the git-rebase(1) command.
+
+For larger sets of commits that only make sense together, or that would
+benefit from a summary of the set's purpose, you should use a merge
+commit.  You should perform your work on a L<topic branch|/Topic
+branches and rewriting history>, which you should regularly rebase
+against blead to ensure that your code is not broken by blead moving.
+When you have finished your work and performed a final rebase and test,
+you can merge it into master like this (assuming your work was on the
+branch C<< committer/somework >>):
+
+  $ git checkout blead
+  $ git merge --no-ff --no-commit committer/somework
+  $ git commit -a
+
+The switches above deserve explanation.  C<--no-ff> indicates that even
+if all your work can be applied linearly against blead, a merge commit
+should still be prepared.  This ensures that all your work will be shown
+as a side branch, with all its commits merged into the mainstream blead
+by the merge commit.
+
+C<--no-commit> means that the merge commit will be I<prepared> but not
+I<committed>.  The commit is then actually performed when you run the
+next command, which will bring up your editor to describe the commit.
+Without C<--no-commit>, the commit would be made with nearly no useful
+message, which would greatly diminish the value of the merge commit as a
+placeholder for the work's description.
+
+When describing the merge commit, explain the purpose of the branch, and
+keep in mind that this description will probably be used by the
+eventual release engineer when reviewing the next perldelta document.
 
 =head2 Committing to maintenance versions
 
@@ -790,20 +774,6 @@ original commit in the new commit message.
 
 Before pushing any change to a maint version, make sure you've
 satisfied the steps in L</Committing to blead> above.
-
-=head2 Grafts
-
-The perl history contains one mistake which was not caught in the
-conversion: a merge was recorded in the history between blead and
-maint-5.10 where no merge actually occurred. Due to the nature of git,
-this is now impossible to fix in the public repository. You can remove
-this mis-merge locally by adding the following line to your
-C<.git/info/grafts> file:
-
-  296f12bbbbaa06de9be9d09d3dcf8f4528898a49 434946e0cb7a32589ed92d18008aaa1d88515930
-
-It is particularly important to have this graft line if any bisecting
-is done in the area of the "merge" in question.
 
 =head2 Merging from a branch via GitHub
 

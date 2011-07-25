@@ -155,10 +155,6 @@ PERLVAR(Iefloatsize,	STRLEN)
 
 /* regex stuff */
 
-PERLVAR(Iscreamfirst,	I32 *)
-PERLVAR(Iscreamnext,	I32 *)
-PERLVAR(Ilastscream,	SV *)
-
 PERLVAR(Ireg_state,	struct re_save_state)
 
 PERLVAR(Iregdummy,	regnode)	/* from regcomp.c */
@@ -233,7 +229,7 @@ When you replace this variable, it is considered a good practice to store the po
 
 PERLVARI(Iopfreehook,	Perl_ophook_t, 0) /* op_free() hook */
 
-PERLVARI(Imaxscream,	I32,	-1)
+/* Space for U32 */
 PERLVARI(Ireginterp_cnt,I32,	 0)	/* Whether "Regexp" was interpolated. */
 PERLVARI(Iwatchaddr,	char **, 0)
 PERLVAR(Iwatchok,	char *)
@@ -251,16 +247,19 @@ PERLVAR(Ilocalizing,	U8)		/* are we processing a local() list? */
 PERLVAR(Icolorset,	bool)		/* from regcomp.c */
 PERLVAR(Iin_eval,	U8)		/* trap "fatal" errors? */
 PERLVAR(Itainted,	bool)		/* using variables controlled by $< */
-
-/* current phase the interpreter is in */
-PERLVARI(Iphase,	enum perl_phase, PERL_PHASE_CONSTRUCT)
+PERLVAR(Itainting,	bool)		/* doing taint checks */
 
 /* This value may be set when embedding for full cleanup  */
 /* 0=none, 1=full, 2=full with checks */
 /* mod_perl is special, and also assigns a meaning -1 */
 PERLVARI(Iperl_destruct_level,	signed char,	0)
 
+/* current phase the interpreter is in */
+PERLVARI(Iphase,	enum perl_phase, PERL_PHASE_CONSTRUCT)
+
 PERLVAR(Iperldb,	U32)
+
+PERLVAR(Isignals,	U32)	/* Using which pre-5.8 signals */
 
 /* pseudo environmental stuff */
 PERLVAR(Iorigargc,	int)
@@ -297,14 +296,12 @@ The C variable which corresponds to Perl's $^W warning variable.
 */
 
 PERLVAR(Idowarn,	U8)
-     /* Space for a U8  */
 PERLVAR(Isawampersand,	bool)		/* must save all match strings */
 PERLVAR(Iunsafe,	bool)
 PERLVAR(Iexit_flags,	U8)		/* was exit() unexpected, etc. */
 PERLVAR(Isrand_called,	bool)
-/* Part of internal state, but makes the 16th 1 byte variable in a row.  */
-PERLVAR(Itainting,	bool)		/* doing taint checks */
 PERLVARI(Iin_load_module, bool, FALSE)	/* to prevent recursions in PerlIO_find_layer */
+     /* Space for a U16  */
 PERLVAR(Iinplace,	char *)
 PERLVAR(Ie_script,	SV *)
 
@@ -568,6 +565,8 @@ PERLVARI(Inumeric_standard,	bool,	TRUE)
 PERLVARI(Inumeric_local,	bool,	TRUE)
 					/* Assume local numerics */
 PERLVAR(Inumeric_name,	char *)		/* Name of current numeric locale */
+PERLVAR(Inumeric_radix_sv,	SV *)	/* The radix separator if not '.' */
+
 #endif /* !USE_LOCALE_NUMERIC */
 
 /* utf8 character classes */
@@ -644,12 +643,6 @@ PERLVARI(Ibeginav_save, AV*, NULL)	/* save BEGIN{}s when compiling */
 PERLVAR(Ibody_arenas, void*) /* pointer to list of body-arenas */
 
 
-#ifdef USE_LOCALE_NUMERIC
-
-PERLVAR(Inumeric_radix_sv,	SV *)	/* The radix separator if not '.' */
-
-#endif
-
 #if defined(USE_ITHREADS)
 PERLVAR(Iregex_pad,     SV**)		/* Shortcut into the array of
 					   regex_padav */
@@ -689,10 +682,6 @@ PERLVARI(Iunitcheckav_save, AV*, NULL)	/* save UNITCHECK{}s when compiling */
 
 PERLVARI(Iclocktick, long, 0)	/* this many times() ticks in a second */
 
-PERLVAR(Isignals, U32)	/* Using which pre-5.8 signals */
-
-PERLVAR(Ireentrant_retint, int)	/* Integer return value from reentrant functions */
-
 PERLVAR(Istashcache,	HV *)		/* Cache to speed up S_method_common */
 
 /* Hooks to shared SVs and locks. */
@@ -708,6 +697,9 @@ PERLVARI(Iunlockhook,	share_proc_t,	PERL_UNLOCK_HOOK)
 
 PERLVARI(Ithreadhook,	thrhook_proc_t,	Perl_nothreadhook)
 
+/* Can shared object be destroyed */
+PERLVARI(Idestroyhook, destroyable_proc_t, Perl_sv_destroyable)
+
 #ifndef PERL_MICRO
 PERLVARI(Isignalhook,	despatch_signals_proc_t, Perl_despatch_signals)
 #endif
@@ -718,11 +710,32 @@ PERLVARI(Irehash_seed, UV, 0)		/* 582 hash initializer */
 
 PERLVARI(Iisarev, HV*, NULL) /* Reverse map of @ISA dependencies */
 
+/* Register of known Method Resolution Orders.
+   What this actually points to is an implementation detail (it may change to
+   a structure incorporating a reference count - use mro_get_from_name to
+   retrieve a C<struct mro_alg *>  */
+PERLVAR(Iregistered_mros, HV *)
+
+/* Compile-time block start/end hooks */
+PERLVAR(Iblockhooks, AV *)
+
+/* Everything that folds to a given character, for case insensitivity regex
+ * matching */
+PERLVARI(Iutf8_foldclosures,	HV *, NULL)
+
+/* List of characters that participate in folds (except marks, etc in
+ * multi-char folds) */
+PERLVARI(Iutf8_foldable,	SV *, NULL)
+
+PERLVAR(Icustom_ops, HV *)      /* custom op registrations */
+
+PERLVAR(Ireentrant_retint, int)	/* Integer return value from reentrant functions */
+
 /* The last unconditional member of the interpreter structure when 5.10.0 was
    released. The offset of the end of this is baked into a global variable in 
    any shared perl library which will allow a sanity test in future perl
    releases.  */
-#define PERL_LAST_5_10_0_INTERP_MEMBER	Iisarev
+#define PERL_LAST_5_16_0_INTERP_MEMBER	Ireentrant_retint
 
 #ifdef PERL_IMPLICIT_CONTEXT
 PERLVARI(Imy_cxt_size, int, 0)		/* size of PL_my_cxt_list */
@@ -764,32 +777,9 @@ PERLVARI(Islabs, I32**, NULL)	/* Array of slabs that have been allocated */
 PERLVARI(Islab_count, U32, 0)	/* Size of the array */
 #endif
 
-/* Can shared object be destroyed */
-PERLVARI(Idestroyhook, destroyable_proc_t, Perl_sv_destroyable)
-
 #ifdef DEBUG_LEAKING_SCALARS
 PERLVARI(Isv_serial, U32, 0) /* SV serial number, used in sv.c */
 #endif
-
-/* Register of known Method Resolution Orders.
-   What this actually points to is an implementation detail (it may change to
-   a structure incorporating a reference count - use mro_get_from_name to
-   retrieve a C<struct mro_alg *>  */
-PERLVAR(Iregistered_mros, HV *)
-
-/* Compile-time block start/end hooks */
-PERLVAR(Iblockhooks, AV *)
-
-
-/* Everything that folds to a given character, for case insensitivity regex
- * matching */
-PERLVARI(Iutf8_foldclosures,	HV *, NULL)
-
-/* List of characters that participate in folds (except marks, etc in
- * multi-char folds) */
-PERLVARI(Iutf8_foldable,	HV *, NULL)
-
-PERLVAR(Icustom_ops, HV *)      /* custom op registrations */
 
 /* If you are adding a U8 or U16, check to see if there are 'Space' comments
  * above on where there are gaps which currently will be structure padding.  */

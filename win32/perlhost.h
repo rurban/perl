@@ -1710,7 +1710,6 @@ static THREAD_RET_TYPE
 win32_start_child(LPVOID arg)
 {
     PerlInterpreter *my_perl = (PerlInterpreter*)arg;
-    GV *tmpgv;
     int status;
     HWND parent_message_hwnd;
 #ifdef PERL_SYNC_FORK
@@ -1722,18 +1721,11 @@ win32_start_child(LPVOID arg)
     PERL_SET_THX(my_perl);
     win32_checkTLS(my_perl);
 
-    /* set $$ to pseudo id */
 #ifdef PERL_SYNC_FORK
     w32_pseudo_id = id;
 #else
     w32_pseudo_id = GetCurrentThreadId();
 #endif
-    if (tmpgv = gv_fetchpv("$", TRUE, SVt_PV)) {
-	SV *sv = GvSV(tmpgv);
-	SvREADONLY_off(sv);
-	sv_setiv(sv, -(IV)w32_pseudo_id);
-	SvREADONLY_on(sv);
-    }
 #ifdef PERL_USES_PL_PIDSTATUS    
     hv_clear(PL_pidstatus);
 #endif    

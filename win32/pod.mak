@@ -15,8 +15,7 @@ REALPERL = ..\perl.exe
 
 ICWD = -I..\dist\Cwd
 
-POD = \
-	perl.pod	\
+POD = perl.pod	\
 	perl5004delta.pod	\
 	perl5005delta.pod	\
 	perl5100delta.pod	\
@@ -31,6 +30,7 @@ POD = \
 	perl5121delta.pod	\
 	perl5122delta.pod	\
 	perl5123delta.pod	\
+	perl5124delta.pod	\
 	perl5130delta.pod	\
 	perl51310delta.pod	\
 	perl51311delta.pod	\
@@ -44,6 +44,10 @@ POD = \
 	perl5138delta.pod	\
 	perl5139delta.pod	\
 	perl5140delta.pod	\
+	perl5141delta.pod	\
+	perl5150delta.pod	\
+	perl5151delta.pod	\
+	perl5152delta.pod	\
 	perl561delta.pod	\
 	perl56delta.pod	\
 	perl570delta.pod	\
@@ -84,20 +88,10 @@ POD = \
 	perldebug.pod	\
 	perldelta.pod	\
 	perldiag.pod	\
-	perldoc.pod	\
 	perldsc.pod	\
+	perldtrace.pod	\
 	perlebcdic.pod	\
 	perlembed.pod	\
-	perlfaq.pod	\
-	perlfaq1.pod	\
-	perlfaq2.pod	\
-	perlfaq3.pod	\
-	perlfaq4.pod	\
-	perlfaq5.pod	\
-	perlfaq6.pod	\
-	perlfaq7.pod	\
-	perlfaq8.pod	\
-	perlfaq9.pod	\
 	perlfilter.pod	\
 	perlfork.pod	\
 	perlform.pod	\
@@ -166,12 +160,9 @@ POD = \
 	perlunitut.pod	\
 	perlutil.pod	\
 	perlvar.pod	\
-	perlvms.pod	\
-	perlxs.pod	\
-	perlxstut.pod	
+	perlvms.pod
 
-MAN = \
-	perl.man	\
+MAN = perl.man	\
 	perl5004delta.man	\
 	perl5005delta.man	\
 	perl5100delta.man	\
@@ -186,6 +177,7 @@ MAN = \
 	perl5121delta.man	\
 	perl5122delta.man	\
 	perl5123delta.man	\
+	perl5124delta.man	\
 	perl5130delta.man	\
 	perl51310delta.man	\
 	perl51311delta.man	\
@@ -199,6 +191,10 @@ MAN = \
 	perl5138delta.man	\
 	perl5139delta.man	\
 	perl5140delta.man	\
+	perl5141delta.man	\
+	perl5150delta.man	\
+	perl5151delta.man	\
+	perl5152delta.man	\
 	perl561delta.man	\
 	perl56delta.man	\
 	perl570delta.man	\
@@ -239,20 +235,10 @@ MAN = \
 	perldebug.man	\
 	perldelta.man	\
 	perldiag.man	\
-	perldoc.man	\
 	perldsc.man	\
+	perldtrace.man	\
 	perlebcdic.man	\
 	perlembed.man	\
-	perlfaq.man	\
-	perlfaq1.man	\
-	perlfaq2.man	\
-	perlfaq3.man	\
-	perlfaq4.man	\
-	perlfaq5.man	\
-	perlfaq6.man	\
-	perlfaq7.man	\
-	perlfaq8.man	\
-	perlfaq9.man	\
 	perlfilter.man	\
 	perlfork.man	\
 	perlform.man	\
@@ -321,12 +307,9 @@ MAN = \
 	perlunitut.man	\
 	perlutil.man	\
 	perlvar.man	\
-	perlvms.man	\
-	perlxs.man	\
-	perlxstut.man	
+	perlvms.man
 
-HTML = \
-	perl.html	\
+HTML = perl.html	\
 	perl5004delta.html	\
 	perl5005delta.html	\
 	perl5100delta.html	\
@@ -341,6 +324,7 @@ HTML = \
 	perl5121delta.html	\
 	perl5122delta.html	\
 	perl5123delta.html	\
+	perl5124delta.html	\
 	perl5130delta.html	\
 	perl51310delta.html	\
 	perl51311delta.html	\
@@ -354,6 +338,10 @@ HTML = \
 	perl5138delta.html	\
 	perl5139delta.html	\
 	perl5140delta.html	\
+	perl5141delta.html	\
+	perl5150delta.html	\
+	perl5151delta.html	\
+	perl5152delta.html	\
 	perl561delta.html	\
 	perl56delta.html	\
 	perl570delta.html	\
@@ -394,20 +382,10 @@ HTML = \
 	perldebug.html	\
 	perldelta.html	\
 	perldiag.html	\
-	perldoc.html	\
 	perldsc.html	\
+	perldtrace.html	\
 	perlebcdic.html	\
 	perlembed.html	\
-	perlfaq.html	\
-	perlfaq1.html	\
-	perlfaq2.html	\
-	perlfaq3.html	\
-	perlfaq4.html	\
-	perlfaq5.html	\
-	perlfaq6.html	\
-	perlfaq7.html	\
-	perlfaq8.html	\
-	perlfaq9.html	\
 	perlfilter.html	\
 	perlfork.html	\
 	perlform.html	\
@@ -475,13 +453,10 @@ HTML = \
 	perlunitut.html	\
 	perlutil.html	\
 	perlvar.html	\
-	perlvms.html	\
-	perlxs.html	\
-	perlxstut.html	
+	perlvms.html
 # not perltoc.html
 
-TEX = \
-	perl.tex	\
+TEX = perl.tex	\
 	perl5004delta.tex	\
 	perl5005delta.tex	\
 	perl5100delta.tex	\
@@ -496,6 +471,7 @@ TEX = \
 	perl5121delta.tex	\
 	perl5122delta.tex	\
 	perl5123delta.tex	\
+	perl5124delta.tex	\
 	perl5130delta.tex	\
 	perl51310delta.tex	\
 	perl51311delta.tex	\
@@ -509,6 +485,10 @@ TEX = \
 	perl5138delta.tex	\
 	perl5139delta.tex	\
 	perl5140delta.tex	\
+	perl5141delta.tex	\
+	perl5150delta.tex	\
+	perl5151delta.tex	\
+	perl5152delta.tex	\
 	perl561delta.tex	\
 	perl56delta.tex	\
 	perl570delta.tex	\
@@ -549,20 +529,10 @@ TEX = \
 	perldebug.tex	\
 	perldelta.tex	\
 	perldiag.tex	\
-	perldoc.tex	\
 	perldsc.tex	\
+	perldtrace.tex	\
 	perlebcdic.tex	\
 	perlembed.tex	\
-	perlfaq.tex	\
-	perlfaq1.tex	\
-	perlfaq2.tex	\
-	perlfaq3.tex	\
-	perlfaq4.tex	\
-	perlfaq5.tex	\
-	perlfaq6.tex	\
-	perlfaq7.tex	\
-	perlfaq8.tex	\
-	perlfaq9.tex	\
 	perlfilter.tex	\
 	perlfork.tex	\
 	perlform.tex	\
@@ -631,9 +601,7 @@ TEX = \
 	perlunitut.tex	\
 	perlutil.tex	\
 	perlvar.tex	\
-	perlvms.tex	\
-	perlxs.tex	\
-	perlxstut.tex	
+	perlvms.tex
 
 man:	$(POD2MAN) $(MAN)
 

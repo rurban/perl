@@ -34,10 +34,6 @@
 #define PERL_IN_PP_CTL_C
 #include "perl.h"
 
-#ifndef WORD_ALIGN
-#define WORD_ALIGN sizeof(U32)
-#endif
-
 #define DOCATCH(o) ((CATCH_GET == TRUE) ? docatch(o) : (o))
 
 #define dopoptosub(plop)	dopoptosub_at(cxstack, (plop))
@@ -302,6 +298,13 @@ PP(pp_substcont)
 	s -= RX_GOFS(rx);
 
 	/* Are we done */
+	/* I believe that we can't set REXEC_SCREAM here if
+	   SvSCREAM(cx->sb_targ) is true because SvPVX(cx->sb_targ) isn't always
+	   equal to s.  [See the comment before Perl_re_intuit_start(), which is
+	   called from Perl_regexec_flags(), which says that it should be when
+	   SvSCREAM() is true.]  s, cx->sb_strend and orig will be consistent
+	   with SvPVX(cx->sb_targ), as substconst doesn't modify cx->sb_targ
+	   during the match.  */
 	if (CxONCE(cx) || s < orig ||
 		!CALLREGEXEC(rx, s, cx->sb_strend, orig,
 			     (s == m) + RX_GOFS(rx), cx->sb_targ, NULL,
@@ -309,7 +312,7 @@ PP(pp_substcont)
 			      ? (REXEC_IGNOREPOS|REXEC_NOT_FIRST)
 			      : (REXEC_COPY_STR|REXEC_IGNOREPOS|REXEC_NOT_FIRST))))
 	{
-	    SV * const targ = cx->sb_targ;
+	    SV *targ = cx->sb_targ;
 
 	    assert(cx->sb_strend >= s);
 	    if(cx->sb_strend > s) {
@@ -321,27 +324,32 @@ PP(pp_substcont)
 	    if (RX_MATCH_TAINTED(rx)) /* run time pattern taint, eg locale */
 		cx->sb_rxtainted |= SUBST_TAINT_PAT;
 
-#ifdef PERL_OLD_COPY_ON_WRITE
-	    if (SvIsCOW(targ)) {
-		sv_force_normal_flags(targ, SV_COW_DROP_PV);
-	    } else
-#endif
-	    {
-		SvPV_free(targ);
+	    if (pm->op_pmflags & PMf_NONDESTRUCT) {
+		PUSHs(dstr);
+		/* From here on down we're using the copy, and leaving the
+		   original untouched.  */
+		targ = dstr;
 	    }
-	    SvPV_set(targ, SvPVX(dstr));
-	    SvCUR_set(targ, SvCUR(dstr));
-	    SvLEN_set(targ, SvLEN(dstr));
-	    if (DO_UTF8(dstr))
-		SvUTF8_on(targ);
-	    SvPV_set(dstr, NULL);
+	    else {
+#ifdef PERL_OLD_COPY_ON_WRITE
+		if (SvIsCOW(targ)) {
+		    sv_force_normal_flags(targ, SV_COW_DROP_PV);
+		} else
+#endif
+		{
+		    SvPV_free(targ);
+		}
+		SvPV_set(targ, SvPVX(dstr));
+		SvCUR_set(targ, SvCUR(dstr));
+		SvLEN_set(targ, SvLEN(dstr));
+		if (DO_UTF8(dstr))
+		    SvUTF8_on(targ);
+		SvPV_set(dstr, NULL);
 
-	    if (pm->op_pmflags & PMf_NONDESTRUCT)
-		PUSHs(targ);
-	    else
 		mPUSHi(saviters - 1);
 
-	    (void)SvPOK_only_UTF8(targ);
+		(void)SvPOK_only_UTF8(targ);
+	    }
 
 	    /* update the taint state of various various variables in
 	     * preparation for final exit.
@@ -388,7 +396,8 @@ PP(pp_substcont)
     }
     cx->sb_s = RX_OFFS(rx)[0].end + orig;
     { /* Update the pos() information. */
-	SV * const sv = cx->sb_targ;
+	SV * const sv
+	    = (pm->op_pmflags & PMf_NONDESTRUCT) ? cx->sb_dstr : cx->sb_targ;
 	MAGIC *mg;
 	SvUPGRADE(sv, SVt_PVMG);
 	if (!(mg = mg_find(sv, PERL_MAGIC_regex_global))) {
@@ -418,7 +427,8 @@ PP(pp_substcont)
 
 	if (cx->sb_iters > 1 && (cx->sb_rxtainted & 
 			(SUBST_TAINT_STR|SUBST_TAINT_PAT|SUBST_TAINT_REPL)))
-	    SvTAINTED_on(cx->sb_targ);
+	    SvTAINTED_on((pm->op_pmflags & PMf_NONDESTRUCT)
+			 ? cx->sb_dstr : cx->sb_targ);
 	TAINT_NOT;
     }
     rxres_save(&cx->sb_rxres, rx);
@@ -523,54 +533,56 @@ S_rxres_free(pTHX_ void **rsp)
     }
 }
 
+#define FORM_NUM_BLANK (1<<30)
+#define FORM_NUM_POINT (1<<29)
+
 PP(pp_formline)
 {
     dVAR; dSP; dMARK; dORIGMARK;
     register SV * const tmpForm = *++MARK;
-    register U32 *fpc;
-    register char *t;
-    const char *f;
+    SV *formsv;		    /* contains text of original format */
+    register U32 *fpc;	    /* format ops program counter */
+    register char *t;	    /* current append position in target string */
+    const char *f;	    /* current position in format string */
     register I32 arg;
-    register SV *sv = NULL;
-    const char *item = NULL;
-    I32 itemsize  = 0;
-    I32 fieldsize = 0;
-    I32 lines = 0;
-    bool chopspace = (strchr(PL_chopset, ' ') != NULL);
-    const char *chophere = NULL;
-    char *linemark = NULL;
+    register SV *sv = NULL; /* current item */
+    const char *item = NULL;/* string value of current item */
+    I32 itemsize  = 0;	    /* length of current item, possibly truncated */
+    I32 fieldsize = 0;	    /* width of current field */
+    I32 lines = 0;	    /* number of lines that have been output */
+    bool chopspace = (strchr(PL_chopset, ' ') != NULL); /* does $: have space */
+    const char *chophere = NULL; /* where to chop current item */
+    STRLEN linemark = 0;    /* pos of start of line in output */
     NV value;
-    bool gotsome = FALSE;
+    bool gotsome = FALSE;   /* seen at least one non-blank item on this line */
     STRLEN len;
-    const STRLEN fudge = SvPOKp(tmpForm)
-			? (SvCUR(tmpForm) * (IN_BYTES ? 1 : 3) + 1) : 0;
+    STRLEN linemax;	    /* estimate of output size in bytes */
     bool item_is_utf8 = FALSE;
     bool targ_is_utf8 = FALSE;
-    SV * nsv = NULL;
-    OP * parseres = NULL;
     const char *fmt;
+    MAGIC *mg = NULL;
+    U8 *source;		    /* source of bytes to append */
+    STRLEN to_copy;	    /* how may bytes to append */
+    char trans;		    /* what chars to translate */
 
-    if (!SvMAGICAL(tmpForm) || !SvCOMPILED(tmpForm)) {
-	if (SvREADONLY(tmpForm)) {
-	    SvREADONLY_off(tmpForm);
-	    parseres = doparseform(tmpForm);
-	    SvREADONLY_on(tmpForm);
-	}
-	else
-	    parseres = doparseform(tmpForm);
-	if (parseres)
-	    return parseres;
-    }
+    mg = doparseform(tmpForm);
+
+    fpc = (U32*)mg->mg_ptr;
+    /* the actual string the format was compiled from.
+     * with overload etc, this may not match tmpForm */
+    formsv = mg->mg_obj;
+
+
     SvPV_force(PL_formtarget, len);
-    if (SvTAINTED(tmpForm))
+    if (SvTAINTED(tmpForm) || SvTAINTED(formsv))
 	SvTAINTED_on(PL_formtarget);
     if (DO_UTF8(PL_formtarget))
 	targ_is_utf8 = TRUE;
-    t = SvGROW(PL_formtarget, len + fudge + 1);  /* XXX SvCUR bad */
+    linemax = (SvCUR(formsv) * (IN_BYTES ? 1 : 3) + 1);
+    t = SvGROW(PL_formtarget, len + linemax + 1);
+    /* XXX from now onwards, SvCUR(PL_formtarget) is invalid */
     t += len;
-    f = SvPV_const(tmpForm, len);
-    /* need to jump to the next word */
-    fpc = (U32*)(f + len + WORD_ALIGN - SvCUR(tmpForm) % WORD_ALIGN);
+    f = SvPV_const(formsv, len);
 
     for (;;) {
 	DEBUG_f( {
@@ -604,31 +616,18 @@ PP(pp_formline)
 	} );
 	switch (*fpc++) {
 	case FF_LINEMARK:
-	    linemark = t;
+	    linemark = t - SvPVX(PL_formtarget);
 	    lines++;
 	    gotsome = FALSE;
 	    break;
 
 	case FF_LITERAL:
-	    arg = *fpc++;
-	    if (targ_is_utf8 && !SvUTF8(tmpForm)) {
-		SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
-		*t = '\0';
-		sv_catpvn_utf8_upgrade(PL_formtarget, f, arg, nsv);
-		t = SvEND(PL_formtarget);
-		f += arg;
-		break;
-	    }
-	    if (!targ_is_utf8 && DO_UTF8(tmpForm)) {
-		SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
-		*t = '\0';
-		sv_utf8_upgrade_flags_grow(PL_formtarget, SV_GMAGIC, fudge + 1);
-		t = SvEND(PL_formtarget);
-		targ_is_utf8 = TRUE;
-	    }
-	    while (arg--)
-		*t++ = *f++;
-	    break;
+	    to_copy = *fpc++;
+	    source = (U8 *)f;
+	    f += to_copy;
+	    trans = '~';
+	    item_is_utf8 = targ_is_utf8 ? !!DO_UTF8(formsv) : !!SvUTF8(formsv);
+	    goto append;
 
 	case FF_SKIP:
 	    f += *fpc++;
@@ -799,69 +798,17 @@ PP(pp_formline)
 	    break;
 
 	case FF_ITEM:
-	    {
-		const char *s = item;
-		arg = itemsize;
-		if (item_is_utf8) {
-		    if (!targ_is_utf8) {
-			SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
-			*t = '\0';
-			sv_utf8_upgrade_flags_grow(PL_formtarget, SV_GMAGIC,
-								    fudge + 1);
-			t = SvEND(PL_formtarget);
-			targ_is_utf8 = TRUE;
-		    }
-		    while (arg--) {
-			if (UTF8_IS_CONTINUED(*s)) {
-			    STRLEN skip = UTF8SKIP(s);
-			    switch (skip) {
-			    default:
-				Move(s,t,skip,char);
-				s += skip;
-				t += skip;
-				break;
-			    case 7: *t++ = *s++;
-			    case 6: *t++ = *s++;
-			    case 5: *t++ = *s++;
-			    case 4: *t++ = *s++;
-			    case 3: *t++ = *s++;
-			    case 2: *t++ = *s++;
-			    case 1: *t++ = *s++;
-			    }
-			}
-			else {
-			    if ( !((*t++ = *s++) & ~31) )
-				t[-1] = ' ';
-			}
-		    }
-		    break;
-		}
-		if (targ_is_utf8 && !item_is_utf8) {
-		    SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
-		    *t = '\0';
-		    sv_catpvn_utf8_upgrade(PL_formtarget, s, arg, nsv);
-		    for (; t < SvEND(PL_formtarget); t++) {
-#ifdef EBCDIC
-			const int ch = *t;
-			if (iscntrl(ch))
-#else
-			    if (!(*t & ~31))
-#endif
-				*t = ' ';
-		    }
-		    break;
-		}
-		while (arg--) {
-#ifdef EBCDIC
-		    const int ch = *t++ = *s++;
-		    if (iscntrl(ch))
-#else
-			if ( !((*t++ = *s++) & ~31) )
-#endif
-			    t[-1] = ' ';
-		}
-		break;
+	    to_copy = itemsize;
+	    source = (U8 *)item;
+	    trans = 1;
+	    if (item_is_utf8) {
+		/* convert to_copy from chars to bytes */
+		U8 *s = source;
+		while (to_copy--)
+		   s += UTF8SKIP(s);
+		to_copy = s - source;
 	    }
+	    goto append;
 
 	case FF_CHOP:
 	    {
@@ -881,73 +828,102 @@ PP(pp_formline)
 	    {
 		const bool oneline = fpc[-1] == FF_LINESNGL;
 		const char *s = item = SvPV_const(sv, len);
+		const char *const send = s + len;
+
 		item_is_utf8 = DO_UTF8(sv);
-		itemsize = len;
-		if (itemsize) {
-		    STRLEN to_copy = itemsize;
-		    const char *const send = s + len;
-		    const U8 *source = (const U8 *) s;
-		    U8 *tmp = NULL;
-
-		    gotsome = TRUE;
-		    chophere = s + itemsize;
-		    while (s < send) {
-			if (*s++ == '\n') {
-			    if (oneline) {
-				to_copy = s - SvPVX_const(sv) - 1;
-				chophere = s;
-				break;
-			    } else {
-				if (s == send) {
-				    itemsize--;
-				    to_copy--;
-				} else
-				    lines++;
-			    }
-			}
-		    }
-		    if (targ_is_utf8 && !item_is_utf8) {
-			source = tmp = bytes_to_utf8(source, &to_copy);
-			SvCUR_set(PL_formtarget,
-				  t - SvPVX_const(PL_formtarget));
-		    } else {
-			if (item_is_utf8 && !targ_is_utf8) {
-			    /* Upgrade targ to UTF8, and then we reduce it to
-			       a problem we have a simple solution for.  */
-			    SvCUR_set(PL_formtarget,
-				      t - SvPVX_const(PL_formtarget));
-			    targ_is_utf8 = TRUE;
-			    /* Don't need get magic.  */
-			    sv_utf8_upgrade_nomg(PL_formtarget);
+		if (!len)
+		    break;
+		trans = 0;
+		gotsome = TRUE;
+		chophere = s + len;
+		source = (U8 *) s;
+		to_copy = len;
+		while (s < send) {
+		    if (*s++ == '\n') {
+			if (oneline) {
+			    to_copy = s - SvPVX_const(sv) - 1;
+			    chophere = s;
+			    break;
 			} else {
-			    SvCUR_set(PL_formtarget,
-				      t - SvPVX_const(PL_formtarget));
+			    if (s == send) {
+				to_copy--;
+			    } else
+				lines++;
 			}
-
-			/* Easy. They agree.  */
-			assert (item_is_utf8 == targ_is_utf8);
-		    }
-		    SvGROW(PL_formtarget,
-			   SvCUR(PL_formtarget) + to_copy + fudge + 1);
-		    t = SvPVX(PL_formtarget) + SvCUR(PL_formtarget);
-
-		    Copy(source, t, to_copy, char);
-		    t += to_copy;
-		    SvCUR_set(PL_formtarget, SvCUR(PL_formtarget) + to_copy);
-		    if (item_is_utf8) {
-			if (SvGMAGICAL(sv)) {
-			    /* Mustn't call sv_pos_b2u() as it does a second
-			       mg_get(). Is this a bug? Do we need a _flags()
-			       variant? */
-			    itemsize = utf8_length(source, source + itemsize);
-			} else {
-			    sv_pos_b2u(sv, &itemsize);
-			}
-			assert(!tmp);
-		    } else if (tmp) {
-			Safefree(tmp);
 		    }
 		}
+	    }
+
+	append:
+	    /* append to_copy bytes from source to PL_formstring.
+	     * item_is_utf8 implies source is utf8.
+	     * if trans, translate certain characters during the copy */
+	    {
+		U8 *tmp = NULL;
+		STRLEN grow = 0;
+
+		SvCUR_set(PL_formtarget,
+			  t - SvPVX_const(PL_formtarget));
+
+		if (targ_is_utf8 && !item_is_utf8) {
+		    source = tmp = bytes_to_utf8(source, &to_copy);
+		} else {
+		    if (item_is_utf8 && !targ_is_utf8) {
+			U8 *s;
+			/* Upgrade targ to UTF8, and then we reduce it to
+			   a problem we have a simple solution for.
+			   Don't need get magic.  */
+			sv_utf8_upgrade_nomg(PL_formtarget);
+			targ_is_utf8 = TRUE;
+			/* re-calculate linemark */
+			s = (U8*)SvPVX(PL_formtarget);
+			/* the bytes we initially allocated to append the
+			 * whole line may have been gobbled up during the
+			 * upgrade, so allocate a whole new line's worth
+			 * for safety */
+			grow = linemax;
+			while (linemark--)
+			    s += UTF8SKIP(s);
+			linemark = s - (U8*)SvPVX(PL_formtarget);
+		    }
+		    /* Easy. They agree.  */
+		    assert (item_is_utf8 == targ_is_utf8);
+		}
+		if (!trans)
+		    /* @* and ^* are the only things that can exceed
+		     * the linemax, so grow by the output size, plus
+		     * a whole new form's worth in case of any further
+		     * output */
+		    grow = linemax + to_copy;
+		if (grow)
+		    SvGROW(PL_formtarget, SvCUR(PL_formtarget) + grow + 1);
+		t = SvPVX(PL_formtarget) + SvCUR(PL_formtarget);
+
+		Copy(source, t, to_copy, char);
+		if (trans) {
+		    /* blank out ~ or control chars, depending on trans.
+		     * works on bytes not chars, so relies on not
+		     * matching utf8 continuation bytes */
+		    U8 *s = (U8*)t;
+		    U8 *send = s + to_copy;
+		    while (s < send) {
+			const int ch = *s;
+			if (trans == '~' ? (ch == '~') :
+#ifdef EBCDIC
+			       iscntrl(ch)
+#else
+			       (!(ch & ~31))
+#endif
+			)
+			    *s = ' ';
+			s++;
+		    }
+		}
+
+		t += to_copy;
+		SvCUR_set(PL_formtarget, SvCUR(PL_formtarget) + to_copy);
+		if (tmp)
+		    Safefree(tmp);
 		break;
 	    }
 
@@ -955,11 +931,11 @@ PP(pp_formline)
 	    arg = *fpc++;
 #if defined(USE_LONG_DOUBLE)
 	    fmt = (const char *)
-		((arg & 256) ?
+		((arg & FORM_NUM_POINT) ?
 		 "%#0*.*" PERL_PRIfldbl : "%0*.*" PERL_PRIfldbl);
 #else
 	    fmt = (const char *)
-		((arg & 256) ?
+		((arg & FORM_NUM_POINT) ?
 		 "%#0*.*f"              : "%0*.*f");
 #endif
 	    goto ff_dec;
@@ -967,15 +943,15 @@ PP(pp_formline)
 	    arg = *fpc++;
 #if defined(USE_LONG_DOUBLE)
  	    fmt = (const char *)
-		((arg & 256) ? "%#*.*" PERL_PRIfldbl : "%*.*" PERL_PRIfldbl);
+		((arg & FORM_NUM_POINT) ? "%#*.*" PERL_PRIfldbl : "%*.*" PERL_PRIfldbl);
 #else
             fmt = (const char *)
-		((arg & 256) ? "%#*.*f"              : "%*.*f");
+		((arg & FORM_NUM_POINT) ? "%#*.*f"              : "%*.*f");
 #endif
 	ff_dec:
 	    /* If the field is marked with ^ and the value is undefined,
 	       blank it out. */
-	    if ((arg & 512) && !SvOK(sv)) {
+	    if ((arg & FORM_NUM_BLANK) && !SvOK(sv)) {
 		arg = fieldsize;
 		while (arg--)
 		    *t++ = ' ';
@@ -993,7 +969,8 @@ PP(pp_formline)
 	    /* Formats aren't yet marked for locales, so assume "yes". */
 	    {
 		STORE_NUMERIC_STANDARD_SET_LOCAL();
-		my_snprintf(t, SvLEN(PL_formtarget) - (t - SvPVX(PL_formtarget)), fmt, (int) fieldsize, (int) arg & 255, value);
+		arg &= ~(FORM_NUM_POINT|FORM_NUM_BLANK);
+		my_snprintf(t, SvLEN(PL_formtarget) - (t - SvPVX(PL_formtarget)), fmt, (int) fieldsize, (int) arg, value);
 		RESTORE_NUMERIC_STANDARD();
 	    }
 	    t += fieldsize;
@@ -1001,7 +978,7 @@ PP(pp_formline)
 
 	case FF_NEWLINE:
 	    f++;
-	    while (t-- > linemark && *t == ' ') ;
+	    while (t-- > (SvPVX(PL_formtarget) + linemark) && *t == ' ') ;
 	    t++;
 	    *t++ = '\n';
 	    break;
@@ -1010,18 +987,12 @@ PP(pp_formline)
 	    arg = *fpc++;
 	    if (gotsome) {
 		if (arg) {		/* repeat until fields exhausted? */
-		    *t = '\0';
-		    SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
-		    lines += FmLINES(PL_formtarget);
-		    if (targ_is_utf8)
-			SvUTF8_on(PL_formtarget);
-		    FmLINES(PL_formtarget) = lines;
-		    SP = ORIGMARK;
-		    RETURNOP(cLISTOP->op_first);
+		    fpc--;
+		    goto end;
 		}
 	    }
 	    else {
-		t = linemark;
+		t = SvPVX(PL_formtarget) + linemark;
 		lines--;
 	    }
 	    break;
@@ -1054,13 +1025,18 @@ PP(pp_formline)
 		break;
 	    }
 	case FF_END:
+	end:
+	    assert(t < SvPVX_const(PL_formtarget) + SvLEN(PL_formtarget));
 	    *t = '\0';
 	    SvCUR_set(PL_formtarget, t - SvPVX_const(PL_formtarget));
 	    if (targ_is_utf8)
 		SvUTF8_on(PL_formtarget);
 	    FmLINES(PL_formtarget) += lines;
 	    SP = ORIGMARK;
-	    RETPUSHYES;
+	    if (fpc[-1] == FF_BLANK)
+		RETURNOP(cLISTOP->op_first);
+	    else
+		RETPUSHYES;
 	}
     }
 }
@@ -1493,6 +1469,20 @@ Perl_is_lvalue_sub(pTHX)
 	return 0;
 }
 
+/* only used by PUSHSUB */
+I32
+Perl_was_lvalue_sub(pTHX)
+{
+    dVAR;
+    const I32 cxix = dopoptosub(cxstack_ix-1);
+    assert(cxix >= 0);  /* We should only be called from inside subs */
+
+    if (CxLVAL(cxstack + cxix) && CvLVALUE(cxstack[cxix].blk_sub.cv))
+	return CxLVAL(cxstack + cxix);
+    else
+	return 0;
+}
+
 STATIC I32
 S_dopoptosub_at(pTHX_ const PERL_CONTEXT *cxstk, I32 startingblock)
 {
@@ -1614,6 +1604,9 @@ Perl_dounwind(pTHX_ I32 cxix)
 {
     dVAR;
     I32 optype;
+
+    if (!PL_curstackinfo) /* can happen if die during thread cloning */
+	return;
 
     while (cxstack_ix > cxix) {
 	SV *sv;
@@ -2071,6 +2064,79 @@ PP(pp_dbstate)
 	return NORMAL;
 }
 
+STATIC SV **
+S_adjust_stack_on_leave(pTHX_ SV **newsp, SV **sp, SV **mark, I32 gimme, U32 flags)
+{
+    PERL_ARGS_ASSERT_ADJUST_STACK_ON_LEAVE;
+
+    if (gimme == G_SCALAR) {
+	if (MARK < SP)
+	    *++newsp = (SvFLAGS(*SP) & flags) ? *SP : sv_mortalcopy(*SP);
+	else {
+	    /* MEXTEND() only updates MARK, so reuse it instead of newsp. */
+	    MARK = newsp;
+	    MEXTEND(MARK, 1);
+	    *++MARK = &PL_sv_undef;
+	    return MARK;
+	}
+    }
+    else if (gimme == G_ARRAY) {
+	/* in case LEAVE wipes old return values */
+	while (++MARK <= SP) {
+	    if (SvFLAGS(*MARK) & flags)
+		*++newsp = *MARK;
+	    else {
+		*++newsp = sv_mortalcopy(*MARK);
+		TAINT_NOT;	/* Each item is independent */
+	    }
+	}
+	/* When this function was called with MARK == newsp, we reach this
+	 * point with SP == newsp. */
+    }
+
+    return newsp;
+}
+
+PP(pp_enter)
+{
+    dVAR; dSP;
+    register PERL_CONTEXT *cx;
+    I32 gimme = GIMME_V;
+
+    ENTER_with_name("block");
+
+    SAVETMPS;
+    PUSHBLOCK(cx, CXt_BLOCK, SP);
+
+    RETURN;
+}
+
+PP(pp_leave)
+{
+    dVAR; dSP;
+    register PERL_CONTEXT *cx;
+    SV **newsp;
+    PMOP *newpm;
+    I32 gimme;
+
+    if (PL_op->op_flags & OPf_SPECIAL) {
+	cx = &cxstack[cxstack_ix];
+	cx->blk_oldpm = PL_curpm;	/* fake block should preserve $1 et al */
+    }
+
+    POPBLOCK(cx,newpm);
+
+    gimme = OP_GIMME(PL_op, (cxstack_ix >= 0) ? gimme : G_SCALAR);
+
+    TAINT_NOT;
+    SP = adjust_stack_on_leave(newsp, SP, newsp, gimme, SVs_PADTMP|SVs_TEMP);
+    PL_curpm = newpm;	/* Don't pop $1 et al till now */
+
+    LEAVE_with_name("block");
+
+    RETURN;
+}
+
 PP(pp_enteriter)
 {
     dVAR; dSP; dMARK;
@@ -2224,21 +2290,7 @@ PP(pp_leaveloop)
     newsp = PL_stack_base + cx->blk_loop.resetsp;
 
     TAINT_NOT;
-    if (gimme == G_VOID)
-	NOOP;
-    else if (gimme == G_SCALAR) {
-	if (mark < SP)
-	    *++newsp = sv_mortalcopy(*SP);
-	else
-	    *++newsp = &PL_sv_undef;
-    }
-    else {
-	while (mark < SP) {
-	    *++newsp = sv_mortalcopy(*++mark);
-	    TAINT_NOT;		/* Each item is independent */
-	}
-    }
-    SP = newsp;
+    SP = adjust_stack_on_leave(newsp, SP, MARK, gimme, 0);
     PUTBACK;
 
     POPLOOP(cx);	/* Stack values are safe: release loop vars ... */
@@ -2250,12 +2302,121 @@ PP(pp_leaveloop)
     return NORMAL;
 }
 
+STATIC void
+S_return_lvalues(pTHX_ SV **mark, SV **sp, SV **newsp, I32 gimme,
+                       PERL_CONTEXT *cx, PMOP *newpm)
+{
+    const bool ref = !!(CxLVAL(cx) & OPpENTERSUB_INARGS);
+    if (gimme == G_SCALAR) {
+	if (CxLVAL(cx) && !ref) {     /* Leave it as it is if we can. */
+	    SV *sv;
+	    const char *what = NULL;
+	    if (MARK < SP) {
+		assert(MARK+1 == SP);
+		if ((SvPADTMP(TOPs) ||
+		     (SvFLAGS(TOPs) & (SVf_READONLY | SVf_FAKE))
+		       == SVf_READONLY
+		    ) &&
+		    !SvSMAGICAL(TOPs)) {
+		    what =
+			SvREADONLY(TOPs) ? (TOPs == &PL_sv_undef) ? "undef"
+			: "a readonly value" : "a temporary";
+		}
+		else goto copy_sv;
+	    }
+	    else {
+		/* sub:lvalue{} will take us here. */
+		what = "undef";
+	    }
+	    LEAVE;
+	    cxstack_ix--;
+	    POPSUB(cx,sv);
+	    PL_curpm = newpm;
+	    LEAVESUB(sv);
+	    Perl_croak(aTHX_
+	              "Can't return %s from lvalue subroutine", what
+	    );
+	}
+	if (MARK < SP) {
+	      copy_sv:
+		if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
+			*++newsp = SvREFCNT_inc(*SP);
+			FREETMPS;
+			sv_2mortal(*newsp);
+		}
+		else
+		    *++newsp =
+		        !SvTEMP(*SP)
+		          ? sv_2mortal(SvREFCNT_inc_simple_NN(*SP))
+		          : *SP;
+	}
+	else {
+	    EXTEND(newsp,1);
+	    *++newsp = &PL_sv_undef;
+	}
+	if (CxLVAL(cx) & OPpENTERSUB_DEREF) {
+	    SvGETMAGIC(TOPs);
+	    if (!SvOK(TOPs)) {
+		U8 deref_type;
+		if (cx->blk_sub.retop->op_type == OP_RV2SV)
+		    deref_type = OPpDEREF_SV;
+		else if (cx->blk_sub.retop->op_type == OP_RV2AV)
+		    deref_type = OPpDEREF_AV;
+		else {
+		    assert(cx->blk_sub.retop->op_type == OP_RV2HV);
+		    deref_type = OPpDEREF_HV;
+		}
+		vivify_ref(TOPs, deref_type);
+	    }
+	}
+    }
+    else if (gimme == G_ARRAY) {
+	assert (!(CxLVAL(cx) & OPpENTERSUB_DEREF));
+	if (ref || !CxLVAL(cx))
+	    while (++MARK <= SP)
+		*++newsp =
+		     SvTEMP(*MARK)
+		       ? *MARK
+		       : ref && SvFLAGS(*MARK) & SVs_PADTMP
+		           ? sv_mortalcopy(*MARK)
+		           : sv_2mortal(SvREFCNT_inc_simple_NN(*MARK));
+	else while (++MARK <= SP) {
+	    if (*MARK != &PL_sv_undef
+		    && (SvPADTMP(*MARK)
+		       || (SvFLAGS(*MARK) & (SVf_READONLY|SVf_FAKE))
+		             == SVf_READONLY
+		       )
+	    ) {
+		    SV *sv;
+		    /* Might be flattened array after $#array =  */
+		    PUTBACK;
+		    LEAVE;
+		    cxstack_ix--;
+		    POPSUB(cx,sv);
+		    PL_curpm = newpm;
+		    LEAVESUB(sv);
+		    Perl_croak(aTHX_
+			"Can't return a %s from lvalue subroutine",
+			SvREADONLY(TOPs) ? "readonly value" : "temporary");
+	    }
+	    else
+		*++newsp =
+		    SvTEMP(*MARK)
+		       ? *MARK
+		       : sv_2mortal(SvREFCNT_inc_simple_NN(*MARK));
+	}
+    }
+    PL_stack_sp = newsp;
+}
+
 PP(pp_return)
 {
     dVAR; dSP; dMARK;
     register PERL_CONTEXT *cx;
     bool popsub2 = FALSE;
     bool clear_errsv = FALSE;
+    bool lval = FALSE;
+    bool gmagic = FALSE;
     I32 gimme;
     SV **newsp;
     PMOP *newpm;
@@ -2296,7 +2457,9 @@ PP(pp_return)
     switch (CxTYPE(cx)) {
     case CXt_SUB:
 	popsub2 = TRUE;
+	lval = !!CvLVALUE(cx->blk_sub.cv);
 	retop = cx->blk_sub.retop;
+	gmagic = CxLVAL(cx) & OPpENTERSUB_DEREF;
 	cxstack_ix++; /* preserve cx entry on stack for use by POPSUB */
 	break;
     case CXt_EVAL:
@@ -2326,14 +2489,17 @@ PP(pp_return)
     }
 
     TAINT_NOT;
-    if (gimme == G_SCALAR) {
+    if (lval) S_return_lvalues(aTHX_ MARK, SP, newsp, gimme, cx, newpm);
+    else {
+      if (gimme == G_SCALAR) {
 	if (MARK < SP) {
 	    if (popsub2) {
 		if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		    if (SvTEMP(TOPs)) {
+		    if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
 			*++newsp = SvREFCNT_inc(*SP);
 			FREETMPS;
 			sv_2mortal(*newsp);
+			if (gmagic) SvGETMAGIC(*newsp);
 		    }
 		    else {
 			sv = SvREFCNT_inc(*SP);	/* FREETMPS could clobber it */
@@ -2342,23 +2508,28 @@ PP(pp_return)
 			SvREFCNT_dec(sv);
 		    }
 		}
+		else if (SvTEMP(*SP) && SvREFCNT(*SP) == 1) {
+		    *++newsp = *SP;
+		    if (gmagic) SvGETMAGIC(*SP);
+		}
 		else
-		    *++newsp = (SvTEMP(*SP)) ? *SP : sv_mortalcopy(*SP);
+		    *++newsp = sv_mortalcopy(*SP);
 	    }
 	    else
 		*++newsp = sv_mortalcopy(*SP);
 	}
 	else
 	    *++newsp = &PL_sv_undef;
-    }
-    else if (gimme == G_ARRAY) {
+      }
+      else if (gimme == G_ARRAY) {
 	while (++MARK <= SP) {
-	    *++newsp = (popsub2 && SvTEMP(*MARK))
+	    *++newsp = popsub2 && SvTEMP(*MARK) && SvREFCNT(*MARK) == 1
 			? *MARK : sv_mortalcopy(*MARK);
 	    TAINT_NOT;		/* Each item is independent */
 	}
+      }
+      PL_stack_sp = newsp;
     }
-    PL_stack_sp = newsp;
 
     LEAVE;
     /* Stack values are safe: */
@@ -2375,6 +2546,37 @@ PP(pp_return)
 	CLEAR_ERRSV();
     }
     return retop;
+}
+
+/* This duplicates parts of pp_leavesub, so that it can share code with
+ * pp_return */
+PP(pp_leavesublv)
+{
+    dVAR; dSP;
+    SV **newsp;
+    PMOP *newpm;
+    I32 gimme;
+    register PERL_CONTEXT *cx;
+    SV *sv;
+
+    if (CxMULTICALL(&cxstack[cxstack_ix]))
+	return 0;
+
+    POPBLOCK(cx,newpm);
+    cxstack_ix++; /* temporarily protect top context */
+    assert(CvLVALUE(cx->blk_sub.cv));
+
+    TAINT_NOT;
+
+    S_return_lvalues(aTHX_ newsp, SP, newsp, gimme, cx, newpm);
+
+    LEAVE;
+    cxstack_ix--;
+    POPSUB(cx,sv);	/* Stack values are safe: release CV and @_ ... */
+    PL_curpm = newpm;	/* ... and pop $1 et al */
+
+    LEAVESUB(sv);
+    return cx->blk_sub.retop;
 }
 
 PP(pp_last)
@@ -2434,21 +2636,8 @@ PP(pp_last)
     }
 
     TAINT_NOT;
-    if (gimme == G_SCALAR) {
-	if (MARK < SP)
-	    *++newsp = ((pop2 == CXt_SUB) && SvTEMP(*SP))
-			? *SP : sv_mortalcopy(*SP);
-	else
-	    *++newsp = &PL_sv_undef;
-    }
-    else if (gimme == G_ARRAY) {
-	while (++MARK <= SP) {
-	    *++newsp = ((pop2 == CXt_SUB) && SvTEMP(*MARK))
-			? *MARK : sv_mortalcopy(*MARK);
-	    TAINT_NOT;		/* Each item is independent */
-	}
-    }
-    SP = newsp;
+    SP = adjust_stack_on_leave(newsp, SP, MARK, gimme,
+				pop2 == CXt_SUB ? SVs_TEMP : 0);
     PUTBACK;
 
     LEAVE;
@@ -2696,8 +2885,8 @@ PP(pp_goto)
 	    SAVEFREESV(cv); /* later, undo the 'avoid premature free' hack */
 	    if (CvISXSUB(cv)) {
 		OP* const retop = cx->blk_sub.retop;
-		SV **newsp;
-		I32 gimme;
+		SV **newsp __attribute__unused__;
+		I32 gimme __attribute__unused__;
 		if (reified) {
 		    I32 index;
 		    for (index=0; index<items; index++)
@@ -3467,9 +3656,10 @@ S_doopen_pm(pTHX_ SV *name)
     PERL_ARGS_ASSERT_DOOPEN_PM;
 
     if (namelen > 3 && memEQs(p + namelen - 3, 3, ".pm")) {
-	SV *const pmcsv = sv_mortalcopy(name);
+	SV *const pmcsv = sv_newmortal();
 	Stat_t pmcstat;
 
+	SvSetSV_nosteal(pmcsv,name);
 	sv_catpvn(pmcsv, "c", 1);
 
 	if (PerlLIO_stat(SvPV_nolen_const(pmcsv), &pmcstat) >= 0)
@@ -3991,14 +4181,14 @@ PP(pp_entereval)
     SAVECOMPILEWARNINGS();
     PL_compiling.cop_warnings = DUP_WARNINGS(PL_curcop->cop_warnings);
     cophh_free(CopHINTHASH_get(&PL_compiling));
-    if (Perl_fetch_cop_label(aTHX_ PL_curcop, NULL, NULL)) {
+    if (Perl_cop_fetch_label(aTHX_ PL_curcop, NULL, NULL)) {
 	/* The label, if present, is the first entry on the chain. So rather
 	   than writing a blank label in front of it (which involves an
 	   allocation), just use the next entry in the chain.  */
 	PL_compiling.cop_hints_hash
 	    = cophh_copy(PL_curcop->cop_hints_hash->refcounted_he_next);
 	/* Check the assumption that this removed the label.  */
-	assert(Perl_fetch_cop_label(aTHX_ &PL_compiling, NULL, NULL) == NULL);
+	assert(Perl_cop_fetch_label(aTHX_ &PL_compiling, NULL, NULL) == NULL);
     }
     else
 	PL_compiling.cop_hints_hash = cophh_copy(PL_curcop->cop_hints_hash);
@@ -4052,7 +4242,6 @@ PP(pp_entereval)
 PP(pp_leaveeval)
 {
     dVAR; dSP;
-    register SV **mark;
     SV **newsp;
     PMOP *newpm;
     I32 gimme;
@@ -4069,31 +4258,8 @@ PP(pp_leaveeval)
     retop = cx->blk_eval.retop;
 
     TAINT_NOT;
-    if (gimme == G_VOID)
-	MARK = newsp;
-    else if (gimme == G_SCALAR) {
-	MARK = newsp + 1;
-	if (MARK <= SP) {
-	    if (SvFLAGS(TOPs) & SVs_TEMP)
-		*MARK = TOPs;
-	    else
-		*MARK = sv_mortalcopy(TOPs);
-	}
-	else {
-	    MEXTEND(mark,0);
-	    *MARK = &PL_sv_undef;
-	}
-	SP = MARK;
-    }
-    else {
-	/* in case LEAVE wipes old return values */
-	for (mark = newsp + 1; mark <= SP; mark++) {
-	    if (!(SvFLAGS(*mark) & SVs_TEMP)) {
-		*mark = sv_mortalcopy(*mark);
-		TAINT_NOT;	/* Each item is independent */
-	    }
-	}
-    }
+    SP = adjust_stack_on_leave((gimme == G_VOID) ? SP : newsp, SP, newsp,
+				gimme, SVs_TEMP);
     PL_curpm = newpm;	/* Don't pop $1 et al till now */
 
 #ifdef DEBUGGING
@@ -4190,33 +4356,7 @@ PP(pp_leavetry)
     PERL_UNUSED_VAR(optype);
 
     TAINT_NOT;
-    if (gimme == G_VOID)
-	SP = newsp;
-    else if (gimme == G_SCALAR) {
-	register SV **mark;
-	MARK = newsp + 1;
-	if (MARK <= SP) {
-	    if (SvFLAGS(TOPs) & (SVs_PADTMP|SVs_TEMP))
-		*MARK = TOPs;
-	    else
-		*MARK = sv_mortalcopy(TOPs);
-	}
-	else {
-	    MEXTEND(mark,0);
-	    *MARK = &PL_sv_undef;
-	}
-	SP = MARK;
-    }
-    else {
-	/* in case LEAVE wipes old return values */
-	register SV **mark;
-	for (mark = newsp + 1; mark <= SP; mark++) {
-	    if (!(SvFLAGS(*mark) & (SVs_PADTMP|SVs_TEMP))) {
-		*mark = sv_mortalcopy(*mark);
-		TAINT_NOT;	/* Each item is independent */
-	    }
-	}
-    }
+    SP = adjust_stack_on_leave(newsp, SP, newsp, gimme, SVs_PADTMP|SVs_TEMP);
     PL_curpm = newpm;	/* Don't pop $1 et al till now */
 
     LEAVE_with_name("eval_scope");
@@ -4233,7 +4373,7 @@ PP(pp_entergiven)
     ENTER_with_name("given");
     SAVETMPS;
 
-    sv_setsv(PAD_SV(PL_op->op_targ), POPs);
+    sv_setsv_mg(PAD_SV(PL_op->op_targ), POPs);
 
     PUSHBLOCK(cx, CXt_GIVEN, SP);
     PUSHGIVEN(cx);
@@ -4254,33 +4394,7 @@ PP(pp_leavegiven)
     assert(CxTYPE(cx) == CXt_GIVEN);
 
     TAINT_NOT;
-    if (gimme == G_VOID)
-	SP = newsp;
-    else if (gimme == G_SCALAR) {
-	register SV **mark;
-	MARK = newsp + 1;
-	if (MARK <= SP) {
-	    if (SvFLAGS(TOPs) & (SVs_PADTMP|SVs_TEMP))
-		*MARK = TOPs;
-	    else
-		*MARK = sv_mortalcopy(TOPs);
-	}
-	else {
-	    MEXTEND(mark,0);
-	    *MARK = &PL_sv_undef;
-	}
-	SP = MARK;
-    }
-    else {
-	/* in case LEAVE wipes old return values */
-	register SV **mark;
-	for (mark = newsp + 1; mark <= SP; mark++) {
-	    if (!(SvFLAGS(*mark) & (SVs_PADTMP|SVs_TEMP))) {
-		*mark = sv_mortalcopy(*mark);
-		TAINT_NOT;	/* Each item is independent */
-	    }
-	}
-    }
+    SP = adjust_stack_on_leave(newsp, SP, newsp, gimme, SVs_PADTMP|SVs_TEMP);
     PL_curpm = newpm;	/* Don't pop $1 et al till now */
 
     LEAVE_with_name("given");
@@ -4830,7 +4944,7 @@ PP(pp_enterwhen)
     if ((0 == (PL_op->op_flags & OPf_SPECIAL)) && !SvTRUEx(POPs))
 	RETURNOP(cLOGOP->op_other->op_next);
 
-    ENTER_with_name("eval");
+    ENTER_with_name("when");
     SAVETMPS;
 
     PUSHBLOCK(cx, CXt_WHEN, SP);
@@ -4842,43 +4956,71 @@ PP(pp_enterwhen)
 PP(pp_leavewhen)
 {
     dVAR; dSP;
+    I32 cxix;
     register PERL_CONTEXT *cx;
     I32 gimme;
     SV **newsp;
     PMOP *newpm;
 
+    cxix = dopoptogiven(cxstack_ix);
+    if (cxix < 0)
+	DIE(aTHX_ "Can't use when() outside a topicalizer");
+
     POPBLOCK(cx,newpm);
     assert(CxTYPE(cx) == CXt_WHEN);
 
-    SP = newsp;
-    PUTBACK;
-
+    TAINT_NOT;
+    SP = adjust_stack_on_leave(newsp, SP, newsp, gimme, SVs_PADTMP|SVs_TEMP);
     PL_curpm = newpm;   /* pop $1 et al */
 
-    LEAVE_with_name("eval");
-    return NORMAL;
+    LEAVE_with_name("when");
+
+    if (cxix < cxstack_ix)
+        dounwind(cxix);
+
+    cx = &cxstack[cxix];
+
+    if (CxFOREACH(cx)) {
+	/* clear off anything above the scope we're re-entering */
+	I32 inner = PL_scopestack_ix;
+
+	TOPBLOCK(cx);
+	if (PL_scopestack_ix < inner)
+	    leave_scope(PL_scopestack[PL_scopestack_ix]);
+	PL_curcop = cx->blk_oldcop;
+
+	return cx->blk_loop.my_op->op_nextop;
+    }
+    else
+	RETURNOP(cx->blk_givwhen.leave_op);
 }
 
 PP(pp_continue)
 {
-    dVAR;   
+    dVAR; dSP;
     I32 cxix;
     register PERL_CONTEXT *cx;
-    I32 inner;
+    I32 gimme;
+    SV **newsp;
+    PMOP *newpm;
+
+    PERL_UNUSED_VAR(gimme);
     
     cxix = dopoptowhen(cxstack_ix); 
     if (cxix < 0)   
 	DIE(aTHX_ "Can't \"continue\" outside a when block");
+
     if (cxix < cxstack_ix)
         dounwind(cxix);
     
-    /* clear off anything above the scope we're re-entering */
-    inner = PL_scopestack_ix;
-    TOPBLOCK(cx);
-    if (PL_scopestack_ix < inner)
-        leave_scope(PL_scopestack[PL_scopestack_ix]);
-    PL_curcop = cx->blk_oldcop;
-    return cx->blk_givwhen.leave_op;
+    POPBLOCK(cx,newpm);
+    assert(CxTYPE(cx) == CXt_WHEN);
+
+    SP = newsp;
+    PL_curpm = newpm;   /* pop $1 et al */
+
+    LEAVE_with_name("when");
+    RETURNOP(cx->blk_givwhen.leave_op->op_next);
 }
 
 PP(pp_break)
@@ -4886,59 +5028,83 @@ PP(pp_break)
     dVAR;   
     I32 cxix;
     register PERL_CONTEXT *cx;
-    I32 inner;
-    dSP;
 
     cxix = dopoptogiven(cxstack_ix); 
-    if (cxix < 0) {
-	if (PL_op->op_flags & OPf_SPECIAL)
-	    DIE(aTHX_ "Can't use when() outside a topicalizer");
-	else
-	    DIE(aTHX_ "Can't \"break\" outside a given block");
-    }
-    if (CxFOREACH(&cxstack[cxix]) && (0 == (PL_op->op_flags & OPf_SPECIAL)))
+    if (cxix < 0)
+	DIE(aTHX_ "Can't \"break\" outside a given block");
+
+    cx = &cxstack[cxix];
+    if (CxFOREACH(cx))
 	DIE(aTHX_ "Can't \"break\" in a loop topicalizer");
 
     if (cxix < cxstack_ix)
         dounwind(cxix);
-    
-    /* clear off anything above the scope we're re-entering */
-    inner = PL_scopestack_ix;
-    TOPBLOCK(cx);
-    if (PL_scopestack_ix < inner)
-        leave_scope(PL_scopestack[PL_scopestack_ix]);
-    PL_curcop = cx->blk_oldcop;
 
-    if (CxFOREACH(cx))
-	return (cx)->blk_loop.my_op->op_nextop;
-    else
-	/* RETURNOP calls PUTBACK which restores the old old sp */
-	RETURNOP(cx->blk_givwhen.leave_op);
+    /* Restore the sp at the time we entered the given block */
+    TOPBLOCK(cx);
+
+    return cx->blk_givwhen.leave_op;
 }
 
-STATIC OP *
+static MAGIC *
 S_doparseform(pTHX_ SV *sv)
 {
     STRLEN len;
-    register char *s = SvPV_force(sv, len);
-    register char * const send = s + len;
-    register char *base = NULL;
-    register I32 skipspaces = 0;
-    bool noblank   = FALSE;
-    bool repeat    = FALSE;
-    bool postspace = FALSE;
+    register char *s = SvPV(sv, len);
+    register char *send;
+    register char *base = NULL; /* start of current field */
+    register I32 skipspaces = 0; /* number of contiguous spaces seen */
+    bool noblank   = FALSE; /* ~ or ~~ seen on this line */
+    bool repeat    = FALSE; /* ~~ seen on this line */
+    bool postspace = FALSE; /* a text field may need right padding */
     U32 *fops;
     register U32 *fpc;
-    U32 *linepc = NULL;
+    U32 *linepc = NULL;	    /* position of last FF_LINEMARK */
     register I32 arg;
-    bool ischop;
-    bool unchopnum = FALSE;
+    bool ischop;	    /* it's a ^ rather than a @ */
+    bool unchopnum = FALSE; /* at least one @ (i.e. non-chop) num field seen */
     int maxops = 12; /* FF_LINEMARK + FF_END + 10 (\0 without preceding \n) */
+    MAGIC *mg = NULL;
+    SV *sv_copy;
 
     PERL_ARGS_ASSERT_DOPARSEFORM;
 
     if (len == 0)
 	Perl_croak(aTHX_ "Null picture in formline");
+
+    if (SvTYPE(sv) >= SVt_PVMG) {
+	/* This might, of course, still return NULL.  */
+	mg = mg_find(sv, PERL_MAGIC_fm);
+    } else {
+	sv_upgrade(sv, SVt_PVMG);
+    }
+
+    if (mg) {
+	/* still the same as previously-compiled string? */
+	SV *old = mg->mg_obj;
+	if ( !(!!SvUTF8(old) ^ !!SvUTF8(sv))
+	      && len == SvCUR(old)
+	      && strnEQ(SvPVX(old), SvPVX(sv), len)
+	) {
+	    DEBUG_f(PerlIO_printf(Perl_debug_log,"Re-using compiled format\n"));
+	    return mg;
+	}
+
+	DEBUG_f(PerlIO_printf(Perl_debug_log, "Re-compiling format\n"));
+	Safefree(mg->mg_ptr);
+	mg->mg_ptr = NULL;
+	SvREFCNT_dec(old);
+	mg->mg_obj = NULL;
+    }
+    else {
+	DEBUG_f(PerlIO_printf(Perl_debug_log, "Compiling format\n"));
+	mg = sv_magicext(sv, NULL, PERL_MAGIC_fm, &PL_vtbl_fm, NULL, 0);
+    }
+
+    sv_copy = newSVpvn_utf8(s, len, SvUTF8(sv));
+    s = SvPV(sv_copy, len); /* work on the copy, not the original */
+    send = s + len;
+
 
     /* estimate the buffer size needed */
     for (base = s; s <= send; s++) {
@@ -4967,10 +5133,10 @@ S_doparseform(pTHX_ SV *sv)
 	case '~':
 	    if (*s == '~') {
 		repeat = TRUE;
-		*s = ' ';
+		skipspaces++;
+		s++;
 	    }
 	    noblank = TRUE;
-	    s[-1] = ' ';
 	    /* FALL THROUGH */
 	case ' ': case '\t':
 	    skipspaces++;
@@ -4988,14 +5154,14 @@ S_doparseform(pTHX_ SV *sv)
 		if (postspace)
 		    *fpc++ = FF_SPACE;
 		*fpc++ = FF_LITERAL;
-		*fpc++ = (U16)arg;
+		*fpc++ = (U32)arg;
 	    }
 	    postspace = FALSE;
 	    if (s <= send)
 		skipspaces--;
 	    if (skipspaces) {
 		*fpc++ = FF_SKIP;
-		*fpc++ = (U16)skipspaces;
+		*fpc++ = (U32)skipspaces;
 	    }
 	    skipspaces = 0;
 	    if (s <= send)
@@ -5006,7 +5172,7 @@ S_doparseform(pTHX_ SV *sv)
 		    arg = fpc - linepc + 1;
 		else
 		    arg = 0;
-		*fpc++ = (U16)arg;
+		*fpc++ = (U32)arg;
 	    }
 	    if (s < send) {
 		linepc = fpc;
@@ -5029,12 +5195,12 @@ S_doparseform(pTHX_ SV *sv)
 	    arg = (s - base) - 1;
 	    if (arg) {
 		*fpc++ = FF_LITERAL;
-		*fpc++ = (U16)arg;
+		*fpc++ = (U32)arg;
 	    }
 
 	    base = s - 1;
 	    *fpc++ = FF_FETCH;
-	    if (*s == '*') {
+	    if (*s == '*') { /*  @* or ^*  */
 		s++;
 		*fpc++ = 2;  /* skip the @* or ^* */
 		if (ischop) {
@@ -5043,8 +5209,8 @@ S_doparseform(pTHX_ SV *sv)
 		} else
 		    *fpc++ = FF_LINEGLOB;
 	    }
-	    else if (*s == '#' || (*s == '.' && s[1] == '#')) {
-		arg = ischop ? 512 : 0;
+	    else if (*s == '#' || (*s == '.' && s[1] == '#')) { /* @###, ^### */
+		arg = ischop ? FORM_NUM_BLANK : 0;
 		base = s - 1;
 		while (*s == '#')
 		    s++;
@@ -5052,15 +5218,15 @@ S_doparseform(pTHX_ SV *sv)
                     const char * const f = ++s;
 		    while (*s == '#')
 			s++;
-		    arg |= 256 + (s - f);
+		    arg |= FORM_NUM_POINT + (s - f);
 		}
 		*fpc++ = s - base;		/* fieldsize for FETCH */
 		*fpc++ = FF_DECIMAL;
-                *fpc++ = (U16)arg;
+                *fpc++ = (U32)arg;
                 unchopnum |= ! ischop;
             }
             else if (*s == '0' && s[1] == '#') {  /* Zero padded decimals */
-                arg = ischop ? 512 : 0;
+                arg = ischop ? FORM_NUM_BLANK : 0;
 		base = s - 1;
                 s++;                                /* skip the '0' first */
                 while (*s == '#')
@@ -5069,14 +5235,14 @@ S_doparseform(pTHX_ SV *sv)
                     const char * const f = ++s;
                     while (*s == '#')
                         s++;
-                    arg |= 256 + (s - f);
+                    arg |= FORM_NUM_POINT + (s - f);
                 }
                 *fpc++ = s - base;                /* fieldsize for FETCH */
                 *fpc++ = FF_0DECIMAL;
-		*fpc++ = (U16)arg;
+		*fpc++ = (U32)arg;
                 unchopnum |= ! ischop;
 	    }
-	    else {
+	    else {				/* text field */
 		I32 prespace = 0;
 		bool ismore = FALSE;
 
@@ -5103,7 +5269,7 @@ S_doparseform(pTHX_ SV *sv)
 		*fpc++ = ischop ? FF_CHECKCHOP : FF_CHECKNL;
 
 		if (prespace)
-		    *fpc++ = (U16)prespace;
+		    *fpc++ = (U32)prespace; /* add SPACE or HALFSPACE */
 		*fpc++ = FF_ITEM;
 		if (ismore)
 		    *fpc++ = FF_MORE;
@@ -5119,20 +5285,16 @@ S_doparseform(pTHX_ SV *sv)
 
     assert (fpc <= fops + maxops); /* ensure our buffer estimate was valid */
     arg = fpc - fops;
-    { /* need to jump to the next word */
-        int z;
-	z = WORD_ALIGN - SvCUR(sv) % WORD_ALIGN;
-	SvGROW(sv, SvCUR(sv) + z + arg * sizeof(U32) + 4);
-	s = SvPVX(sv) + SvCUR(sv) + z;
-    }
-    Copy(fops, s, arg, U32);
-    Safefree(fops);
-    sv_magic(sv, NULL, PERL_MAGIC_fm, NULL, 0);
-    SvCOMPILED_on(sv);
+
+    mg->mg_ptr = (char *) fops;
+    mg->mg_len = arg * sizeof(U32);
+    mg->mg_obj = sv_copy;
+    mg->mg_flags |= MGf_REFCOUNTED;
 
     if (unchopnum && repeat)
-        DIE(aTHX_ "Repeated format line will never terminate (~~ and @#)");
-    return 0;
+        Perl_die(aTHX_ "Repeated format line will never terminate (~~ and @#)");
+
+    return mg;
 }
 
 
@@ -5145,9 +5307,9 @@ S_num_overflow(NV value, I32 fldsize, I32 frcsize)
     bool res = FALSE;
     int intsize = fldsize - (value < 0 ? 1 : 0);
 
-    if (frcsize & 256)
+    if (frcsize & FORM_NUM_POINT)
         intsize--;
-    frcsize &= 255;
+    frcsize &= ~(FORM_NUM_POINT|FORM_NUM_BLANK);
     intsize -= frcsize;
 
     while (intsize--) pwr *= 10.0;
@@ -5245,11 +5407,14 @@ S_run_user_filter(pTHX_ int idx, SV *buf_sv, int maxlen)
 	int count;
 
 	ENTER_with_name("call_filter_sub");
-	SAVE_DEFSV;
+	save_gp(PL_defgv, 0);
+	GvINTRO_off(PL_defgv);
+	SAVEGENERICSV(GvSV(PL_defgv));
 	SAVETMPS;
 	EXTEND(SP, 2);
 
 	DEFSV_set(upstream);
+	SvREFCNT_inc_simple_void_NN(upstream);
 	PUSHMARK(SP);
 	mPUSHi(0);
 	if (filter_state) {

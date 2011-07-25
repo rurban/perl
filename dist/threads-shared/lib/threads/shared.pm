@@ -7,7 +7,7 @@ use warnings;
 
 use Scalar::Util qw(reftype refaddr blessed);
 
-our $VERSION = '1.37';
+our $VERSION = '1.38';
 my $XS_VERSION = $VERSION;
 $VERSION = eval $VERSION;
 
@@ -543,7 +543,7 @@ thread.
 
 Using L<refaddr()|Scalar::Util/"refaddr EXPR">) is unreliable for testing
 whether or not two shared references are equivalent (e.g., when testing for
-circular references).  Use L<is_shared()/"is_shared VARIABLE">, instead:
+circular references).  Use L<is_shared()|/"is_shared VARIABLE">, instead:
 
     use threads;
     use threads::shared;
@@ -594,7 +594,7 @@ L<http://www.perl.com/pub/a/2002/06/11/threads.html> and
 L<http://www.perl.com/pub/a/2002/09/04/threads.html>
 
 Perl threads mailing list:
-L<http://lists.cpan.org/showlist.cgi?name=iThreads>
+L<http://lists.perl.org/list/ithreads.html>
 
 =head1 AUTHOR
 

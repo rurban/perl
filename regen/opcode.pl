@@ -20,8 +20,14 @@ BEGIN {
     require 'regen/regen_lib.pl';
 }
 
-my $oc = safer_open('opcode.h-new', 'opcode.h');
-my $on = safer_open('opnames.h-new', 'opnames.h');
+my $oc = open_new('opcode.h', '>',
+		  {by => 'regen/opcode.pl', from => 'its data',
+		   file => 'opcode.h', style => '*',
+		   copyright => [1993 .. 2007]});
+
+my $on = open_new('opnames.h', '>',
+		  { by => 'regen/opcode.pl', from => 'its data', style => '*',
+		    file => 'opnames.h', copyright => [1999 .. 2008] });
 
 # Read data.
 
@@ -117,6 +123,7 @@ my @raw_alias = (
 		 Perl_pp_ehostent => [qw(enetent eprotoent eservent
 					 spwent epwent sgrent egrent)],
 		 Perl_pp_shostent => [qw(snetent sprotoent sservent)],
+		 Perl_pp_aelemfast => ['aelemfast_lex'],
 		);
 
 while (my ($func, $names) = splice @raw_alias, 0, 2) {
@@ -138,10 +145,7 @@ foreach my $sock_func (qw(socket bind listen accept shutdown
 
 # Emit defines.
 
-print $oc read_only_top(lang => 'C', by => 'regen/opcode.pl', from => 'its data',
-			file => 'opcode.h', style => '*',
-			copyright => [1993 .. 2007]),
-    "#ifndef PERL_GLOBAL_STRUCT_INIT\n\n";
+print $oc    "#ifndef PERL_GLOBAL_STRUCT_INIT\n\n";
 
 {
     my $last_cond = '';
@@ -178,10 +182,7 @@ print $oc read_only_top(lang => 'C', by => 'regen/opcode.pl', from => 'its data'
     unimplemented();
 }
 
-print $on read_only_top(lang => 'C', by => 'regen/opcode.pl',
-			from => 'its data', style => '*',
-			file => 'opnames.h', copyright => [1999 .. 2008]),
-    "typedef enum opcode {\n";
+print $on "typedef enum opcode {\n";
 
 my $i = 0;
 for (@ops) {
@@ -441,9 +442,8 @@ sub gen_op_is_macro {
     }
 }
 
-my $pp = safer_open('pp_proto.h-new', 'pp_proto.h');
-
-print $pp read_only_top(lang => 'C', by => 'opcode.pl', from => 'its data');
+my $pp = open_new('pp_proto.h', '>',
+		  { by => 'opcode.pl', from => 'its data' });
 
 {
     my %funcs;

@@ -66,7 +66,7 @@ utility will look for errors in your markup.
 F<splain> is an interface to L<perldiag> - paste in your error message
 to it, and it'll explain it for you.
 
-=item L<roffitall|roffitall>
+=item C<roffitall|roffitall>
 
 The C<roffitall> utility is not installed on your system but lives in
 the F<pod/> directory of your Perl source kit; it converts all the
@@ -164,7 +164,7 @@ itself or any of the standard library modules back to the developers;
 please read through the documentation for F<perlbug> thoroughly before
 using it to submit a bug report.
 
-=item L<perlthanks|perlthanks>
+=item L<perlthanks|perlbug>
 
 This program provides an easy way to send a thank-you message back to the
 authors and maintainers of perl. It's just F<perlbug> installed under
@@ -208,13 +208,6 @@ It is typically run by the makefiles created by L<ExtUtils::MakeMaker>.
 F<xsubpp> will compile XS code into C code by embedding the constructs
 necessary to let C functions manipulate Perl values and creates the glue
 necessary to let Perl access those functions.
-
-=item L<dprofpp|dprofpp>
-
-Perl comes with a profiler, the F<Devel::DProf> module. The
-F<dprofpp> utility analyzes the output of this profiler and tells you
-which subroutines are taking up the most run time. See L<Devel::DProf>
-for more information.
 
 =item L<prove>
 
@@ -304,11 +297,10 @@ validate your packlists and even create a tarball from an installed module.
 L<perldoc|perldoc>, L<pod2man|pod2man>, L<perlpod>,
 L<pod2html|pod2html>, L<pod2usage|pod2usage>, L<podselect|podselect>,
 L<podchecker|podchecker>, L<splain|splain>, L<perldiag>,
-L<roffitall|roffitall>, L<a2p|a2p>, L<s2p|s2p>, L<find2perl|find2perl>,
+C<roffitall|roffitall>, L<a2p|a2p>, L<s2p|s2p>, L<find2perl|find2perl>,
 L<File::Find|File::Find>, L<pl2pm|pl2pm>, L<perlbug|perlbug>,
-L<h2ph|h2ph>, L<c2ph|c2ph>, L<h2xs|h2xs>, L<dprofpp|dprofpp>,
-L<Devel::DProf>, L<enc2xs>, L<xsubpp>, L<cpan>, L<cpanp>, L<cpan2dist>,
-L<instmodsh>, L<piconv>, L<prove>, L<corelist>, L<ptar>, L<ptardiff>,
-L<shasum>
+L<h2ph|h2ph>, L<c2ph|c2ph>, L<h2xs|h2xs>, L<enc2xs>, L<xsubpp>,
+L<cpan>, L<cpanp>, L<cpan2dist>, L<instmodsh>, L<piconv>, L<prove>,
+L<corelist>, L<ptar>, L<ptardiff>, L<shasum>
 
 =cut

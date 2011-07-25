@@ -1,6 +1,18 @@
 CHANGES
 -------
 
+  2.037 22 June 2011
+
+      * No Changes
+
+  2.036 6 May 2011
+
+      * Added offset patramter to CRC32
+
+  2.035 6 May 2011
+
+      * No Changes
+
   2.033 11 Jan 2011
       * Fixed typos & spelling errors.
         [perl# 81782]

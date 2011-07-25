@@ -294,7 +294,7 @@ barestmt:	PLUGSTMT
 #endif
 			  if (CvOUTSIDE(fmtcv) && !CvUNIQUE(CvOUTSIDE(fmtcv))) {
 			      SvREFCNT_inc_simple_void(fmtcv);
-			      pad_add_anon((SV*)fmtcv, OP_NULL);
+			      pad_add_anon(fmtcv, OP_NULL);
 			  }
 			}
 	|	SUB startsub subname proto subattrlist subbody
@@ -816,7 +816,7 @@ subscripted:    star '{' expr ';' '}'        /* *main::{something} */
 			  TOKEN_GETMAD($2,$$,'[');
 			  TOKEN_GETMAD($4,$$,']');
 			}
-	|	scalar '{' expr ';' '}'    /* $foo->{bar();} */
+	|	scalar '{' expr ';' '}'    /* $foo{bar();} */
 			{ $$ = newBINOP(OP_HELEM, 0, oopsHV($1), jmaybe($3));
 			    PL_parser->expect = XOPERATOR;
 			  TOKEN_GETMAD($2,$$,'{');

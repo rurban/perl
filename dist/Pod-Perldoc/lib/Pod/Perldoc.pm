@@ -12,7 +12,7 @@ use File::Spec::Functions qw(catfile catdir splitdir);
 use vars qw($VERSION @Pagers $Bindir $Pod2man
   $Temp_Files_Created $Temp_File_Lifetime
 );
-$VERSION = '3.15_03';
+$VERSION = '3.15_06';
 #..........................................................................
 
 BEGIN {  # Make a DEBUG constant very first thing...
@@ -239,14 +239,14 @@ sub usage {
   $! = 0;
   
   die <<EOF;
-perldoc [options] PageName|ModuleName|ProgramName...
+perldoc [options] PageName|ModuleName|ProgramName|URL...
 perldoc [options] -f BuiltinFunction
 perldoc [options] -q FAQRegex
 perldoc [options] -v PerlVariable
 
 Options:
     -h   Display this help message
-    -V   report version
+    -V   Report version
     -r   Recursive search (slow)
     -i   Ignore case
     -t   Display pod using pod2text instead of pod2man and nroff
@@ -263,16 +263,17 @@ Options:
     -M FormatterModuleNameToUse
     -w formatter_option:option_value
     -L translation_code   Choose doc translation (if any)
-    -X   use index if present (looks for pod.idx at $Config{archlib})
+    -X   Use index if present (looks for pod.idx at $Config{archlib})
     -q   Search the text of questions (not answers) in perlfaq[1-9]
     -f   Search Perl built-in functions
     -v   Search predefined Perl variables
 
-PageName|ModuleName...
+PageName|ModuleName|ProgramName|URL...
          is the name of a piece of documentation that you want to look at. You
          may either give a descriptive name of the page (as in the case of
          `perlfunc') the name of a module, either like `Term::Info' or like
-         `Term/Info', or the name of a program, like `perldoc'.
+         `Term/Info', or the name of a program, like `perldoc', or a URL 
+         starting with http(s). 
 
 BuiltinFunction
          is the name of a perl function.  Will extract documentation from
@@ -292,18 +293,27 @@ EOF
 
 #..........................................................................
 
-sub usage_brief {
+sub program_name {
   my $me = $0;		# Editing $0 is unportable
 
   $me =~ s,.*[/\\],,; # get basename
-  
+
+  return $me;
+}
+
+#..........................................................................
+
+sub usage_brief {
+  my $self = shift;
+  my $me = $self->program_name;
+
   die <<"EOUSAGE";
 Usage: $me [-h] [-V] [-r] [-i] [-D] [-t] [-u] [-m] [-n nroffer_program] [-l] [-T] [-d output_filename] [-o output_format] [-M FormatterModuleNameToUse] [-w formatter_option:option_value] [-L translation_code] [-F] [-X] PageName|ModuleName|ProgramName
        $me -f PerlFunc
        $me -q FAQKeywords
        $me -v PerlVar
 
-The -h option prints more help.  Also try "perldoc perldoc" to get
+The -h option prints more help.  Also try "$me perldoc" to get
 acquainted with the system.                        [Perldoc v$VERSION]
 EOUSAGE
 
@@ -484,7 +494,7 @@ sub find_good_formatter_class {
       
     } elsif(
       (IS_VMS or IS_MSWin32 or IS_Dos or IS_OS2)
-       # the alway case-insensitive fs's
+       # the always case-insensitive filesystems
       and $class_seen{lc("~$c")}++
     ) {
       DEBUG > 4 and print
@@ -549,10 +559,11 @@ sub formatter_sanity_check {
      ) || '';
     $ext = ".$ext" if length $ext;
     
+    my $me = $self->program_name;
     die
        "When using Perldoc to format with $formatter_class, you have to\n"
      . "specify -T or -dsomefile$ext\n"
-     . "See `perldoc perldoc' for more information on those switches.\n"
+     . "See `$me perldoc' for more information on those switches.\n"
     ;
   }
 }
@@ -712,6 +723,21 @@ sub grand_search_init {
     my($self, $pages, @found) = @_;
 
     foreach (@$pages) {
+        if (/^http(s)?:\/\//) {
+            require HTTP::Tiny;
+            require File::Temp;
+            my $response = HTTP::Tiny->new->get($_);
+            if ($response->{success}) {
+                my ($fh, $filename) = File::Temp::tempfile(UNLINK => 1);
+                $fh->print($response->{content});
+                push @found, $filename;
+            }
+            else {
+                print STDERR "No " .
+                    ($self->opt_m ? "module" : "documentation") . " found for \"$_\".\n";                
+            }
+            next;
+        }
         if ($self->{'podidx'} && open(PODIDX, $self->{'podidx'})) {
             my $searchfor = catfile split '::', $_;
             $self->aside( "Searching for '$searchfor' in $self->{'podidx'}\n" );
@@ -746,7 +772,7 @@ sub grand_search_init {
                 for ($i = 0; $trn = $ENV{'DCL$PATH;'.$i}; $i++) {
                     push(@searchdirs,$trn);
                 }
-                push(@searchdirs,'perl_root:[lib.pod]')  # installed pods
+                push(@searchdirs,'perl_root:[lib.pods]')  # installed pods
             }
             else {
                 push(@searchdirs, grep(-d, split($Config{path_sep},
@@ -773,12 +799,13 @@ sub grand_search_init {
                     ($self->opt_m ? "module" : "documentation") . " found for \"$_\".\n";
                 if ( @{ $self->{'found'} } ) {
                     print STDERR "However, try\n";
+                    my $me = $self->program_name;
                     for my $dir (@{ $self->{'found'} }) {
                         opendir(DIR, $dir) or die "opendir $dir: $!";
                         while (my $file = readdir(DIR)) {
                             next if ($file =~ /^\./s);
                             $file =~ s/\.(pm|pod)\z//;  # XXX: badfs
-                            print STDERR "\tperldoc $_\::$file\n";
+                            print STDERR "\t$me $_\::$file\n";
                         }
                         closedir(DIR)    or die "closedir $dir: $!";
                     }
@@ -900,7 +927,7 @@ sub search_perlvar {
     open(PVAR, "<", $perlvar)               # "Funk is its own reward"
         or die("Can't open $perlvar: $!");
 
-    if ( $opt =~ /^\$\d+$/ ) { # handle $1, $2, ..., $9
+    if ( $opt ne '$0' && $opt =~ /^\$\d+$/ ) { # handle $1, $2, ...
       $opt = '$<I<digits>>';
     }
     my $search_re = quotemeta($opt);

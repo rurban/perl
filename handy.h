@@ -470,7 +470,7 @@ There are three variants for all the functions in this section.  The base ones
 operate using the character set of the platform Perl is running on.  The ones
 with an C<_A> suffix operate on the ASCII character set, and the ones with an
 C<_L1> suffix operate on the full Latin1 character set.  All are unaffected by
-locale
+locale.
 
 For ASCII platforms, the base function with no suffix and the one with the
 C<_A> suffix are identical.  The function with the C<_L1> suffix imposes the
@@ -954,7 +954,7 @@ The XSUB-writer's interface to the C C<malloc> function.
 In 5.9.3, Newx() and friends replace the older New() API, and drops
 the first parameter, I<x>, a debug aid which allowed callers to identify
 themselves.  This aid has been superseded by a new build option,
-PERL_MEM_LOG (see L<perlhack/PERL_MEM_LOG>).  The older API is still
+PERL_MEM_LOG (see L<perlhacktips/PERL_MEM_LOG>).  The older API is still
 there for use in XS modules supporting older perls.
 
 =for apidoc Am|void|Newxc|void* ptr|int nitems|type|cast

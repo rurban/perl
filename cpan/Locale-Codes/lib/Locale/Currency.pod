@@ -17,6 +17,9 @@ Locale::Currency - standard codes for currency identification
 
 =head1 DESCRIPTION
 
+This module exists as both Locale::Codes::Currency and Locale::Currency (for
+historical reasons).  The Locale::Currency module will continue to work.
+
 The C<Locale::Currency> module provides access to standard codes used
 for identifying currencies and funds, such as those defined in ISO 4217.
 
@@ -82,7 +85,7 @@ This code set is identified with the symbol C<LOCALE_CURR_NUMERIC>.
 
 =item B<Locale::Currency::delete_currency_code_alias  ( CODE [,CODESET] )>
 
-These routines are all documented in the Locale::Codes man page.
+These routines are all documented in the Locale::Codes::API man page.
 
 =back
 
@@ -92,7 +95,11 @@ These routines are all documented in the Locale::Codes man page.
 
 =item B<Locale::Codes>
 
-=item B<Locale::Constants>
+The Locale-Codes distribution.
+
+=item B<Locale::Codes::API>
+
+The list of functions supported by this module.
 
 =item B<http://www.iso.org/iso/support/currency_codes_list-1.htm>
 

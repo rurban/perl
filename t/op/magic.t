@@ -12,7 +12,7 @@ BEGIN {
 use warnings;
 use Config;
 
-plan (tests => 87);
+plan (tests => 88);
 
 $Is_MSWin32  = $^O eq 'MSWin32';
 $Is_NetWare  = $^O eq 'NetWare';
@@ -169,8 +169,24 @@ eval { die "foo\n" };
 is $@, "foo\n";
 
 cmp_ok($$, '>', 0);
-eval { $$++ };
-like ($@, qr/^Modification of a read-only value attempted/);
+my $pid = $$;
+eval { $$ = 42 };
+is $$, 42, '$$ can be modified';
+SKIP: {
+    skip "no fork", 1 unless $Config{d_fork};
+    (my $kidpid = open my $fh, "-|") // skip "cannot fork: $!", 1;
+    if($kidpid) { # parent
+	my $kiddollars = <$fh>;
+	close $fh or die "cannot close pipe from kid proc: $!";
+	is $kiddollars, $kidpid, '$$ is reset on fork';
+    }
+    else { # child
+	print $$;
+	$::NO_ENDING = 1; # silence "Looks like you only ran..."
+	exit;
+    }
+}
+$$ = $pid; # Tests below use $$
 
 # $^X and $0
 {

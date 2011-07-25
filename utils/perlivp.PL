@@ -44,9 +44,8 @@ sub usage {
     print << "    EOUSAGE";
 Usage:
 
-    $0 [-a] [-p] [-v] | [-h]
+    $0 [-p] [-v] | [-h]
 
-    -a Run all tests (default is to skip .ph tests)
     -p Print a preface before each test telling what it will test.
     -v Verbose mode in which extra information about test results
        is printed.  Test failures always print out some extra information
@@ -66,7 +65,7 @@ while ($ARGV[0] =~ /^-/) {
         usage() if '?' =~ /\Q$flag/;
         usage() if 'h' =~ /\Q$flag/;
         usage() if 'H' =~ /\Q$flag/;
-        usage("unknown flag: `$flag'") unless 'HhPpVva' =~ /\Q$flag/;
+        usage("unknown flag: `$flag'") unless 'HhPpVv' =~ /\Q$flag/;
         warn "$0: `$flag' flag already set\n" if $opt{$flag}++;
     } 
     shift;
@@ -101,14 +100,16 @@ print OUT <<'!NO!SUBS!';
 
 print "## Checking Perl binary via variable `\$perlpath' = $perlpath.\n" if $opt{'p'};
 
+my $label = 'Executable perl binary';
+
 if (-x $perlpath) {
     print "## Perl binary `$perlpath' appears executable.\n" if $opt{'v'};
-    print "ok 1\n";
+    print "ok 1 $label\n";
     $pass__total++;
 }
 else {
     print "# Perl binary `$perlpath' does not appear executable.\n";
-    print "not ok 1\n";
+    print "not ok 1 $label\n";
     $error_total++;
 }
 $tests_total++;
@@ -123,18 +124,28 @@ my \$ivp_VERSION = "$]";
 
 !GROK!THIS!
 print OUT <<'!NO!SUBS!';
+
+$label = 'Perl version correct';
 if ($ivp_VERSION eq $]) {
     print "## Perl version `$]' appears installed as expected.\n" if $opt{'v'};
-    print "ok 2\n";
+    print "ok 2 $label\n";
     $pass__total++;
 }
 else {
     print "# Perl version `$]' installed, expected $ivp_VERSION.\n";
-    print "not ok 2\n";
+    print "not ok 2 $label\n";
     $error_total++;
 }
 $tests_total++;
 
+# We have the right perl and version, so now reset @INC so we ignore
+# PERL5LIB and '.'
+{
+    local $ENV{PERL5LIB};
+    my $perl_V = qx($perlpath -V);
+    $perl_V =~ s{.*\@INC:\n}{}ms;
+    @INC = grep { length && $_ ne '.' } split ' ', $perl_V;
+}
 
 print "## Checking roots of the Perl library directory tree via variable `\@INC'.\n" if $opt{'p'};
 
@@ -151,12 +162,14 @@ foreach (@INC) {
     }
     $INC_total++;
 }
+
+$label = '@INC directoreis exist';
 if ($INC_total == $INC_there) {
-    print "ok 3\n";
+    print "ok 3 $label\n";
     $pass__total++;
 }
 else {
-    print "not ok 3\n";
+    print "not ok 3 $label\n";
     $error_total++;
 }
 $tests_total++;
@@ -179,12 +192,13 @@ foreach (qw(Config.pm ExtUtils/Installed.pm)) {
     }
     $@ = undef;
 }
+$label = 'Modules needed for rest of perlivp exist';
 if ($needed_total == $needed_there) {
-    print "ok 4\n";
+    print "ok 4 $label\n";
     $pass__total++;
 }
 else {
-    print "not ok 4\n";
+    print "not ok 4 $label\n";
     $error_total++;
 }
 $tests_total++;
@@ -210,6 +224,7 @@ if (defined($Config{'extensions'})) {
         next if $_ eq 'libnet';
         next if $_ eq 'Locale/Codes';
         next if $_ eq 'podlators';
+        next if $_ eq 'perlfaq';
         # test modules
         next if $_ eq 'XS/APItest';
         next if $_ eq 'XS/Typemap';
@@ -247,12 +262,13 @@ if (defined($Config{'extensions'})) {
     }
     $@ = undef;
 }
+$label = 'All (and only) expected extensions installed';
 if ($extensions_total == $extensions_there) {
-    print "ok 5\n";
+    print "ok 5 $label\n";
     $pass__total++;
 }
 else {
-    print "not ok 5\n";
+    print "not ok 5 $label\n";
     $error_total++;
 }
 $tests_total++;
@@ -301,72 +317,17 @@ for (@modules) {
     }
     @missing = ();
 }
+$label = 'Module files correctly installed';
 if (($installed_total == $installed_there) && 
     ($installed_total == $version_check)) {
-    print "ok 6\n";
+    print "ok 6 $label\n";
     $pass__total++;
 }
 else {
-    print "not ok 6\n";
+    print "not ok 6 $label\n";
     $error_total++;
 }
 $tests_total++;
-
-
-if ($opt{'a'}) {
-print "## Checking installations of *.h -> *.ph header files.\n" if $opt{'p'};
-my $ph_there = 0;
-my $var = undef;
-my $val = undef;
-my $h_file = undef;
-# Just about "any" C implementation ought to have a stdio.h (even if 
-# Config.pm may not list a i_stdio var).
-my @ph_files = qw(stdio.ph);
-# Add the ones that we know that perl thinks are there:
-while (($var, $val) = each %Config) {
-    if ($var =~ m/i_(.+)/ && $val eq 'define') {
-        $h_file = $1;
-	# Some header and symbol names don't match for hysterical raisins.
-	$h_file = 'arpa/inet'    if $h_file eq 'arpainet';
-	$h_file = 'netinet/in'   if $h_file eq 'niin';
-	$h_file = 'netinet/tcp'  if $h_file eq 'netinettcp';
-	$h_file = 'sys/resource' if $h_file eq 'sysresrc';
-	$h_file = 'sys/select'   if $h_file eq 'sysselct';
-	$h_file = 'sys/security' if $h_file eq 'syssecrt';
-        $h_file = 'rpcsvc/dbm'   if $h_file eq 'rpcsvcdbm';
-        # This ought to distinguish syslog from sys/syslog.
-        # (NB syslog.ph is heavily used for the DBI pre-requisites).
-        $h_file =~ s{^sys(\w.+)}{sys/$1} unless $h_file eq 'syslog';
-        push(@ph_files, "$h_file.ph");
-    }
-}
-#foreach (qw(stdio.ph syslog.ph)) {
-foreach (@ph_files) {
-    $@ = undef;
-    eval "require \"$_\";";
-    if (!$@) {
-        print "## Perl header `$_' appears to be installed.\n" if $opt{'v'};
-        $ph_there++;
-    }
-    else {
-        print "# Perl header `$_' does not appear to be properly installed.\n";
-    }
-    $@ = undef;
-}
-
-if (scalar(@ph_files) == $ph_there) {
-    print "ok 7\n";
-    $pass__total++;
-}
-else {
-    print "not ok 7\n";
-    $error_total++;
-}
-$tests_total++;
-}
-else {
-    print "##  Skip checking of *.ph header files.\n" if $opt{'p'};
-}
 
 # Final report (rather than feed ousrselves to Test::Harness::runtests()
 # we simply format some output on our own to keep things simple and
@@ -389,7 +350,7 @@ perlivp - Perl Installation Verification Procedure
 
 =head1 SYNOPSIS
 
-B<perlivp> [B<-a>] [B<-p>] [B<-v>] [B<-h>]
+B<perlivp> [B<-p>] [B<-v>] [B<-h>]
 
 =head1 DESCRIPTION
 
@@ -414,11 +375,6 @@ etc.
 =item B<-h> help
 
 Prints out a brief help message.
-
-=item B<-a> run all tests
-
-Normally tests for optional features are skipped.  With -a all tests
-are executed.
 
 =item B<-p> print preface
 
@@ -476,11 +432,6 @@ is the latter case then please let the author know.
 One or more files turned up missing according to a run of 
 C<ExtUtils::Installed -E<gt> validate()> over your installation.
 Correct by conducting a proper installation.
-
-=item * print "# Perl header `$_' does not appear to be properly installed.\n";
-
-Correct by running B<h2ph> over your system's C header files.  If necessary, 
-edit the resulting *.ph files to eliminate perl syntax errors.
 
 =back
 

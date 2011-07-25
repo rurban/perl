@@ -1,13 +1,13 @@
 package feature;
 
-our $VERSION = '1.20';
+our $VERSION = '1.22';
 
 # (feature name) => (internal name, used in %^H)
 my %feature = (
+    say             => 'feature_say',
+    state           => 'feature_state',
     switch          => 'feature_switch',
-    say             => "feature_say",
-    state           => "feature_state",
-    unicode_strings => "feature_unicode",
+    unicode_strings => 'feature_unicode',
 );
 
 # This gets set (for now) in $^H as well as in %^H,
@@ -18,11 +18,12 @@ our $hint_uni8bit = 0x00000800;
 # NB. the latest bundle must be loaded by the -E switch (see toke.c)
 
 my %feature_bundle = (
-    "5.10" => [qw(switch say state)],
-    "5.11" => [qw(switch say state unicode_strings)],
-    "5.12" => [qw(switch say state unicode_strings)],
-    "5.13" => [qw(switch say state unicode_strings)],
-    "5.14" => [qw(switch say state unicode_strings)],
+    "5.10" => [qw(say state switch)],
+    "5.11" => [qw(say state switch unicode_strings)],
+    "5.12" => [qw(say state switch unicode_strings)],
+    "5.13" => [qw(say state switch unicode_strings)],
+    "5.14" => [qw(say state switch unicode_strings)],
+    "5.15" => [qw(say state switch unicode_strings)],
 );
 
 # special case
@@ -37,7 +38,7 @@ feature - Perl pragma to enable new features
 
 =head1 SYNOPSIS
 
-    use feature qw(switch say);
+    use feature qw(say switch);
     given ($foo) {
 	when (1)	  { say "\$foo == 1" }
 	when ([2,3])	  { say "\$foo == 2 || \$foo == 3" }
@@ -54,7 +55,9 @@ It is usually impossible to add new syntax to Perl without breaking
 some existing programs. This pragma provides a way to minimize that
 risk. New syntactic constructs, or new semantic meanings to older
 constructs, can be enabled by C<use feature 'foo'>, and will be parsed
-only when the appropriate feature pragma is in scope.
+only when the appropriate feature pragma is in scope. (Nevertheless, the
+C<CORE::> prefix provides access to all Perl keywords, regardless of this
+pragma.)
 
 =head2 Lexical effect
 
@@ -83,13 +86,6 @@ has lexical effect.
 
 C<no feature> with no features specified will turn off all features.
 
-=head2 The 'switch' feature
-
-C<use feature 'switch'> tells the compiler to enable the Perl 6
-given/when construct.
-
-See L<perlsyn/"Switch statements"> for details.
-
 =head2 The 'say' feature
 
 C<use feature 'say'> tells the compiler to enable the Perl 6
@@ -103,6 +99,13 @@ C<use feature 'state'> tells the compiler to enable C<state>
 variables.
 
 See L<perlsub/"Persistent Private Variables"> for details.
+
+=head2 The 'switch' feature
+
+C<use feature 'switch'> tells the compiler to enable the Perl 6
+given/when construct.
+
+See L<perlsyn/"Switch statements"> for details.
 
 =head2 the 'unicode_strings' feature
 
@@ -128,11 +131,21 @@ implemented until 5.13.8.
 It's possible to load a whole slew of features in one go, using
 a I<feature bundle>. The name of a feature bundle is prefixed with
 a colon, to distinguish it from an actual feature. At present, the
-only feature bundle is C<use feature ":5.10"> which is equivalent
-to C<use feature qw(switch say state)>.
+only feature bundles correspond to Perl releases, e.g. C<use feature
+":5.10"> which is equivalent to C<use feature qw(switch say state)>.
 
-Specifying sub-versions such as the C<0> in C<5.10.0> in feature bundles has
+By convention, the feature bundle for any given Perl release includes
+the features of previous releases, down to and including 5.10, the
+first official release to provide this facility. Since Perl 5.12
+only provides one new feature, C<unicode_strings>, and Perl 5.14
+provides none, C<use feature ":5.14"> is equivalent to C<use feature
+qw(switch say state unicode_strings)>.
+
+Specifying sub-versions such as the C<0> in C<5.14.0> in feature bundles has
 no effect: feature bundles are guaranteed to be the same for all sub-versions.
+
+Note that instead of using release-based feature bundles it is usually
+better, and shorter, to use implicit loading as described below.
 
 =head1 IMPLICIT LOADING
 

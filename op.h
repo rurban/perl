@@ -130,14 +130,11 @@ Deprecated.  Use C<GIMME_V> instead.
 				    defined()*/
 				/*  On OP_DBSTATE, indicates breakpoint
 				 *    (runtime property) */
-				/*  On OP_AELEMFAST, indicates pad var */
 				/*  On OP_REQUIRE, was seen as CORE::require */
 				/*  On OP_ENTERWHEN, there's no condition */
-				/*  On OP_BREAK, an implicit break */
 				/*  On OP_SMARTMATCH, an implicit smartmatch */
 				/*  On OP_ANONHASH and OP_ANONLIST, create a
 				    reference to the new anon hash or array */
-				/*  On OP_ENTER, store caller context */
 				/*  On OP_HELEM and OP_HSLICE, localization will be followed
 				    by assignment, so do not wipe the target if it is special
 				    (e.g. a glob or a magic SV) */
@@ -199,21 +196,30 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpDEREF_SV		(32|64)	/*   Want ref to SV. */
 /* Private for OP_RV2SV, OP_RV2AV, OP_RV2AV */
 #define OPpDEREFed		4	/* prev op was OPpDEREF */
+
   /* OP_ENTERSUB only */
 #define OPpENTERSUB_DB		16	/* Debug subroutine. */
 #define OPpENTERSUB_HASTARG	32	/* Called from OP tree. */
 #define OPpENTERSUB_NOMOD	64	/* Immune to op_lvalue() for :attrlist. */
-  /* OP_ENTERSUB and OP_RV2CV only */
+#define OPpENTERSUB_INARGS	4	/* Lval used as arg to a sub. */
+#define OPpENTERSUB_DEREF	1	/* Lval call that autovivifies. */
+  /* Mask for OP_ENTERSUB flags, the absence of which must be propagated
+     in dynamic context */
+#define OPpENTERSUB_LVAL_MASK (OPpLVAL_INTRO|OPpENTERSUB_INARGS)
+
+  /* OP_RV2CV only */
 #define OPpENTERSUB_AMPER	8	/* Used & form to call. */
 #define OPpENTERSUB_NOPAREN	128	/* bare sub call (without parens) */
-#define OPpENTERSUB_INARGS	4	/* Lval used as arg to a sub. */
+#define OPpMAY_RETURN_CONSTANT	1	/* If a constant sub, return the constant */
+
   /* OP_GV only */
 #define OPpEARLY_CV		32	/* foo() called before sub foo was parsed */
   /* OP_?ELEM only */
 #define OPpLVAL_DEFER		16	/* Defer creation of array/hash elem */
   /* OP_RV2?V, OP_GVSV, OP_ENTERITER only */
 #define OPpOUR_INTRO		16	/* Variable was in an our() */
-  /* OP_RV2[AGH]V, OP_PAD[AH]V, OP_[AH]ELEM */
+  /* OP_RV2[AGH]V, OP_PAD[AH]V, OP_[AH]ELEM, OP_[AH]SLICE OP_AV2ARYLEN,
+     OP_R?KEYS, OP_SUBSTR, OP_POS, OP_VEC */
 #define OPpMAYBE_LVSUB		8	/* We might be an lvalue to return */
   /* OP_PADSV only */
 #define OPpPAD_STATE		16	/* is a "state" pad */
@@ -223,9 +229,6 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpDONT_INIT_GV		4	/* Call gv_fetchpv with GV_NOINIT */
 /* (Therefore will return whatever is currently in the symbol table, not
    guaranteed to be a PVGV)  */
-
-  /* OP_RV2CV only */
-#define OPpMAY_RETURN_CONSTANT	1	/* If a constant sub, return the constant */
 
 /* Private for OPs with TARGLEX */
   /* (lower bits may carry MAXARG) */
@@ -281,7 +284,8 @@ Deprecated.  Use C<GIMME_V> instead.
 
 /* Private for OP_FTXXX */
 #define OPpFT_ACCESS		2	/* use filetest 'access' */
-#define OPpFT_STACKED		4	/* stacked filetest, as in "-f -x $f" */
+#define OPpFT_STACKED		4	/* stacked filetest, as "-f" in "-f -x $f" */
+#define OPpFT_STACKING		8	/* stacking filetest, as "-x" in "-f -x $f" */
 
 /* Private for OP_(MAP|GREP)(WHILE|START) */
 #define OPpGREP_LEX		2	/* iterate over lexical $_ */
@@ -538,7 +542,7 @@ struct loop {
 #  define Nullop ((OP*)NULL)
 #endif
 
-/* Lowest byte-and-a-bit of PL_opargs */
+/* Lowest byte of PL_opargs */
 #define OA_MARK 1
 #define OA_FOLDCONST 2
 #define OA_RETSCALAR 4
@@ -762,6 +766,12 @@ preprocessing token; the type of I<arg> depends on I<which>.
 
 #define RV2CVOPCV_MARK_EARLY     0x00000001
 #define RV2CVOPCV_RETURN_NAME_GV 0x00000002
+
+#define op_lvalue(op,t) Perl_op_lvalue_flags(aTHX_ op,t,0)
+
+/* flags for op_lvalue_flags */
+
+#define OP_LVALUE_NO_CROAK 1
 
 /*
 =head1 Custom Operators

@@ -7,7 +7,7 @@ BEGIN {
 }
 
 use strict;
-plan( tests => 113 );
+plan( tests => 122 );
 
 run_tests() unless caller;
 
@@ -201,6 +201,33 @@ SKIP: {
     $_ = "\x{100}BC";
     is(index($_, "C", 4), -1,
        'UTF-8 cache handles offset beyond the end of the string');
+}
+
+# RT #89218
+use constant {PVBM => 'galumphing', PVBM2 => 'bang'};
+
+sub index_it {
+    is(index('galumphing', PVBM), 0,
+       "index isn't confused by format compilation");
+}
+ 
+index_it();
+is($^A, '', '$^A is empty');
+formline PVBM;
+is($^A, 'galumphing', "formline isn't confused by index compilation");
+index_it();
+
+$^A = '';
+# must not do index here before formline.
+is($^A, '', '$^A is empty');
+formline PVBM2;
+is($^A, 'bang', "formline isn't confused by index compilation");
+is(index('bang', PVBM2), 0, "index isn't confused by format compilation");
+
+{
+    use constant perl => "rules";
+    is(index("perl rules", perl), 5, 'first index of a constant works');
+    is(index("rules 1 & 2", perl), 0, 'second index of the same constant works');
 }
 
 }

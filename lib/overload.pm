@@ -1,6 +1,6 @@
 package overload;
 
-our $VERSION = '1.13';
+our $VERSION = '1.15';
 
 sub nil {}
 
@@ -519,7 +519,7 @@ This overload was introduced in Perl 5.12.
 
 The key C<"~~"> allows you to override the smart matching logic used by
 the C<~~> operator and the switch construct (C<given>/C<when>).  See
-L<perlsyn/switch> and L<feature>.
+L<perlsyn/Switch statements> and L<feature>.
 
 Unusually, the overloaded implementation of the smart match operator
 does not get full control of the smart match behaviour.
@@ -877,7 +877,8 @@ skipped.
 There are exceptions to the above rules for dereference operations
 (which, if Step 1 fails, always fall back to the normal, built-in
 implementations - see Dereferencing), and for C<~~> (which has its
-own set of rules - see L<Matching>).
+own set of rules - see C<Matching> under L</Overloadable Operations>
+above).
 
 Note on Step 7: some operators have a different semantic depending
 on the type of their operands.

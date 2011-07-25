@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.83";
+our $VERSION   = "0.84";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -595,7 +595,7 @@ our %priv; # used to display each opcode's BASEOP.op_private values
 $priv{$_}{128} = "LVINTRO"
   for ("pos", "substr", "vec", "threadsv", "gvsv", "rv2sv", "rv2hv", "rv2gv",
        "rv2av", "rv2arylen", "aelem", "helem", "aslice", "hslice", "padsv",
-       "padav", "padhv", "enteriter");
+       "padav", "padhv", "enteriter", "entersub");
 $priv{$_}{64} = "REFC" for ("leave", "leavesub", "leavesublv", "leavewrite");
 $priv{"aassign"}{64} = "COMMON";
 $priv{"aassign"}{32} = $] < 5.009 ? "PHASH" : "STATE";
@@ -611,12 +611,14 @@ $priv{$_}{4} = "DREFed" for (qw(rv2sv rv2av rv2hv));
 @{$priv{$_}}{32,64,96} = ("DREFAV", "DREFHV", "DREFSV")
   for (qw(rv2gv rv2sv padsv aelem helem));
 $priv{$_}{16} = "STATE" for ("padav", "padhv", "padsv");
-@{$priv{"entersub"}}{16,32,64} = ("DBG","TARG","NOMOD");
-@{$priv{$_}}{4,8,128} = ("INARGS","AMPER","NO()") for ("entersub", "rv2cv");
+@{$priv{"entersub"}}{1,4,16,32,64} = qw( DREF INARGS DBG TARG NOMOD );
+@{$priv{rv2cv}}{1,8,128} = ("CONST","AMPER","NO()");
 $priv{"gv"}{32} = "EARLYCV";
 $priv{"aelem"}{16} = $priv{"helem"}{16} = "LVDEFER";
 $priv{$_}{16} = "OURINTR" for ("gvsv", "rv2sv", "rv2av", "rv2hv", "r2gv",
 	"enteriter");
+$priv{$_}{8} = 'LVSUB' for qw(rv2av rv2gv rv2hv padav padhv aelem helem
+                        aslice hslice av2arylen keys rkeys substr pos vec);
 $priv{$_}{16} = "TARGMY"
   for (map(($_,"s$_"),"chop", "chomp"),
        map(($_,"i_$_"), "postinc", "postdec", "multiply", "divide", "modulo",
@@ -1255,7 +1257,7 @@ usual convention for Arabic numerals, and the default.
 
 =item B<-littleendian>
 
-Print seqence numbers with the least significant digit first.  This is
+Print sequence numbers with the least significant digit first.  This is
 obviously mutually exclusive with bigendian.
 
 =back

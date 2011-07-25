@@ -590,7 +590,7 @@ our $to_trace = 0;
 
 # This is for a rarely used development feature that allows you to compare two
 # versions of the Unicode standard without having to deal with changes caused
-# by the code points introduced in the later verson.  Change the 0 to a SINGLE
+# by the code points introduced in the later version.  Change the 0 to a SINGLE
 # dotted Unicode release number (e.g. 2.1).  Only code points introduced in
 # that release and earlier will be used; later ones are thrown away.  You use
 # the version number of the earliest one you want to compare; then run this
@@ -779,6 +779,8 @@ push @tables_that_may_be_empty, 'Script=Common' if $v_version le v4.0.1;
 push @tables_that_may_be_empty, 'Title' if $v_version lt v2.0.0;
 push @tables_that_may_be_empty, 'Script=Katakana_Or_Hiragana'
                                                     if $v_version ge v4.1.0;
+push @tables_that_may_be_empty, 'Script_Extensions=Katakana_Or_Hiragana'
+                                                    if $v_version ge v6.0.0;
 
 # The lists below are hashes, so the key is the item in the list, and the
 # value is the reason why it is in the list.  This makes generation of
@@ -944,7 +946,11 @@ if ($v_version ge 5.2.0 && $v_version lt 6.0.0) {
 
 # Probably obsolete forever
 if ($v_version ge v4.1.0) {
-    $why_suppressed{'Script=Katakana_Or_Hiragana'} = 'Obsolete.  All code points previously matched by this have been moved to "Script=Common"';
+    $why_suppressed{'Script=Katakana_Or_Hiragana'} = 'Obsolete.  All code points previously matched by this have been moved to "Script=Common".';
+}
+if ($v_version ge v6.0.0) {
+    $why_suppressed{'Script=Katakana_Or_Hiragana'} .= '  Consider instead using Script_Extensions=Katakana or Script_Extensions=Hiragana (or both)"';
+    $why_suppressed{'Script_Extensions=Katakana_Or_Hiragana'} = 'All code points that would be matched by this are matched by either Script_Extensions=Katakana or Script_Extensions=Hiragana"';
 }
 
 # This program can create files for enumerated-like properties, such as
@@ -1063,7 +1069,6 @@ my %ignored_files = (
     'EmojiSources.txt' => 'Not of general utility: for Japanese legacy cell-phone applications',
     'IndicMatraCategory.txt' => 'Provisional',
     'IndicSyllabicCategory.txt' => 'Provisional',
-    'ScriptExtensions.txt' => 'Provisional',
 );
 
 ### End of externally interesting definitions, except for @input_file_objects
@@ -1097,9 +1102,13 @@ my $MAX_UNICODE_CODEPOINTS = $LAST_UNICODE_CODEPOINT + 1;
 
 # Matches legal code point.  4-6 hex numbers, If there are 6, the first
 # two must be 10; if there are 5, the first must not be a 0.  Written this way
-# to decrease backtracking
-my $code_point_re =
-        qr/ \b (?: 10[0-9A-F]{4} | [1-9A-F][0-9A-F]{4} | [0-9A-F]{4} ) \b/x;
+# to decrease backtracking.  The first one allows the code point to be at the
+# end of a word, but to work properly, the word shouldn't end with a valid hex
+# character.  The second one won't match a code point at the end of a word,
+# and doesn't have the run-on issue
+my $run_on_code_point_re =
+            qr/ (?: 10[0-9A-F]{4} | [1-9A-F][0-9A-F]{4} | [0-9A-F]{4} ) \b/x;
+my $code_point_re = qr/\b$run_on_code_point_re/;
 
 # This matches the beginning of the line in the Unicode db files that give the
 # defaults for code points not listed (i.e., missing) in the file.  The code
@@ -1284,6 +1293,7 @@ my $perl;
 my $block;
 my $perl_charname;
 my $print;
+my $Any;
 
 # Are there conflicting names because of beginning with 'In_', or 'Is_'
 my $has_In_conflicts = 0;
@@ -4967,7 +4977,24 @@ sub trace { return main::trace(@_); }
             # utf8.c, which can't really deal with empty tables, but it can
             # deal with a table that matches nothing, as the inverse of 'Any'
             # does.
-            push @OUT, "!utf8::IsAny\n";
+            push @OUT, "!utf8::Any\n";
+        }
+        elsif ($self->name eq 'N'
+
+               # To save disk space and table cache space, avoid putting out
+               # binary N tables, but instead create a file which just inverts
+               # the Y table.  Since the file will still exist and occupy a
+               # certain number of blocks, might as well output the whole
+               # thing if it all will fit in one block.   The number of
+               # ranges below is an approximate number for that.
+               && $self->property->type == $BINARY
+               # && $self->property->tables == 2  Can't do this because the
+               #        non-binary properties, like NFDQC aren't specifiable
+               #        by the notation
+               && $range_list{$addr}->ranges > 15
+               && ! $annotate)  # Under --annotate, want to see everything
+        {
+            push @OUT, "!utf8::" . $self->property->name . "\n";
         }
         else {
             my $range_size_1 = $range_size_1{$addr};
@@ -5210,10 +5237,11 @@ sub trace { return main::trace(@_); }
         my $pre_body = $self->pre_body;
         push @HEADER, $pre_body, "\n" if $pre_body;
 
-        # All these files have a .pl suffix
-        $file_path{$addr}->[-1] .= '.pl';
+        # All these files should have a .pl suffix added to them.
+        my @file_with_pl = @{$file_path{$addr}};
+        $file_with_pl[-1] .= '.pl';
 
-        main::write($file_path{$addr},
+        main::write(\@file_with_pl,
                     $annotate,      # utf8 iff annotating
                     \@HEADER,
                     \@OUT);
@@ -5819,6 +5847,7 @@ END
     # array giving all the ranges that use this base name.  Each range
     # is actually a hash giving the 'low' and 'high' values of it.
     my %names_ending_in_code_point;
+    my %loose_names_ending_in_code_point;
 
     # Inverse mapping.  The list of ranges that have these kinds of
     # names.  Each element contains the low, high, and base names in a
@@ -5861,6 +5890,10 @@ END
             # structures output in the file.
             push @{$names_ending_in_code_point{$map}->{'low'}}, $low;
             push @{$names_ending_in_code_point{$map}->{'high'}}, $high;
+
+            my $squeezed = $map =~ s/[-\s]+//gr;
+            push @{$loose_names_ending_in_code_point{$squeezed}->{'low'}}, $low;
+            push @{$loose_names_ending_in_code_point{$squeezed}->{'high'}}, $high;
 
             push @code_points_ending_in_code_point, { low => $low,
                                                         high => $high,
@@ -5960,7 +5993,9 @@ END
         # Here we assume we were called after have gone through the whole
         # file.  If we actually generated anything for each map type, add its
         # respective header and trailer
+        my $specials_name = "";
         if (@multi_code_point_maps) {
+            $specials_name = "utf8::ToSpec$name";
             $pre_body .= <<END;
 
 # Some code points require special handling because their mappings are each to
@@ -5970,7 +6005,7 @@ END
 # Each key is the string of N bytes that together make up the UTF-8 encoding
 # for the code point.  (i.e. the same as looking at the code point's UTF-8
 # under "use bytes").  Each value is the UTF-8 of the translation, for speed.
-%utf8::ToSpec$name = (
+\%$specials_name = (
 END
             $pre_body .= join("\n", @multi_code_point_maps) . "\n);\n";
         }
@@ -5982,6 +6017,8 @@ END
                 main::simple_dumper(\@code_points_ending_in_code_point,
                                     ' ' x 8);
             my $names = main::simple_dumper(\%names_ending_in_code_point,
+                                            ' ' x 8);
+            my $loose_names = main::simple_dumper(\%loose_names_ending_in_code_point,
                                             ' ' x 8);
 
             # Do the same with the Hangul names,
@@ -6035,14 +6072,23 @@ END
 
     # Matches legal code point.  4-6 hex numbers, If there are 6, the
     # first two must be '10'; if there are 5, the first must not be a '0'.
+    # First can match at the end of a word provided that the end of the
+    # word doesn't look like a hex number.
+    my \$run_on_code_point_re = qr/$run_on_code_point_re/;
     my \$code_point_re = qr/$code_point_re/;
 
     # In the following hash, the keys are the bases of names which includes
     # the code point in the name, like CJK UNIFIED IDEOGRAPH-4E01.  The values
     # of each key is another hash which is used to get the low and high ends
-    # for each range of code points that apply to the name
+    # for each range of code points that apply to the name.
     my %names_ending_in_code_point = (
 $names
+    );
+
+    # The following hash is a copy of the previous one, except is for loose
+    # matching, so each name has blanks and dashes squeezed out
+    my %loose_names_ending_in_code_point = (
+$loose_names
     );
 
     # And the following array gives the inverse mapping from code points to
@@ -6081,7 +6127,7 @@ $jamo_t
     my \$syllable_re = qr/$jamo_re/;
 
     my \$HANGUL_SYLLABLE = "HANGUL SYLLABLE ";
-    my \$HANGUL_SYLLABLE_LENGTH = length \$HANGUL_SYLLABLE;
+    my \$loose_HANGUL_SYLLABLE = "HANGULSYLLABLE";
 
     # These constants names and values were taken from the Unicode standard,
     # version 5.1, section 3.12.  They are used in conjunction with Hangul
@@ -6101,16 +6147,19 @@ END
             $pre_body .= << 'END';
 
     sub name_to_code_point_special {
-        my $name = shift;
+        my ($name, $loose) = @_;
 
         # Returns undef if not one of the specially handled names; otherwise
         # returns the code point equivalent to the input name
+        # $loose is non-zero if to use loose matching, 'name' in that case
+        # must be input as upper case with all blanks and dashes squeezed out.
 END
             if ($has_hangul_syllables) {
                 $pre_body .= << 'END';
 
-        if (substr($name, 0, $HANGUL_SYLLABLE_LENGTH) eq $HANGUL_SYLLABLE) {
-            $name = substr($name, $HANGUL_SYLLABLE_LENGTH);
+        if ((! $loose && $name =~ s/$HANGUL_SYLLABLE//)
+            || ($loose && $name =~ s/$loose_HANGUL_SYLLABLE//))
+        {
             return if $name !~ qr/^$syllable_re$/;
             my $L = $Jamo_L{$1};
             my $V = $Jamo_V{$2};
@@ -6121,22 +6170,30 @@ END
             }
             $pre_body .= << 'END';
 
-        # Name must end in '-code_point' for this to handle.
-        if ($name !~ /^ (.*) - ($code_point_re) $/x) {
-            return;
-        }
+        # Name must end in 'code_point' for this to handle.
+        return if (($loose && $name !~ /^ (.*?) ($run_on_code_point_re) $/x)
+                   || (! $loose && $name !~ /^ (.*) ($code_point_re) $/x));
 
         my $base = $1;
         my $code_point = CORE::hex $2;
+        my $names_ref;
+
+        if ($loose) {
+            $names_ref = \%loose_names_ending_in_code_point;
+        }
+        else {
+            return if $base !~ s/-$//;
+            $names_ref = \%names_ending_in_code_point;
+        }
 
         # Name must be one of the ones which has the code point in it.
-        return if ! $names_ending_in_code_point{$base};
+        return if ! $names_ref->{$base};
 
         # Look through the list of ranges that apply to this name to see if
         # the code point is in one of them.
-        for (my $i = 0; $i < scalar @{$names_ending_in_code_point{$base}{'low'}}; $i++) {
-            return if $names_ending_in_code_point{$base}{'low'}->[$i] > $code_point;
-            next if $names_ending_in_code_point{$base}{'high'}->[$i] < $code_point;
+        for (my $i = 0; $i < scalar @{$names_ref->{$base}{'low'}}; $i++) {
+            return if $names_ref->{$base}{'low'}->[$i] > $code_point;
+            next if $names_ref->{$base}{'high'}->[$i] < $code_point;
 
             # Here, the code point is in the range.
             return $code_point;
@@ -6194,6 +6251,11 @@ END
 # map to.
 \$utf8::SwashInfo{'To$name'}{'format'} = '$format'; # $map_table_formats{$format}
 END
+        if ($specials_name) {
+        $return .= <<END;
+\$utf8::SwashInfo{'To$name'}{'specials_name'} = '$specials_name'; # Name of hash of special mappings
+END
+        }
         my $default_map = $default_map{$addr};
         $return .= "\$utf8::SwashInfo{'To$name'}{'missing'} = '$default_map';";
 
@@ -6222,6 +6284,7 @@ END
         $has_hangul_syllables = 0;
         undef @multi_code_point_maps;
         undef %names_ending_in_code_point;
+        undef %loose_names_ending_in_code_point;
         undef @code_points_ending_in_code_point;
 
         # Calculate the format of the table if not already done.
@@ -6408,6 +6471,11 @@ sub trace { return main::trace(@_); }
     # points.
     main::set_access('matches_all', \%matches_all, 'r');
 
+    my %complement;
+    # Points to the complement that this table is expressed in terms of; 0 if
+    # none.
+    main::set_access('complement', \%complement, 'r', 's' );
+
     sub new {
         my $class = shift;
 
@@ -6456,6 +6524,7 @@ sub trace { return main::trace(@_); }
         $matches_all{$addr} = $matches_all;
         $leader{$addr} = $self;
         $parent{$addr} = $self;
+        $complement{$addr} = 0;
 
         if (defined $format && $format ne $EMPTY_FORMAT) {
             Carp::my_carp_bug("'Format' must be '$EMPTY_FORMAT' in a match table instead of '$format'.  Using '$EMPTY_FORMAT'");
@@ -7212,6 +7281,12 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
     # have to keep more than three.
     main::set_access('unique_maps', \%unique_maps);
 
+    my %pre_declared_maps;
+    # A boolean that gives whether the input data should declare all the
+    # tables used, or not.  If the former, unknown ones raise a warning.
+    main::set_access('pre_declared_maps',
+                                    \%pre_declared_maps, 'r');
+
     sub new {
         # The only required parameter is the positionally first, name.  All
         # other parameters are key => value pairs.  See the documentation just
@@ -7239,6 +7314,11 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
         $full_name{$addr} = delete $args{'Full_Name'} || $name;
         $type{$addr} = delete $args{'Type'} || $UNKNOWN;
         $pseudo_map_type{$addr} = delete $args{'Map_Type'};
+        $pre_declared_maps{$addr} = delete $args{'Pre_Declared_Maps'}
+                                    # Starting in this release, property
+                                    # values should be defined for all
+                                    # properties, except those overriding this
+                                    // $v_version ge v5.1.0;
         # Rest of parameters passed on.
 
         $has_only_code_point_maps{$addr} = 1;
@@ -7364,6 +7444,25 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
         }
 
         return $table;
+    }
+
+    sub delete_match_table {
+        # Delete the table referred to by $2 from the property $1.
+
+        my $self = shift;
+        my $table_to_remove = shift;
+        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+
+        my $addr = do { no overloading; pack 'J', $self; };
+
+        # Remove all names that refer to it.
+        foreach my $key (keys %{$table_ref{$addr}}) {
+            delete $table_ref{$addr}{$key}
+                                if $table_ref{$addr}{$key} == $table_to_remove;
+        }
+
+        $table_to_remove->DESTROY;
+        return;
     }
 
     sub table {
@@ -10270,7 +10369,7 @@ END
                             # http://www.unicode.org/versions/corrigendum8.html
             $fields[$BIDI] = "AL";
         }
-        elsif ($^V lt v5.15.0) { # For 5.16 will convert to use Unicode's name
+        elsif ($^V lt v5.17.0) { # For 5.18 will convert to use Unicode's name
             $fields[$CHARNAME] = "";
         }
 
@@ -11041,6 +11140,35 @@ sub filter_old_style_normalization_lines {
     return;
 }
 
+sub setup_script_extensions {
+    # The Script_Extensions property starts out with a clone of the Script
+    # property.
+
+    my $sc = property_ref("Script");
+    my $scx = Property->new("scx", Full_Name => "Script_Extensions",
+                  Initialize => $sc,
+                  Default_Map => $sc->default_map,
+                  Pre_Declared_Maps => 0,
+                  );
+    $scx->add_comment(join_lines( <<END
+The values for code points that appear in one script are just the same as for
+the 'Script' property.  Likewise the values for those that appear in many
+scripts are either 'Common' or 'Inherited', same as with 'Script'.  But the
+values of code points that appear in a few scripts are a space separated list
+of those scripts.
+END
+    ));
+
+    # Make the scx's tables and aliases for them the same as sc's
+    foreach my $table ($sc->tables) {
+        my $scx_table = $scx->add_match_table($table->name,
+                                Full_Name => $table->full_name);
+        foreach my $alias ($table->aliases) {
+            $scx_table->add_alias($alias->name);
+        }
+    }
+}
+
 sub finish_Unicode() {
     # This routine should be called after all the Unicode files have been read
     # in.  It:
@@ -11130,27 +11258,47 @@ sub finish_Unicode() {
         # missing code points.
         if (defined (my $default_map = $property->default_map)) {
 
-            # This fills in any missing values with the default.
+            # Make sure there is a match table for the default
+            my $default_table;
+            if (! defined ($default_table = $property->table($default_map))) {
+                $default_table = $property->add_match_table($default_map);
+            }
+
+            # And, if the property is binary, the default table will just
+            # be the complement of the other table.
+            if ($property_type == $BINARY) {
+                my $non_default_table;
+
+                # Find the non-default table.
+                for my $table ($property->tables) {
+                    next if $table == $default_table;
+                    $non_default_table = $table;
+                }
+                $default_table->set_complement($non_default_table);
+            }
+
+            # This fills in any missing values with the default.  It's
+            # tempting to save some time and memory in running this program
+            # by skipping this step for binary tables where the default
+            # is easily calculated.  But it is needed for generating
+            # the test file, and other changes would also be required to do
+            # so.
             $property->add_map(0, $LAST_UNICODE_CODEPOINT,
                                $default_map, Replace => $NO);
-
-            # Make sure there is a match table for the default
-            if (! defined $property->table($default_map)) {
-                $property->add_match_table($default_map);
-            }
         }
 
         # Have all we need to populate the match tables.
         my $property_name = $property->name;
+        my $maps_should_be_defined = $property->pre_declared_maps;
         foreach my $range ($property->ranges) {
             my $map = $range->value;
             my $table = property_ref($property_name)->table($map);
             if (! defined $table) {
 
                 # Integral and rational property values are not necessarily
-                # defined in PropValueAliases, but all other ones should be,
-                # starting in 5.1
-                if ($v_version ge v5.1.0
+                # defined in PropValueAliases, but whether all the other ones
+                # should be depends on the property.
+                if ($maps_should_be_defined
                     && $map !~ /^ -? \d+ ( \/ \d+ )? $/x)
                 {
                     Carp::my_carp("Table '$property_name=$map' should have been defined.  Defining it now.")
@@ -11270,7 +11418,35 @@ END
             ));
         }
     }
-    return
+
+    # The Script_Extensions property started out as a clone of the Script
+    # property.  But processing its data file caused some elements to be
+    # replaced with different data.  (These elements were for the Common and
+    # Inherited properties.)  This data is a qw() list of all the scripts that
+    # the code points in the given range are in.  An example line is:
+    # 060C          ; Arab Syrc Thaa # Po       ARABIC COMMA
+    #
+    # The code above has created a new match table named "Arab Syrc Thaa"
+    # which contains 060C.  (The cloned table started out with this code point
+    # mapping to "Common".)  Now we add 060C to each of the Arab, Syrc, and
+    # Thaa match tables.  Then we delete the now spurious "Arab Syrc Thaa"
+    # match table.  This is repeated for all these tables and ranges.  The map
+    # data is retained in the map table for reference, but the spurious match
+    # tables are deleted.
+
+    my $scx = property_ref("Script_Extensions");
+    foreach my $table ($scx->tables) {
+        next unless $table->name =~ /\s/;   # Only the new tables have a space
+                                            # in their names, and all do
+        my @scripts = split /\s+/, $table->name;
+        foreach my $script (@scripts) {
+            my $script_table = $scx->table($script);
+            $script_table += $table;
+        }
+        $scx->delete_match_table($table);
+    }
+
+    return;
 }
 
 sub compile_perl() {
@@ -11288,7 +11464,7 @@ sub compile_perl() {
 
     # 'Any' is all code points.  As an error check, instead of just setting it
     # to be that, construct it to be the union of all the major categories
-    my $Any = $perl->add_match_table('Any',
+    $Any = $perl->add_match_table('Any',
             Description  => "[\\x{0000}-\\x{$LAST_UNICODE_CODEPOINT_STRING}]",
             Matches_All => 1);
 
@@ -11552,8 +11728,8 @@ sub compile_perl() {
                                 );
     $XPerlSpace->add_alias('SpacePerl');    # A pre-existing synonym
     my $PerlSpace = $perl->add_match_table('PerlSpace',
-                            Description => '\s, restricted to ASCII',
-                            Initialize => $XPerlSpace & $ASCII,
+                        Description => '\s, restricted to ASCII = [ \f\n\r\t]',
+                        Initialize => $XPerlSpace & $ASCII,
                             );
 
 
@@ -11632,10 +11808,17 @@ sub compile_perl() {
                               0xFF10..0xFF19, 0xFF21..0xFF26, 0xFF41..0xFF46]);
         $Xdigit->add_description('[0-9A-Fa-f] and corresponding fullwidth versions, like U+FF10: FULLWIDTH DIGIT ZERO');
     }
-    $perl->add_match_table('PosixXDigit',
-                            Initialize => $ASCII & $Xdigit,
-                            Description => '[0-9A-Fa-f]',
-                        );
+
+    # AHex was not present in early releases
+    my $PosixXDigit = $perl->add_match_table('PosixXDigit');
+    my $AHex = property_ref('ASCII_Hex_Digit');
+    if (defined $AHex && ! $AHex->is_empty) {
+        $PosixXDigit->set_equivalent_to($AHex->table('Y'), Related => 1);
+    }
+    else {
+        $PosixXDigit->initialize($Xdigit & $ASCII);
+    }
+    $PosixXDigit->add_description('[0-9A-Fa-f]');
 
     my $dt = property_ref('Decomposition_Type');
     $dt->add_match_table('Non_Canon', Full_Name => 'Non_Canonical',
@@ -12192,7 +12375,7 @@ sub register_file_for_name($$$) {
 
     my $table = shift;
     my $directory_ref = shift;   # Array of the directory path for the file
-    my $file = shift;            # The file name in the final directory, [-1].
+    my $file = shift;            # The file name in the final directory.
     Carp::carp_extra_args(\@_) if main::DEBUG && @_;
 
     trace "table=$table, file=$file, directory=@$directory_ref" if main::DEBUG && $to_trace;
@@ -12207,6 +12390,21 @@ sub register_file_for_name($$$) {
     # Do all of the work for all equivalent tables when called with the leader
     # table, so skip if isn't the leader.
     return if $table->leader != $table;
+
+    # If this is a complement of another file, use that other file instead,
+    # with a ! prepended to it.
+    my $complement;
+    if (($complement = $table->complement) != 0) {
+        my @directories = $complement->file_path;
+
+        # This assumes that the 0th element is something like 'lib',
+        # the 1th element the property name (in its own directory), like
+        # 'AHex', and the 2th element the file like 'Y' which will have a .pl
+        # appended to it later.
+        $directories[1] =~ s/^/!/;
+        $file = pop @directories;
+        $directory_ref =\@directories;
+    }
 
     # Join all the file path components together, using slashes.
     my $full_filename = join('/', @$directory_ref, $file);
@@ -12275,7 +12473,7 @@ sub register_file_for_name($$$) {
             }
 
             # Keep a list of the deprecated properties and their filenames
-            if ($deprecated) {
+            if ($deprecated && $complement == 0) {
                 $utf8::why_deprecated{$sub_filename} = $deprecated;
             }
 
@@ -12819,19 +13017,20 @@ sub make_pod () {
                                                       : ""));
         @block_warning = << "END";
 
-Matches in the Block property have shortcuts that begin with 'In_'.  For
-example, \\p{Block=Latin1} can be written as \\p{In_Latin1}.  For backward
-compatibility, if there is no conflict with another shortcut, these may also
-be written as \\p{Latin1} or \\p{Is_Latin1}.  But, N.B., there are numerous
-such conflicting shortcuts.  Use of these forms for Block is discouraged, and
-are flagged as such, not only because of the potential confusion as to what is
-meant, but also because a later release of Unicode may preempt the shortcut,
-and your program would no longer be correct.  Use the 'In_' form instead to
-avoid this, or even more clearly, use the compound form, e.g.,
-\\p{blk:latin1}.  See L<perlunicode/"Blocks"> for more information about this.
+Matches in the Block property have shortcuts that begin with "In_".  For
+example, C<\\p{Block=Latin1}> can be written as C<\\p{In_Latin1}>.  For
+backward compatibility, if there is no conflict with another shortcut, these
+may also be written as C<\\p{Latin1}> or C<\\p{Is_Latin1}>.  But, N.B., there
+are numerous such conflicting shortcuts.  Use of these forms for Block is
+discouraged, and are flagged as such, not only because of the potential
+confusion as to what is meant, but also because a later release of Unicode may
+preempt the shortcut, and your program would no longer be correct.  Use the
+"In_" form instead to avoid this, or even more clearly, use the compound form,
+e.g., C<\\p{blk:latin1}>.  See L<perlunicode/"Blocks"> for more information
+about this.
 END
     }
-    my $text = "If an entry has flag(s) at its beginning, like '$DEPRECATED', the 'Is_' form has the same flag(s)";
+    my $text = "If an entry has flag(s) at its beginning, like \"$DEPRECATED\", the \"Is_\" form has the same flag(s)";
     $text = "$exception_message $text" if $has_Is_conflicts;
 
     # And the 'Is_ line';
@@ -12873,7 +13072,7 @@ END
 
         $zero_matches = <<END;
 
-=head2 Legal \\p{} and \\P{} constructs that match no characters
+=head2 Legal C<\\p{}> and C<\\P{}> constructs that match no characters
 
 Unicode has some property-value pairs that currently don't match anything.
 This happens generally either because they are obsolete, or for symmetry with
@@ -13023,8 +13222,9 @@ There are many properties in Unicode, and Perl provides access to almost all of
 them, as well as some additional extensions and short-cut synonyms.
 
 And just about all of the few that aren't accessible through the Perl
-core are accessible through the modules: Unicode::Normalize and
-Unicode::UCD, and for Unihan properties, via the CPAN module Unicode::Unihan.
+core are accessible through the modules: L<Unicode::Normalize> and
+L<Unicode::UCD>, and for Unihan properties, via the CPAN module
+L<Unicode::Unihan>.
 
 This document merely lists all available properties and does not attempt to
 explain what each property really means.  There is a brief description of each
@@ -13037,30 +13237,30 @@ L<perlunicode/Other Properties>.
 Note that you can define your own properties; see
 L<perlunicode/"User-Defined Character Properties">.
 
-=head1 Properties accessible through \\p{} and \\P{}
+=head1 Properties accessible through C<\\p{}> and C<\\P{}>
 
-The Perl regular expression \\p{} and \\P{} constructs give access to most of
-the Unicode character properties.  The table below shows all these constructs,
-both single and compound forms.
+The Perl regular expression C<\\p{}> and C<\\P{}> constructs give access to
+most of the Unicode character properties.  The table below shows all these
+constructs, both single and compound forms.
 
 B<Compound forms> consist of two components, separated by an equals sign or a
 colon.  The first component is the property name, and the second component is
 the particular value of the property to match against, for example,
-'\\p{Script: Greek}' and '\\p{Script=Greek}' both mean to match characters
+C<\\p{Script: Greek}> and C<\\p{Script=Greek}> both mean to match characters
 whose Script property is Greek.
 
-B<Single forms>, like '\\p{Greek}', are mostly Perl-defined shortcuts for
+B<Single forms>, like C<\\p{Greek}>, are mostly Perl-defined shortcuts for
 their equivalent compound forms.  The table shows these equivalences.  (In our
-example, '\\p{Greek}' is a just a shortcut for '\\p{Script=Greek}'.)
+example, C<\\p{Greek}> is a just a shortcut for C<\\p{Script=Greek}>.)
 There are also a few Perl-defined single forms that are not shortcuts for a
-compound form.  One such is \\p{Word}.  These are also listed in the table.
+compound form.  One such is C<\\p{Word}>.  These are also listed in the table.
 
 In parsing these constructs, Perl always ignores Upper/lower case differences
-everywhere within the {braces}.  Thus '\\p{Greek}' means the same thing as
-'\\p{greek}'.  But note that changing the case of the 'p' or 'P' before the
-left brace completely changes the meaning of the construct, from "match" (for
-'\\p{}') to "doesn't match" (for '\\P{}').  Casing in this document is for
-improved legibility.
+everywhere within the {braces}.  Thus C<\\p{Greek}> means the same thing as
+C<\\p{greek}>.  But note that changing the case of the C<"p"> or C<"P"> before
+the left brace completely changes the meaning of the construct, from "match"
+(for C<\\p{}>) to "doesn't match" (for C<\\P{}>).  Casing in this document is
+for improved legibility.
 
 Also, white space, hyphens, and underscores are also normally ignored
 everywhere between the {braces}, and hence can be freely added or removed
@@ -13070,7 +13270,7 @@ means that tighter (stricter) rules are used for that entry:
 
 =over 4
 
-=item Single form (\\p{name}) tighter rules:
+=item Single form (C<\\p{name}>) tighter rules:
 
 White space, hyphens, and underscores ARE significant
 except for:
@@ -13086,7 +13286,7 @@ except for:
 That means, for example, that you can freely add or remove white space
 adjacent to (but within) the braces without affecting the meaning.
 
-=item Compound form (\\p{name=value} or \\p{name:value}) tighter rules:
+=item Compound form (C<\\p{name=value}> or C<\\p{name:value}>) tighter rules:
 
 The tighter rules given above for the single form apply to everything to the
 right of the colon or equals; the looser rules still apply to everything to
@@ -13141,7 +13341,7 @@ flags each such entry in the table.
 
 @block_warning
 
-The table below has two columns.  The left column contains the \\p{}
+The table below has two columns.  The left column contains the C<\\p{}>
 constructs to look up, possibly preceded by the flags mentioned above; and
 the right column contains information about them, like a description, or
 synonyms.  It shows both the single and compound forms for each property that
@@ -13170,7 +13370,7 @@ in the second column.  Under case-insensitive matching they match the
 same code pode points as the property "other_property".
 
 There is no description given for most non-Perl defined properties (See
-$unicode_reference_url for that).
+L<$unicode_reference_url> for that).
 
 For compactness, 'B<*>' is used as a wildcard instead of showing all possible
 combinations.  For example, entries like:
@@ -13182,10 +13382,11 @@ for the latter is also valid for the former.  Similarly,
 
  \\p{Is_*}                                   \\p{*}
 
-means that if and only if, for example, \\p{Foo} exists, then \\p{Is_Foo} and
-\\p{IsFoo} are also valid and all mean the same thing.  And similarly,
-\\p{Foo=Bar} means the same as \\p{Is_Foo=Bar} and \\p{IsFoo=Bar}.  '*' here
-is restricted to something not beginning with an underscore.
+means that if and only if, for example, C<\\p{Foo}> exists, then
+C<\\p{Is_Foo}> and C<\\p{IsFoo}> are also valid and all mean the same thing.
+And similarly, C<\\p{Foo=Bar}> means the same as C<\\p{Is_Foo=Bar}> and
+C<\\p{IsFoo=Bar}>.  "*" here is restricted to something not beginning with an
+underscore.
 
 Also, in binary properties, 'Yes', 'T', and 'True' are all synonyms for 'Y'.
 And 'No', 'F', and 'False' are all synonyms for 'N'.  The table shows 'Y*' and
@@ -13203,7 +13404,7 @@ B<Summary legend:>
 
 =over 4
 
-=item B<*> is a wild-card
+=item Z<>B<*> is a wild-card
 
 =item B<(\\d+)> in the info column gives the number of code points matched by
 this property.
@@ -13233,9 +13434,9 @@ These are:
  Titlecase_Mapping          ucfirst()
  Uppercase_Mapping          uc()
 
-Case_Folding is accessible through the /i modifier in regular expressions.
+Case_Folding is accessible through the C</i> modifier in regular expressions.
 
-The Name property is accessible through the \\N{} interpolation in
+The Name property is accessible through the C<\\N{}> interpolation in
 double-quoted strings and regular expressions, but both usages require a C<use
 charnames;> to be specified, which also contains related functions viacode(),
 vianame(), and string_vianame().
@@ -13267,7 +13468,7 @@ code points to their respective values.  As part of its build process,
 Perl constructs tables containing these mappings for all properties that it
 deals with.  Some, but not all, of these are written out into files.
 Those written out are in the directory C<\$Config{privlib}>/F<unicore/To/>
-(%Config is available from the Config module).
+(C<%Config> is available from the C<Config> module).
 
 Perl reserves the right to change the format and even the existence of any of
 those files without notice, except the ones that were in existence prior to
@@ -13276,13 +13477,13 @@ are:
 
 @map_tables_actually_output
 
-Each of the files in this directory defines two hash entries to help reading
-programs decipher it.  One of them looks like this:
+Each of the files in this directory defines several hash entries to help
+reading programs decipher it.  One of them looks like this:
 
     \$utf8::SwashInfo{'ToNAME'}{'format'} = 's';
 
-where 'NAME' is a name to indicate the property.  For backwards compatibility,
-this is not necessarily the property's official Unicode name.  (The 'To' is
+where "NAME" is a name to indicate the property.  For backwards compatibility,
+this is not necessarily the property's official Unicode name.  (The "To" is
 also for backwards compatibility.)  The hash entry gives the format of the
 mapping fields of the table, currently one of the following:
 
@@ -13292,17 +13493,22 @@ This format applies only to the entries in the main body of the table.
 Entries defined in hashes or ones that are missing from the list can have a
 different format.
 
-The value that the missing entries have is given by the other SwashInfo hash
+The value that the missing entries have is given by another SwashInfo hash
 entry line; it looks like this:
 
     \$utf8::SwashInfo{'ToNAME'}{'missing'} = 'NaN';
 
 This example line says that any Unicode code points not explicitly listed in
-the file have the value 'NaN' under the property indicated by NAME.  If the
+the file have the value "NaN" under the property indicated by NAME.  If the
 value is the special string C<< <code point> >>, it means that the value for
 any missing code point is the code point itself.  This happens, for example,
 in the file for Uppercase_Mapping (To/Upper.pl), in which code points like the
-character 'A', are missing because the uppercase of 'A' is itself.
+character "A", are missing because the uppercase of "A" is itself.
+
+Finally, if the file contains a hash for special case entries, its name is
+specified by an entry that looks like this:
+
+    \$utf8::SwashInfo{'ToNAME'}{'specials_name'} = 'utf8::ToSpecNAME';
 
 =head1 SEE ALSO
 
@@ -13385,7 +13591,6 @@ END
     foreach my $cased (keys %caseless_equivalent_to) {
         my @path = $caseless_equivalent_to{$cased}->file_path;
         my $path = join '/', @path[1, -1];
-        $path =~ s/\.pl//;
         $utf8::caseless_equivalent_to{$cased} = $path;
     }
     push @heavy, simple_dumper (\%utf8::caseless_equivalent_to, ' ' x 4);
@@ -13414,9 +13619,16 @@ sub write_all_tables() {
     # (sort so that if there is an immutable file name, it has precedence, so
     # some other property can't come in and take over its file name.  If b's
     # file name is defined, will return 1, meaning to take it first; don't
-    # care if both defined, as they had better be different anyway)
+    # care if both defined, as they had better be different anyway.  And the
+    # property named 'Perl' needs to be first (it doesn't have any immutable
+    # file name) because empty properties are defined in terms of it's table
+    # named 'Any'.)
     PROPERTY:
-    foreach my $property (sort { defined $b->file } property_ref('*')) {
+    foreach my $property (sort { return -1 if $a == $perl;
+                                 return 1 if $b == $perl;
+                                 return defined $b->file
+                                } property_ref('*'))
+    {
         my $type = $property->type;
 
         # And for each table for that property, starting with the mapping
@@ -13434,6 +13646,14 @@ sub write_all_tables() {
                                 return 1 if ! defined $ext_a;
                                 my $ext_b = $b->external_name;
                                 return -1 if ! defined $ext_b;
+
+                                # But return the non-complement table before
+                                # the complement one, as the latter is defined
+                                # in terms of the former, and needs to have
+                                # the information for the former available.
+                                return 1 if $a->complement != 0;
+                                return -1 if $b->complement != 0;
+
                                 my $cmp = length $ext_a <=> length $ext_b;
 
                                 # Return result if lengths not equal
@@ -13529,6 +13749,9 @@ sub write_all_tables() {
                 {
                     push @unhandled_properties, "$table";
                 }
+
+                # An empty table is just the complement of everything.
+                $table->set_complement($Any) if $table != $property;
             }
             elsif ($expected_empty) {
                 my $because = "";
@@ -13726,7 +13949,8 @@ sub write_all_tables() {
 
         # Only need to write one file when shared by more than one
         # property
-        next if ! $is_property && $table->leader != $table;
+        next if ! $is_property
+                && ($table->leader != $table || $table->complement != 0);
 
         # Construct a nice comment to add to the file
         $table->set_final_comment;
@@ -14423,6 +14647,10 @@ my @input_file_objects = (
                     Optional => 1,
                     Each_Line_Handler => \&filter_unihan_line,
                     ),
+    Input_file->new('ScriptExtensions.txt', v6.0.0,
+                    Property => 'Script_Extensions',
+                    Pre_Handler => \&setup_script_extensions,
+                    ),
 );
 
 # End of all the preliminaries.
@@ -14704,7 +14932,7 @@ END
 }
 
 # Output these warnings unless -q explicitly specified.
-if ($verbosity >= $NORMAL_VERBOSITY) {
+if ($verbosity >= $NORMAL_VERBOSITY && ! $debug_skip) {
     if (@unhandled_properties) {
         print "\nProperties and tables that unexpectedly have no code points\n";
         foreach my $property (sort @unhandled_properties) {

@@ -3,14 +3,37 @@ use strict;
 use warnings;
 package CPAN::Meta::Converter;
 BEGIN {
-  $CPAN::Meta::Converter::VERSION = '2.110440';
+  $CPAN::Meta::Converter::VERSION = eval '2.110930_001';
 }
 # ABSTRACT: Convert CPAN distribution metadata structures
 
 
 use CPAN::Meta::Validator;
-use Storable qw/dclone/;
 use version 0.82 ();
+use Parse::CPAN::Meta 1.4400 ();
+use Carp qw(croak);
+
+sub _dclone {
+  my $ref = shift;
+
+  # Work around JSON::PP's lack of a convert_blessed_universally
+  local *UNIVERSAL::TO_JSON = sub {
+      my $obj = shift;
+
+      # Special case: stringify version objects
+      # Everything else: serialize
+      return $obj->isa("version") ? "$obj"    :
+             $obj->isa("HASH")    ? { %$obj } :
+             $obj->isa("ARRAY")   ? { @$obj } :
+                                    croak "Don't know how to serialize $obj";
+  };
+
+  my $backend = Parse::CPAN::Meta->json_backend();
+  return $backend->new->decode(
+    $backend->new->convert_blessed->allow_blessed->encode($ref)
+  );
+}
+
 
 my %known_specs = (
     '2'   => 'http://search.cpan.org/perldoc?CPAN::Meta::Spec',
@@ -134,15 +157,18 @@ my @valid_licenses_2 = qw(
   unknown
 );
 
+# The "old" values were defined by Module::Build, and were often vague.  I have
+# made the decisions below based on reading Module::Build::API and how clearly
+# it specifies the version of the license.
 my %license_map_2 = (
-  ( map { $_ => $_ } @valid_licenses_2 ),
-  apache => 'apache_2_0',
-  artistic => 'artistic_1',
-  artistic2 => 'artistic_2',
-  gpl => 'gpl_1',
-  lgpl => 'lgpl_2_1',
-  mozilla => 'mozilla_1_0',
-  perl => 'perl_5',
+  (map { $_ => $_ } @valid_licenses_2),
+  apache      => 'apache_2_0',  # clearly stated as 2.0
+  artistic    => 'artistic_1',  # clearly stated as 1
+  artistic2   => 'artistic_2',  # clearly stated as 2
+  gpl         => 'open_source', # we don't know which GPL; punt
+  lgpl        => 'open_source', # we don't know which LGPL; punt
+  mozilla     => 'open_source', # we don't know which MPL; punt
+  perl        => 'perl_5',      # clearly Perl 5
   restrictive => 'restricted',
 );
 
@@ -1187,7 +1213,7 @@ sub convert {
   my $new_version = $args->{version} || $HIGHEST;
 
   my ($old_version) = $self->{spec};
-  my $converted = dclone $self->{data};
+  my $converted = _dclone($self->{data});
 
   if ( $old_version == $new_version ) {
     $converted = _convert( $converted, $cleanup{$old_version}, $old_version );
@@ -1242,7 +1268,7 @@ CPAN::Meta::Converter - Convert CPAN distribution metadata structures
 
 =head1 VERSION
 
-version 2.110440
+version 2.110930
 
 =head1 SYNOPSIS
 

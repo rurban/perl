@@ -5,7 +5,7 @@ use 5.008;
 use strict;
 use warnings;
 
-our $VERSION = '1.83';
+our $VERSION = '1.84';
 my $XS_VERSION = $VERSION;
 $VERSION = eval $VERSION;
 
@@ -1051,7 +1051,7 @@ L<http://www.perl.com/pub/a/2002/06/11/threads.html> and
 L<http://www.perl.com/pub/a/2002/09/04/threads.html>
 
 Perl threads mailing list:
-L<http://lists.cpan.org/showlist.cgi?name=iThreads>
+L<http://lists.perl.org/list/ithreads.html>
 
 Stack size discussion:
 L<http://www.perlmonks.org/?node_id=532956>

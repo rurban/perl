@@ -2066,7 +2066,7 @@ $     if f$type(use5005threads) .nes. ""
 $     then
 $         if use5005threads .or. use5005threads .eqs. "define" then bool_dflt="n"
 $     endif
-$     rp = "Use the newer intepreter-based ithreads? [''bool_dflt'] "
+$     rp = "Use the newer interpreter-based ithreads? [''bool_dflt'] "
 $     GOSUB myread
 $     use_ithreads=ans
 $     if use_ithreads 
@@ -7372,10 +7372,6 @@ $ WRITE CONFIG "$ cpan2dist  == """ + perl_setup_perl + " ''vms_prefix':[utils]c
 $! FIXME: "-" is an operator and illegal in a symbol name -- cpanp-run-perl can't work
 $!$ WRITE CONFIG "$ cpanp-run-perl == """ + perl_setup_perl + " ''vms_prefix':[utils]cpanp-run-perl.com"""
 $ WRITE CONFIG "$ cpanp      == """ + perl_setup_perl + " ''vms_prefix':[utils]cpanp.com"""
-$ IF F$LOCATE("Devel::DProf",dynamic_ext) .LT. F$LENGTH(dynamic_ext)
-$ THEN
-$ WRITE CONFIG "$ dprofpp    == """ + perl_setup_perl + " ''vms_prefix':[utils]dprofpp.com"""
-$ ENDIF 
 $ WRITE CONFIG "$ enc2xs     == """ + perl_setup_perl + " ''vms_prefix':[utils]enc2xs.com"""
 $ WRITE CONFIG "$ find2perl  == """ + perl_setup_perl + " ''vms_prefix':[utils]find2perl.com"""
 $ WRITE CONFIG "$ h2ph       == """ + perl_setup_perl + " ''vms_prefix':[utils]h2ph.com"""
