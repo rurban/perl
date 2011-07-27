@@ -96,6 +96,12 @@ XXX
 
 =item *
 
+L<CPANPLUS> has been upgraded from version 0.9108 to version 0.9109
+
+Fixed support for v-strings and x.y.z versions with v5.8.4
+
+=item *
+
 L<ExtUtils::Install> has been upgraded from version 1.56 to version 1.57.
 
 There is no change to ExtUtils::Install other than the version number
@@ -123,6 +129,14 @@ L<Term::ANSIColor> has been upgraded from version 3.00 to version 3.01
 Only interpret an initial array reference as a list of colors, not any initial
 reference, allowing the colored function to work properly on objects with
 stringification defined.
+
+=item *
+
+L<Unicode::Collate> has been upgraded from version 0.77 to version 0.78
+
+=item *
+
+L<Unicode::Normalize> has been upgraded from version 1.12 to version 1.13
 
 =back
 
@@ -364,6 +378,12 @@ effects like C<ref \$_> returning "CODE" in some instances.
 
 C<lock>'s prototype has been corrected to C<(\[$@%*])> from C<(\$)>, which
 was just wrong.
+
+=item *
+
+The prototypes for the core functions C<stat> and C<lstat> have been
+removed, as they were incorrect, because their syntax cannot be replicated
+by Perl subroutines.
 
 =item *
 
