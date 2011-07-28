@@ -45,6 +45,15 @@ XXX For a release on a stable branch, this section aspires to be:
 
 [ List each incompatible change as a =head2 entry ]
 
+=head2 C<UNIVERSAL::VERSION> now returns $VERSION
+
+C<UNIVERSAL::VERSION> now return whatever is in $VERSION, instead of
+returning $VERSION converted to a version object and then to a string.
+As a result, it no longer parses the version when called without arguments,
+so it no longer dies in that case for malformed versions.  This allows
+custom version number parsers to use C<< ->VERSION >> to retrieve the
+version number, as was the case in Perl 5.8 [perl #95544].
+
 =head1 Deprecations
 
 XXX Any deprecated features, syntax, modules etc. should be listed here.
@@ -110,11 +119,22 @@ to version 1.999002 and a new C<skip_cwd> attribute has been added.
 
 =item *
 
+L<IPC::Open3> has been upgraded from version 1.11 to 1.12.
+
+C<open3> with "-" for the program name works once more.  This was broken in
+version 1.06 (and hence in Perl 5.14.0) [perl #95748].
+
+=item *
+
 L<Module::Build> has been upgraded from version 0.3800 to version 0.39_01.
 
 Pod to HTML internals changed to support revisions to Pod::Html in core.
 Also fixes some minor bugs. [rt.cpan.org #68585] [rt.cpan.org #67893]
 [rt.cpan.org #67008]
+
+=item *
+
+L<Params::Check> has been upgraded from version 0.28 to version 0.30
 
 =item *
 
