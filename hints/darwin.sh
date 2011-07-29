@@ -143,7 +143,7 @@ esac
 
 # Shared library extension is .dylib.
 # Bundle extension is .bundle.
-ld='cc';
+test -z "$ld" && ld='cc';
 so='dylib';
 dlext='bundle';
 usedl='define';
@@ -185,7 +185,7 @@ case "$osvers" in
    lddlflags="${ldflags} -bundle -undefined dynamic_lookup"
    case "$ld" in
        *MACOSX_DEVELOPMENT_TARGET*) ;;
-       *) ld="env MACOSX_DEPLOYMENT_TARGET=10.3 ${ld}" ;;
+       cc) ld="env MACOSX_DEPLOYMENT_TARGET=10.3 ${ld}" ;;
    esac
    ;;
 esac
