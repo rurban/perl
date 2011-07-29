@@ -9041,6 +9041,98 @@ Perl_cv_set_call_checker(pTHX_ CV *cv, Perl_call_checker ckfun, SV *ckobj)
     }
 }
 
+/* If &Foo::bar exists or if %Foo:: isn't modified at run time, Foo::->bar() 
+ * could be resolved at compile time to a subroutine call.
+ * Foo->bar(args...) :
+ *   pushmark
+ *   const PV => "Foo"
+ *     args ...
+ *   method_named => PV "bar"
+ *   entersub
+ * =>
+ *   pushmark
+ *   const PV => "Foo"
+ *     args ...
+ *   gv => *Foo::bar
+ *   entersub
+ * 
+ * Also if the class is typed, as in 
+ *   my Foo $obj = shift;
+ *   $obj->bar(args...);
+ *
+ *   pushmark
+ *   padsv GV => *Foo
+ *     args ...
+ *   method_named => PV "bar"
+ *   entersub
+ */
+STATIC OP *
+S_method_to_entersub(pTHX_ OP *o, OP *svop)
+{
+    GV *gv;
+    SV *method = ((SVOP*)svop)->op_sv;
+    char *methname;
+    STRLEN methlen;
+    HV *stash;
+    OP *nop;
+    OP *mop;
+
+    if (svop->op_type == OP_METHOD_NAMED)
+        methname = SvPV(method, methlen);
+    else
+        return ((OP*)NULL);
+
+    if (o->op_type == OP_CONST) {
+        /* const class: Foo->bar() */
+        STRLEN len;
+        char *package = SvPV(((SVOP*)o)->op_sv, len);
+        stash = gv_stashpvn(package, len, FALSE);
+    }
+    else if (o->op_type == OP_PADSV) {
+        /* typed class: my Foo $obj; $obj->bar */
+        SV *sv = *av_fetch(PL_comppad_name, o->op_targ, FALSE);
+        if (sv && SvOBJECT(sv))
+            stash = SvSTASH(sv);
+        else
+	    return ((OP*)NULL);
+    }
+    else
+	return ((OP*)NULL);
+
+    /* XXX: emulate method_common() */
+    if (!(stash && (gv = gv_fetchmeth(stash, methname, methlen, 0)) && 
+          isGV(gv)))
+	return ((OP*)NULL);
+
+    if (GvSTASH(CvGV(GvCV(gv))) != stash) {
+        /* XXX TODO Check readonly @ISA and stash at compile time to make sure 
+	 * this lookup is valid.
+	 */
+        return ((OP*)NULL); 	/* if stash and @ISA is not frozen */
+
+        gv = CvGV(GvCV(gv)); 	/* point to the real gv */
+    }
+
+    if (o->op_type == OP_PADSV) {
+	DEBUG_v(PerlIO_printf(Perl_debug_log, "method_named (%s)$o->%s => entersub at 0x%p, GV=0x%p\n",
+			      HvNAME(stash), methname, o, gv));
+    } else {
+	DEBUG_v(PerlIO_printf(Perl_debug_log, "method_named %s->%s => entersub at 0x%p, GV=0x%p\n",
+			      HvNAME(stash), methname, o, gv));
+    }
+
+    /* remove bareword-ness of class name */
+    o->op_private &= ~(OPpCONST_BARE|OPpCONST_STRICT); 
+    for (mop = o; mop->op_sibling->op_sibling; mop = mop->op_sibling) ;
+
+    op_free(mop->op_sibling); /* loose OP_METHOD_NAMED */
+    mop->op_sibling = scalar(newGVOP(OP_GV, 0, gv));
+    nop = convert(OP_ENTERSUB, OPf_STACKED, o);
+
+    /* DEBUG_v(op_dump(nop)); */
+    return nop;
+}
+
 OP *
 Perl_ck_subr(pTHX_ OP *o)
 {
@@ -9067,6 +9159,14 @@ Perl_ck_subr(pTHX_ OP *o)
 	o->op_private |= (cvop->op_private & OPpENTERSUB_AMPER);
 	op_null(cvop);
     } else if (cvop->op_type == OP_METHOD || cvop->op_type == OP_METHOD_NAMED) {
+	if (aop->op_type == OP_CONST || aop->op_type == OP_PADSV) {
+	    /* Named or typed methods, if &Foo::bar exists or if the inheritence is known, 
+	       can be resolved at compile time to a subroutine call. */
+	    OP *nop;
+	    if ((nop = S_method_to_entersub(aTHX_ aop, cvop))) {
+		return nop;
+	    }
+	}
 	if (aop->op_type == OP_CONST)
 	    aop->op_private &= ~OPpCONST_STRICT;
 	else if (aop->op_type == OP_LIST) {
