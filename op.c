@@ -9077,6 +9077,7 @@ S_method_to_entersub(pTHX_ OP *o, OP *svop)
     OP *nop;
     OP *mop;
 
+    /* XXX need to ensure entersub->op_private & OPpENTERSUB_NOMOD */
     if (svop->op_type == OP_METHOD_NAMED)
         methname = SvPV(method, methlen);
     else
@@ -9158,7 +9159,7 @@ Perl_ck_subr(pTHX_ OP *o)
 	o->op_private |= (cvop->op_private & OPpENTERSUB_AMPER);
 	op_null(cvop);
     } else if (cvop->op_type == OP_METHOD || cvop->op_type == OP_METHOD_NAMED) {
-	if (cvop->op_type == OP_METHOD_NAMED && 
+	if ((cvop->op_type == OP_METHOD_NAMED && o->op_private & OPpENTERSUB_NOMOD) &&
 	    (aop->op_type == OP_CONST || aop->op_type == OP_PADSV)) {
 	    /* Named or typed methods, if &Foo::bar exists or inheritence is locked. */
 	    OP *nop;
