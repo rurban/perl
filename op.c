@@ -9129,7 +9129,6 @@ S_method_to_entersub(pTHX_ OP *o, OP *svop)
     mop->op_sibling = scalar(newGVOP(OP_GV, 0, gv));
     nop = convert(OP_ENTERSUB, OPf_STACKED, o);
 
-    /* DEBUG_v(op_dump(nop)); */
     return nop;
 }
 
@@ -9159,9 +9158,9 @@ Perl_ck_subr(pTHX_ OP *o)
 	o->op_private |= (cvop->op_private & OPpENTERSUB_AMPER);
 	op_null(cvop);
     } else if (cvop->op_type == OP_METHOD || cvop->op_type == OP_METHOD_NAMED) {
-	if (aop->op_type == OP_CONST || aop->op_type == OP_PADSV) {
-	    /* Named or typed methods, if &Foo::bar exists or if the inheritence is known, 
-	       can be resolved at compile time to a subroutine call. */
+	if (cvop->op_type == OP_METHOD_NAMED && 
+	    (aop->op_type == OP_CONST || aop->op_type == OP_PADSV)) {
+	    /* Named or typed methods, if &Foo::bar exists or inheritence is locked. */
 	    OP *nop;
 	    if ((nop = S_method_to_entersub(aTHX_ aop, cvop))) {
 		return nop;
