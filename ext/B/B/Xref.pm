@@ -48,6 +48,56 @@ letter "i". Subroutine and method calls are indicated by the character
 "&".  Subroutine definitions are indicated by "s" and format
 definitions by "f".
 
+For instance, here's part of the report from the I<pod2man> program that
+comes with Perl:
+
+  Subroutine clear_noremap
+    Package (lexical)
+      $ready_to_print   i1069, 1079
+    Package main
+      $&                1086
+      $.                1086
+      $0                1086
+      $1                1087
+      $2                1085, 1085
+      $3                1085, 1085
+      $ARGV             1086
+      %HTML_Escapes     1085, 1085
+
+This shows the variables used in the subroutine C<clear_noremap>.  The
+variable C<$ready_to_print> is a my() (lexical) variable,
+B<i>ntroduced (first declared with my()) on line 1069, and used on
+line 1079.  The variable C<$&> from the main package is used on 1086,
+and so on.
+
+A line number may be prefixed by a single letter:
+
+=over 4
+
+=item i
+
+Lexical variable introduced (declared with my()) for the first time.
+
+=item &
+
+Subroutine or method call.
+
+=item s
+
+Subroutine defined.
+
+=item r
+
+Format defined.
+
+=back
+
+The most useful option the cross referencer has is to save the report
+to a separate file.  For instance, to save the report on
+I<myperlprogram> to the file I<report>:
+
+  $ perl -MO=Xref,-oreport myperlprogram
+
 =head1 OPTIONS
 
 Option words are separated by commas (not whitespace) and follow the
