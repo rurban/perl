@@ -7,7 +7,7 @@ BEGIN {
 }
 
 BEGIN { require './test.pl'; }
-plan tests => 243;
+plan tests => 240;
 
 while (<DATA>) {
     chomp;
@@ -30,8 +30,6 @@ __DATA__
 __FILE__ ()
 __LINE__ ()
 __PACKAGE__ ()
-__DATA__ undef
-__END__ undef
 abs (_)
 accept (**)
 alarm (_)
@@ -57,7 +55,6 @@ cos (_)
 crypt ($$)
 dbmclose (\%)
 dbmopen (\%$$)
-default undef
 defined undef
 delete undef
 die (@)
@@ -139,7 +136,7 @@ local undef
 localtime (;$)
 lock (\[$@%*])
 log (_)
-lstat undef
+lstat (*)
 lt undef
 m undef
 map undef
@@ -226,7 +223,7 @@ split undef
 sprintf ($@)
 sqrt (_)
 srand (;$)
-stat undef
+stat (*)
 state undef
 study undef
 sub undef

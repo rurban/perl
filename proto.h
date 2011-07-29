@@ -571,11 +571,6 @@ PERL_CALLCONV void	Perl_cop_store_label(pTHX_ COP *const cop, const char *label,
 #define PERL_ARGS_ASSERT_COP_STORE_LABEL	\
 	assert(cop); assert(label)
 
-PERL_CALLCONV SV *	Perl_core_prototype(pTHX_ SV *sv, const char *name, const STRLEN len, const bool croak)
-			__attribute__nonnull__(pTHX_2);
-#define PERL_ARGS_ASSERT_CORE_PROTOTYPE	\
-	assert(name)
-
 PERL_CALLCONV PERL_CONTEXT*	Perl_create_eval_scope(pTHX_ U32 flags);
 PERL_CALLCONV void	Perl_croak(pTHX_ const char* pat, ...)
 			__attribute__noreturn__
@@ -5575,7 +5570,10 @@ STATIC void	S_process_special_blocks(pTHX_ const char *const fullname, GV *const
 STATIC OP*	S_ref_array_or_hash(pTHX_ OP* cond);
 STATIC OP*	S_refkids(pTHX_ OP* o, I32 type);
 STATIC bool	S_scalar_mod_type(const OP *o, I32 type)
-			__attribute__warn_unused_result__;
+			__attribute__warn_unused_result__
+			__attribute__nonnull__(1);
+#define PERL_ARGS_ASSERT_SCALAR_MOD_TYPE	\
+	assert(o)
 
 STATIC OP*	S_scalarboolean(pTHX_ OP *o)
 			__attribute__nonnull__(pTHX_1);

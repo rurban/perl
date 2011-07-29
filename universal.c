@@ -311,7 +311,6 @@ XS(XS_UNIVERSAL_VERSION)
     GV **gvp;
     GV *gv;
     SV *sv;
-    SV *ret;
     const char *undef;
     PERL_UNUSED_ARG(cv);
 
@@ -328,12 +327,15 @@ XS(XS_UNIVERSAL_VERSION)
     gvp = pkg ? (GV**)hv_fetchs(pkg, "VERSION", FALSE) : NULL;
 
     if (gvp && isGV(gv = *gvp) && (sv = GvSV(gv)) && SvOK(sv)) {
-        ret = sv_newmortal();
-        sv_setsv(ret, sv);
+        SV * const nsv = sv_newmortal();
+        sv_setsv(nsv, sv);
+        sv = nsv;
+	if ( !sv_derived_from(sv, "version"))
+	    upg_version(sv, FALSE);
         undef = NULL;
     }
     else {
-        sv = ret = &PL_sv_undef;
+        sv = &PL_sv_undef;
         undef = "(undef)";
     }
 
@@ -352,9 +354,6 @@ XS(XS_UNIVERSAL_VERSION)
 			     SvPVx_nolen_const(ST(0)) );
 	     }
 	}
-
-	if ( !sv_derived_from(sv, "version"))
-	    upg_version(sv, FALSE);
 
 	if ( !sv_derived_from(req, "version")) {
 	    /* req may very well be R/O, so create a new object */
@@ -377,7 +376,11 @@ XS(XS_UNIVERSAL_VERSION)
 
     }
 
-    ST(0) = ret;
+    if ( SvOK(sv) && sv_derived_from(sv, "version") ) {
+	ST(0) = sv_2mortal(vstringify(sv));
+    } else {
+	ST(0) = sv;
+    }
 
     XSRETURN(1);
 }

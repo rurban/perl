@@ -14,7 +14,7 @@ use File::Spec;
 
 no warnings 'utf8';
 
-our $VERSION = '0.78';
+our $VERSION = '0.77';
 our $PACKAGE = __PACKAGE__;
 
 ### begin XS only ###
@@ -789,9 +789,9 @@ sub _eqArray($$$)
 
 ##
 ## (int position, int length)
-## int position = index(string, substring, position, [undoc'ed global])
+## int position = index(string, substring, position, [undoc'ed grobal])
 ##
-## With "global" (only for the list context),
+## With "grobal" (only for the list context),
 ##  returns list of arrayref[position, length].
 ##
 sub index
@@ -802,7 +802,7 @@ sub index
     my $subE = $self->splitEnt(shift);
     my $pos  = @_ ? shift : 0;
        $pos  = 0 if $pos < 0;
-    my $glob = shift;
+    my $grob = shift;
 
     my $lev  = $self->{level};
     my $v2i  = $self->{UCA_Version} >= 9 &&
@@ -810,7 +810,7 @@ sub index
 
     if (! @$subE) {
 	my $temp = $pos <= 0 ? 0 : $len <= $pos ? $len : $pos;
-	return $glob
+	return $grob
 	    ? map([$_, 0], $temp..$len)
 	    : wantarray ? ($temp,0) : $temp;
     }
@@ -896,7 +896,7 @@ sub index
 			_eqArray(\@strWt, \@subWt, $lev)) {
 		my $temp = $iniPos[0] + $pos;
 
-		if ($glob) {
+		if ($grob) {
 		    push @g_ret, [$temp, $finPos[$#subWt] - $iniPos[0]];
 		    splice @strWt,  0, $#subWt;
 		    splice @iniPos, 0, $#subWt;
@@ -914,7 +914,7 @@ sub index
 	}
     }
 
-    return $glob
+    return $grob
 	? @g_ret
 	: wantarray ? () : NOMATCHPOS;
 }

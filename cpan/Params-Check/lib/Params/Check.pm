@@ -18,7 +18,7 @@ BEGIN {
     @ISA        =   qw[ Exporter ];
     @EXPORT_OK  =   qw[check allow last_error];
 
-    $VERSION                = '0.30';
+    $VERSION                = '0.28';
     $VERBOSE                = $^W ? 1 : 0;
     $NO_DUPLICATES          = 0;
     $STRIP_LEADING_DASHES   = 0;
@@ -247,18 +247,14 @@ on this.
 sub check {
     my ($utmpl, $href, $verbose) = @_;
 
-    ### clear the current error string ###
-    _clear_error();
-
     ### did we get the arguments we need? ###
-    if ( !$utmpl or !$href ) {
-      _store_error(loc('check() expects two arguments'));
-      return unless $WARNINGS_FATAL;
-      croak(__PACKAGE__->last_error);
-    }
+    return if !$utmpl or !$href;
 
     ### sensible defaults ###
     $verbose ||= $VERBOSE || 0;
+
+    ### clear the current error string ###
+    _clear_error();
 
     ### XXX what type of template is it? ###
     ### { key => { } } ?
@@ -279,8 +275,8 @@ sub check {
     my %defs    = %$defs;
 
     ### flag to see if anything went wrong ###
-    my $wrong;
-
+    my $wrong; 
+    
     ### flag to see if we warned for anything, needed for warnings_fatal
     my $warned;
 
@@ -342,7 +338,7 @@ sub check {
         if( exists $tmpl{'allow'} and not do {
                 local $_ERROR_STRING;
                 allow( $args{$key}, $tmpl{'allow'} )
-            }
+            }         
         ) {
             ### stringify the value in the error report -- we don't want dumps
             ### of objects, but we do want to see *roughly* what we passed
@@ -359,7 +355,7 @@ sub check {
 
     }
 
-    ### croak with the collected errors if there were errors and
+    ### croak with the collected errors if there were errors and 
     ### we have the fatal flag toggled.
     croak(__PACKAGE__->last_error) if ($wrong || $warned) && $WARNINGS_FATAL;
 
@@ -443,7 +439,7 @@ sub allow {
         for ( @{$_[1]} ) {
             return 1 if allow( $_[0], $_ );
         }
-
+        
         return;
 
     ### fall back to a simple, but safe 'eq' ###
@@ -513,7 +509,7 @@ sub _sanity_check_and_defaults {
             } grep {
                 not $known_keys{$_}
             } keys %{$utmpl{$key}};
-
+        
             ### make sure you passed a ref, otherwise, complain about it!
             if ( exists $utmpl{$key}->{'store'} ) {
                 _store_error( loc(
@@ -658,7 +654,7 @@ Default is 1;
 
 =head2 $Params::Check::WARNINGS_FATAL
 
-If set to true, L<Params::Check> will C<croak> when an error during
+If set to true, L<Params::Check> will C<croak> when an error during 
 template validation occurs, rather than return C<false>.
 
 Default is 0;
