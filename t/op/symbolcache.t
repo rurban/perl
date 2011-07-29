@@ -20,7 +20,7 @@ ok( !main->can('removed'), 'function not available as method' );
 # replacement
 sub replaced { 'func' }
 is( replaced(), 'func', 'original function still bound' );
-is( main->replaced, 'meth', 'method is replaced function' );
+is( main->replaced, 'func', 'method optimized to function' );
 BEGIN { delete $main::{replaced} }
 sub replaced { 'meth' }
 
