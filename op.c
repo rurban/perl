@@ -9130,6 +9130,7 @@ S_method_to_entersub(pTHX_ OP *o, OP *svop)
     mop->op_sibling = scalar(newGVOP(OP_GV, 0, gv));
     nop = convert(OP_ENTERSUB, OPf_STACKED, o);
 
+    DEBUG_v(op_dump(o));
     return nop;
 }
 
