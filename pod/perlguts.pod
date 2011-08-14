@@ -1694,7 +1694,7 @@ scratchpads. (I<And> the lexicals should be separate anyway!)
 So each subroutine is born with an array of scratchpads (of length 1).
 On each entry to the subroutine it is checked that the current
 depth of the recursion is not more than the length of this array, and
-if it is, new scratchpad is created and pushed into the array.
+if it is, a new scratchpad is created and pushed into the array.
 
 The I<target>s on this scratchpad are C<undef>s, but they are already
 marked with correct flags.
@@ -1725,7 +1725,7 @@ example above it looks like:
      $b ---> $c ---> + ---> $a ---> assign-to
 
 But with the actual compile tree for C<$a = $b + $c> it is different:
-some nodes I<optimized away>.  As a corollary, though the actual tree
+some nodes are I<optimized away>.  As a corollary, though the actual tree
 contains more nodes than our simplified example, the execution order
 is the same as in our example.
 

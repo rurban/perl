@@ -1958,7 +1958,7 @@ Perl_cv_clone(pTHX_ CV *proto)
 
     if (CvCONST(cv)) {
 	/* Constant sub () { $x } closing over $x - see lib/constant.pm:
-	 * The prototype was marked as a candiate for const-ization,
+	 * The prototype was marked as a candidate for "constization",
 	 * so try to grab the current const value, and if successful,
 	 * turn into a const sub:
 	 */
