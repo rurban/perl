@@ -466,8 +466,9 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5152delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5153delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
+generated_headers = uudmap.h bitcount.h mg_data.h
 
 Icwd = -Idist/Cwd -Idist/Cwd/lib
 
@@ -630,12 +631,12 @@ done
 
 $spitshell >>$Makefile <<'!NO!SUBS!'
 
-globals$(OBJ_EXT): uudmap.h bitcount.h mg_data.h
+globals$(OBJ_EXT): $(generated_headers)
 
 uudmap.h mg_data.h: bitcount.h
 
 bitcount.h: generate_uudmap$(HOST_EXE_EXT)
-	$(RUN) ./generate_uudmap$(HOST_EXE_EXT) uudmap.h bitcount.h mg_data.h
+	$(RUN) ./generate_uudmap$(HOST_EXE_EXT) $(generated_headers)
 
 generate_uudmap$(OBJ_EXT): mg_raw.h
 
@@ -748,8 +749,11 @@ else
 	case "$dtrace_h" in
 	?*)
 		$spitshell >>$Makefile <<'!NO!SUBS!'
+# dtrace dicards const qualifiers from arguments, put them back
 $(DTRACE_H): perldtrace.d
-	$(DTRACE) -h -s perldtrace.d -o $(DTRACE_H)
+	$(DTRACE) -h -s perldtrace.d -o $(DTRACE_H).in
+	sed -e '/const/!s/char \*/const char */g' $(DTRACE_H).in >$(DTRACE_H)
+	$(RMS) $(DTRACE_H).in
 
 mydtrace.h: $(DTRACE_H)
 
@@ -1033,8 +1037,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5152delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5152delta.pod
+pod/perl5153delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5153delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1148,9 +1152,11 @@ AUTOGEN_FILES = opcode.h opnames.h pp_proto.h proto.h \
 
 regen:	FORCE
 	-perl regen.pl
+	-perl regen/uconfig_h.pl
 
 regen_headers:	FORCE
 	-perl regen.pl -v
+	-perl regen/uconfig_h.pl -v
 
 regen_meta:  META.yml
 
@@ -1226,7 +1232,7 @@ veryclean:	_verycleaner _mopup _clobber
 
 # Do not 'make _mopup' directly.
 _mopup:
-	rm -f *$(OBJ_EXT) *$(LIB_EXT) all perlmain.c opmini.c perlmini.c uudmap.h generate_uudmap$(EXE_EXT) bitcount.h mg_data.h
+	rm -f *$(OBJ_EXT) *$(LIB_EXT) all perlmain.c opmini.c perlmini.c generate_uudmap$(EXE_EXT) $(generated_headers)
 	-rmdir .depending
 	-@test -f extra.pods && rm -f `cat extra.pods`
 	-@test -f vms/README_vms.pod && rm -f vms/README_vms.pod

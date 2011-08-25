@@ -156,11 +156,18 @@ Deprecated.  Use C<GIMME_V> instead.
 	      : G_SCALAR)						\
 	   : dowantarray())
 
+/* Lower bits of op_private often carry the number of arguments, as
+ * set by newBINOP, newUNOP and ck_fun */
+
 /* NOTE: OP_NEXTSTATE and OP_DBSTATE (i.e. COPs) carry lower
  * bits of PL_hints in op_private */
 
 /* Private for lvalues */
 #define OPpLVAL_INTRO	128	/* Lvalue must be localized or lvalue sub */
+
+/* Private for OPs with TARGLEX */
+  /* (lower bits may carry MAXARG) */
+#define OPpTARGET_MY		16	/* Target is PADMY. */
 
 /* Private for OP_LEAVE, OP_LEAVESUB, OP_LEAVESUBLV and OP_LEAVEWRITE */
 #define OPpREFCOUNTED		64	/* op_targ carries a refcount */
@@ -194,15 +201,13 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpDEREF_AV		32	/*   Want ref to AV. */
 #define OPpDEREF_HV		64	/*   Want ref to HV. */
 #define OPpDEREF_SV		(32|64)	/*   Want ref to SV. */
-/* Private for OP_RV2SV, OP_RV2AV, OP_RV2AV */
-#define OPpDEREFed		4	/* prev op was OPpDEREF */
 
   /* OP_ENTERSUB only */
 #define OPpENTERSUB_DB		16	/* Debug subroutine. */
 #define OPpENTERSUB_HASTARG	32	/* Called from OP tree. */
-#define OPpENTERSUB_NOMOD	64	/* Immune to op_lvalue() for :attrlist. */
 #define OPpENTERSUB_INARGS	4	/* Lval used as arg to a sub. */
 #define OPpENTERSUB_DEREF	1	/* Lval call that autovivifies. */
+/* used by HINT_STRICT_SUBS     2          */
   /* Mask for OP_ENTERSUB flags, the absence of which must be propagated
      in dynamic context */
 #define OPpENTERSUB_LVAL_MASK (OPpLVAL_INTRO|OPpENTERSUB_INARGS)
@@ -229,10 +234,6 @@ Deprecated.  Use C<GIMME_V> instead.
 #define OPpDONT_INIT_GV		4	/* Call gv_fetchpv with GV_NOINIT */
 /* (Therefore will return whatever is currently in the symbol table, not
    guaranteed to be a PVGV)  */
-
-/* Private for OPs with TARGLEX */
-  /* (lower bits may carry MAXARG) */
-#define OPpTARGET_MY		16	/* Target is PADMY. */
 
 /* Private for OP_ENTERITER and OP_ITER */
 #define OPpITER_REVERSED	4	/* for (reverse ...) */
@@ -293,6 +294,9 @@ Deprecated.  Use C<GIMME_V> instead.
 /* Private for OP_ENTEREVAL */
 #define OPpEVAL_HAS_HH		2	/* Does it have a copy of %^H */
     
+/* Private for OP_CALLER and OP_WANTARRAY */
+#define OPpOFFBYONE		128	/* Treat caller(1) as caller(2) */
+
 struct op {
     BASEOP
 };

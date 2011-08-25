@@ -19,6 +19,7 @@ cpan/Archive-Extract/lib/Archive/Extract.pm	Archive::Extract
 cpan/Archive-Extract/t/01_Archive-Extract.t	Archive::Extract tests
 cpan/Archive-Extract/t/src/double_dir.zip	Archive::Extract tests
 cpan/Archive-Extract/t/src/x.bz2		Archive::Extract tests
+cpan/Archive-Extract/t/src/x.ear		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.gz			Archive::Extract tests
 cpan/Archive-Extract/t/src/x.jar		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.lzma		Archive::Extract tests
@@ -28,9 +29,11 @@ cpan/Archive-Extract/t/src/x.tar.gz		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.tar.xz		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.tgz		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.txz		Archive::Extract tests
+cpan/Archive-Extract/t/src/x.war		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.xz		Archive::Extract tests
 cpan/Archive-Extract/t/src/x.Z			Archive::Extract tests
 cpan/Archive-Extract/t/src/x.zip		Archive::Extract tests
+cpan/Archive-Extract/t/src/y.ear		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.jar		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.par		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.tar		Archive::Extract tests
@@ -40,6 +43,7 @@ cpan/Archive-Extract/t/src/y.tar.xz		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.tbz		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.tgz		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.txz		Archive::Extract tests
+cpan/Archive-Extract/t/src/y.war		Archive::Extract tests
 cpan/Archive-Extract/t/src/y.zip		Archive::Extract tests
 cpan/Archive-Tar/bin/ptar				the ptar utility
 cpan/Archive-Tar/bin/ptardiff				the ptardiff utility
@@ -288,6 +292,7 @@ cpan/CPAN/lib/CPAN/Distrostatus.pm	helper package for CPAN.pm
 cpan/CPAN/lib/CPAN/Exception/blocked_urllist.pm	helper package for CPAN.pm
 cpan/CPAN/lib/CPAN/Exception/RecursiveDependency.pm	helper package for CPAN.pm
 cpan/CPAN/lib/CPAN/Exception/yaml_not_installed.pm	helper package for CPAN.pm
+cpan/CPAN/lib/CPAN/Exception/yaml_process_error.pm	helper package for CPAN.pm
 cpan/CPAN/lib/CPAN/FirstTime.pm		Utility for creating CPAN config files
 cpan/CPAN/lib/CPAN/FTP/netrc.pm		helper package for CPAN.pm
 cpan/CPAN/lib/CPAN/FTP.pm			helper package for CPAN.pm
@@ -1689,10 +1694,13 @@ cpan/Module-Load/t/to_load/Must/Be/Loaded.pm	Module::Load tests
 cpan/Module-Load/t/to_load/TestModule.pm	Module::Load tests
 cpan/Module-Load/t/to_load/ToBeLoaded		Module::Load tests
 cpan/Module-Metadata/lib/Module/Metadata.pm
+cpan/Module-Metadata/t/lib/0_1/Foo.pm
+cpan/Module-Metadata/t/lib/0_2/Foo.pm
 cpan/Module-Metadata/t/lib/DistGen.pm
 cpan/Module-Metadata/t/lib/MBTest.pm
 cpan/Module-Metadata/t/lib/Tie/CPHash.pm
 cpan/Module-Metadata/t/metadata.t
+cpan/Module-Metadata/t/version.t
 cpan/Module-Pluggable/lib/Devel/InnerPackage.pm		Find inner packages
 cpan/Module-Pluggable/lib/Module/Pluggable/Object.pm	Module::Pluggable
 cpan/Module-Pluggable/lib/Module/Pluggable.pm		Module::Pluggable
@@ -2004,10 +2012,14 @@ cpan/Pod-Simple/t/corpus/s2763_sjis.xml			Pod::Simple test file
 cpan/Pod-Simple/t/corpus.t				Pod::Simple test file
 cpan/Pod-Simple/t/corpus/thai_iso11.txt			Pod::Simple test file
 cpan/Pod-Simple/t/corpus/thai_iso11.xml			Pod::Simple test file
+cpan/Pod-Simple/t/emptylists.t				Pod::Simple test file
 cpan/Pod-Simple/t/encod01.t				Pod::Simple test file
 cpan/Pod-Simple/t/encod02.t				Pod::Simple test file
 cpan/Pod-Simple/t/encod03.t				Pod::Simple test file
 cpan/Pod-Simple/t/end_over.t				Pod::Simple test file
+cpan/Pod-Simple/t/eol2.t				Pod::Simple test file
+cpan/Pod-Simple/t/eol.t					Pod::Simple test file
+cpan/Pod-Simple/t/fake-closers.t			Pod::Simple test file
 cpan/Pod-Simple/t/fcodes_e.t				Pod::Simple test file
 cpan/Pod-Simple/t/fcodes_l.t				Pod::Simple test file
 cpan/Pod-Simple/t/fcodes_s.t				Pod::Simple test file
@@ -2079,6 +2091,7 @@ cpan/Pod-Simple/t/verb_fmt.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml01.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml05.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml10.t				Pod::Simple test file
+cpan/Pod-Simple/t/xhtml15.t				Pod::Simple test file
 cpan/Pod-Simple/t/x_nixer.t				Pod::Simple test file
 cpan/Sys-Syslog/Changes			Changelog for Sys::Syslog
 cpan/Sys-Syslog/fallback/const-c.inc	Sys::Syslog constants fallback file
@@ -4385,6 +4398,7 @@ pod/perl5140delta.pod		Perl changes in version 5.14.0
 pod/perl5141delta.pod		Perl changes in version 5.14.1
 pod/perl5150delta.pod		Perl changes in version 5.15.0
 pod/perl5151delta.pod		Perl changes in version 5.15.1
+pod/perl5152delta.pod		Perl changes in version 5.15.2
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl570delta.pod		Perl changes in version 5.7.0
@@ -4416,7 +4430,6 @@ pod/perlcall.pod		Perl calling conventions from C
 pod/perlcheat.pod		Perl cheat sheet
 pod/perlclib.pod		Internal replacements for standard C library functions
 pod/perlcommunity.pod		Perl community information
-pod/perlcompile.pod		Perl compiler suite intro
 pod/perldata.pod		Perl data structures
 pod/perldbmfilter.pod		Perl DBM filters
 pod/perldebguts.pod		Perl debugging guts and tips
@@ -4428,6 +4441,7 @@ pod/perldsc.pod			Perl data structures intro
 pod/perldtrace.pod		Perl's support for DTrace
 pod/perlebcdic.pod		Considerations for running Perl on EBCDIC platforms
 pod/perlembed.pod		Perl ways to embed perl in your C or C++ application
+pod/perlexperiment.pod		A listing of experimental features in Perl
 pod/perlfilter.pod		Perl source filters
 pod/perlfork.pod		Perl fork() information
 pod/perlform.pod		Perl formats
@@ -4524,6 +4538,7 @@ Porting/corelist.pl		Generates data for Module::CoreList
 Porting/curliff.pl		Curliff or liff your curliffable files.
 Porting/epigraphs.pod		the release epigraphs used over the years
 Porting/exec-bit.txt		List of files that get +x in release tarball
+Porting/exercise_makedef.pl	Brute force testing for makedef.pl
 Porting/expand-macro.pl		A tool to expand C macro definitions in the Perl source
 Porting/findrfuncs		Find reentrant variants of functions used in an executable
 Porting/findvars		Find occurrences of words
@@ -4912,6 +4927,8 @@ t/op/concat2.t			Tests too complex for concat.t
 t/op/concat.t			See if string concatenation works
 t/op/cond.t			See if conditional expressions work
 t/op/context.t			See if context propagation works
+t/op/coreinline.t		Test inlining of \&CORE::subs
+t/op/coresubs.t			Test &CORE::subs()
 t/op/cproto.t			Check builtin prototypes
 t/op/crypt.t			See if crypt works
 t/op/dbm.t			See if dbmopen/dbmclose work
@@ -4962,7 +4979,6 @@ t/op/int.t			See if int works
 t/op/join.t			See if join works
 t/op/kill0.t			See if kill(0, $pid) works
 t/op/lc.t			See if lc, uc, lcfirst, ucfirst, quotemeta work
-t/op/lc_user.t			See if user-defined lc et alia work
 t/op/leaky-magic.t		See whether vars' magic leaks into packages
 t/op/length.t			See if length works
 t/op/lex_assign.t		See if ops involving lexicals or pad temps work
@@ -5048,9 +5064,9 @@ t/op/tie.t			See if tie/untie functions work
 t/op/time_loop.t		Test that very large values don't hang gmtime and localtime.
 t/op/time.t			See if time functions work
 t/op/tr.t			See if tr works
-t/op/turkish.t			See if we can implement Turkish casing
 t/op/undef.t			See if undef works
 t/op/universal.t		See if UNIVERSAL class works
+t/op/unlink.t			See if unlink works
 t/op/unshift.t			See if unshift works
 t/op/upgrade.t			See if upgrading and assigning scalars works
 t/op/utf8cache.t		Tests malfunctions of utf8 cache
@@ -5077,6 +5093,7 @@ t/porting/dual-life.t		Check that dual-life bins are in utils/
 t/porting/exec-bit.t		Check that exec-bit bins are identified
 t/porting/filenames.t		Check the MANIFEST for filename portability.
 t/porting/FindExt.t		Test win32/FindExt.pm
+t/porting/globvar.t		Check that globvar.sym is sane
 t/porting/known_pod_issues.dat	Data file for porting/podcheck.t
 t/porting/maintainers.t		Test that Porting/Maintainers.pl is up to date
 t/porting/manifest.t		Test that this MANIFEST file is well formed

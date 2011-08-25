@@ -39,7 +39,7 @@ INST_TOP	*= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	*= \5.15.1
+#INST_VER	*= \5.15.2
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -921,6 +921,7 @@ CORE_H		= $(CORE_NOCFG_H) .\config.h ..\git_version.h
 UUDMAP_H	= ..\uudmap.h
 BITCOUNT_H	= ..\bitcount.h
 MG_DATA_H	= ..\mg_data.h
+GENERATED_HEADERS = $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
 
 MICROCORE_OBJ	= $(MICROCORE_SRC:db:+$(o))
 CORE_OBJ	= $(MICROCORE_OBJ) $(EXTRACORE_SRC:db:+$(o))
@@ -1292,12 +1293,12 @@ $(X2P) : $(MINIPERL) $(X2P_OBJ) Extensions
 	$(EMBED_EXE_MANI)
 .ENDIF
 
-$(MINIDIR)\globals$(o) : $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
+$(MINIDIR)\globals$(o) : $(GENERATED_HEADERS)
 
 $(UUDMAP_H) $(MG_DATA_H) : $(BITCOUNT_H)
 
 $(BITCOUNT_H) : $(GENUUDMAP)
-	$(GENUUDMAP) $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
+	$(GENUUDMAP) $(GENERATED_HEADERS)
 
 $(GENUUDMAP_OBJ) : ..\mg_raw.h
 
@@ -1442,7 +1443,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5152delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5153delta.pod
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
 	$(PERLEXE) $(ICWD) ..\pod\perlmodlib.pl -q
@@ -1534,7 +1535,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5152delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5153delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
@@ -1671,7 +1672,7 @@ _clean :
 	-@erase $(PERLSTATICLIB)
 	-@erase $(PERLDLL)
 	-@erase $(CORE_OBJ)
-	-@erase $(GENUUDMAP) $(GENUUDMAP_OBJ) $(UUDMAP_H) $(BITCOUNT_H) $(MG_DATA_H)
+	-@erase $(GENUUDMAP) $(GENUUDMAP_OBJ) $(GENERATED_HEADERS)
 	-if exist $(MINIDIR) rmdir /s /q $(MINIDIR)
 	-if exist $(UNIDATADIR1) rmdir /s /q $(UNIDATADIR1)
 	-if exist $(UNIDATADIR2) rmdir /s /q $(UNIDATADIR2)

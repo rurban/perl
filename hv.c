@@ -340,7 +340,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     if (!hv)
 	return NULL;
-    if (SvTYPE(hv) == SVTYPEMASK)
+    if (SvTYPE(hv) == (svtype)SVTYPEMASK)
 	return NULL;
 
     assert(SvTYPE(hv) == SVt_PVHV);
@@ -1813,7 +1813,7 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
 	    SvREFCNT_dec(meta->mro_linear_current);
 	    meta->mro_linear_current = NULL;
 	}
-	if(meta->mro_nextmethod) SvREFCNT_dec(meta->mro_nextmethod);
+	SvREFCNT_dec(meta->mro_nextmethod);
 	SvREFCNT_dec(meta->isa);
 	Safefree(meta);
 	aux->xhv_mro_meta = NULL;

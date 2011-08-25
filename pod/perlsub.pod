@@ -1149,7 +1149,11 @@ arguments, just like C<time()>.  That is, if you say
     mytime +2;
 
 you'll get C<mytime() + 2>, not C<mytime(2)>, which is how it would be parsed
-without a prototype.
+without a prototype.  If you want to force a unary function to have the
+same precedence as a list operator, add C<;> to the end of the prototype:
+
+    sub mygetprotobynumber($;);
+    mygetprotobynumber $a > $b; # parsed as mygetprotobynumber($a > $b)
 
 The interesting thing about C<&> is that you can generate new syntax with it,
 provided it's in the initial position:
@@ -1309,8 +1313,10 @@ built-in name with the special package qualifier C<CORE::>.  For example,
 saying C<CORE::open()> always refers to the built-in C<open()>, even
 if the current package has imported some other subroutine called
 C<&open()> from elsewhere.  Even though it looks like a regular
-function call, it isn't: you can't take a reference to it, such as
-the incorrect C<\&CORE::open> might appear to produce.
+function call, it isn't: the CORE:: prefix in that case is part of Perl's
+syntax, and works for any keyword, regardless of what is in the CORE
+package.  Taking a reference to it, that is, C<\&CORE::open>, only works
+for some keywords.  See L<CORE>.
 
 Library modules should not in general export built-in names like C<open>
 or C<chdir> as part of their default C<@EXPORT> list, because these may

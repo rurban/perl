@@ -1160,7 +1160,7 @@ perl_destruct(pTHXx)
 	for (sva = PL_sv_arenaroot; sva; sva = MUTABLE_SV(SvANY(sva))) {
 	    svend = &sva[SvREFCNT(sva)];
 	    for (sv = sva + 1; sv < svend; ++sv) {
-		if (SvTYPE(sv) != SVTYPEMASK) {
+		if (SvTYPE(sv) != (svtype)SVTYPEMASK) {
 		    PerlIO_printf(Perl_debug_log, "leaked: sv=0x%p"
 			" flags=0x%"UVxf
 			" refcnt=%"UVuf pTHX__FORMAT "\n"
@@ -3480,14 +3480,14 @@ S_init_interp(pTHX)
 {
     dVAR;
 #ifdef MULTIPLICITY
-#  define PERLVAR(var,type)
-#  define PERLVARA(var,n,type)
+#  define PERLVAR(prefix,var,type)
+#  define PERLVARA(prefix,var,n,type)
 #  if defined(PERL_IMPLICIT_CONTEXT)
-#    define PERLVARI(var,type,init)		aTHX->var = init;
-#    define PERLVARIC(var,type,init)	aTHX->var = init;
+#    define PERLVARI(prefix,var,type,init)	aTHX->prefix##var = init;
+#    define PERLVARIC(prefix,var,type,init)	aTHX->prefix##var = init;
 #  else
-#    define PERLVARI(var,type,init)	PERL_GET_INTERP->var = init;
-#    define PERLVARIC(var,type,init)	PERL_GET_INTERP->var = init;
+#    define PERLVARI(prefix,var,type,init)	PERL_GET_INTERP->var = init;
+#    define PERLVARIC(prefix,var,type,init)	PERL_GET_INTERP->var = init;
 #  endif
 #  include "intrpvar.h"
 #  undef PERLVAR
@@ -3495,10 +3495,10 @@ S_init_interp(pTHX)
 #  undef PERLVARI
 #  undef PERLVARIC
 #else
-#  define PERLVAR(var,type)
-#  define PERLVARA(var,n,type)
-#  define PERLVARI(var,type,init)	PL_##var = init;
-#  define PERLVARIC(var,type,init)	PL_##var = init;
+#  define PERLVAR(prefix,var,type)
+#  define PERLVARA(prefix,var,n,type)
+#  define PERLVARI(prefix,var,type,init)	PL_##var = init;
+#  define PERLVARIC(prefix,var,type,init)	PL_##var = init;
 #  include "intrpvar.h"
 #  undef PERLVAR
 #  undef PERLVARA
@@ -3848,7 +3848,7 @@ Perl_init_dbargs(pTHX)
 	   "leak" until global destruction.  */
 	av_clear(args);
     }
-    AvREAL_off(PL_dbargs);	/* XXX should be REIFY (see av.h) */
+    AvREIFY_only(PL_dbargs);
 }
 
 void

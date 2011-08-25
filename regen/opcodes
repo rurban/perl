@@ -235,7 +235,7 @@ boolkeys	boolkeys		ck_fun		%	H
 
 # Explosives and implosives.
 
-unpack		unpack			ck_unpack	@	S S?
+unpack		unpack			ck_fun		u@	S S?
 pack		pack			ck_fun		mst@	S L
 split		split			ck_split	t@	S S S
 join		join or string		ck_join		mst@	S L
@@ -379,8 +379,8 @@ getpeername	getpeername		ck_fun		is%	Fs
 
 # Stat calls.  OP_IS_FILETEST wants them consecutive.
 
-lstat		lstat			ck_ftst		u-	F
-stat		stat			ck_ftst		u-	F
+lstat		lstat			ck_ftst		u-	F?
+stat		stat			ck_ftst		u-	F?
 ftrread		-R			ck_ftst		isu-	F-+
 ftrwrite	-W			ck_ftst		isu-	F-+
 ftrexec		-X			ck_ftst		isu-	F-+
@@ -539,3 +539,6 @@ custom		unknown custom operator		ck_null		0
 reach		each on reference			ck_each		%	S
 rkeys		keys on reference			ck_each		t%	S
 rvalues		values on reference			ck_each		t%	S
+
+# For CORE:: subs
+coreargs	CORE:: subroutine	ck_null		$	

@@ -95,7 +95,7 @@ please add it. This will help the porters fix the bug.
 
 The perl5-porters (p5p) mailing list is where the Perl standard
 distribution is maintained and developed. The people who maintain Perl
-are also referred to as the "Perl 5 Porters", or just the "porters".
+are also referred to as the "Perl 5 Porters", "p5p" or just the "porters".
 
 A searchable archive of the list is available at
 L<http://www.xray.mpe.mpg.de/mailing-lists/perl5-porters/>. There is
@@ -1080,7 +1080,7 @@ each file's purpose. Perl instead begins each with a literary allusion
 to that file's purpose.
 
 Like chapters in many books, all top-level Perl source files (along
-with a few others here and there) begin with an epigramic inscription
+with a few others here and there) begin with an epigrammatic inscription
 that alludes, indirectly and metaphorically, to the material you're
 about to read.
 
