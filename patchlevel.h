@@ -137,6 +137,7 @@ static const char * const local_patches[] = {
 	,"uncommitted-changes"
 #endif
 	PERL_GIT_UNPUSHED_COMMITS    	/* do not remove this line */
+	,"github.com/rurban/perl/opt_methods"
 	,NULL
 };
 
