@@ -468,11 +468,11 @@ else { x(); }
 my($y, $t);
 /x${y}z$t/;
 ####
-# TODO new undocumented cpan-bug #33708
+# TODO new undocumented cpan-bug #33708 => bogus: valid compile-time expansion
 # cpan-bug #33708
 %{$_ || {}}
 ####
-# TODO hash constants not yet fixed
+# TODO hash constants not yet fixed => bogus: valid compile-time expansion
 # cpan-bug #33708
 use constant H => { "#" => 1 }; H->{"#"}
 ####

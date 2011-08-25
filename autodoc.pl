@@ -197,7 +197,7 @@ removed without notice.\n\n" if $flags =~ /x/;
 	print $fh "\t$ret" . ($large_ret ? ' ' : "\t") . "$n(";
 	my $long_args;
 	for (@args) {
-	    if ($indent_size + 2 + length > 80) {
+	    if ($indent_size + 2 + length > 79) {
 		$long_args=1;
 		$indent_size -= length($n) - 3;
 		last;
@@ -213,7 +213,7 @@ removed without notice.\n\n" if $flags =~ /x/;
 	while () {
 	    if (!@args or
 	         length $args
-	         && $indent_size + 3 + length($args[0]) + length $args > 80
+	         && $indent_size + 3 + length($args[0]) + length $args > 79
 	    ) {
 		print $fh
 		  $first ? '' : (
@@ -271,7 +271,7 @@ _EOH_
 
     if (@$missing) {
         print $fh "\n=head1 Undocumented functions\n\n";
-    print $fh <<'_EOB_';
+    print $fh $podname eq 'perlapi' ? <<'_EOB_' : <<'_EOB_';
 The following functions have been flagged as part of the public API,
 but are currently undocumented. Use them at your own risk, as the
 interfaces are subject to change.
@@ -279,6 +279,13 @@ interfaces are subject to change.
 If you use one of them, you may wish to consider creating and submitting
 documentation for it. If your patch is accepted, this will indicate that
 the interface is stable (unless it is explicitly marked otherwise).
+
+=over
+
+_EOB_
+The following functions are currently undocumented.  If you use one of
+them, you may wish to consider creating and submitting documentation for
+it.
 
 =over
 
@@ -434,7 +441,9 @@ L<perlguts>, L<perlxs>, L<perlxstut>, L<perlintern>
 
 _EOE_
 
-my @missing_guts = grep $funcflags{$_}{flags} !~ /A/ && !$docs{guts}{$_}, keys %funcflags;
+# List of non-static internal functions
+my @missing_guts =
+ grep $funcflags{$_}{flags} !~ /[As]/ && !$docs{guts}{$_}, keys %funcflags;
 
 output('perlintern', <<'END', $docs{guts}, \@missing_guts, <<'END');
 =head1 NAME

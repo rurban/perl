@@ -517,6 +517,7 @@ EXTCONST char* const PL_op_name[] = {
 	"reach",
 	"rkeys",
 	"rvalues",
+	"coreargs",
 };
 #endif
 
@@ -895,6 +896,7 @@ EXTCONST char* const PL_op_desc[] = {
 	"each on reference",
 	"keys on reference",
 	"values on reference",
+	"CORE:: subroutine",
 };
 #endif
 
@@ -1287,6 +1289,7 @@ EXT Perl_ppaddr_t PL_ppaddr[] /* or perlvars.h */
 	Perl_pp_reach,	/* implemented by Perl_pp_rkeys */
 	Perl_pp_rkeys,
 	Perl_pp_rvalues,	/* implemented by Perl_pp_rkeys */
+	Perl_pp_coreargs,
 }
 #endif
 #ifdef PERL_PPADDR_INITED
@@ -1449,7 +1452,7 @@ EXT Perl_check_t PL_check[] /* or perlvars.h */
 	Perl_ck_null,		/* helem */
 	Perl_ck_null,		/* hslice */
 	Perl_ck_fun,		/* boolkeys */
-	Perl_ck_unpack,		/* unpack */
+	Perl_ck_fun,		/* unpack */
 	Perl_ck_fun,		/* pack */
 	Perl_ck_split,		/* split */
 	Perl_ck_join,		/* join */
@@ -1676,6 +1679,7 @@ EXT Perl_check_t PL_check[] /* or perlvars.h */
 	Perl_ck_each,		/* reach */
 	Perl_ck_each,		/* rkeys */
 	Perl_ck_each,		/* rvalues */
+	Perl_ck_null,		/* coreargs */
 }
 #endif
 #ifdef PERL_CHECK_INITED
@@ -1832,7 +1836,7 @@ EXTCONST U32 PL_opargs[] = {
 	0x00014204,	/* helem */
 	0x00024401,	/* hslice */
 	0x00004b00,	/* boolkeys */
-	0x00091400,	/* unpack */
+	0x00091480,	/* unpack */
 	0x0002140d,	/* pack */
 	0x00111408,	/* split */
 	0x0002140d,	/* join */
@@ -1939,8 +1943,8 @@ EXTCONST U32 PL_opargs[] = {
 	0x01116404,	/* ssockopt */
 	0x00006b04,	/* getsockname */
 	0x00006b04,	/* getpeername */
-	0x00006c80,	/* lstat */
-	0x00006c80,	/* stat */
+	0x0000ec80,	/* lstat */
+	0x0000ec80,	/* stat */
 	0x00006c84,	/* ftrread */
 	0x00006c84,	/* ftrwrite */
 	0x00006c84,	/* ftrexec */
@@ -2059,6 +2063,7 @@ EXTCONST U32 PL_opargs[] = {
 	0x00001b00,	/* reach */
 	0x00001b08,	/* rkeys */
 	0x00001b08,	/* rvalues */
+	0x00000600,	/* coreargs */
 };
 #endif
 

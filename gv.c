@@ -36,6 +36,7 @@ Perl stores its global variables.
 #define PERL_IN_GV_C
 #include "perl.h"
 #include "overload.c"
+#include "keywords.h"
 
 static const char S_autoload[] = "AUTOLOAD";
 static const STRLEN S_autolen = sizeof(S_autoload)-1;
@@ -411,7 +412,6 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
     HV* cstash;
     GV* candidate = NULL;
     CV* cand_cv = NULL;
-    CV* old_cv;
     GV* topgv = NULL;
     const char *hvname;
     I32 create = (level >= 0) ? 1 : 0;
@@ -505,7 +505,8 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
              *  2. method isn't a stub (else AUTOLOAD fails spectacularly)
              */
             if (topgv && (GvREFCNT(topgv) == 1) && (CvROOT(cand_cv) || CvXSUB(cand_cv))) {
-                  if ((old_cv = GvCV(topgv))) SvREFCNT_dec(old_cv);
+                  CV *old_cv = GvCV(topgv);
+                  SvREFCNT_dec(old_cv);
                   SvREFCNT_inc_simple_void_NN(cand_cv);
                   GvCV_set(topgv, cand_cv);
                   GvCVGEN(topgv) = topgen_cmp;
@@ -520,7 +521,8 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
         if(candidate) {
             cand_cv = GvCV(candidate);
             if (topgv && (GvREFCNT(topgv) == 1) && (CvROOT(cand_cv) || CvXSUB(cand_cv))) {
-                  if ((old_cv = GvCV(topgv))) SvREFCNT_dec(old_cv);
+                  CV *old_cv = GvCV(topgv);
+                  SvREFCNT_dec(old_cv);
                   SvREFCNT_inc_simple_void_NN(cand_cv);
                   GvCV_set(topgv, cand_cv);
                   GvCVGEN(topgv) = topgen_cmp;
@@ -1032,6 +1034,8 @@ S_gv_magicalize_overload(pTHX_ GV *gv)
     hv_magic(hv, NULL, PERL_MAGIC_overload);
 }
 
+static void core_xsub(pTHX_ CV* cv);
+
 GV *
 Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		       const svtype sv_type)
@@ -1105,7 +1109,13 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		{
 		    stash = GvHV(gv) = newHV();
 		    if (!HvNAME_get(stash)) {
-			hv_name_set(stash, nambeg, name_cursor-nambeg, 0);
+			if (GvSTASH(gv) == PL_defstash && len == 6
+			 && strnEQ(name, "CORE", 4))
+			    hv_name_set(stash, "CORE", 4, 0);
+			else
+			    hv_name_set(
+				stash, nambeg, name_cursor-nambeg, 0
+			    );
 			/* If the containing stash has multiple effective
 			   names, see that this one gets them, too. */
 			if (HvAUX(GvSTASH(gv))->xhv_name_count)
@@ -1290,7 +1300,8 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
     /* set up magic where warranted */
     if (stash != PL_defstash) { /* not the main stash */
 	/* We only have to check for four names here: EXPORT, ISA, OVERLOAD
-	   and VERSION. All the others apply only to the main stash. */
+	   and VERSION. All the others apply only to the main stash or to
+	   CORE (which is checked right after this). */
 	if (len > 2) {
 	    const char * const name2 = name + 1;
 	    switch (*name) {
@@ -1310,7 +1321,124 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		if (strEQ(name2, "ERSION"))
 		    GvMULTI_on(gv);
 		break;
+	    default:
+		goto try_core;
 	    }
+	    return gv;
+	}
+      try_core:
+	if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4) {
+	  /* Avoid null warning: */
+	  const char * const stashname = HvNAME(stash); assert(stashname);
+	  if (strnEQ(stashname, "CORE", 4)) {
+	    const int code = keyword(name, len, 1);
+	    static const char file[] = __FILE__;
+	    CV *cv, *oldcompcv;
+	    int opnum = 0;
+	    SV *opnumsv;
+	    bool ampable = FALSE; /* &{}-able */
+	    COP *oldcurcop;
+	    yy_parser *oldparser;
+	    I32 oldsavestack_ix;
+
+	    if (code >= 0) return gv; /* not overridable */
+	    switch (-code) {
+	     /* no support for \&CORE::infix;
+	        no support for funcs that take labels, as their parsing is
+	        weird  */
+	    case KEY_and: case KEY_cmp: case KEY_CORE: case KEY_dump:
+	    case KEY_eq: case KEY_ge:
+	    case KEY_gt: case KEY_le: case KEY_lt: case KEY_ne:
+	    case KEY_or: case KEY_x: case KEY_xor:
+		return gv;
+	    case KEY___FILE__: case KEY___LINE__: case KEY___PACKAGE__:
+	    case KEY_abs: case KEY_alarm: case KEY_atan2: case KEY_chr:
+	    case KEY_chroot: case KEY_crypt:
+	    case KEY_break: case KEY_continue: case KEY_cos:
+	    case KEY_endgrent: case KEY_endhostent:
+	    case KEY_endnetent: case KEY_endprotoent: case KEY_endpwent:
+	    case KEY_endservent: case KEY_exp: case KEY_fork:
+	    case KEY_getgrent: case KEY_getgrgid: case KEY_getgrnam:
+	    case KEY_gethostbyaddr: case KEY_gethostbyname:
+	    case KEY_gethostent: case KEY_getlogin: case KEY_getnetbyaddr:
+	    case KEY_getnetbyname: case KEY_getnetent: case KEY_getppid:
+	    case KEY_getpriority: case KEY_getprotobyname:
+	    case KEY_getprotobynumber: case KEY_getprotoent:
+	    case KEY_getpwnam: case KEY_getpwuid: case KEY_getservbyname:
+	    case KEY_getservbyport: case KEY_getservent: case KEY_getpwent:
+	    case KEY_hex: case KEY_int: case KEY_lc: case KEY_lcfirst: 
+	    case KEY_length: case KEY_link: case KEY_log: case KEY_msgctl:
+	    case KEY_msgget: case KEY_msgrcv: case KEY_msgsnd:
+	    case KEY_not: case KEY_oct: case KEY_ord:
+	    case KEY_quotemeta: case KEY_readlink: case KEY_readpipe:
+	    case KEY_ref: case KEY_rename: case KEY_rmdir: case KEY_semctl:
+	    case KEY_semget: case KEY_semop: case KEY_setgrent:
+	    case KEY_sethostent: case KEY_setnetent: case KEY_setpriority:
+	    case KEY_setprotoent: case KEY_setpwent: case KEY_setservent:
+	    case KEY_shmctl: case KEY_shmget: case KEY_shmread:
+	    case KEY_shmwrite: case KEY_sin: case KEY_sqrt:
+	    case KEY_symlink: case KEY_time: case KEY_times:
+	    case KEY_uc: case KEY_ucfirst: case KEY_vec:
+	    case KEY_wait: case KEY_waitpid: case KEY_wantarray:
+		ampable = TRUE;
+	    }
+	    if (ampable) {
+		ENTER;
+		oldcurcop = PL_curcop;
+		oldparser = PL_parser;
+		lex_start(NULL, NULL, 0);
+		oldcompcv = PL_compcv;
+		PL_compcv = NULL; /* Prevent start_subparse from setting
+		                     CvOUTSIDE. */
+		oldsavestack_ix = start_subparse(FALSE,0);
+		cv = PL_compcv;
+	    }
+	    else {
+		/* Avoid calling newXS, as it calls us, and things start to
+		   get hairy. */
+		cv = MUTABLE_CV(newSV_type(SVt_PVCV));
+		GvCV_set(gv,cv);
+		GvCVGEN(gv) = 0;
+		mro_method_changed_in(GvSTASH(gv));
+		CvISXSUB_on(cv);
+		CvXSUB(cv) = core_xsub;
+	    }
+	    CvGV_set(cv, gv); /* This stops new ATTRSUB from setting CvFILE
+	                         from PL_curcop. */
+	    (void)gv_fetchfile(file);
+	    CvFILE(cv) = (char *)file;
+	    /* XXX This is inefficient, as doing things this order causes
+	           a prototype check in newATTRSUB.  But we have to do
+	           it this order as we need an op number before calling
+	           new ATTRSUB. */
+	    (void)core_prototype((SV *)cv, name, code, &opnum);
+	    if (ampable) {
+		if (opnum == OP_VEC) CvLVALUE_on(cv);
+		newATTRSUB(oldsavestack_ix,
+		           newSVOP(
+		                 OP_CONST, 0,
+		                 newSVpvn_share(nambeg,full_len,0)
+		           ),
+		           NULL,NULL,
+		           coresub_op(
+		             opnum
+		               ? newSVuv((UV)opnum)
+		               : newSVpvn(name,len),
+		             code, opnum
+		           )
+		);
+		assert(GvCV(gv) == cv);
+		LEAVE;
+		PL_parser = oldparser;
+		PL_curcop = oldcurcop;
+		PL_compcv = oldcompcv;
+	    }
+	    opnumsv = opnum ? newSVuv((UV)opnum) : (SV *)NULL;
+	    cv_set_call_checker(
+	       cv, Perl_ck_entersub_args_core, opnumsv ? opnumsv : (SV *)cv
+	    );
+	    SvREFCNT_dec(opnumsv);
+	  }
 	}
     }
     else if (len > 1) {
@@ -2539,17 +2667,14 @@ Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
 /*
 =for apidoc is_gv_magical_sv
 
-Returns C<TRUE> if given the name of a magical GV.
+Returns C<TRUE> if given the name of a magical GV.  Any get-magic that
+C<name_sv> has is ignored.
 
 Currently only useful internally when determining if a GV should be
 created even in rvalue contexts.
 
 C<flags> is not used at present but available for future extension to
 allow selecting particular classes of magical variable.
-
-Currently assumes that C<name> is NUL terminated (as well as len being valid).
-This assumption is met by all callers within the perl core, which all pass
-pointers returned by SvPV.
 
 =cut
 */
@@ -2558,7 +2683,7 @@ bool
 Perl_is_gv_magical_sv(pTHX_ SV *const name_sv, U32 flags)
 {
     STRLEN len;
-    const char *const name = SvPV_const(name_sv, len);
+    const char *const name = SvPV_nomg_const(name_sv, len);
 
     PERL_UNUSED_ARG(flags);
     PERL_ARGS_ASSERT_IS_GV_MAGICAL_SV;
@@ -2641,6 +2766,7 @@ Perl_is_gv_magical_sv(pTHX_ SV *const name_sv, U32 flags)
 	case '>':
 	case '\\':
 	case '/':
+	case '$':
 	case '|':
 	case '+':
 	case ';':
@@ -2771,6 +2897,16 @@ Perl_gv_try_downgrade(pTHX_ GV *gv)
 				STRUCT_OFFSET(XPVIV, xiv_iv));
 	SvRV_set(gv, value);
     }
+}
+
+#include "XSUB.h"
+
+static void
+core_xsub(pTHX_ CV* cv)
+{
+    Perl_croak(aTHX_
+       "&CORE::%s cannot be called directly", GvNAME(CvGV(cv))
+    );
 }
 
 /*

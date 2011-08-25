@@ -147,11 +147,11 @@ PP(pp_rv2gv)
 
     if (!isGV(sv) || SvFAKE(sv)) SvGETMAGIC(sv);
     if (SvROK(sv)) {
-      wasref:
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, to_gv_amg);
 	    SPAGAIN;
 	}
+      wasref:
 	sv = SvRV(sv);
 	if (SvTYPE(sv) == SVt_PVIO) {
 	    GV * const gv = MUTABLE_GV(sv_newmortal());
@@ -169,10 +169,10 @@ PP(pp_rv2gv)
 		/* If this is a 'my' scalar and flag is set then vivify
 		 * NI-S 1999/05/07
 		 */
-		if (SvREADONLY(sv))
-		    Perl_croak_no_modify(aTHX);
 		if (PL_op->op_private & OPpDEREF) {
 		    GV *gv;
+		    if (SvREADONLY(sv))
+			Perl_croak_no_modify(aTHX);
 		    if (cUNOP->op_targ) {
 			STRLEN len;
 			SV * const namesv = PAD_SV(cUNOP->op_targ);
@@ -197,17 +197,24 @@ PP(pp_rv2gv)
 		    report_uninit(sv);
 		RETSETUNDEF;
 	    }
-	    if ((PL_op->op_flags & OPf_SPECIAL) &&
-		!(PL_op->op_flags & OPf_MOD))
+	    if (  ((PL_op->op_flags & OPf_SPECIAL) &&
+		   !(PL_op->op_flags & OPf_MOD))
+		|| PL_op->op_type == OP_READLINE  )
 	    {
-		SV * const temp = MUTABLE_SV(gv_fetchsv(sv, 0, SVt_PVGV));
+		STRLEN len;
+		const char * const nambeg = SvPV_nomg_const(sv, len);
+		SV * const temp = MUTABLE_SV(
+		    gv_fetchpvn_flags(nambeg, len, SvUTF8(sv), SVt_PVGV)
+		);
 		if (!temp
-		    && (!is_gv_magical_sv(sv,0)
-			|| !(sv = MUTABLE_SV(gv_fetchsv(sv, GV_ADD,
+		     /* !len to avoid an extra uninit warning */
+		    && (!len || !is_gv_magical_sv(sv,0)
+			|| !(sv = MUTABLE_SV(gv_fetchpvn_flags(
+				 nambeg, len, GV_ADD | SvUTF8(sv),
 							SVt_PVGV))))) {
 		    RETSETUNDEF;
 		}
-		sv = temp;
+		if (temp) sv = temp;
 	    }
 	    else {
 		if (PL_op->op_private & HINT_STRICT_REFS)
@@ -230,10 +237,10 @@ PP(pp_rv2gv)
 		}
 	    }
 	    /* FAKE globs in the symbol table cause weird bugs (#77810) */
-	    if (sv) SvFAKE_off(sv);
+	    SvFAKE_off(sv);
 	}
     }
-    if (sv && SvFAKE(sv)) {
+    if (SvFAKE(sv)) {
 	SV *newsv = sv_newmortal();
 	sv_setsv_flags(newsv, sv, 0);
 	SvFAKE_off(newsv);
@@ -279,10 +286,16 @@ Perl_softref2xv(pTHX_ SV *const sv, const char *const what,
     if ((PL_op->op_flags & OPf_SPECIAL) &&
 	!(PL_op->op_flags & OPf_MOD))
 	{
-	    gv = gv_fetchsv(sv, 0, type);
+	    STRLEN len;
+	    const char * const nambeg = SvPV_nomg_const(sv, len);
+	    gv = gv_fetchpvn_flags(nambeg, len, SvUTF8(sv), type);
 	    if (!gv
 		&& (!is_gv_magical_sv(sv,0)
-		    || !(gv = gv_fetchsv(sv, GV_ADD, type))))
+		    || !(gv = gv_fetchpvn_flags(
+		          nambeg, len, GV_ADD|SvUTF8(sv), type
+		        ))
+		   )
+	       )
 		{
 		    **spp = &PL_sv_undef;
 		    return NULL;
@@ -301,8 +314,7 @@ PP(pp_rv2sv)
     dVAR; dSP; dTOPss;
     GV *gv = NULL;
 
-    if (!(PL_op->op_private & OPpDEREFed))
-	SvGETMAGIC(sv);
+    SvGETMAGIC(sv);
     if (SvROK(sv)) {
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, to_sv_amg);
@@ -340,7 +352,7 @@ PP(pp_rv2sv)
 		Perl_croak(aTHX_ "%s", PL_no_localize_ref);
 	}
 	else if (PL_op->op_private & OPpDEREF)
-	    vivify_ref(sv, PL_op->op_private & OPpDEREF);
+	    sv = vivify_ref(sv, PL_op->op_private & OPpDEREF);
     }
     SETs(sv);
     RETURN;
@@ -439,84 +451,13 @@ PP(pp_prototype)
 	const char * s = SvPVX_const(TOPs);
 	if (strnEQ(s, "CORE::", 6)) {
 	    const int code = keyword(s + 6, SvCUR(TOPs) - 6, 1);
-	    if (code < 0) {	/* Overridable. */
-#define MAX_ARGS_OP ((sizeof(I32) - 1) * 2)
-		int i = 0, n = 0, seen_question = 0, defgv = 0;
-		I32 oa;
-		char str[ MAX_ARGS_OP * 2 + 2 ]; /* One ';', one '\0' */
-
-		switch (-code) {
-		case KEY_and   : case KEY_chop: case KEY_chomp:
-		case KEY_cmp   : case KEY_exec: case KEY_eq   :
-		case KEY_ge    : case KEY_gt  : case KEY_le   :
-		case KEY_lt    : case KEY_ne  : case KEY_or   :
-		case KEY_system: case KEY_x   : case KEY_xor  :
-		    goto set;
-		case KEY_mkdir:
-		    ret = newSVpvs_flags("_;$", SVs_TEMP);
-		    goto set;
-		case KEY_keys: case KEY_values: case KEY_each:
-		    ret = newSVpvs_flags("+", SVs_TEMP);
-		    goto set;
-		case KEY_push: case KEY_unshift:
-		    ret = newSVpvs_flags("+@", SVs_TEMP);
-		    goto set;
-		case KEY_pop: case KEY_shift:
-		    ret = newSVpvs_flags(";+", SVs_TEMP);
-		    goto set;
-		case KEY_splice:
-		    ret = newSVpvs_flags("+;$$@", SVs_TEMP);
-		    goto set;
-		case KEY_lock: case KEY_tied: case KEY_untie:
-		    ret = newSVpvs_flags("\\[$@%*]", SVs_TEMP);
-		    goto set;
-		case KEY_tie:
-		    ret = newSVpvs_flags("\\[$@%*]$@", SVs_TEMP);
-		    goto set;
-		case KEY___FILE__: case KEY___LINE__: case KEY___PACKAGE__:
-		    ret = newSVpvs_flags("", SVs_TEMP);
-		    goto set;
-		case KEY_readpipe:
-		    s = "CORE::backtick";
-		}
-		while (i < MAXO) {	/* The slow way. */
-		    if (strEQ(s + 6, PL_op_name[i])
-			|| strEQ(s + 6, PL_op_desc[i]))
-		    {
-			goto found;
-		    }
-		    i++;
-		}
-		goto nonesuch;		/* Should not happen... */
-	      found:
-		defgv = PL_opargs[i] & OA_DEFGV;
-		oa = PL_opargs[i] >> OASHIFT;
-		while (oa) {
-		    if (oa & OA_OPTIONAL && !seen_question && !defgv) {
-			seen_question = 1;
-			str[n++] = ';';
-		    }
-		    if ((oa & (OA_OPTIONAL - 1)) >= OA_AVREF
-			&& (oa & (OA_OPTIONAL - 1)) <= OA_SCALARREF
-			/* But globs are already references (kinda) */
-			&& (oa & (OA_OPTIONAL - 1)) != OA_FILEREF
-		    ) {
-			str[n++] = '\\';
-		    }
-		    str[n++] = ("?$@@%&*$")[oa & (OA_OPTIONAL - 1)];
-		    oa = oa >> 4;
-		}
-		if (defgv && str[n - 1] == '$')
-		    str[n - 1] = '_';
-		str[n++] = '\0';
-		ret = newSVpvn_flags(str, n - 1, SVs_TEMP);
-	    }
-	    else if (code)		/* Non-Overridable */
-		goto set;
-	    else {			/* None such */
-	      nonesuch:
+	    if (!code || code == -KEY_CORE)
 		DIE(aTHX_ "Can't find an opnumber for \"%s\"", s+6);
+	    if (code < 0) {	/* Overridable. */
+		SV * const sv = core_prototype(NULL, s + 6, code, NULL);
+		if (sv) ret = sv;
 	    }
+	    goto set;
 	}
     }
     cv = sv_2cv(TOPs, &stash, &gv, 0);
@@ -5985,9 +5926,9 @@ PP(pp_lock)
     dSP;
     dTOPss;
     SV *retsv = sv;
-    assert(SvTYPE(retsv) != SVt_PVCV);
     SvLOCK(sv);
-    if (SvTYPE(retsv) == SVt_PVAV || SvTYPE(retsv) == SVt_PVHV) {
+    if (SvTYPE(retsv) == SVt_PVAV || SvTYPE(retsv) == SVt_PVHV
+     || SvTYPE(retsv) == SVt_PVCV) {
 	retsv = refto(retsv);
     }
     SETs(retsv);
@@ -6031,6 +5972,77 @@ PP(pp_boolkeys)
     }
 
     XPUSHs(boolSV(HvUSEDKEYS(hv) != 0));
+    RETURN;
+}
+
+/* For sorting out arguments passed to a &CORE:: subroutine */
+PP(pp_coreargs)
+{
+    dSP;
+    int opnum = SvIOK(cSVOP_sv) ? (int)SvUV(cSVOP_sv) : 0;
+    AV * const at_ = GvAV(PL_defgv);
+    SV **svp = AvARRAY(at_);
+    I32 minargs = 0, maxargs = 0, numargs = AvFILLp(at_)+1;
+    I32 oa = opnum ? PL_opargs[opnum] >> OASHIFT : 0;
+    bool seen_question = 0;
+    const char *err = NULL;
+
+    /* Count how many args there are first, to get some idea how far to
+       extend the stack. */
+    while (oa) {
+	maxargs++;
+	if (oa & OA_OPTIONAL) seen_question = 1;
+	if (!seen_question) minargs++;
+	oa >>= 4;
+    }
+
+    if(numargs < minargs) err = "Not enough";
+    else if(numargs > maxargs) err = "Too many";
+    if (err)
+	/* diag_listed_as: Too many arguments for %s */
+	Perl_croak(aTHX_
+	  "%s arguments for %s", err,
+	   opnum ? OP_DESC(PL_op->op_next) : SvPV_nolen_const(cSVOP_sv)
+	);
+
+    /* Reset the stack pointer.  Without this, we end up returning our own
+       arguments in list context, in addition to the values we are supposed
+       to return.  nextstate usually does this on sub entry, but we need
+       to run the next op with the caller’s hints, so we cannot have a
+       nextstate. */
+    SP = PL_stack_base + cxstack[cxstack_ix].blk_oldsp;
+
+    if(!maxargs) RETURN;
+
+    EXTEND(SP, maxargs);
+
+    oa = PL_opargs[opnum] >> OASHIFT;
+    if (!numargs) {
+	PERL_SI * const oldsi = PL_curstackinfo;
+	I32 const oldcxix = oldsi->si_cxix;
+	CV *caller;
+	if (oldcxix) oldsi->si_cxix--;
+	else PL_curstackinfo = oldsi->si_prev;
+	caller = find_runcv(NULL);
+	PL_curstackinfo = oldsi;
+	oldsi->si_cxix = oldcxix;
+	PUSHs(
+	 find_rundefsv2(caller,cxstack[cxstack_ix].blk_oldcop->cop_seq)
+	);
+	oa >>= 4;
+    }
+    for (;oa;numargs&&(++svp,--numargs)) {
+	switch (oa & 7) {
+	case OA_SCALAR:
+	    PUSHs(numargs ? svp && *svp ? *svp : &PL_sv_undef : NULL);
+	    break;
+	default:
+	    PUTBACK;
+	    DIE(aTHX_ "panic: unknown OA_*: %x", (unsigned)(oa&7));
+	}
+	oa = oa >> 4;
+    }
+
     RETURN;
 }
 

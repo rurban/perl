@@ -1,20 +1,23 @@
 =encoding utf8
 
+=for comment
+This has been completed up to 527d644b124fe.
+
 =head1 NAME
 
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.15.2
+perldelta - what is new for perl v5.15.3
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.15.1 release and
-the 5.15.2 release.
+This document describes differences between the 5.15.2 release and
+the 5.15.3 release.
 
-If you are upgrading from an earlier release such as 5.15.0, first read
-L<perl5151delta>, which describes differences between 5.15.0 and
-5.15.1.
+If you are upgrading from an earlier release such as 5.15.1, first read
+L<perl5152delta>, which describes differences between 5.15.1 and
+5.15.2.
 
 =head1 Notice
 
@@ -28,6 +31,18 @@ here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
 
+=head2 More CORE subs are callable through references
+
+Perl 5.15., introduced subroutines in the CORE namespace.  Most of them
+could only be called as barewords; i.e., they could be aliased at compile
+time and then inlined under new names.
+
+Many more of these functions can now be called through references and via
+C<&foo()> syntax, bypassing the prototype.
+
+XXX This is too vague, but the exact list of them will likely change before
+5.15.3.  It's currently functions whose prototypes match /^[\$_]+;?\z/.
+
 =head1 Security
 
 XXX Any security-related notices go here.  In particular, any security
@@ -38,12 +53,22 @@ L</Selected Bug Fixes> section.
 
 =head1 Incompatible Changes
 
-XXX For a release on a stable branch, this section aspires to be:
+=head2 User-defined case changing operations.
 
-    There are no changes intentionally incompatible with 5.XXX.XXX
-    If any exist, they are bugs and reports are welcome.
+This feature was deprecated in Perl 5.14, and has now been removed.
+The CPAN module L<Unicode::Casing> provides better functionality without
+the drawbacks that this feature had, as are detailed in the 5.14
+documentation:
+L<http://perldoc.perl.org/5.14.0/perlunicode.html#User-Defined-Case-Mappings-%28for-serious-hackers-only%29>
 
-[ List each incompatible change as a =head2 entry ]
+=head2 XSUBs are now 'static'
+
+XSUB C functions are now 'static', that is, they are not visible from
+outside the compilation unit. For the exceedingly rare case where
+this is not desired, a new public macro C<XS_EXTERNAL(name)> can be
+used in place of C<XS(name)>. C<ExtUtils::ParseXS> (C<xsubpp>)
+can be made to declare XSUBs with C<XS_EXTERNAL> using the
+C<EXPORT_XSUB_SYMBOLS> keyword, see L<perlxs> for details.
 
 =head1 Deprecations
 
@@ -96,33 +121,29 @@ XXX
 
 =item *
 
-L<ExtUtils::Install> has been upgraded from version 1.56 to version 1.57.
+L<Archive::Extract> has been upgraded from version 0.52 to version 0.56
 
-There is no change to ExtUtils::Install other than the version number
-increase, but L<ExtUtils::Installed> has been upgraded from version 1.999_001
-to version 1.999002 and a new C<skip_cwd> attribute has been added.
+Resolved an issue where C<unzip> executable was present in C<PATH> on MSWin32
 
 =item *
 
-L<Module::Build> has been upgraded from version 0.3800 to version 0.39_01.
+L<diagnostics> has been upgraded from version 1.24 to 1.25.
 
-Pod to HTML internals changed to support revisions to Pod::Html in core.
-Also fixes some minor bugs. [rt.cpan.org #68585] [rt.cpan.org #67893]
-[rt.cpan.org #67008]
-
-=item *
-
-L<PerlIO::via> has been upgraded from version 0.11 to version 0.12.
-
-The only change is a correction in the documentation.
+It now strips out C<SZ<><...>> formatting codes before displaying
+descriptions [perl #94488].
 
 =item *
 
-L<Term::ANSIColor> has been upgraded from version 3.00 to version 3.01
+L<Math::BigRat> has been upgraded from version 0.2602 to 0.2603.
 
-Only interpret an initial array reference as a list of colors, not any initial
-reference, allowing the colored function to work properly on objects with
-stringification defined.
+C<int()> on a Math::BigRat object containing -1/2 now creates a
+Math::BigInt containing 0, rather than -0.  L<Math::BigInt> does not even
+support negative zero, so the resulting object was actually malformed
+[perl #95530].
+
+=item *
+
+L<Pod::Simple> has been upgraded from version 3.18 to 3.19.
 
 =back
 
@@ -227,19 +248,13 @@ here. Most of these are built within the directories F<utils> and F<x2p>.
 entries for each change
 Use L<XXX> with program names to get proper documentation linking. ]
 
-=head3 L<perlivp>
+=head3 L<XXX>
 
 =over 4
 
 =item *
 
-Fixed a bug whereby other perls under the current directory could cause
-false positive failures.
-
-=item *
-
-Tests for .ph files have been removed, as these test have been optional since
-2005 and .ph files are no longer generated during installation.
+XXX
 
 =back
 
@@ -274,7 +289,14 @@ that they represent may be covered elsewhere.
 
 =item *
 
-XXX
+F<t/porting/globvar.t> has been added, to run a sanity check on F<globar.sym>.
+F<globar.sym> is not needed on most *nix platforms, but is for Win32, hence
+previously was it was possible to inadvertently commit changes that worked
+perfectly locally, but broke the build on Win32.
+
+=item *
+
+F<t/op/unlink.t> has been added to test the C<unlink> function.
 
 =back
 
@@ -355,30 +377,57 @@ L</Modules and Pragmata>.
 
 =item *
 
-Locking an lvalue subroutine (via C<lock &lvsub>) now locks the return
-value, instead of trying to lock the sub (which has no effect).  It also no
-longer tries to return the sub as a scalar, resulting in strange side
-effects like C<ref \$_> returning "CODE" in some instances.
+In Perl 5.15.0 C<defined(${'$'})> stopped returning true if the C<$$>
+variable had not been used yet.  This has been fixed.
 
 =item *
 
-C<lock>'s prototype has been corrected to C<(\[$@%*])> from C<(\$)>, which
-was just wrong.
+Perl 5.10.0 introduced a similar bug: C<defined(*{"foo"})> where "foo"
+represents the name of a built-in global variable used to return false if
+the variable had never been used before, but only on the I<first> call.
+This, too, has been fixed.
 
 =item *
 
-Most dereferencing operators (C<${}>, etc.) used to call C<FETCH> twice on
-a tied operand when doing a symbolic dereference (looking up a variable by
-name, which is not permitted under C<use strict 'refs'>).  Only C<&{}> did
-not have this problem.  This has been fixed.
+Various functions that take a filehandle argument in rvalue context
+(C<close>, C<readline>, etc.) used to call C<FETCH> multiple times, if it
+was a tied variable, and warn twice, if it was C<undef> [perl #97482].
 
 =item *
 
-A minor regression introduced in 5.15.0 has been fixed.  Dereferencing a
-magical mortal (e.g., the return value of C<delete> on a tied hash element)
-explicitly returned from a subroutine called recursively was not calling
-C<FETCH>.  This would affect code like C<@{ foo() }> where the C<foo> sub
-contains C<return delete $hash{elem}> and is calling itself.
+C<close> and similar filehandle functions, when called on built-in global
+variables (like C<$+>), used to die if the variable happened to hold the
+undefined value, instead of producing the usual "Use of uninitialized
+value" warning.
+
+=item *
+
+When autovivified file handles were introduced in Perl 5.6.0, C<readline>
+was inadvertently made to autovivify when called as C<readline($foo)> (but
+not as C<< <$foo> >>).  It has now been fixed never to autovivify.
+
+=item *
+
+C<defined ${ $tied_variable }> used to call C<FETCH> multiple times, but
+now calls it just once.
+
+=item *
+
+Some cases of dereferencing a complex expression, such as
+C<${ (), $tied } = 1>, used to call C<FETCH> multiple times, but now call
+it once.
+
+=item *
+
+For a tied variable returning a package name, C<< $tied->method >> used to
+call C<FETCH> multiple times (even up to six!), and sometimes would
+fail to call the method, due to memory corruption.
+
+=item *
+
+Calling an undefined anonymous subroutine (e.g., what $x holds after
+C<undef &{$x = sub{}}>) used to cause a "Not a CODE reference" error, which
+has been corrected to "Undefined subroutine called" [perl #71154].
 
 =back
 
@@ -410,7 +459,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.1..HEAD
+  perl Porting/acknowledgements.pl v5.15.2..HEAD
 
 =head1 Reporting Bugs
 

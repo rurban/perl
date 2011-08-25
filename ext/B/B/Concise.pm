@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.84";
+our $VERSION   = "0.85";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -601,6 +601,7 @@ $priv{"aassign"}{64} = "COMMON";
 $priv{"aassign"}{32} = $] < 5.009 ? "PHASH" : "STATE";
 $priv{"sassign"}{32} = "STATE";
 $priv{"sassign"}{64} = "BKWARD";
+$priv{"sassign"}{128}= "CV2GV";
 $priv{$_}{64} = "RTIME" for ("match", "subst", "substcont", "qr");
 @{$priv{"trans"}}{1,2,4,8,16,64} = ("<UTF", ">UTF", "IDENT", "SQUASH", "DEL",
 				    "COMPL", "GROWS");
@@ -611,7 +612,8 @@ $priv{$_}{4} = "DREFed" for (qw(rv2sv rv2av rv2hv));
 @{$priv{$_}}{32,64,96} = ("DREFAV", "DREFHV", "DREFSV")
   for (qw(rv2gv rv2sv padsv aelem helem));
 $priv{$_}{16} = "STATE" for ("padav", "padhv", "padsv");
-@{$priv{"entersub"}}{1,4,16,32,64} = qw( DREF INARGS DBG TARG NOMOD );
+$priv{rv2gv}{4} = "NOINIT";
+@{$priv{"entersub"}}{1,4,16,32,64} = qw( DREF INARGS DBG TARG );
 @{$priv{rv2cv}}{1,8,128} = ("CONST","AMPER","NO()");
 $priv{"gv"}{32} = "EARLYCV";
 $priv{"aelem"}{16} = $priv{"helem"}{16} = "LVDEFER";
@@ -658,6 +660,7 @@ if ($] >= 5.009) {
   $priv{$_}{2} = "GREPLEX"
     for ("mapwhile", "mapstart", "grepwhile", "grepstart");
 }
+$priv{$_}{128} = '+1' for qw "caller wantarray";
 
 our %hints; # used to display each COP's op_hints values
 

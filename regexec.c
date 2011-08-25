@@ -3685,7 +3685,10 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	case NBOUNDU:
 	case NBOUNDA:
 	    /* was last char in word? */
-	    if (utf8_target && FLAGS(scan) != REGEX_ASCII_RESTRICTED_CHARSET) {
+	    if (utf8_target
+		&& FLAGS(scan) != REGEX_ASCII_RESTRICTED_CHARSET
+		&& FLAGS(scan) != REGEX_ASCII_MORE_RESTRICTED_CHARSET)
+	    {
 		if (locinput == PL_bostr)
 		    ln = '\n';
 		else {
@@ -3732,6 +3735,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 			n = isALNUM(nextchr);
 			break;
 		    case REGEX_ASCII_RESTRICTED_CHARSET:
+		    case REGEX_ASCII_MORE_RESTRICTED_CHARSET:
 			ln = isWORDCHAR_A(ln);
 			n = isWORDCHAR_A(nextchr);
 			break;
@@ -5679,6 +5683,8 @@ NULL
 
 #define CASE_CLASS(nAmE)                              \
         case nAmE:                                    \
+	    if (locinput >= PL_regeol)                \
+		sayNO;                                \
             if ((n=is_##nAmE(locinput,utf8_target))) {    \
                 locinput += n;                        \
                 nextchr = UCHARAT(locinput);          \
@@ -5686,6 +5692,8 @@ NULL
                 sayNO;                                \
             break;                                    \
         case N##nAmE:                                 \
+	    if (locinput >= PL_regeol)                \
+		sayNO;                                \
             if ((n=is_##nAmE(locinput,utf8_target))) {    \
                 sayNO;                                \
             } else {                                  \

@@ -341,13 +341,10 @@ Perl_cv_undef(pTHX_ CV *cv)
 	    PTR2UV(cv), PTR2UV(PL_comppad))
     );
 
-#ifdef USE_ITHREADS
-    if (CvFILE(cv) && !CvISXSUB(cv)) {
-	/* for XSUBs CvFILE point directly to static memory; __FILE__ */
+    if (CvFILE(cv) && CvDYNFILE(cv)) {
 	Safefree(CvFILE(cv));
     }
     CvFILE(cv) = NULL;
-#endif
 
     if (!CvISXSUB(cv) && CvROOT(cv)) {
 	if (SvTYPE(cv) == SVt_PVCV && CvDEPTH(cv))
@@ -466,8 +463,9 @@ Perl_cv_undef(pTHX_ CV *cv)
 	CvXSUB(cv) = NULL;
     }
     /* delete all flags except WEAKOUTSIDE and CVGV_RC, which indicate the
-     * ref status of CvOUTSIDE and CvGV */
-    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC);
+     * ref status of CvOUTSIDE and CvGV, and ANON, which pp_entersub uses
+     * to choose an error message */
+    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC|CVf_ANON);
 }
 
 /*
@@ -994,6 +992,24 @@ Perl_find_rundefsv(pTHX)
 	return DEFSV;
 
     return PAD_SVl(po);
+}
+
+SV *
+Perl_find_rundefsv2(pTHX_ CV *cv, U32 seq)
+{
+    SV *namesv;
+    int flags;
+    PADOFFSET po;
+
+    PERL_ARGS_ASSERT_FIND_RUNDEFSV2;
+
+    po = pad_findlex("$_", 2, 0, cv, seq, 1,
+	    NULL, &namesv, &flags);
+
+    if (po == NOT_IN_PAD || SvPAD_OUR(namesv))
+	return DEFSV;
+
+    return AvARRAY((PAD*) (AvARRAY(CvPADLIST(cv))[CvDEPTH(cv)]))[po];
 }
 
 /*
@@ -1875,12 +1891,8 @@ Perl_cv_clone(pTHX_ CV *proto)
     CvFLAGS(cv) = CvFLAGS(proto) & ~(CVf_CLONE|CVf_WEAKOUTSIDE|CVf_CVGV_RC);
     CvCLONED_on(cv);
 
-#ifdef USE_ITHREADS
-    CvFILE(cv)		= CvISXSUB(proto) ? CvFILE(proto)
-					  : savepv(CvFILE(proto));
-#else
-    CvFILE(cv)		= CvFILE(proto);
-#endif
+    CvFILE(cv)		= CvDYNFILE(proto) ? savepv(CvFILE(proto))
+					   : CvFILE(proto);
     CvGV_set(cv,CvGV(proto));
     CvSTASH_set(cv, CvSTASH(proto));
     OP_REFCNT_LOCK;

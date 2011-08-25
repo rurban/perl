@@ -7,7 +7,7 @@ BEGIN {
 }
 
 BEGIN { require './test.pl'; }
-plan tests => 240;
+plan tests => 245;
 
 while (<DATA>) {
     chomp;
@@ -30,6 +30,9 @@ __DATA__
 __FILE__ ()
 __LINE__ ()
 __PACKAGE__ ()
+__DATA__ undef
+__END__ undef
+CORE unknown
 abs (_)
 accept (**)
 alarm (_)
@@ -38,6 +41,7 @@ atan2 ($$)
 bind (*$)
 binmode (*;$)
 bless ($;$)
+break ()
 caller (;$)
 chdir (;$)
 chmod (@)
@@ -101,7 +105,7 @@ getpgrp (;$)
 getppid ()
 getpriority ($$)
 getprotobyname ($)
-getprotobynumber ($)
+getprotobynumber ($;)
 getprotoent ()
 getpwent ()
 getpwnam ($)
@@ -134,9 +138,9 @@ link ($$)
 listen (*$)
 local undef
 localtime (;$)
-lock (\[$@%*])
+lock (\[$@%&*])
 log (_)
-lstat (*)
+lstat (;*)
 lt undef
 m undef
 map undef
@@ -149,7 +153,7 @@ my undef
 ne undef
 next undef
 no undef
-not ($)
+not ($;)
 oct (_)
 open (*;$@)
 opendir (*$)
@@ -193,7 +197,7 @@ say undef
 scalar undef
 seek (*$$)
 seekdir (*$)
-select (;*)
+select undef
 semctl ($$$$)
 semget ($$$)
 semop ($$)
@@ -223,7 +227,7 @@ split undef
 sprintf ($@)
 sqrt (_)
 srand (;$)
-stat (*)
+stat (;*)
 state undef
 study undef
 sub undef
@@ -249,7 +253,7 @@ umask (;$)
 undef undef
 unless undef
 unlink (@)
-unpack ($;$)
+unpack ($_)
 unshift (+@)
 untie (\[$@%*])
 until undef
