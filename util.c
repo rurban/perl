@@ -117,9 +117,10 @@ Perl_safesysmalloc(MEM_SIZE size)
 	header->interpreter = aTHX;
 	/* Link us into the list.  */
 	header->prev = &PL_memory_debug_header;
-	header->next = PL_memory_debug_header.next;
+	header->next = PL_memory_debug_header.next ? PL_memory_debug_header.next : header;
 	PL_memory_debug_header.next = header;
-	header->next->prev = header;
+	if (header->next)
+	    header->next->prev = header;
 #  ifdef PERL_POISON
 	header->size = size;
 #  endif
@@ -348,9 +349,10 @@ Perl_safesyscalloc(MEM_SIZE count, MEM_SIZE size)
 	    header->interpreter = aTHX;
 	    /* Link us into the list.  */
 	    header->prev = &PL_memory_debug_header;
-	    header->next = PL_memory_debug_header.next;
+	    header->next = PL_memory_debug_header.next ? PL_memory_debug_header.next : header;
 	    PL_memory_debug_header.next = header;
-	    header->next->prev = header;
+	    if (header->next)
+		header->next->prev = header;
 #  ifdef PERL_POISON
 	    header->size = total_size;
 #  endif
