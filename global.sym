@@ -17,10 +17,6 @@
 
 Perl_Gv_AMupdate
 Perl_PerlIO_context_layers
-Perl__append_range_to_invlist
-Perl__new_invlist
-Perl__swash_inversion_hash
-Perl__swash_to_invlist
 Perl__to_uni_fold_flags
 Perl__to_utf8_fold_flags
 Perl_amagic_call
@@ -69,6 +65,8 @@ Perl_ck_warner
 Perl_ck_warner_d
 Perl_ckwarn
 Perl_ckwarn_d
+Perl_cop_fetch_label
+Perl_cop_store_label
 Perl_croak
 Perl_croak_no_modify
 Perl_croak_sv
@@ -77,6 +75,7 @@ Perl_custom_op_desc
 Perl_custom_op_name
 Perl_custom_op_register
 Perl_custom_op_xop
+Perl_cv_clone
 Perl_cv_const_sv
 Perl_cv_get_call_checker
 Perl_cv_set_call_checker
@@ -125,7 +124,6 @@ Perl_eval_pv
 Perl_eval_sv
 Perl_fbm_compile
 Perl_fbm_instr
-Perl_fetch_cop_label
 Perl_filter_add
 Perl_filter_del
 Perl_filter_read
@@ -344,8 +342,6 @@ Perl_my_fflush_all
 Perl_my_fork
 Perl_my_lstat
 Perl_my_lstat_flags
-Perl_my_pclose
-Perl_my_popen
 Perl_my_popen_list
 Perl_my_setenv
 Perl_my_snprintf
@@ -426,7 +422,7 @@ Perl_op_contextualize
 Perl_op_dump
 Perl_op_free
 Perl_op_linklist
-Perl_op_lvalue
+Perl_op_lvalue_flags
 Perl_op_null
 Perl_op_prepend_elem
 Perl_op_refcnt_lock
@@ -434,8 +430,18 @@ Perl_op_refcnt_unlock
 Perl_op_scope
 Perl_pack_cat
 Perl_packlist
-Perl_pad_findmy
+Perl_pad_add_anon
+Perl_pad_add_name_pv
+Perl_pad_add_name_pvn
+Perl_pad_add_name_sv
+Perl_pad_alloc
+Perl_pad_compname_type
+Perl_pad_findmy_pv
+Perl_pad_findmy_pvn
+Perl_pad_findmy_sv
+Perl_pad_new
 Perl_pad_push
+Perl_pad_tidy
 Perl_parse_arithexpr
 Perl_parse_barestmt
 Perl_parse_block
@@ -779,6 +785,7 @@ Perl_vwarner
 Perl_warn
 Perl_warn_sv
 Perl_warner
+Perl_was_lvalue_sub
 Perl_whichsig
 Perl_xs_apiversion_bootcheck
 Perl_xs_version_bootcheck
@@ -797,9 +804,12 @@ Perl_signbit
 Perl_my_strlcat
 Perl_my_strlcpy
 Perl_my_chsize
+Perl_my_pclose
+Perl_my_popen
 Perl_my_sprintf
 Perl_my_bcopy
 Perl_hv_assert
+Perl_pad_setsv
 Perl_pad_sv
 Perl_dump_fds
 Perl_sys_intern_clear
@@ -810,7 +820,6 @@ Perl_get_mstats
 Perl_my_htonl
 Perl_my_ntohl
 Perl_my_swap
-Perl_do_exec
 Perl_gv_SVadd
 Perl_GetVars
 Perl_free_global_struct
@@ -833,6 +842,14 @@ Perl_warn_nocontext
 Perl_warner_nocontext
 perl_alloc_using
 perl_clone_using
+Perl__append_range_to_invlist
+Perl__invlist_intersection
+Perl__invlist_invert
+Perl__invlist_subtract
+Perl__invlist_union
+Perl__new_invlist
+Perl__swash_inversion_hash
+Perl__swash_to_invlist
 Perl_sv_setsv_cow
 Perl_Slab_Alloc
 Perl_Slab_Free

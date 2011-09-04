@@ -83,9 +83,9 @@ EOS
 sub list_authors {
     my ($patchers, $authors) = @_;
     binmode(STDOUT, ":utf8");
-    print "$_\n" for  sort { lc $a cmp lc $b }
+    print wrap '', '', join(', ', sort { lc $a cmp lc $b }
                       map { $authors->{$_} }
-                      keys %$patchers;
+                      keys %$patchers) . ".\n";
 }
 
 sub parse_commits_from_stdin {
@@ -536,6 +536,7 @@ brian.d.foy\100gmail.com                bdfoy\100cpan.org
 BQW10602\100nifty.com                   sadahiro\100cpan.org
 
 chromatic\100wgz.org                    chromatic\100rmci.net
+claes\100surfar.nu                      claes\100versed.se
 clintp\100geeksalad.org                 cpierce1\100ford.com
 clkao\100clkao.org                      clkao\100bestpractical.com
 corion\100corion.net                    corion\100cpan.org
@@ -638,6 +639,7 @@ jpeacock\100rowman.com                  john.peacock\100havurah-software.org
 +                                       jpeacock\100havurah-software.org
 +                                       jpeacock\100dsl092-147-156.wdc1.dsl.speakeasy.net
 +                                       jpeacock\100jpeacock-hp.doesntexist.org
++                                       jpeacock\100cpan.org
 jql\100accessone.com                    jql\100jql.accessone.com
 jsm28\100hermes.cam.ac.uk               jsm28\100cam.ac.uk
 
@@ -649,6 +651,8 @@ kane\100dwim.org                        kane\100xs4all.net
 ken\100mathforum.org                    kenahoo\100gmail.com
 +                                       ken.williams\100thomsonreuters.com
 kroepke\100dolphin-services.de          kay\100dolphin-services.de
+kst\100mib.org                          kst\100cts.com
++                                       kst\100SDSC.EDU
 kstar\100wolfetech.com                  kstar\100cpan.org
 +                                       kurt_starsinic\100ml.com
 +                                       kstar\100www.chapin.edu
@@ -804,8 +808,10 @@ schwab\100suse.de                       schwab\100issan.informatik.uni-dortmund.
 sebastien\100aperghis.net               maddingue\100free.fr
 +                                       saper\100cpan.org
 shigeya\100wide.ad.jp                   shigeya\100foretune.co.jp
-shlomif\100vipe.technion.ac.il          shlomif\100iglu.org.il
+shlomif\100cpan.org                     shlomif\100vipe.technion.ac.il
++                                       shlomif\100iglu.org.il
 +                                       shlomif+processed-by-perl\100gmail.com
++                                       shlomif\100shlomifish.org
 simon\100simon-cozens.org               simon\100pembro4.pmb.ox.ac.uk
 +                                       simon\100brecon.co.uk
 +                                       simon\100othersideofthe.earth.li
@@ -828,6 +834,7 @@ spider\100orb.nashua.nh.us              spider\100web.zk3.dec.com
 +                                       spidb\100cpan.org
 +                                       spider.boardman\100orb.nashua.nh.us
 +                                       root\100peano.zk3.dec.com
+spiros\100lokku.com			s.denaxas\100gmail.com
 spp\100ds.net                           spp\100psa.pencom.com
 +                                       spp\100psasolar.colltech.com
 +                                       spp\100spotter.yi.org
@@ -862,3 +869,5 @@ wolfgang.laun\100alcatel.at             wolfgang.laun\100chello.at
 +                                       wolfgang.laun\100thalesgroup.com
 +                                       wolfgang.laun\100gmail.com
 yath\100yath.de                         yath-perlbug\100yath.de
+
+jkeen@verizon.net                       jkeenan@cpan.org

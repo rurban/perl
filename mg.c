@@ -1733,13 +1733,20 @@ Perl_magic_setnkeys(pTHX_ SV *sv, MAGIC *mg)
 
 Invoke a magic method (like FETCH).
 
-* sv and mg are the tied thingy and the tie magic;
-* meth is the name of the method to call;
-* argc is the number of args (in addition to $self) to pass to the method;
-       the args themselves are any values following the argc argument.
-* flags:
-    G_DISCARD:     invoke method with G_DISCARD flag and don't return a value
-    G_UNDEF_FILL:  fill the stack with argc pointers to PL_sv_undef.
+C<sv> and C<mg> are the tied thingy and the tie magic.
+
+C<meth> is the name of the method to call.
+
+C<argc> is the number of args (in addition to $self) to pass to the method.
+
+The C<flags> can be:
+
+    G_DISCARD     invoke method with G_DISCARD flag and don't
+                  return a value
+    G_UNDEF_FILL  fill the stack with argc pointers to
+                  PL_sv_undef
+
+The arguments themselves are any values following the C<flags> argument.
 
 Returns the SV (if any) returned by the method, or NULL on failure.
 
@@ -2358,9 +2365,8 @@ Perl_magic_setmglob(pTHX_ SV *sv, MAGIC *mg)
 {
     PERL_ARGS_ASSERT_MAGIC_SETMGLOB;
     PERL_UNUSED_CONTEXT;
+    PERL_UNUSED_ARG(sv);
     mg->mg_len = -1;
-    if (!isGV_with_GP(sv))
-	SvSCREAM_off(sv);
     return 0;
 }
 
@@ -2387,6 +2393,9 @@ Perl_magic_setregexp(pTHX_ SV *sv, MAGIC *mg)
     } else if (type == PERL_MAGIC_bm) {
 	SvTAIL_off(sv);
 	SvVALID_off(sv);
+    } else if (type == PERL_MAGIC_study) {
+	if (!isGV_with_GP(sv))
+	    SvSCREAM_off(sv);
     } else {
 	assert(type == PERL_MAGIC_fm);
     }
@@ -2474,6 +2483,14 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
         break;
     case '\001':	/* ^A */
 	sv_setsv(PL_bodytarget, sv);
+	FmLINES(PL_bodytarget) = 0;
+	if (SvPOK(PL_bodytarget)) {
+	    char *s = SvPVX(PL_bodytarget);
+	    while ( ((s = strchr(s, '\n'))) ) {
+		FmLINES(PL_bodytarget)++;
+		s++;
+	    }
+	}
 	/* mg_set() has temporarily made sv non-magical */
 	if (PL_tainting) {
 	    if ((tmg = mg_find(sv,PERL_MAGIC_taint)) && tmg->mg_len & 1)

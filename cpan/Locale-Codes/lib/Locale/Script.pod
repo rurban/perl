@@ -18,6 +18,9 @@ Locale::Script - standard codes for script identification
 
 =head1 DESCRIPTION
 
+This module exists as both Locale::Codes::Script and Locale::Script (for
+historical reasons).  The Locale::Script module will continue to work.
+
 The C<Locale::Script> module provides access to standards codes used
 for identifying scripts, such as those defined in ISO 15924.
 
@@ -35,7 +38,8 @@ scripts. The ones currently supported are:
 =item B<alpha>
 
 This is a set of four-letter (capitalized) codes from ISO 15924
-such as 'Phnx' for Phoenician.
+such as 'Phnx' for Phoenician.  It also includes additions to this
+set included in the IANA language registry.
 
 This code set is identified with the symbol C<LOCALE_SCRIPT_ALPHA>.
 
@@ -82,7 +86,7 @@ This code set is identified with the symbol C<LOCALE_SCRIPT_NUMERIC>.
 
 =item B<Locale::Script::delete_script_code_alias  ( CODE [,CODESET] )>
 
-These routines are all documented in the Locale::Codes man page.
+These routines are all documented in the Locale::Codes::API man page.
 
 =back
 
@@ -92,11 +96,19 @@ These routines are all documented in the Locale::Codes man page.
 
 =item B<Locale::Codes>
 
-=item B<Locale::Constants>
+The Locale-Codes distribution.
+
+=item B<Locale::Codes::API>
+
+The list of functions supported by this module.
 
 =item B<http://www.unicode.org/iso15924/>
 
 Home page for ISO 15924.
+
+=item B<http://www.iana.org/assignments/language-subtag-registry>
+
+The IANA language subtag registry.
 
 =back
 

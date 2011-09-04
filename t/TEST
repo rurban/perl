@@ -42,7 +42,6 @@ my %abs = (
 	   '../cpan/IPC-SysV' => 1,
 	   '../cpan/Locale-Codes' => 1,
 	   '../cpan/Log-Message' => 1,
-	   '../cpan/Math-Complex' => 1,
 	   '../cpan/Module-Build' => 1,
 	   '../cpan/Module-Load' => 1,
 	   '../cpan/Module-Load-Conditional' => 1,
@@ -75,7 +74,6 @@ my %temp_no_core =
      '../cpan/podlators' => 1,
      '../cpan/Test-Simple' => 1,
      '../cpan/Tie-RefHash' => 1,
-     '../cpan/Time-HiRes' => 1,
      '../cpan/Unicode-Collate' => 1,
      '../cpan/Unicode-Normalize' => 1,
     );

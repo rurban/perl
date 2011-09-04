@@ -562,7 +562,7 @@ perl_destruct(pTHXx)
         JMPENV_PUSH(x);
 	PERL_UNUSED_VAR(x);
         if (PL_endav && !PL_minus_c) {
-	    PL_phase = PERL_PHASE_END;
+	    PERL_SET_PHASE(PERL_PHASE_END);
             call_list(PL_scopestack_ix, PL_endav);
 	}
         JMPENV_POP;
@@ -757,7 +757,7 @@ perl_destruct(pTHXx)
      * destruct_level > 0 */
     SvREFCNT_dec(PL_main_cv);
     PL_main_cv = NULL;
-    PL_phase = PERL_PHASE_DESTRUCT;
+    PERL_SET_PHASE(PERL_PHASE_DESTRUCT);
 
     /* Tell PerlIO we are about to tear things apart in case
        we have layers which are using resources that should
@@ -904,14 +904,6 @@ perl_destruct(pTHXx)
     PL_statgv = NULL;
 
     /* defgv, aka *_ should be taken care of elsewhere */
-
-    /* clean up after study() */
-    SvREFCNT_dec(PL_lastscream);
-    PL_lastscream = NULL;
-    Safefree(PL_screamfirst);
-    PL_screamfirst = 0;
-    Safefree(PL_screamnext);
-    PL_screamnext  = 0;
 
     /* float buffer */
     Safefree(PL_efloatbuf);
@@ -1615,7 +1607,7 @@ perl_parse(pTHXx_ XSINIT_t xsinit, int argc, char **argv, char **env)
 	    call_list(oldscope, PL_unitcheckav);
 	}
 	if (PL_checkav) {
-	    PL_phase = PERL_PHASE_CHECK;
+	    PERL_SET_PHASE(PERL_PHASE_CHECK);
 	    call_list(oldscope, PL_checkav);
 	}
 	ret = 0;
@@ -1633,7 +1625,7 @@ perl_parse(pTHXx_ XSINIT_t xsinit, int argc, char **argv, char **env)
 	    call_list(oldscope, PL_unitcheckav);
 	}
 	if (PL_checkav) {
-	    PL_phase = PERL_PHASE_CHECK;
+	    PERL_SET_PHASE(PERL_PHASE_CHECK);
 	    call_list(oldscope, PL_checkav);
 	}
 	ret = STATUS_EXIT;
@@ -1700,6 +1692,9 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef PERL_USE_SAFE_PUTENV
 			     " PERL_USE_SAFE_PUTENV"
 #  endif
+#  ifdef UNLINK_ALL_VERSIONS
+			     " UNLINK_ALL_VERSIONS"
+#  endif
 #  ifdef USE_ATTRIBUTES_FOR_PERLIO
 			     " USE_ATTRIBUTES_FOR_PERLIO"
 #  endif
@@ -1709,14 +1704,8 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef USE_LOCALE
 			     " USE_LOCALE"
 #  endif
-#  ifdef USE_LOCALE_COLLATE
-			     " USE_LOCALE_COLLATE"
-#  endif
 #  ifdef USE_LOCALE_CTYPE
 			     " USE_LOCALE_CTYPE"
-#  endif
-#  ifdef USE_LOCALE_NUMERIC
-			     " USE_LOCALE_NUMERIC"
 #  endif
 #  ifdef USE_PERL_ATOF
 			     " USE_PERL_ATOF"
@@ -1782,7 +1771,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
     SV *linestr_sv = newSV_type(SVt_PVIV);
     bool add_read_e_script = FALSE;
 
-    PL_phase = PERL_PHASE_START;
+    PERL_SET_PHASE(PERL_PHASE_START);
 
     SvGROW(linestr_sv, 80);
     sv_setpvs(linestr_sv,"");
@@ -2286,7 +2275,7 @@ perl_run(pTHXx)
 	PL_curstash = PL_defstash;
 	if (!(PL_exit_flags & PERL_EXIT_DESTRUCT_END) &&
 	    PL_endav && !PL_minus_c) {
-	    PL_phase = PERL_PHASE_END;
+	    PERL_SET_PHASE(PERL_PHASE_END);
 	    call_list(oldscope, PL_endav);
 	}
 #ifdef MYMALLOC
@@ -2338,7 +2327,7 @@ S_run_body(pTHX_ I32 oldscope)
 	if (PERLDB_SINGLE && PL_DBsingle)
 	    sv_setiv(PL_DBsingle, 1);
 	if (PL_initav) {
-	    PL_phase = PERL_PHASE_INIT;
+	    PERL_SET_PHASE(PERL_PHASE_INIT);
 	    call_list(oldscope, PL_initav);
 	}
 #ifdef PERL_DEBUG_READONLY_OPS
@@ -2348,7 +2337,7 @@ S_run_body(pTHX_ I32 oldscope)
 
     /* do it */
 
-    PL_phase = PERL_PHASE_RUN;
+    PERL_SET_PHASE(PERL_PHASE_RUN);
 
     if (PL_restartop) {
 	PL_restartjmpenv = NULL;
@@ -2396,10 +2385,13 @@ Perl_get_sv(pTHX_ const char *name, I32 flags)
 
 =for apidoc p||get_av
 
-Returns the AV of the specified Perl array.  C<flags> are passed to
-C<gv_fetchpv>. If C<GV_ADD> is set and the
+Returns the AV of the specified Perl global or package array with the given
+name (so it won't work on lexical variables).  C<flags> are passed 
+to C<gv_fetchpv>. If C<GV_ADD> is set and the
 Perl variable does not exist then it will be created.  If C<flags> is zero
 and the variable does not exist then NULL is returned.
+
+Perl equivalent: C<@{"$name"}>.
 
 =cut
 */
@@ -2502,7 +2494,10 @@ Perl_get_cv(pTHX_ const char *name, I32 flags)
 
 =for apidoc p||call_argv
 
-Performs a callback to the specified Perl sub.  See L<perlcall>.
+Performs a callback to the specified named and package-scoped Perl subroutine 
+with C<argv> (a NULL-terminated array of strings) as arguments. See L<perlcall>.
+
+Approximate Perl equivalent: C<&{"$sub_name"}(@$argv)>.
 
 =cut
 */

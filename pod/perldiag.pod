@@ -445,7 +445,6 @@ wasn't a symbol table entry.
 (P) An internal request asked to add a dirhandle entry to something
 that wasn't a symbol table entry.
 
-
 =item Bad symbol for filehandle
 
 (P) An internal request asked to add a filehandle entry to something
@@ -1451,7 +1450,6 @@ the character name specified in the C<\N{...}> escape.  Perhaps you
 forgot to load the corresponding C<charnames> pragma?
 See L<charnames>.
 
-
 =item Constant is not %s reference
 
 (F) A constant value (perhaps declared using the C<use constant> pragma)
@@ -1519,9 +1517,20 @@ array is empty, just use C<if (@array) { # not empty }> for example.
 
 =item defined(%hash) is deprecated
 
-(D deprecated) defined() is not usually useful on hashes because it
-checks for an undefined I<scalar> value.  If you want to see if the hash
-is empty, just use C<if (%hash) { # not empty }> for example.
+(D deprecated) C<defined()> is not usually useful on hashes; it merely
+checks for non-empty, similar to a hash in boolean context (see
+L<perldata>).  If a non-empty check is what you want then just use:
+
+    if (%hash) {
+       # not empty
+    }
+
+If you had C<defined(%Foo::Bar::QUUX)> to check whether such a
+package variable exists, then it has never actually done that,
+but instead creates the hash if necessary (autovivification)
+then tests for non-empty.  If you really want to check
+existence of a package variable then look at the glob slot
+with C<defined *Foo::Bar::QUUX{HASH}> (see L<perlref>).
 
 =item (?(DEFINE)....) does not allow branches in regex; marked by <-- HERE in m/%s/
 
@@ -2044,6 +2053,11 @@ been used, and the correct charname handler is in scope.
 binary number.  Interpretation of the binary number stopped before the
 offending digit.
 
+=item Illegal character after '_' in prototype for %s : %s
+
+(W illegalproto) An illegal character was found in a prototype declaration.
+Legal characters in prototypes are $, @, %, *, ;, [, ], &, \, and +.
+
 =item Illegal character \%o (carriage return)
 
 (F) Perl normally treats carriage returns in the program text as it
@@ -2185,7 +2199,6 @@ the path to a known value, using trustworthy data.  See L<perlsec>.
 expression that contains a call to a user-defined character property
 function, i.e. C<\p{IsFoo}> or C<\p{InFoo}>.
 See L<perlunicode/User-Defined Character Properties> and L<perlsec>.
-
 
 =item Integer overflow in format string for %s
 
@@ -2477,13 +2490,18 @@ You may wish to switch to using L<Math::BigInt> explicitly.
 by that?  lstat() makes sense only on filenames.  (Perl did a fstat()
 instead on the filehandle.)
 
+=item lvalue attribute cannot be removed after the subroutine has been defined
+
+(W misc) The lvalue attribute on a Perl subroutine cannot be turned off
+once the subroutine is defined.
+
 =item lvalue attribute ignored after the subroutine has been defined
 
-(W misc) Making a subroutine an lvalue subroutine after it has been defined
-by declaring the subroutine with an lvalue attribute is not
-possible. To make the subroutine an lvalue subroutine add the
-lvalue attribute to the definition, or put the declaration before
-the definition.
+(W misc) Making a Perl subroutine an lvalue subroutine after it has been
+defined, whether by declaring the subroutine with an lvalue attribute
+or by using L<attributes.pm|attributes>, is not possible.  To make the subroutine an
+lvalue subroutine, add the lvalue attribute to the definition, or put
+the declaration before the definition.
 
 =item Malformed integer in [] in pack
 

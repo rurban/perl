@@ -354,11 +354,12 @@
 #endif
 
 #define NOOP /*EMPTY*/(void)0
-#if !defined(HASATTRIBUTE_UNUSED) && defined(__cplusplus)
-#define dNOOP /*EMPTY*/(void)0 /* Older g++ has no __attribute((unused))__ */
-#else
-#define dNOOP extern int /*@unused@*/ Perl___notused PERL_UNUSED_DECL
-#endif
+/* cea2e8a9dd23747f accidentally lost the comment originally from the first
+   check in of thread.h, explaining why we need dNOOP at all:  */
+/* Rats: if dTHR is just blank then the subsequent ";" throws an error */
+/* Declaring a *function*, instead of a variable, ensures that we don't rely
+   on being able to suppress "unused" warnings.  */
+#define dNOOP extern int Perl___notused()
 
 #ifndef pTHX
 /* Don't bother defining tTHX and sTHX; using them outside
@@ -4628,11 +4629,23 @@ EXTCONST char PL_bincompat_options[] =
 #  ifdef FAKE_THREADS
 			     " FAKE_THREADS"
 #  endif
+#  ifdef FCRYPT
+			     " FCRYPT"
+#  endif
+#  ifdef HAS_TIMES
+			     " HAS_TIMES"
+#  endif
+#  ifdef HAVE_INTERP_INTERN
+			     " HAVE_INTERP_INTERN"
+#  endif
 #  ifdef MULTIPLICITY
 			     " MULTIPLICITY"
 #  endif
 #  ifdef MYMALLOC
 			     " MYMALLOC"
+#  endif
+#  ifdef PERLIO_LAYERS
+			     " PERLIO_LAYERS"
 #  endif
 #  ifdef PERL_DEBUG_READONLY_OPS
 			     " PERL_DEBUG_READONLY_OPS"
@@ -4648,6 +4661,9 @@ EXTCONST char PL_bincompat_options[] =
 #  endif
 #  ifdef PERL_MAD
 			     " PERL_MAD"
+#  endif
+#  ifdef PERL_MICRO
+			     " PERL_MICRO"
 #  endif
 #  ifdef PERL_NEED_APPCTX
 			     " PERL_NEED_APPCTX"
@@ -4688,6 +4704,12 @@ EXTCONST char PL_bincompat_options[] =
 #  ifdef USE_LARGE_FILES
 			     " USE_LARGE_FILES"
 #  endif
+#  ifdef USE_LOCALE_COLLATE
+			     " USE_LOCALE_COLLATE"
+#  endif
+#  ifdef USE_LOCALE_NUMERIC
+			     " USE_LOCALE_NUMERIC"
+#  endif
 #  ifdef USE_LONG_DOUBLE
 			     " USE_LONG_DOUBLE"
 #  endif
@@ -4706,15 +4728,21 @@ EXTCONST char PL_bincompat_options[] =
 #  ifdef VMS_DO_SOCKETS
 			     " VMS_DO_SOCKETS"
 #  endif
-#  ifdef VMS_WE_ARE_CASE_SENSITIVE
-			     " VMS_SYMBOL_CASE_AS_IS"
-#  endif
 #  ifdef VMS_SHORTEN_LONG_SYMBOLS
 			     " VMS_SHORTEN_LONG_SYMBOLS"
+#  endif
+#  ifdef VMS_WE_ARE_CASE_SENSITIVE
+			     " VMS_SYMBOL_CASE_AS_IS"
 #  endif
   "";
 #else
 EXTCONST char PL_bincompat_options[];
+#endif
+
+#ifndef PERL_SET_PHASE
+#  define PERL_SET_PHASE(new_phase) \
+    PHASE_CHANGE_PROBE(PL_phase_names[new_phase], PL_phase_names[PL_phase]); \
+    PL_phase = new_phase;
 #endif
 
 /* The interpreter phases. If these ever change, PL_phase_names right below will
@@ -5083,6 +5111,33 @@ EXTCONST U8 PL_magic_data[256] =
 #else
 EXTCONST U8 PL_magic_data[256];
 #endif
+
+#ifdef DOINIT
+		        /* NL BD IV NV PV PI PN MG RX GV LV AV HV CV FM IO */
+EXTCONST bool
+PL_valid_types_IVX[]    = { 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0 };
+EXTCONST bool
+PL_valid_types_NVX[]    = { 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0 };
+EXTCONST bool
+PL_valid_types_PVX[]    = { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1 };
+EXTCONST bool
+PL_valid_types_RV[]     = { 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 };
+EXTCONST bool
+PL_valid_types_IV_set[] = { 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1 };
+EXTCONST bool
+PL_valid_types_NV_set[] = { 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
+
+#else
+
+EXTCONST bool PL_valid_types_IVX[];
+EXTCONST bool PL_valid_types_NVX[];
+EXTCONST bool PL_valid_types_PVX[];
+EXTCONST bool PL_valid_types_RV[];
+EXTCONST bool PL_valid_types_IV_set[];
+EXTCONST bool PL_valid_types_NV_set[];
+
+#endif
+
 
 #include "overload.h"
 
@@ -5543,6 +5598,8 @@ int flock(int fd, int op);
 #define PERL_SCAN_ALLOW_UNDERSCORES   0x01 /* grok_??? accept _ in numbers */
 #define PERL_SCAN_DISALLOW_PREFIX     0x02 /* grok_??? reject 0x in hex etc */
 #define PERL_SCAN_SILENT_ILLDIGIT     0x04 /* grok_??? not warn about illegal digits */
+#define PERL_SCAN_SILENT_NON_PORTABLE 0x08 /* grok_??? not warn about very large
+					      numbers which are <= UV_MAX */
 /* Output flags: */
 #define PERL_SCAN_GREATER_THAN_UV_MAX 0x02 /* should this merge with above? */
 

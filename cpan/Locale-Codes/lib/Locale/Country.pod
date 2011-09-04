@@ -20,6 +20,9 @@ Locale::Country - standard codes for country identification
 
 =head1 DESCRIPTION
 
+This module exists as both Locale::Codes::Country and Locale::Country (for
+historical reasons).  The Locale::Country module will continue to work.
+
 The C<Locale::Country> module provides access to several code sets
 that can be used for identifying countries, such as those defined in
 ISO 3166-1.
@@ -109,7 +112,7 @@ This code set is identified with the symbol C<LOCALE_CODE_DOM>.
 
 =item B<Locale::Country::delete_country_code_alias  ( CODE [,CODESET] )>
 
-These routines are all documented in the Locale::Codes man page.
+These routines are all documented in the Locale::Codes::API man page.
 
 =item B<alias_code ( ALIAS, CODE [,CODESET] )>
 
@@ -127,8 +130,8 @@ the following two are identical:
 
 and the latter should be used for consistency.
 
-The alias_code function is deprecated (though there is no currently no
-plan to remove it).
+The alias_code function is deprecated and will be removed at some point
+in the future.
 
 B<Note:> this function was previously called _alias_code, but the
 leading underscore has been dropped. The old name was supported for
@@ -142,9 +145,11 @@ all 2.X releases, but has been dropped as of 3.00.
 
 =item B<Locale::Codes>
 
-=item B<Locale::Constants>
-
 The Locale-Codes distribution.
+
+=item B<Locale::Codes::API>
+
+The list of functions supported by this module.
 
 =item B<Locale::SubCountry>
 

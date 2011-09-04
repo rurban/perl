@@ -854,22 +854,56 @@ Perl_screaminstr(pTHX_ SV *bigstr, SV *littlestr, I32 start_shift, I32 end_shift
 {
     dVAR;
     register const unsigned char *big;
-    register I32 pos;
+    U32 pos = 0; /* hush a gcc warning */
     register I32 previous;
     register I32 first;
     register const unsigned char *little;
     register I32 stop_pos;
     register const unsigned char *littleend;
-    I32 found = 0;
+    bool found = FALSE;
+    const MAGIC * mg;
+    const void *screamnext_raw = NULL; /* hush a gcc warning */
+    bool cant_find = FALSE; /* hush a gcc warning */
 
     PERL_ARGS_ASSERT_SCREAMINSTR;
 
+    assert(SvMAGICAL(bigstr));
+    mg = mg_find(bigstr, PERL_MAGIC_study);
+    assert(mg);
     assert(SvTYPE(littlestr) == SVt_PVMG);
     assert(SvVALID(littlestr));
 
-    if (*old_posp == -1
-	? (pos = PL_screamfirst[BmRARE(littlestr)]) < 0
-	: (((pos = *old_posp), pos += PL_screamnext[pos]) == 0)) {
+    if (mg->mg_private == 1) {
+	const U8 *const screamfirst = (U8 *)mg->mg_ptr;
+	const U8 *const screamnext = screamfirst + 256;
+
+	screamnext_raw = (const void *)screamnext;
+
+	pos = *old_posp == -1
+	    ? screamfirst[BmRARE(littlestr)] : screamnext[*old_posp];
+	cant_find = pos == (U8)~0;
+    } else if (mg->mg_private == 2) {
+	const U16 *const screamfirst = (U16 *)mg->mg_ptr;
+	const U16 *const screamnext = screamfirst + 256;
+
+	screamnext_raw = (const void *)screamnext;
+
+	pos = *old_posp == -1
+	    ? screamfirst[BmRARE(littlestr)] : screamnext[*old_posp];
+	cant_find = pos == (U16)~0;
+    } else if (mg->mg_private == 4) {
+	const U32 *const screamfirst = (U32 *)mg->mg_ptr;
+	const U32 *const screamnext = screamfirst + 256;
+
+	screamnext_raw = (const void *)screamnext;
+
+	pos = *old_posp == -1
+	    ? screamfirst[BmRARE(littlestr)] : screamnext[*old_posp];
+	cant_find = pos == (U32)~0;
+    } else
+	Perl_croak(aTHX_ "panic: unknown study size %u", mg->mg_private);
+
+    if (cant_find) {
       cant_find:
 	if ( BmRARE(littlestr) == '\n'
 	     && BmPREVIOUS(littlestr) == SvCUR(littlestr) - 1) {
@@ -900,28 +934,59 @@ Perl_screaminstr(pTHX_ SV *bigstr, SV *littlestr, I32 start_shift, I32 end_shift
 #endif
 	return NULL;
     }
-    while (pos < previous + start_shift) {
-	if (!(pos += PL_screamnext[pos]))
-	    goto cant_find;
+    if (mg->mg_private == 1) {
+	const U8 *const screamnext = (const U8 *const) screamnext_raw;
+	while ((I32)pos < previous + start_shift) {
+	    pos = screamnext[pos];
+	    if (pos == (U8)~0)
+		goto cant_find;
+	}
+    } else if (mg->mg_private == 2) {
+	const U16 *const screamnext = (const U16 *const) screamnext_raw;
+	while ((I32)pos < previous + start_shift) {
+	    pos = screamnext[pos];
+	    if (pos == (U16)~0)
+		goto cant_find;
+	}
+    } else if (mg->mg_private == 4) {
+	const U32 *const screamnext = (const U32 *const) screamnext_raw;
+	while ((I32)pos < previous + start_shift) {
+	    pos = screamnext[pos];
+	    if (pos == (U32)~0)
+		goto cant_find;
+	}
     }
     big -= previous;
-    do {
-	register const unsigned char *s, *x;
-	if (pos >= stop_pos) break;
-	if (big[pos] != first)
-	    continue;
-	for (x=big+pos+1,s=little; s < littleend; /**/ ) {
-	    if (*s++ != *x++) {
-		s--;
-		break;
+    while (1) {
+	if ((I32)pos >= stop_pos) break;
+	if (big[pos] == first) {
+	    const unsigned char *s = little;
+	    const unsigned char *x = big + pos + 1;
+	    while (s < littleend) {
+		if (*s != *x++)
+		    break;
+		++s;
+	    }
+	    if (s == littleend) {
+		*old_posp = (I32)pos;
+		if (!last) return (char *)(big+pos);
+		found = TRUE;
 	    }
 	}
-	if (s == littleend) {
-	    *old_posp = pos;
-	    if (!last) return (char *)(big+pos);
-	    found = 1;
+	if (mg->mg_private == 1) {
+	    pos = ((const U8 *const)screamnext_raw)[pos];
+	    if (pos == (U8)~0)
+		break;
+	} else if (mg->mg_private == 2) {
+	    pos = ((const U16 *const)screamnext_raw)[pos];
+	    if (pos == (U16)~0)
+		break;
+	} else if (mg->mg_private == 4) {
+	    pos = ((const U32 *const)screamnext_raw)[pos];
+	    if (pos == (U32)~0)
+		break;
 	}
-    } while ( pos += PL_screamnext[pos] );
+    };
     if (last && found)
 	return (char *)(big+(*old_posp));
   check_tail:
@@ -4474,6 +4539,11 @@ dotted_decimal_version:
 	    if (*d == '0' && isDIGIT(d[1])) {
 		BADVERSION(s,errstr,"Invalid version format (no leading zeros)");
 	    }
+	}
+
+	/* and we never support negative versions */
+	if ( *d == '-') {
+		BADVERSION(s,errstr,"Invalid version format (negative version number)");                
 	}
 
 	/* consume all of the integer part */

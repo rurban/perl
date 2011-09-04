@@ -216,7 +216,7 @@ C<format-patch> command produces one patch file for each commit you
 made. If you prefer to send a single patch for all commits, you can use
 C<git diff>.
 
-  % git co blead
+  % git checkout blead
   % git pull
   % git diff blead my-branch-name
 
@@ -834,7 +834,7 @@ non-conflicting test scripts itself, and there is no standard interface
 to C<make> utilities to interact with their job schedulers.
 
 Note that currently some test scripts may fail when run in parallel (most
-notably C<ext/IO/t/io_dir.t>). If necessary, run just the failing scripts
+notably F<ext/IO/t/io_dir.t>). If necessary, run just the failing scripts
 again sequentially and see if the failures go away.
 
 =head2 Running tests by hand

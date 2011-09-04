@@ -1,5 +1,5 @@
 name: perl
-version: 5.015000
+version: 5.015001
 abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
@@ -42,10 +42,15 @@ no_index:
     - dist/Math-BigRat
     - dist/Module-CoreList
     - dist/Net-Ping
+    - dist/perlfaq
     - dist/Pod-Perldoc
     - dist/Safe
+    - dist/Search-Dict
     - dist/SelfLoader
     - dist/Storable
+    - dist/Term-Complete
+    - dist/Term-ReadLine
+    - dist/Text-Abbrev
     - dist/Thread-Queue
     - dist/Thread-Semaphore
     - dist/threads
@@ -96,7 +101,6 @@ no_index:
     - lib/Exporter.pm
     - lib/Exporter.t
     - lib/Exporter/Heavy.pm
-    - lib/newgetopt.pl
     - lib/unicore/mktables
     - lib/version.pm
     - lib/version.pod

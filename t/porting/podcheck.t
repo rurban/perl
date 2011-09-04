@@ -26,8 +26,8 @@ podcheck.t - Look for possible problems in the Perl pods
 =head1 SYNOPSIS
 
  cd t
- ./perl -I../lib porting/podcheck.t [--show_all] [--cpan] [--counts]
-                                                            [ FILE ...]
+ ./perl -I../lib porting/podcheck.t [--show_all] [--cpan] [--deltas]
+                                                  [--counts] [ FILE ...]
  ./perl -I../lib porting/podcheck.t --add_link MODULE ...
 
  ./perl -I../lib porting/podcheck.t --regen
@@ -162,6 +162,13 @@ Normally, all pods in the cpan directory are skipped, except to make sure that
 any blead-upstream links to such pods are valid.
 This option will cause cpan upstream pods to be checked.
 
+=item --deltas
+
+Normally, all old perldelta pods are skipped, except to make sure that
+any links to such pods are valid.  This is because they are considered
+stable, and perhaps trying to fix them will cause changes that will
+misrepresent Perl's history.  But, this option will cause them to be checked.
+
 =item --show_all
 
 Normally, if the number of potential problems of a given type found for a
@@ -253,6 +260,7 @@ my $non_pods = qr/ (?: \.
                        (?: [achot]  | zip | gz | bz2 | jar | tar | tgz | PL | so
                            | orig | rej | patch   # Patch program output
                            | sw[op] | \#.*  # Editor droppings
+                           | old      # buildtoc output
                        )
                        $
                     ) | ~$      # Another editor dropping
@@ -359,8 +367,8 @@ my $regen = 0;
 my $add_link = 0;
 my $show_all = 0;
 
-# Assume that are to skip anything in /cpan
-my $do_upstream_cpan = 0;
+my $do_upstream_cpan = 0; # Assume that are to skip anything in /cpan
+my $do_deltas = 0;        # And stable perldeltas
 
 while (@ARGV && substr($ARGV[0], 0, 1) eq '-') {
     my $arg = shift @ARGV;
@@ -374,6 +382,9 @@ while (@ARGV && substr($ARGV[0], 0, 1) eq '-') {
     }
     elsif ($arg eq '-cpan') {
         $do_upstream_cpan = 1;
+    }
+    elsif ($arg eq '-deltas') {
+        $do_deltas = 1;
     }
     elsif ($arg eq '-show_all') {
         $show_all = 1;
@@ -389,6 +400,7 @@ Usage: $0 [ --regen | --cpan | --show_all | FILE ... | --add_link MODULE ... ]\n
     --add_link -> Add the MODULE and man page references to the data base
     --regen    -> Regenerate the data file for $0
     --cpan     -> Include files in the cpan subdirectory.
+    --deltas   -> Include stable perldeltas
     --show_all -> Show all known potential problems
     --counts   -> Don't test, but give summary counts of the currently
                   existing database
@@ -398,14 +410,17 @@ EOF
 
 my @files = @ARGV;
 
-if (($regen + $show_all + $show_counts + $do_upstream_cpan + $add_link) > 1) {
-    croak "--regen, --show_all, --cpan, --counts, and --add_link are mutually exclusive";
+my $cpan_or_deltas = $do_upstream_cpan || $do_deltas;
+if (($regen + $show_all + $show_counts + $add_link + $cpan_or_deltas ) > 1) {
+    croak "--regen, --show_all, --counts, and --add_link are mutually exclusive\n and none can be run with --cpan nor --deltas";
 }
 
 my $has_input_files = @files;
 
-if ($has_input_files && ($regen || $show_counts || $do_upstream_cpan)) {
-    croak "--regen, --counts and --cpan can't be used since using specific files";
+if ($has_input_files
+    && ($regen || $show_counts || $do_upstream_cpan || $do_deltas))
+{
+    croak "--regen, --counts, --deltas, and --cpan can't be used since using specific files";
 }
 
 if ($add_link && ! $has_input_files) {
@@ -648,26 +663,81 @@ package My::Pod::Checker {      # Extend Pod::Checker
         # Matches something that looks like a file name, but is enclosed in
         # C<...>
         my $C_path_re = qr{ \b ( C<
-                                # exclude regexes and 'OS/2'
-                                (?! (?: (?: s | qr | m) / ) | OS/2 > )
-                                \w+ (?: / \w+ )+ > (?: \. \w+ )? )
+                                # exclude various things that have slashes
+                                # in them but aren't paths
+                                (?!
+                                    (?: (?: s | qr | m) / ) # regexes
+                                    | \d+/\d+>       # probable fractions
+                                    | OS/2>
+                                    | Perl/Tk>
+                                    | origin/blead>
+                                    | origin/maint
+                                    | -    # File names don't begin with "-"
+                                 )
+                                 [-\w]+ (?: / [-\w]+ )+ (?: \. \w+ )? > )
                           }x;
 
         # If looks like a reference to other documentation by containing the
         # word 'See' and then a likely pod directive, warn.
+        while ($paragraph =~ m{
+                                ( (?: \w+ \s+ )* )  # The phrase before, if any
+                                \b [Ss]ee \s+
+                                ( ( [^L] )
+                                  <
+                                  ( [^<]*? )  # The not < excludes nested C<L<...
+                                  >
+                                )
+                                ( \s+ (?: under | in ) \s+ L< )?
+                            }xg) {
+            my $prefix = $1 // "";
+            my $construct = $2;     # The whole thing, like C<...>
+            my $type = $3;
+            my $interior = $4;
+            my $trailing = $5;      # After the whole thing ending in "L<"
 
-        while ($paragraph =~ m{ \b See \s+ ( ( [^L] ) <
-                                ( [^<]*? )  # The not-< excludes nested C<L<...
-                                > ) }ixg) {
-            my $construct = $1;
-            my $type = $2;
-            my $interior = $3;
-            if ($interior !~ /$non_pods/
-                && $construct !~ /$C_path_re/g) {
-                $self->poderror({ -line => $line, -file => $file,
-                    -msg => $see_not_linked,
-                    parameter => $construct
-                });
+            # If the full phrase is something like, "you might see C<", or
+            # similar, it really isn't a reference to a link.  The ones I saw
+            # all had the word "you" in them; and the "you" wasn't the
+            # beginning of a sentence.
+            if ($prefix !~ / \b you \b /x) {
+
+                # Now, find what the module or man page name within the
+                # construct would be if it actually has L<> syntax.  If it
+                # doesn't have that syntax, will set the module to the entire
+                # interior.
+                $interior =~ m/ ^
+                                (?: [^|]+ \| )? # Optional arbitrary text ending
+                                                # in "|"
+                                ( .+? )         # module, etc. name
+                                (?: \/ .+ )?    # target within module
+                                $
+                            /xs;
+                my $module = $1;
+                if (! defined $trailing # not referring to something in another
+                                        # section
+                    && $interior !~ /$non_pods/
+
+                    # C<> that look like files have their own message below, so
+                    # exclude them
+                    && $construct !~ /$C_path_re/g
+
+                    # There can't be spaces (I think) in module names or man
+                    # pages
+                    && $module !~ / \s /x
+
+                    # F<> that end in eg \.pl are almost certainly ok, as are
+                    # those that look like a path with multiple "/" chars
+                    && ($type ne "F"
+                        || (! -e $interior
+                            && $interior !~ /\.\w+$/
+                            && $interior !~ /\/.+\//)
+                    )
+                ) {
+                    $self->poderror({ -line => $line, -file => $file,
+                        -msg => $see_not_linked,
+                        parameter => $construct
+                    });
+                }
             }
         }
         while ($paragraph =~ m/$C_path_re/g) {
@@ -842,30 +912,34 @@ open $data_fh, '<:bytes', $known_issues or die "Can't open $known_issues";
 
 my %counts; # For --counts param, count of each issue type
 my %suppressed_files;   # Files with at least one issue type to suppress
+my $HEADER = <<END;
+# This file is the data file for $0.
+# There are three types of lines.
+# Comment lines are white-space only or begin with a '#', like this one.  Any
+#   changes you make to the comment lines will be lost when the file is
+#   regen'd.
+# Lines without tab characters are simply NAMES of pods that the program knows
+#   will have links to them and the program does not check if those links are
+#   valid.
+# All other lines should have three fields, each separated by a tab.  The
+#   first field is the name of a pod; the second field is an error message
+#   generated by this program; and the third field is a count of how many
+#   known instances of that message there are in the pod.  -1 means that the
+#   program can expect any number of this type of message.
+END
 
+my @existing_issues;
 
-if ($add_link) {
-    $copy_fh = open_new($known_issues);
-    my @existing_db = <$data_fh>;
-    my_safer_print($copy_fh, @existing_db);
-
-    foreach my $module (@files) {
-        die "\"$module\" does not look like a module or man page"
-            # Must look like (A or A::B or A::B::C ..., or foo(3C)
-            if $module !~ /^ (?: \w+ (?: :: \w+ )* | \w+ \( \d \w* \) ) $/x;
-        $module .= "\n";
-        next if grep { $module eq $_ } @existing_db;
-        my_safer_print($copy_fh, $module);
-    }
-    close_and_rename($copy_fh);
-    exit;
-}
 
 while (<$data_fh>) {    # Read the data base
     chomp;
     next if /^\s*(?:#|$)/;  # Skip comment and empty lines
     if (/\t/) {
         next if $show_all;
+        if ($add_link) {    # The issues are saved and later output unchanged
+            push @existing_issues, $_;
+            next;
+        }
 
         # Keep track of counts of each issue type for each file
         my ($filename, $message, $count) = split /\t/;
@@ -885,6 +959,28 @@ while (<$data_fh>) {    # Read the data base
     }
 }
 close $data_fh;
+
+if ($add_link) {
+    $copy_fh = open_new($known_issues);
+
+    # Check for basic sanity, and add each command line argument
+    foreach my $module (@files) {
+        die "\"$module\" does not look like a module or man page"
+            # Must look like (A or A::B or A::B::C ..., or foo(3C)
+            if $module !~ /^ (?: \w+ (?: :: \w+ )* | \w+ \( \d \w* \) ) $/x;
+        $valid_modules{$module} = 1
+    }
+    my_safer_print($copy_fh, $HEADER);
+    foreach (sort { lc $a cmp lc $b } keys %valid_modules) {
+        my_safer_print($copy_fh, $_, "\n");
+    }
+
+    # The rest of the db file is output unchanged.
+    my_safer_print($copy_fh, join "\n", @existing_issues, "");
+
+    close_and_rename($copy_fh);
+    exit;
+}
 
 if ($show_counts) {
     my $total = 0;
@@ -923,9 +1019,13 @@ foreach my $file (keys %excluded_files) {
 # 'delta'.  (Actually the currently developed one matches as well, but
 # is a duplicate of perldelta.pod, so can be skipped, so fine for it to
 # match this.
-my $only_for_interior_links_re = qr/ \b perl \d+ delta \. pod \b
-                                     | ^ pod\/perltoc.pod $
+my $only_for_interior_links_re = qr/ ^ pod\/perltoc.pod $
                                    /x;
+unless ($do_deltas) {
+    $only_for_interior_links_re = qr/$only_for_interior_links_re |
+                                    \b perl \d+ delta \. pod \b
+                                /x;
+}
 
 { # Closure
     my $first_time = 1;
@@ -1124,28 +1224,14 @@ sub is_pod_file {
 
 if ($has_input_files) {
     undef %known_problems;
-    $do_upstream_cpan = 1;  # In case one of the inputs is from cpan
-
+    $do_upstream_cpan = $do_deltas = 1;  # In case one of the inputs is one
+                                         # of these types
 }
 else { # No input files -- go find all the possibilities.
     if ($regen) {
         $copy_fh = open_new($known_issues);
         note("Regenerating $known_issues, please be patient...");
-        print $copy_fh <<END;
-# This file is the data file for $0.
-# There are three types of lines.
-# Comment lines are white-space only or begin with a '#', like this one.  Any
-#   changes you make to the comment lines will be lost when the file is
-#   regen'd.
-# Lines without tab characters are simply NAMES of pods that the program knows
-#   will have links to them and the program does not check if those links are
-#   valid.
-# All other lines should have three fields, each separated by a tab.  The
-#   first field is the name of a pod; the second field is an error message
-#   generated by this program; and the third field is a count of how many
-#   known instances of that message there are in the pod.  -1 means that the
-#   program can expect any number of this type of message.
-END
+        print $copy_fh $HEADER;
     }
 
     # Move to the directory above us, but have to adjust @INC to account for
@@ -1281,6 +1367,8 @@ foreach my $filename (@files) {
                 $checker->set_skip("$prior_filename is a README apparently for $filename");
             } elsif ($filename =~ /\breadme\b/i) {
                 $checker->set_skip("$filename is a README apparently for $prior_filename");
+            } elsif (! $do_upstream_cpan && $filename =~ /^cpan/) {
+                $checker->set_skip("CPAN is upstream for $filename");
             } else { # Here have two pods with identical names that differ
                 $prior_checker->poderror(
                         { -msg => $duplicate_name,
@@ -1313,7 +1401,7 @@ foreach my $filename (@files) {
             if ($filename =~ /^cpan/) {
                 $checker->set_skip("CPAN is upstream for $filename");
             }
-            elsif ($filename =~ /perl\d+delta/) {
+            elsif ($filename =~ /perl\d+delta/ && ! $do_deltas) {
                 $checker->set_skip("$filename is a stable perldelta");
             }
             elsif ($filename =~ /perltoc/) {
@@ -1553,9 +1641,9 @@ if (%files_with_unknown_issues) {
 HOW TO GET THIS .t TO PASS
 
 There $were_count_files that had new potential problems identified.
-Some of them may be real, and some of them may be because this program
-isn't as smart as it likes to think it is.  You can teach this program
-to ignore the issues it has identified, and hence pass, by doing the
+Some of them may be real, and some of them may be false positives, because
+this program isn't as smart as it likes to think it is.  You can teach this
+program to ignore the issues it has identified, and hence pass, by doing the
 following:
 
 1) If a problem is about a link to an unknown module or man page that
@@ -1570,8 +1658,8 @@ following:
    ones you decided to, and rerun this test to verify that the fixes
    worked.
 
-3) If there remain potential problems that you don't plan to fix right
-   now (or aren't really problems),
+3) If there remain false positive or problems that you don't plan to fix right
+   now,
 $how_to
    That should cause all current potential problems to be accepted by
    the program, so that the next time it runs, they won't be flagged.

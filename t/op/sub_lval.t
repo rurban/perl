@@ -3,7 +3,7 @@ BEGIN {
     @INC = '../lib';
     require './test.pl';
 }
-plan tests=>160;
+plan tests=>179;
 
 sub a : lvalue { my $a = 34; ${\(bless \$a)} }  # Return a temporary
 sub b : lvalue { ${\shift} }
@@ -211,6 +211,7 @@ like($_, qr/Can\'t modify non-lvalue subroutine call/)
   or diag "'$_', '$x0', '$x1'";
 
 sub lv0 : lvalue { }
+sub rlv0 : lvalue { return }
 
 $_ = undef;
 eval <<'EOE' or $_ = $@;
@@ -222,11 +223,28 @@ like($_, qr/Can't return undef from lvalue subroutine/);
 
 $_ = undef;
 eval <<'EOE' or $_ = $@;
+  rlv0 = (2,3);
+  1;
+EOE
+
+like($_, qr/Can't return undef from lvalue subroutine/,
+    'explicit return of nothing in scalar context');
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
   (lv0) = (2,3);
   1;
 EOE
 
 ok(!defined $_) or diag $_;
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
+  (rlv0) = (2,3);
+  1;
+EOE
+
+ok(!defined $_, 'explicit return of nothing in list context') or diag $_;
 
 ($a,$b)=();
 (lv0($a,$b)) = (3,4);
@@ -235,6 +253,7 @@ is +($a//'undef') . ($b//'undef'), 'undefundef',
 
 
 sub lv1u :lvalue { undef }
+sub rlv1u :lvalue { undef }
 
 $_ = undef;
 eval <<'EOE' or $_ = $@;
@@ -246,14 +265,28 @@ like($_, qr/Can't return undef from lvalue subroutine/);
 
 $_ = undef;
 eval <<'EOE' or $_ = $@;
+  rlv1u = (2,3);
+  1;
+EOE
+
+like($_, qr/Can't return undef from lvalue subroutine/,
+     'explicitly returning undef in scalar context');
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
   (lv1u) = (2,3);
   1;
 EOE
 
-# Fixed by change @10777
-#print "# '$_'.\nnot "
-#  unless /Can\'t return an uninitialized value from lvalue subroutine/;
-# print "ok 34 # Skip: removed test\n";
+ok(!defined, 'implicitly returning undef in list context');
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
+  (rlv1u) = (2,3);
+  1;
+EOE
+
+ok(!defined, 'explicitly returning undef in list context');
 
 $x = '1234567';
 
@@ -265,6 +298,25 @@ eval <<'EOE' or $_ = $@;
 EOE
 
 like($_, qr/Can\'t return a temporary from lvalue subroutine/);
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
+  sub rlv1t : lvalue { index $x, 2 }
+  rlv1t = (2,3);
+  1;
+EOE
+
+like($_, qr/Can\'t return a temporary from lvalue subroutine/,
+    'returning a PADTMP explicitly');
+
+$_ = undef;
+eval <<'EOE' or $_ = $@;
+  (rlv1t) = (2,3);
+  1;
+EOE
+
+like($_, qr/Can\'t return a temporary from lvalue subroutine/,
+    'returning a PADTMP explicitly (list context)');
 
 $_ = undef;
 sub lv2t : lvalue { shift }
@@ -504,6 +556,30 @@ is($@, "", "element of tied array");
 is ($Tie_Array::val[0], "value");
 
 
+# Check that tied pad vars that are returned can be assigned to
+sub TIESCALAR { bless [] }
+sub STORE {$wheel = $_[1]}
+sub FETCH {$wheel}
+sub tied_pad_var  :lvalue { tie my $tyre, ''; $tyre }
+sub tied_pad_varr :lvalue { tie my $tyre, ''; return $tyre }
+tied_pad_var = 1;
+is $wheel, 1, 'tied pad var returned in scalar lvalue context';
+tied_pad_var->${\sub{ $_[0] = 2 }};
+is $wheel, 2, 'tied pad var returned in scalar ref context';
+(tied_pad_var) = 3;
+is $wheel, 3, 'tied pad var returned in list lvalue context';
+$_ = 4 for tied_pad_var;
+is $wheel, 4, 'tied pad var returned in list ref context';
+tied_pad_varr = 5;
+is $wheel, 5, 'tied pad var explicitly returned in scalar lvalue context';
+tied_pad_varr->${\sub{ $_[0] = 6 }};
+is $wheel, 6, 'tied pad var explicitly returned in scalar ref context';
+(tied_pad_varr) = 7;
+is $wheel, 7, 'tied pad var explicitly returned in list lvalue context';
+$_ = 8 for tied_pad_varr;
+is $wheel, 8, 'tied pad var explicitly returned in list ref context';
+
+
 # Test explicit return of lvalue expression
 {
     # subs are copies from tests 1-~18 with an explicit return added.
@@ -690,17 +766,22 @@ is ($Tie_Array::val[0], "value");
     is ($result, 'bar', "RT #41550");
 }
 
+SKIP: { skip 'no attributes.pm', 1 unless eval 'require attributes';
 fresh_perl_is(<<'----', <<'====', "lvalue can not be set after definition. [perl #68758]");
 use warnings;
 our $x;
 sub foo { $x }
 sub foo : lvalue;
+sub MODIFY_CODE_ATTRIBUTES {}
+sub foo : lvalue : fr0g;
 foo = 3;
 ----
 lvalue attribute ignored after the subroutine has been defined at - line 4.
-Can't modify non-lvalue subroutine call in scalar assignment at - line 5, near "3;"
+lvalue attribute ignored after the subroutine has been defined at - line 6.
+Can't modify non-lvalue subroutine call in scalar assignment at - line 7, near "3;"
 Execution of - aborted due to compilation errors.
 ====
+}
 
 {
     my $x;
@@ -710,15 +791,17 @@ Execution of - aborted due to compilation errors.
     is($x, 5, "subroutine declared with lvalue before definition retains lvalue. [perl #68758]");
 }
 
-sub utf8::valid :lvalue;
-require attributes;
-is "@{[ &attributes::get(\&utf8::valid) ]}", 'lvalue',
+SKIP: { skip "no attributes.pm", 2 unless eval { require attributes };
+  sub utf8::valid :lvalue;
+  require attributes;
+  is "@{[ &attributes::get(\&utf8::valid) ]}", 'lvalue',
    'sub declaration with :lvalue applies it to XSUBs';
 
-BEGIN { *wonky = \&marjibberous }
-sub wonky :lvalue;
-is "@{[ &attributes::get(\&wonky) ]}", 'lvalue',
+  BEGIN { *wonky = \&marjibberous }
+  sub wonky :lvalue;
+  is "@{[ &attributes::get(\&wonky) ]}", 'lvalue',
    'sub declaration with :lvalue applies it to assigned stub';
+}
 
 sub fleen : lvalue { $pnare }
 $pnare = __PACKAGE__;
@@ -741,14 +824,12 @@ is $ambaga, 74, 'explicit return of arbitrary expression (list context)';
 is $ambaga, 73, 'implicit return of arbitrary expression (scalar context)';
 (sub :lvalue { $ambaga || $ambaga }->()) = 74;
 is $ambaga, 74, 'implicit return of arbitrary expression (list context)';
-{ local $::TODO = 'return needs to enforce the same rules as leavesublv';
 eval { +sub :lvalue { return 3 }->() = 4 };
 like $@, qr/Can\'t return a readonly value from lvalue subroutine at/,
       'assignment to numeric constant explicitly returned from lv sub';
 eval { (sub :lvalue { return 3 }->()) = 4 };
 like $@, qr/Can\'t return a readonly value from lvalue subroutine at/,
       'assignment to num constant explicitly returned (list cx)';
-}
 eval { +sub :lvalue { 3 }->() = 4 };
 like $@, qr/Can\'t return a readonly value from lvalue subroutine at/,
       'assignment to numeric constant implicitly returned from lv sub';
@@ -823,3 +904,14 @@ for (
 	         .$suffix             # (they used to be copied)
 }
 continue { $suffix = ' (explicit return)' }
+
+# Returning unwritables from nested lvalue sub call in in rvalue context
+# First, ensure we are testing what we think we are:
+if (!Internals::SvREADONLY($])) { Internals::SvREADONLY($],1); }
+sub squibble : lvalue { return $] }
+sub squebble : lvalue {        squibble }
+sub squabble : lvalue { return squibble }
+is $x = squebble, $], 'returning ro from nested lv sub call in rv cx';
+is $x = squabble, $], 'explct. returning ro from nested lv sub in rv cx';
+is \squebble, \$], 'returning ro from nested lv sub call in ref cx';
+is \squabble, \$], 'explct. returning ro from nested lv sub in ref cx';

@@ -33,16 +33,16 @@ h Tutorials
   perltrap		Perl traps for the unwary
   perldebtut		Perl debugging tutorial
 
-  perlfaq		Perl frequently asked questions
-2 perlfaq1		General Questions About Perl
-2 perlfaq2		Obtaining and Learning about Perl
-2 perlfaq3		Programming Tools
-2 perlfaq4		Data Manipulation
-2 perlfaq5		Files and Formats
-2 perlfaq6		Regexes
-2 perlfaq7		Perl Language Issues
-2 perlfaq8		System Interaction
-2 perlfaq9		Networking
+  dist/perlfaq/lib/perlfaq		Perl frequently asked questions
+2 dist/perlfaq/lib/perlfaq1		General Questions About Perl
+2 dist/perlfaq/lib/perlfaq2		Obtaining and Learning about Perl
+2 dist/perlfaq/lib/perlfaq3		Programming Tools
+2 dist/perlfaq/lib/perlfaq4		Data Manipulation
+2 dist/perlfaq/lib/perlfaq5		Files and Formats
+2 dist/perlfaq/lib/perlfaq6		Regexes
+2 dist/perlfaq/lib/perlfaq7		Perl Language Issues
+2 dist/perlfaq/lib/perlfaq8		System Interaction
+2 dist/perlfaq/lib/perlfaq9		Networking
 
 h Reference Manual
 
@@ -101,14 +101,16 @@ g perlmodlib		Perl modules: how to write and use
 
   perlfilter		Perl source filters
 
+  perldtrace		Perl's support for DTrace
+
   perlglossary		Perl Glossary
 
 h Internals and C Language Interface
 
   perlembed		Perl ways to embed perl in your C or C++ application
   perldebguts		Perl debugging guts and tips
-  perlxstut		Perl XS tutorial
-  perlxs		Perl XS application programming interface
+  dist/ExtUtils-ParseXS/lib/perlxstut	Perl XS tutorial
+  dist/ExtUtils-ParseXS/lib/perlxs	Perl XS application programming interface
   perlclib		Internal replacements for standard C library functions
   perlguts		Perl internal functions for those doing extensions
   perlcall		Perl calling conventions from C
@@ -135,11 +137,14 @@ h Miscellaneous
   perlcommunity		Perl community information
   perltodo		Perl things to do
 
-  perldoc		Look up Perl documentation in Pod format
+  dist/Pod-Perldoc/lib/perldoc	Look up Perl documentation in Pod format
 
   perlhist		Perl history records
   perldelta		Perl changes since previous version
+  perl5152delta		Perl changes in version 5.15.2
+  perl5151delta		Perl changes in version 5.15.1
   perl5150delta		Perl changes in version 5.15.0
+  perl5141delta		Perl changes in version 5.14.1
   perl5140delta		Perl changes in version 5.14.0
   perl51311delta	Perl changes in version 5.13.11
   perl51310delta	Perl changes in version 5.13.10

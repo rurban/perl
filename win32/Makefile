@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.15.0
+#INST_VER	= \5.15.1
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -902,7 +902,7 @@ $(X2P_OBJ)	: $(CORE_H)
 perldll.def : $(MINIPERL) $(CONFIGPM) ..\global.sym ..\makedef.pl create_perllibst_h.pl
 	$(MINIPERL) -I..\lib create_perllibst_h.pl
 	$(MINIPERL) -I..\lib -w ..\makedef.pl PLATFORM=win32 $(OPTIMIZE) $(DEFINES) $(BUILDOPT) \
-	    CCTYPE=$(CCTYPE) > perldll.def
+	    CCTYPE=$(CCTYPE) TARG_DIR=..\ > perldll.def
 
 $(PERLDLL): perldll.def $(PERLDLL_OBJ) $(PERLDLL_RES) Extensions_static
 	$(LINK32) -dll -def:perldll.def -base:0x28000000 -out:$@ @Extensions_static @<<
@@ -1071,7 +1071,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5150delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5152delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
@@ -1164,7 +1164,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5150delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5152delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \

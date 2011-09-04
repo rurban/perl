@@ -542,7 +542,7 @@ be zero.
 #define cop_hints_2hv(cop, flags) \
     cophh_2hv(CopHINTHASH_get(cop), flags)
 
-#define CopLABEL(c)  Perl_fetch_cop_label(aTHX_ (c), NULL, NULL)
+#define CopLABEL(c)  Perl_cop_fetch_label(aTHX_ (c), NULL, NULL)
 #define CopLABEL_alloc(pv)	((pv)?savepv(pv):NULL)
 
 #define CopSTASH_ne(c,hv)	(!CopSTASH_eq(c,hv))
@@ -633,9 +633,18 @@ struct block_format {
 
 
 #define PUSHSUB(cx)							\
+    {									\
+	/* If the context is indeterminate, then only the lvalue */	\
+	/* flags that the caller also has are applicable.        */	\
+	U8 phlags =							\
+	   (PL_op->op_flags & OPf_WANT)					\
+	       ? OPpENTERSUB_LVAL_MASK					\
+	       : !(PL_op->op_private & OPpENTERSUB_LVAL_MASK)		\
+	           ? 0 : Perl_was_lvalue_sub(aTHX);			\
 	PUSHSUB_BASE(cx)						\
 	cx->blk_u16 = PL_op->op_private &				\
-	              (OPpLVAL_INTRO|OPpENTERSUB_INARGS|OPpENTERSUB_DEREF);
+	                  (phlags|OPpENTERSUB_DEREF);			\
+    }
 
 /* variant for use by OP_DBSTATE, where op_private holds hint bits */
 #define PUSHSUB_DB(cx)							\

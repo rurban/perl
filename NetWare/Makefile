@@ -86,7 +86,7 @@ NLM_VERSION    = 3,20,0
 
 
 # Here comes the CW tools - TO BE FILLED TO BUILD WITH CW -
-MODULE_DESC     = "Perl 5.15.0 for NetWare"
+MODULE_DESC     = "Perl 5.15.1 for NetWare"
 CCTYPE          = CodeWarrior
 C_COMPILER		= mwccnlm -c
 CPP_COMPILER	= mwccnlm
@@ -462,7 +462,7 @@ INST_NW_TOP2 = $(INST_NW_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-INST_VER	= \5.15.0
+INST_VER	= \5.15.1
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -1063,10 +1063,10 @@ $(PERLIMPLIB): perllib.imp
 
 perllib.imp : $(MINIPERL) $(CONFIGPM) ..\global.sym ..\makedef.pl
 #	$(MINIPERL) -w ..\makedef.pl PLATFORM=netware FILETYPE=def $(ADD_BUILDOPT) \
-#	    CCTYPE=$(CCTYPE) > perllib.def
+#	    CCTYPE=$(CCTYPE) TARG_DIR=..\ > perllib.def
 	@echo (Perl) > perl.imp
   	$(MINIPERL) -w ..\makedef.pl PLATFORM=netware FILETYPE=imp $(BS_CFLAGS) $(DEFINES) $(ADD_BUILDOPT) \
-	    CCTYPE=$(CCTYPE) >> perl.imp
+	    CCTYPE=$(CCTYPE) TARG_DIR=..\ >> perl.imp
 	copy perl.imp $(COREDIR)
   
 $(DLL_OBJ) : $(DYNALOADER).c $(CORE_H) $(EXTDIR)\DynaLoader\dlutils.c

@@ -242,43 +242,21 @@ smoking with the target version built into the perl executable. For
 subsequent release candidates and the final release, it it not necessary to
 bump the version further.
 
-There is a tool to semi-automate this process. It works in two stages.
-First, it generates a list of suggested changes, which you review and
-edit; then you feed this list back and it applies the edits. So, first
-scan the source directory looking for likely candidates. The command line
-arguments are the old and new version numbers, and -s means scan:
+There is a tool to semi-automate this process:
 
-    $ ./perl -Ilib Porting/bump-perl-version -s 5.10.0 5.10.1 > /tmp/scan
+     $ ./perl -Ilib Porting/bump-perl-version -i 5.10.0 5.10.1
 
-This produces a file containing a list of suggested edits, e.g.:
+Remember that this tool is largely just grepping for '5.10.0' or whatever,
+so it will generate false positives. Be careful not change text like
+"this was fixed in 5.10.0"!
 
-    NetWare/Makefile
-
-       89: -MODULE_DESC     = "Perl 5.10.0 for NetWare"
-	   +MODULE_DESC     = "Perl 5.10.1 for NetWare"
-
-i.e. in the file F<NetWare/Makefile>, line 89 would be changed as shown.
-Review the file carefully, and delete any -/+ line pairs that you don't
-want changing. You can also edit just the C<+> line to change the
-suggested replacement text. Remember that this tool is largely just
-grepping for '5.10.0' or whatever, so it will generate false positives. Be
-careful not change text like "this was fixed in 5.10.0"! Then run:
-
-    $ ./perl -Ilib Porting/bump-perl-version -u < /tmp/scan
-
-which will update all the files shown.
+Use git status and git diff to select changes you want to keep.
 
 Be particularly careful with F<INSTALL>, which contains a mixture of
 C<5.10.0>-type strings, some of which need bumping on every release, and
 some of which need to be left unchanged.
 The line in F<INSTALL> about "is binary incompatible with" requires a
 correct choice of earlier version to declare incompatibility with.
-
-Also note that this tool
-currently only detects a single substitution per line: so in particular,
-this line in README.vms needs special handling:
-
-    rename perl-5^.10^.1.dir perl-5_10_1.dir
 
 When doing a BLEAD-POINT or BLEAD-FINAL release, also make sure the
 C<PERL_API_*> constants in F<patchlevel.h> are in sync with the version
@@ -302,7 +280,7 @@ Test your changes:
 
 Commit your changes:
 
-    $ git st
+    $ git status
     $ git diff
     B<review the delta carefully>
 
@@ -332,22 +310,6 @@ release, this would be 5.13.11).
 
 For BLEAD-POINT releases, it needs to refer to the previous BLEAD-POINT
 release (so for 5.15.3 this would be 5.15.2).
-
-
-=head3 update Changes
-
-Update the F<Changes> file to contain the git log command which would show
-all the changes in this release. You will need assume the existence of a
-not-yet created tag for the forthcoming release; e.g.
-
-    git log ... perl-5.10.0..perl-5.12.0
-
-Due to warts in the perforce-to-git migration, some branches require extra
-exclusions to avoid other branches being pulled in. Make sure you have the
-correct incantation: replace the not-yet-created tag with C<HEAD> and see
-if C<git log> produces roughly the right number of commits across roughly the
-right time period (you may find C<git log --pretty=oneline | wc> useful).
-
 
 =head3 Check more build configurations
 
@@ -399,20 +361,9 @@ part of I<advance actions>, do that now.
 =head3 finalize perldelta
 
 Finalize the perldelta.  In particular, fill in the Acknowledgements
-section.  You can generate a list of contributors with checkAUTHORS.pl.
-For example:
+section, which can be generated with something like:
 
-  $ git log --pretty=fuller v5.13.${last}..HEAD | \
-    perl Porting/checkAUTHORS.pl --who -
-
-Look at the previous L<perldelta> for how to write the opening
-paragraph of the Acknowledgements section. To get the amount of
-changed files and number of lines use this command:
-
-  $ git diff --shortstat v5.13.${last}..HEAD | \
-    ./perl -Ilib -nE 'my ($files, $insert, $delete) = /(\d+)/ga; say "$files files and ", $insert + $delete, " lines changed"'
-
-Making sure to round off the number of lines changed.
+  $ perl Porting/acknowledgements.pl v5.15.0..HEAD
 
 Re-read the perldelta to try to find any embarrassing typos and thinkos;
 remove any C<TODO> or C<XXX> flags; update the "Known Problems" section
@@ -496,6 +447,9 @@ Check that file over carefully:
 If necessary, bump C<$VERSION> (there's no need to do this for
 every RC; in RC1, bump the version to a new clean number that will
 appear in the final release, and leave as-is for the later RCs and final).
+It may also happen that C<Module::CoreList> has been modified in blead, and
+hence has a new version number already.  (But make sure it is not the same
+number as a CPAN release.)
 
 Edit the version number in the new C<< 'Module::CoreList' => 'X.YZ' >>
 entry, as that is likely to reflect the previous version number.
@@ -504,10 +458,6 @@ Also edit Module::CoreList's new version number in its F<Changes>
 file.
 
 Add a perldelta entry for the new Module::CoreList version.
-
-You should also add the version you're about to release to the
-L<Module::CoreList/CAVEATS> section which enumerates the perl releases
-that Module::CoreList covers.
 
 In addition, if this is a final release (rather than a release candidate):
 
@@ -624,6 +574,16 @@ and you'll need to use a new version number for your release.
 
 =head3 build the tarball
 
+Before you run the following, you might want to install 7-Zip (the
+C<p7zip-full> package under Debian or the C<p7zip> port on MacPorts) or
+the AdvanceCOMP suite (e.g. the C<advancecomp> package under Debian,
+or the C<advancecomp> port on macports - 7-Zip on Windows is the
+same code as AdvanceCOMP, so Windows users get the smallest files
+first time). These compress about 5% smaller than gzip and bzip2.
+Over the lifetime of your distribution this will save a lot of
+people a small amount of download time and disk space, which adds
+up.
+
 Create a tarball. Use the C<-s> option to specify a suitable suffix for
 the tarball and directory name:
 
@@ -647,20 +607,6 @@ your changes were all committed, you can override the suffix with:
 
 XXX if we go for extra tags and branches stuff, then add the extra details
 here
-
-Optionally, you might want to compress your tarball more. Unix F<gzip>
-doesn't actually produce the smallest possible DEFLATE output. If you have the
-AdvanceCOMP suite (e.g. the C<advancecomp> port on macports), you can run
-
-    $ advdef -z -4 ../perl-x.y.z-RC1.tar.gz
-
-which will probably shrink your tarball by about 5%. Over the lifetime of
-your distribution this will save a lot of people a small amount of download
-time and disk space, which adds up.
-
-(7-Zip on Windows is the same code as AdvanceCOMP, so Windows users get the
-smallest files first time)
-
 
 Finally, clean up the temporary directory, e.g.
 
@@ -883,7 +829,9 @@ Mail p5p to announce your new release, with a quote you prepared earlier.
 =head3 update epigraphs.pod
 
 Add your quote to F<Porting/epigraphs.pod> and commit it.
-
+Your release announcement will probably not have reached the web-visible
+archives yet, so you won't be able to include the customary link to the
+release announcement yet.
 
 =head3 Module::CoreList nagging
 
@@ -938,7 +886,8 @@ version numbers.  Then commit the move and the new file.
 Now you need to update various tables of contents related to perldelta,
 most of which can be generated automatically.
 
-Edit F<pod.lst>: add the new entry
+Edit F<pod.lst>: add the new entry for the perlNNNdelta file for the
+current version (the file that will be symlinked to perldelta).
 
 Manually create a temporary link to the new delta file; normally this is
 done from the Makefile, but the Makefile is updated by buildtoc, and
@@ -983,6 +932,17 @@ copying the exiting entry, and bump the file's $VERSION; e.g.
 Then follow the section L<"Bump the version number"> to bump the version
 in the remaining files and test and commit.
 
+
+=head3 clean build and test
+
+Run a clean build and test to make sure nothing obvious is broken.
+
+In particular, F<Porting/perldelta_template.pod> is intentionally exempted
+from podchecker tests, to avoid false positives about placeholder text.
+However, once it's copied to F<pod/perldelta.pod> the contents can now
+cause test failures. Problems should resolved either by replacing placeholder
+text with correct text, or following the instructions output by
+F<t/porting/podcheck.t> on how to update its exceptions database.
 
 =head3 push commits
 
@@ -1051,10 +1011,9 @@ e.g.
 
 =head3 bump RT version number
 
-If necessary, send an email to C<perlbug-admin at perl.org> requesting
-that new version numbers be added to the RT fields C<Perl Version> and
-C<Fixed In>.
-
+Log into http://rt.perl.org/ and check whether the new version is
+in the RT fields C<Perl Version> and C<Fixed In>. If not, send an
+email to C<perlbug-admin at perl.org> requesting this.
 
 =head3 Relax!
 
@@ -1065,6 +1024,11 @@ Thanks for releasing perl!
 
 
 =head2 Building a release - the day after
+
+=head3 link announcement in epigraphs.pod
+
+Add, to your quote to F<Porting/epigraphs.pod>, a link to the release
+announcement in the web-visible mailing list archive.  Commit it.
 
 =head3 check tarball availability
 
@@ -1106,7 +1070,7 @@ It should be visible at a URL like C<http://search.cpan.org/dist/perl-5.10.1/>.
 
 =head3 update dev.perl.org
 
-I<This step ONLY for BLEAD-POINT and MAINT>
+I<This step ONLY for BLEAD-FINAL and MAINT>
 
 Ask Leo Lapworth to update L<http://dev.perl.org/perl5/>.
 

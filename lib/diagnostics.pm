@@ -185,7 +185,7 @@ use 5.009001;
 use Carp;
 $Carp::Internal{__PACKAGE__.""}++;
 
-our $VERSION = '1.22';
+our $VERSION = '1.23';
 our $DEBUG;
 our $VERBOSE;
 our $PRETTY;
@@ -406,6 +406,9 @@ my %msg;
 
 	# strip formatting directives from =item line
 	$header =~ s/[A-Z]<(.*?)>/$1/g;
+
+	# Since we strip "\.\n" when we search a warning, strip it here as well
+	$header =~ s/\.?$//;
 
         my @toks = split( /(%l?[dx]|%c|%(?:\.\d+)?[fs])/, $header );
 	if (@toks > 1) {

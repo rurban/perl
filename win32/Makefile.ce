@@ -6,7 +6,7 @@
 
 SRCDIR     = ..
 PV         = 59
-INST_VER   = 5.15.0
+INST_VER   = 5.15.1
 
 # INSTALL_ROOT specifies a path where this perl will be installed on CE device
 INSTALL_ROOT=/netzwerk/sprache/perl
@@ -848,7 +848,7 @@ $(DLLDIR)\perllib$(o)	: perllib.c .\perlhost.h .\vdir.h .\vmem.h
 perldll.def : $(HPERL) $(CONFIGPM) ..\global.sym ..\makedef.pl create_perllibst_h.pl
 	$(HPERL) -MCross -I..\lib create_perllibst_h.pl
 	$(HPERL) -w ..\makedef.pl PLATFORM=wince $(OPTIMIZE) $(DEFINES) $(BUILDOPT) \
-	    CCTYPE=$(CCTYPE) -DPERL_DLL=$(PERLDLL) > perldll.def
+	    CCTYPE=$(CCTYPE) -DPERL_DLL=$(PERLDLL) TARG_DIR=..\ > perldll.def
 
 $(PERLDLL) : $(DLLDIR) perldll.def $(XDLLOBJS) $(PERLDLL_RES)
 	$(LINK32) -dll -def:perldll.def -out:$@ \

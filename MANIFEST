@@ -965,7 +965,6 @@ cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker/Config.pm	MakeMaker wrapper for C
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker/FAQ.pod		MakeMaker FAQ
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker.pm		Write Makefiles for extensions
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker/Tutorial.pod	Writing a module with MakeMaker
-cpan/ExtUtils-MakeMaker/lib/ExtUtils/MakeMaker/YAML.pm		clone of YAML::Tiny
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/Mkbootstrap.pm		Writes a bootstrap file (see MakeMaker)
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/Mksymlists.pm		Writes a linker options file for extensions
 cpan/ExtUtils-MakeMaker/lib/ExtUtils/MM_AIX.pm			MakeMaker methods for AIX
@@ -1023,8 +1022,12 @@ cpan/ExtUtils-MakeMaker/t/lib/TieOut.pm				Testing library to capture prints
 cpan/ExtUtils-MakeMaker/t/MakeMaker_Parameters.t		test "MakeMaker Parameters" section
 cpan/ExtUtils-MakeMaker/t/make.t				See if make detection works
 cpan/ExtUtils-MakeMaker/t/maketext_filter.t			See if maketext_filter works
+cpan/ExtUtils-MakeMaker/t/meta_convert.t				See if MakeMaker works
 cpan/ExtUtils-MakeMaker/t/metafile_data.t			See if META.yml handling works
 cpan/ExtUtils-MakeMaker/t/metafile_file.t			See if META.yml handling works
+cpan/ExtUtils-MakeMaker/t/META_for_testing.json				test data for MakeMaker
+cpan/ExtUtils-MakeMaker/t/META_for_testing_tricky_version.yml				test data for MakeMaker
+cpan/ExtUtils-MakeMaker/t/META_for_testing.yml				test data for MakeMaker
 cpan/ExtUtils-MakeMaker/t/miniperl.t				Test MakeMaker with miniperl
 cpan/ExtUtils-MakeMaker/t/min_perl_version.t			Test the MIN_PERL_VERSION argument to WriteMakefile.
 cpan/ExtUtils-MakeMaker/t/Mkbootstrap.t				See if ExtUtils::Mkbootstrap works
@@ -1086,7 +1089,6 @@ cpan/Getopt-Long/CHANGES		Getopt::Long changes
 cpan/Getopt-Long/lib/Getopt/Long.pm	Fetch command options (GetOptions)
 cpan/Getopt-Long/README			Getopt::Long README
 cpan/Getopt-Long/t/gol-basic.t		See if Getopt::Long works
-cpan/Getopt-Long/t/gol-compat.t		See if Getopt::Long works
 cpan/Getopt-Long/t/gol-linkage.t	See if Getopt::Long works
 cpan/Getopt-Long/t/gol-oo.t		See if Getopt::Long works
 cpan/Getopt-Long/t/gol-xargv.t		See if Getopt::Long works
@@ -1106,6 +1108,7 @@ cpan/HTTP-Tiny/t/100_get.t
 cpan/HTTP-Tiny/t/110_mirror.t
 cpan/HTTP-Tiny/t/120_put.t
 cpan/HTTP-Tiny/t/130_redirect.t
+cpan/HTTP-Tiny/t/140_proxy.t
 cpan/HTTP-Tiny/t/cases/get-01.txt
 cpan/HTTP-Tiny/t/cases/get-02.txt
 cpan/HTTP-Tiny/t/cases/get-03.txt
@@ -1243,6 +1246,7 @@ cpan/IO-Compress/t/105oneshot-gzip.t			IO::Compress
 cpan/IO-Compress/t/105oneshot-rawdeflate.t		IO::Compress
 cpan/IO-Compress/t/105oneshot-zip-bzip2-only.t		IO::Compress
 cpan/IO-Compress/t/105oneshot-zip-only.t		IO::Compress
+cpan/IO-Compress/t/105oneshot-zip-store-only.t		IO::Compress
 cpan/IO-Compress/t/105oneshot-zip.t			IO::Compress
 cpan/IO-Compress/t/106prime-bzip2.t			IO::Compress
 cpan/IO-Compress/t/106prime-deflate.t			IO::Compress
@@ -1452,15 +1456,30 @@ cpan/List-Util/t/tainted.t		Scalar::Util
 cpan/List-Util/t/weak.t			Scalar::Util
 cpan/List-Util/XS.pp			List::Util
 cpan/Locale-Codes/ChangeLog			Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/API.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes/Changes.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Constants.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/Constants.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Country_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Country.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/Country.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Currency_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/Currency.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangExt_Codes.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangExt.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangExt.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Language_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/Language.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangVar_Codes.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangVar.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangVar.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes.pod		Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Script_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Script.pm	Locale::Codes
-cpan/Locale-Codes/lib/Locale/Constants.pm	Locale::Codes
-cpan/Locale-Codes/lib/Locale/Constants.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Script.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Country.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Country.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Currency.pm	Locale::Codes
@@ -1471,17 +1490,29 @@ cpan/Locale-Codes/lib/Locale/Script.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Script.pod		Locale::Codes documentation
 cpan/Locale-Codes/LICENSE			Locale::Codes
 cpan/Locale-Codes/README.first			Locale::Codes
+cpan/Locale-Codes/t/alias_code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/alias_code.t		Locale::Codes tests
+cpan/Locale-Codes/t/code2country_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2country.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2currency.t		Locale::Codes tests
+cpan/Locale-Codes/t/code2langext.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2language.t		Locale::Codes tests
+cpan/Locale-Codes/t/code2langvar.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2script.t		Locale::Codes tests
+cpan/Locale-Codes/t/country2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/country2code.t		Locale::Codes tests
+cpan/Locale-Codes/t/country_code2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/country_code2code.t		Locale::Codes tests
+cpan/Locale-Codes/t/country_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/country.t			Locale::Codes tests
+cpan/Locale-Codes/t/currency2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/currency2code.t		Locale::Codes tests
+cpan/Locale-Codes/t/langext2code.t	Locale::Codes tests
 cpan/Locale-Codes/t/language2code.t		Locale::Codes tests
+cpan/Locale-Codes/t/language_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/language.t			Locale::Codes tests
+cpan/Locale-Codes/t/langvar2code.t	Locale::Codes tests
+cpan/Locale-Codes/t/script2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/script2code.t		Locale::Codes tests
 cpan/Locale-Codes/t/testfunc.pl			Locale::Codes tests
 cpan/Locale-Maketext-Simple/lib/Locale/Maketext/Simple.pm	Locale::Simple
@@ -1506,8 +1537,10 @@ cpan/Log-Message/t/01_Log-Message-Config.t	Log::Message tests
 cpan/Log-Message/t/02_Log-Message.t		Log::Message tests
 cpan/Log-Message/t/conf/config_file		Log::Message tests
 cpan/Log-Message/t/conf/LoadMe.pl		Log::Message tests
+cpan/Math-Complex/ChangeLog		Math-Complex change log
 cpan/Math-Complex/lib/Math/Complex.pm	A Complex package
 cpan/Math-Complex/lib/Math/Trig.pm	A simple interface to complex trigonometry
+cpan/Math-Complex/Makefile.PL		Math-Complex building
 cpan/Math-Complex/t/Complex.t		See if Math::Complex works
 cpan/Math-Complex/t/Trig.t		See if Math::Trig works
 cpan/Math-Complex/t/underbar.t		See if Math::Complex works
@@ -2068,6 +2101,7 @@ cpan/Term-ANSIColor/ANSIColor.pm	Perl module supporting termcap usage
 cpan/Term-ANSIColor/ChangeLog		Term::ANSIColor
 cpan/Term-ANSIColor/README		Term::ANSIColor
 cpan/Term-ANSIColor/t/basic.t		Tests for Term::ANSIColor
+cpan/Term-ANSIColor/t/stringify.t		Tests for Term::ANSIColor
 cpan/Term-Cap/Cap.pm			Perl module supporting termcap usage
 cpan/Term-Cap/test.pl			See if Term::Cap works
 cpan/Term-UI/lib/Term/UI/History.pm	Term::UI
@@ -2521,7 +2555,18 @@ cpan/Time-HiRes/hints/svr4.pl		Hints for Time::HiRes for named architecture
 cpan/Time-HiRes/HiRes.pm		Time::HiRes extension
 cpan/Time-HiRes/HiRes.xs		Time::HiRes extension
 cpan/Time-HiRes/Makefile.PL		Time::HiRes extension
-cpan/Time-HiRes/t/HiRes.t		Test for Time::HiRes
+cpan/Time-HiRes/t/alarm.t		Test for Time::HiRes
+cpan/Time-HiRes/t/clock.t		Test for Time::HiRes
+cpan/Time-HiRes/t/gettimeofday.t	Test for Time::HiRes
+cpan/Time-HiRes/t/itimer.t		Test for Time::HiRes
+cpan/Time-HiRes/t/nanosleep.t		Test for Time::HiRes
+cpan/Time-HiRes/t/sleep.t		Test for Time::HiRes
+cpan/Time-HiRes/t/stat.t		Test for Time::HiRes
+cpan/Time-HiRes/t/time.t		Test for Time::HiRes
+cpan/Time-HiRes/t/tv_interval.t		Test for Time::HiRes
+cpan/Time-HiRes/t/ualarm.t		Test for Time::HiRes
+cpan/Time-HiRes/t/usleep.t		Test for Time::HiRes
+cpan/Time-HiRes/t/Watchdog.pm		Test for Time::HiRes
 cpan/Time-HiRes/typemap			Time::HiRes extension
 cpan/Time-Local/lib/Time/Local.pm	Reverse translation of localtime, gmtime
 cpan/Time-Local/t/Local.t		See if Time::Local works
@@ -2928,20 +2973,61 @@ dist/ExtUtils-Install/t/Packlist.t			See if Packlist works
 dist/ExtUtils-Manifest/lib/ExtUtils/Manifest.pm			Utilities to write MANIFEST files
 dist/ExtUtils-Manifest/lib/ExtUtils/MANIFEST.SKIP		The default MANIFEST.SKIP
 dist/ExtUtils-Manifest/t/Manifest.t				See if ExtUtils::Manifest works
-dist/ExtUtils-ParseXS/Changes			ExtUtils::ParseXS change log
-dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS.pm	converts Perl XS code into C code
-dist/ExtUtils-ParseXS/lib/ExtUtils/xsubpp	External subroutine preprocessor
-dist/ExtUtils-ParseXS/t/basic.t			See if ExtUtils::ParseXS works
-dist/ExtUtils-ParseXS/t/lib/IncludeTester.pm	ExtUtils::ParseXS testing utility
-dist/ExtUtils-ParseXS/t/more.t			Extended ExtUtils::ParseXS testing
-dist/ExtUtils-ParseXS/t/typemap			Standard typemap for controlled testing
-dist/ExtUtils-ParseXS/t/usage.t			ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSInclude.xsh		Test file for ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSMore.xs		Test file for ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSTest.pm		Test file for ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSTest.xs		Test file for ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSUsage.pm		ExtUtils::ParseXS tests
-dist/ExtUtils-ParseXS/t/XSUsage.xs		ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/Changes					ExtUtils::ParseXS change log
+dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS/Constants.pm		ExtUtils::ParseXS guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS/CountLines.pm	ExtUtils::ParseXS guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS.pm			converts Perl XS code into C code
+dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS.pod			ExtUtils::ParseXS documentation
+dist/ExtUtils-ParseXS/lib/ExtUtils/ParseXS/Utilities.pm		ExtUtils::ParseXS guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/Typemaps/InputMap.pm		ExtUtils::Typemaps guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/Typemaps/OutputMap.pm	ExtUtils::Typemaps guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/Typemaps.pm			ExtUtils::Typemaps, a PXS helper
+dist/ExtUtils-ParseXS/lib/ExtUtils/Typemaps/Type.pm		ExtUtils::Typemaps guts
+dist/ExtUtils-ParseXS/lib/ExtUtils/xsubpp			External subroutine preprocessor
+dist/ExtUtils-ParseXS/lib/perlxs.pod	Perl XS application programming interface
+dist/ExtUtils-ParseXS/lib/perlxstut.pod	Perl XS tutorial
+dist/ExtUtils-ParseXS/t/001-basic.t				See if ExtUtils::ParseXS works
+dist/ExtUtils-ParseXS/t/002-more.t				Extended ExtUtils::ParseXS testing
+dist/ExtUtils-ParseXS/t/003-usage.t				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/004-nolinenumbers.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/101-standard_typemap_locations.t	ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/102-trim_whitespace.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/103-tidy_type.t				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/104-map_type.t				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/105-valid_proto_string.t		ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/106-process_typemaps.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/107-make_targetable.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/108-map_type.t				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/109-standard_XS_defs.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/110-assign_func_args.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/111-analyze_preprocessor_statements.t	ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/112-set_cond.t				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/113-check_cond_preproc_statements.t	ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/114-blurt_death_Warn.t			ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/501-t-compile.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/510-t-bare.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/511-t-whitespace.t			ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/512-t-file.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/513-t-merge.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/600-t-compat.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/data/b.typemap				ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/combined.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/conflicting.typemap		ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/confl_repl.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/confl_skip.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/other.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/perl.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/data/simple.typemap			ExtUtils::Typemaps test data
+dist/ExtUtils-ParseXS/t/lib/IncludeTester.pm			ExtUtils::ParseXS testing utility
+dist/ExtUtils-ParseXS/t/lib/PrimitiveCapture.pm			Primitive STDOUT/ERR capturing for tests
+dist/ExtUtils-ParseXS/t/pseudotypemap1				A test-typemap
+dist/ExtUtils-ParseXS/t/typemap					Standard typemap for controlled testing
+dist/ExtUtils-ParseXS/t/XSInclude.xsh				Test file for ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/XSMore.xs				Test file for ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/XSTest.pm				Test file for ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/XSTest.xs				Test file for ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/XSUsage.pm				ExtUtils::ParseXS tests
+dist/ExtUtils-ParseXS/t/XSUsage.xs				ExtUtils::ParseXS tests
 dist/File-CheckTree/lib/File/CheckTree.pm	Perl module supporting wholesale file mode validation
 dist/File-CheckTree/t/CheckTree.t		See if File::CheckTree works
 dist/Filter-Simple/lib/Filter/Simple.pm				Simple frontend to Filter::Util::Call
@@ -3140,6 +3226,18 @@ dist/Net-Ping/t/410_syn_host.t		Ping Net::Ping
 dist/Net-Ping/t/450_service.t		Ping Net::Ping
 dist/Net-Ping/t/500_ping_icmp.t		Ping Net::Ping
 dist/Net-Ping/t/510_ping_udp.t		Ping Net::Ping
+dist/perlfaq/lib/perlfaq1.pod		General Questions About Perl
+dist/perlfaq/lib/perlfaq2.pod	Obtaining and Learning about Perl
+dist/perlfaq/lib/perlfaq3.pod	Programming Tools
+dist/perlfaq/lib/perlfaq4.pod	Data Manipulation
+dist/perlfaq/lib/perlfaq5.pod	Files and Formats
+dist/perlfaq/lib/perlfaq6.pod	Regexes
+dist/perlfaq/lib/perlfaq7.pod	Perl Language Issues
+dist/perlfaq/lib/perlfaq8.pod	System Interaction
+dist/perlfaq/lib/perlfaq9.pod	Networking
+dist/perlfaq/lib/perlfaq.pm	Perl frequently asked questions
+dist/perlfaq/lib/perlfaq.pod	Perl frequently asked questions
+dist/Pod-Perldoc/lib/perldoc.pod			Look up Perl documentation in Pod format
 dist/Pod-Perldoc/lib/Pod/Perldoc/BaseTo.pm	utility module for perldoc
 dist/Pod-Perldoc/lib/Pod/Perldoc/GetOptsOO.pm	options parsing for perldoc
 dist/Pod-Perldoc/lib/Pod/Perldoc.pm		guts of the 'perldoc' utility
@@ -3170,6 +3268,8 @@ dist/Safe/t/safesort.t		Tests Safe with sort
 dist/Safe/t/safeuniversal.t	Tests Safe with functions from universal.c
 dist/Safe/t/safeutf8.t		Tests Safe with utf8.pm
 dist/Safe/t/safewrap.t		Tests Safe::wrap_code_ref()
+dist/Search-Dict/lib/Search/Dict.pm	Perform binary search on dictionaries
+dist/Search-Dict/t/Dict.t		See if Search::Dict works
 dist/SelfLoader/lib/SelfLoader.pm	Load functions only on demand
 dist/SelfLoader/t/01SelfLoader.t	See if SelfLoader works
 dist/SelfLoader/t/02SelfLoader-buggy.t	See if SelfLoader works
@@ -3223,6 +3323,12 @@ dist/Storable/t/tied.t			See if Storable works
 dist/Storable/t/utf8hash.t		See if Storable works
 dist/Storable/t/utf8.t			See if Storable works
 dist/Storable/t/weak.t			Can Storable store weakrefs
+dist/Term-Complete/lib/Term/Complete.pm	A command completion subroutine
+dist/Term-Complete/t/Complete.t		See if Term::Complete works
+dist/Term-ReadLine/lib/Term/ReadLine.pm		Stub readline library
+dist/Term-ReadLine/t/ReadLine.t			See if Term::ReadLine works
+dist/Text-Abbrev/lib/Text/Abbrev.pm		An abbreviation table builder
+dist/Text-Abbrev/t/Abbrev.t		Test Text::Abbrev
 dist/Thread-Queue/lib/Thread/Queue.pm	Thread-safe queues
 dist/Thread-Queue/t/01_basic.t		Thread::Queue tests
 dist/Thread-Queue/t/02_refs.t		Thread::Queue tests
@@ -3615,11 +3721,14 @@ ext/XS-APItest/t/call_checker.t	test call checker plugin API
 ext/XS-APItest/t/caller.t	XS::APItest: tests for caller_cx
 ext/XS-APItest/t/call.t		XS::APItest extension
 ext/XS-APItest/t/cleanup.t	test stack behaviour on unwinding
+ext/XS-APItest/t/clone-with-stack.t	test clone with CLONEf_COPY_STACKS works
 ext/XS-APItest/t/cophh.t	test COPHH API
+ext/XS-APItest/t/coplabel.t	test cop_*_label
 ext/XS-APItest/t/copyhints.t	test hv_copy_hints_hv() API
 ext/XS-APItest/t/customop.t	XS::APItest: tests for custom ops
 ext/XS-APItest/t/eval-filter.t	Simple source filter/eval test
 ext/XS-APItest/t/exception.t	XS::APItest extension
+ext/XS-APItest/t/fetch_pad_names.t	Tests for UTF8 names in pad
 ext/XS-APItest/t/grok.t		XS::APItest: tests for grok* functions
 ext/XS-APItest/t/hash.t		XS::APItest: tests for hash related APIs
 ext/XS-APItest/t/keyword_multiline.t	test keyword plugin parsing across lines
@@ -3640,6 +3749,7 @@ ext/XS-APItest/t/op_contextualize.t	test op_contextualize() API
 ext/XS-APItest/t/op_list.t	test OP list construction API
 ext/XS-APItest/t/op.t		XS::APItest: tests for OP related APIs
 ext/XS-APItest/t/overload.t	XS::APItest: tests for overload related APIs
+ext/XS-APItest/t/pad_scalar.t	Test pad_findmy_* functions
 ext/XS-APItest/t/peep.t		test PL_peepp/PL_rpeepp
 ext/XS-APItest/t/pmflag.t	Test removal of Perl_pmflag()
 ext/XS-APItest/t/postinc.t	test op_lvalue()
@@ -3655,12 +3765,14 @@ ext/XS-APItest/t/stmtasexpr.t	test recursive descent statement parsing
 ext/XS-APItest/t/stmtsasexpr.t	test recursive descent statement-sequence parsing
 ext/XS-APItest/t/stuff_modify_bug.t	test for eval side-effecting source string
 ext/XS-APItest/t/stuff_svcur_bug.t	test for a bug in lex_stuff_pvn
+ext/XS-APItest/t/sviscow.t	Test SvIsCOW
 ext/XS-APItest/t/svpeek.t	XS::APItest extension
 ext/XS-APItest/t/svpv_magic.t	Test behaviour of SvPVbyte and get magic
 ext/XS-APItest/t/svsetsv.t	Test behaviour of sv_setsv with/without PERL_CORE
 ext/XS-APItest/t/swaplabel.t	test recursive descent label parsing
 ext/XS-APItest/t/swaptwostmts.t	test recursive descent statement parsing
 ext/XS-APItest/t/temp_lv_sub.t	XS::APItest: tests for lvalue subs returning temps
+ext/XS-APItest/t/underscore_length.t	Test find_rundefsv()
 ext/XS-APItest/t/utf16_to_utf8.t	Test behaviour of utf16_to_utf8{,reversed}
 ext/XS-APItest/t/utf8.t		Tests for code in utf8.c
 ext/XS-APItest/t/xs_special_subs_require.t	for require too
@@ -3811,23 +3923,15 @@ iperlsys.h			Perl's interface to the system
 keywords.c			Perl_keyword(), generated by regen/keywords.pl
 keywords.h			The keyword numbers
 l1_char_class_tab.h		256 word bit table of character classes (for handy.h)
-lib/abbrev.pl			An abbreviation table builder
 lib/AnyDBM_File.pm		Perl module to emulate dbmopen
 lib/AnyDBM_File.t		See if AnyDBM_File works
-lib/assert.pl			assertion and panic with stack trace
 lib/Benchmark.pm		Measure execution time
 lib/Benchmark.t			See if Benchmark works
-lib/bigfloat.pl			An arbitrary precision floating point package
-lib/bigfloatpl.t		See if bigfloat.pl works
-lib/bigint.pl			An arbitrary precision integer arithmetic package
-lib/bigintpl.t			See if bigint.pl works
-lib/bigrat.pl			An arbitrary precision rational arithmetic package
 lib/blib.pm			For "use blib"
 lib/blib.t			blib.pm test
 lib/bytes_heavy.pl		Support routines for byte pragma
 lib/bytes.pm			Pragma to enable byte operations
 lib/bytes.t			bytes.pm test
-lib/cacheout.pl			Manages output filehandles when you need too many
 lib/Carp/Heavy.pm		Error message workhorse
 lib/Carp.pm			Error message base class
 lib/Carp.t			See if Carp works
@@ -3835,12 +3939,10 @@ lib/charnames.pm		Character names
 lib/charnames.t			See if character names work
 lib/Class/Struct.pm		Declare struct-like datatypes as Perl classes
 lib/Class/Struct.t		See if Class::Struct works
-lib/complete.pl			A command completion subroutine
 lib/Config/Extensions.pm	Convenient hash lookup for built extensions
 lib/Config/Extensions.t		See if Config::Extensions works
 lib/Config.t			See if Config works
 lib/CORE.pod			document the CORE namespace
-lib/ctime.pl			A ctime workalike
 lib/DBM_Filter/Changes		DBM Filter Change history
 lib/DBM_Filter/compress.pm	DBM Filter to compress keys/values
 lib/DBM_Filter/encode.pm	DBM Filter for encoding
@@ -3863,12 +3965,10 @@ lib/diagnostics.pm		Print verbose diagnostics
 lib/diagnostics.t		See if diagnostics.pm works
 lib/DirHandle.pm		like FileHandle only for directories
 lib/DirHandle.t			See if DirHandle works
-lib/dotsh.pl			Code to "dot" in a shell script
 lib/dumpvar.pl			A variable dumper
 lib/dumpvar.t			A variable dumper tester
 lib/English.pm			Readable aliases for short variables
 lib/English.t			See if English works
-lib/exceptions.pl		catch and throw routines
 lib/Exporter/Heavy.pm		Complicated routines for Exporter
 lib/Exporter.pm			Exporter base class
 lib/Exporter.t			See if Exporter works
@@ -3876,7 +3976,6 @@ lib/ExtUtils/Embed.pm		Utilities for embedding Perl in C programs
 lib/ExtUtils/t/Embed.t		See if ExtUtils::Embed and embedding works
 lib/ExtUtils/typemap		Extension interface types
 lib/ExtUtils/XSSymSet.pm	on VMS, manage linker symbols when building extensions
-lib/fastcwd.pl			a faster but more dangerous getcwd
 lib/feature.pm			Pragma to enable new syntax
 lib/feature.t			See if features work
 lib/feature/unicode_strings.t	See if feature "unicode_strings" work
@@ -3899,18 +3998,10 @@ lib/filetest.pm			For "use filetest"
 lib/filetest.t			See if filetest works
 lib/FindBin.pm			Find name of currently executing program
 lib/FindBin.t			See if FindBin works
-lib/finddepth.pl		A depth-first find emulator--used by find2perl
-lib/find.pl			A find emulator--used by find2perl
-lib/flush.pl			Routines to do single flush
-lib/getcwd.pl			A getcwd() emulator
-lib/getopt.pl			Perl library supporting option parsing
-lib/getopts.pl			Perl library supporting option parsing
 lib/Getopt/Std.pm		Fetch command options (getopt, getopts)
 lib/Getopt/Std.t		See if Getopt::Std and Getopt::Long work
 lib/h2ph.t			See if h2ph works like it should
 lib/h2xs.t			See if h2xs produces expected lists of files
-lib/hostname.pl			Old hostname code
-lib/importenv.pl		Perl routine to get environment into variables
 lib/integer.pm			For "use integer"
 lib/integer.t			For "use integer" testing
 lib/Internals.t			For Internals::* testing
@@ -3918,7 +4009,6 @@ lib/less.pm			For "use less"
 lib/less.t			See if less support works
 lib/locale.pm			For "use locale"
 lib/locale.t			See if locale support works
-lib/look.pl			A "look" equivalent
 lib/Net/hostent.pm		By-name interface to Perl's builtin gethost*
 lib/Net/hostent.t		See if Net::hostent works
 lib/Net/netent.pm		By-name interface to Perl's builtin getnet*
@@ -3927,9 +4017,6 @@ lib/Net/protoent.pm		By-name interface to Perl's builtin getproto*
 lib/Net/protoent.t		See if Net::protoent works
 lib/Net/servent.pm		By-name interface to Perl's builtin getserv*
 lib/Net/servent.t		See if Net::servtent works
-lib/newgetopt.pl		A perl library supporting long option parsing
-lib/open2.pl			Open a two-ended pipe (uses IPC::Open2)
-lib/open3.pl			Open a three-ended pipe (uses IPC::Open3)
 lib/open.pm			Pragma to specify default I/O layers
 lib/open.t			See if the open pragma works
 lib/overload64.t		See if operator overloading works with 64-bit ints
@@ -3958,32 +4045,18 @@ lib/Pod/t/InputObjects.t	See if Pod::InputObjects works
 lib/Pod/t/Select.t		See if Pod::Select works
 lib/Pod/t/Usage.t		See if Pod::Usage works
 lib/Pod/t/utils.t		Test for Pod::ParseUtils
-lib/pwd.pl			Routines to keep track of PWD environment variable
-lib/Search/Dict.pm		Perform binary search on dictionaries
-lib/Search/Dict.t		See if Search::Dict works
 lib/SelectSaver.pm		Enforce proper select scoping
 lib/SelectSaver.t		See if SelectSaver works
-lib/shellwords.pl		Perl library to split into words with shell quoting
 lib/sigtrap.pm			For trapping an abort and giving traceback
 lib/sigtrap.t			See if sigtrap works
 lib/sort.pm			For "use sort"
 lib/sort.t			See if "use sort" works
-lib/stat.pl			Perl library supporting stat function
 lib/strict.pm			For "use strict"
 lib/strict.t			See if strictures work
 lib/subs.pm			Declare overriding subs
 lib/subs.t			See if subroutine pseudo-importation works
 lib/Symbol.pm			Symbol table manipulation routines
 lib/Symbol.t			See if Symbol works
-lib/syslog.pl			Perl library supporting syslogging
-lib/tainted.pl			Old code for tainting
-lib/termcap.pl			Perl library supporting termcap usage
-lib/Term/Complete.pm		A command completion subroutine
-lib/Term/Complete.t		See if Term::Complete works
-lib/Term/ReadLine.pm		Stub readline library
-lib/Term/ReadLine.t		See if Term::ReadLine works
-lib/Text/Abbrev.pm		An abbreviation table builder
-lib/Text/Abbrev.t		Test Text::Abbrev
 lib/Thread.pm			Thread extensions frontend
 lib/Thread.t			Thread extensions frontend tests
 lib/Tie/Array.pm		Base class for tied arrays
@@ -4004,7 +4077,6 @@ lib/Tie/SubstrHash.pm		Compact hash for known key, value and table size
 lib/Tie/SubstrHash.t		Test for Tie::SubstrHash
 lib/Time/gmtime.pm		By-name interface to Perl's builtin gmtime
 lib/Time/gmtime.t		Test for Time::gmtime
-lib/timelocal.pl		Perl library supporting inverse of localtime, gmtime
 lib/Time/localtime.pm		By-name interface to Perl's builtin localtime
 lib/Time/localtime.t		Test for Time::localtime
 lib/Time/tm.pm			Internal object for Time::{gm,local}time
@@ -4069,7 +4141,6 @@ lib/User/pwent.t		See if User::pwent works
 lib/utf8_heavy.pl		Support routines for utf8 pragma
 lib/utf8.pm			Pragma to control Unicode support
 lib/utf8.t			See if utf8 operations work
-lib/validate.pl			Perl library supporting wholesale file mode validation
 lib/vars_carp.t			See if "use vars" doesn't load Carp.pm per default
 lib/vars.pm			Declare pseudo-imported global variables
 lib/vars.t			See if "use vars" works
@@ -4311,6 +4382,9 @@ pod/perl5137delta.pod		Perl changes in version 5.13.7
 pod/perl5138delta.pod		Perl changes in version 5.13.8
 pod/perl5139delta.pod		Perl changes in version 5.13.9
 pod/perl5140delta.pod		Perl changes in version 5.14.0
+pod/perl5141delta.pod		Perl changes in version 5.14.1
+pod/perl5150delta.pod		Perl changes in version 5.15.0
+pod/perl5151delta.pod		Perl changes in version 5.15.1
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl570delta.pod		Perl changes in version 5.7.0
@@ -4350,20 +4424,10 @@ pod/perldebtut.pod		Perl debugging tutorial
 pod/perldebug.pod		Perl debugging
 pod/perldelta.pod		Perl changes since previous version
 pod/perldiag.pod		Perl diagnostic messages
-pod/perldoc.pod			Look up Perl documentation in Pod format
 pod/perldsc.pod			Perl data structures intro
+pod/perldtrace.pod		Perl's support for DTrace
 pod/perlebcdic.pod		Considerations for running Perl on EBCDIC platforms
 pod/perlembed.pod		Perl ways to embed perl in your C or C++ application
-pod/perlfaq1.pod		General Questions About Perl
-pod/perlfaq2.pod		Obtaining and Learning about Perl
-pod/perlfaq3.pod		Programming Tools
-pod/perlfaq4.pod		Data Manipulation
-pod/perlfaq5.pod		Files and Formats
-pod/perlfaq6.pod		Regexes
-pod/perlfaq7.pod		Perl Language Issues
-pod/perlfaq8.pod		System Interaction
-pod/perlfaq9.pod		Networking
-pod/perlfaq.pod			Perl frequently asked questions
 pod/perlfilter.pod		Perl source filters
 pod/perlfork.pod		Perl fork() information
 pod/perlform.pod		Perl formats
@@ -4431,13 +4495,12 @@ pod/perlunitut.pod		Perl Unicode tutorial
 pod/perlutil.pod		utilities packaged with the Perl distribution
 pod/perlvar.pod			Perl predefined variables
 pod/perlvms.pod			Perl notes for VMS
-pod/perlxs.pod			Perl XS application programming interface
-pod/perlxstut.pod		Perl XS tutorial
 pod/roffitall			troff the whole man page set
 pod/rofftoc			Generate a table of contents in troff format
 pod/splitman			Splits perlfunc into multiple man pages
 pod/splitpod			Splits perlfunc into multiple pod pages
 Policy_sh.SH			Hold site-wide preferences between Configure runs.
+Porting/acknowledgements.pl	Generate perldelta acknowledgements text
 Porting/add-package.pl		Add/Update CPAN modules that are part of Core
 Porting/bump-perl-version	bump the perl version in relevant files
 Porting/check83.pl		Check whether we are 8.3-friendly
@@ -4874,6 +4937,7 @@ t/op/filetest.t			See if file tests work
 t/op/filetest_t.t		See if -t file test works
 t/op/flip.t			See if range operator works
 t/op/fork.t			See if fork works
+t/op/fresh_perl_utf8.t		UTF8 tests for pads and gvs
 t/op/getpid.t			See if $$ and getppid work with threads
 t/op/getppid.t			See if getppid works
 t/op/glob.t			See if <*> works
@@ -4907,6 +4971,7 @@ t/op/lfs.t			See if large files work for perlio
 t/op/list.t			See if array lists work
 t/op/localref.t			See if local ${deref} works
 t/op/local.t			See if local works
+t/op/lock.t			Tests for lock args & retval (no threads)
 t/op/loopctl.t			See if next/last/redo work
 t/op/lop.t			See if logical operators work
 t/op/magic-27839.t		Test for #27839, skipped for minitest
@@ -5069,6 +5134,7 @@ t/re/substT.t			See if substitution works with -T
 t/re/subst_wamp.t		See if substitution works with $& present
 t/re/uniprops.t			Test unicode \p{} regex constructs
 t/run/cloexec.t			Test close-on-exec.
+t/run/dtrace.t			Test for DTrace probes
 t/run/exit.t			Test perl's exit status.
 t/run/fresh_perl.t		Tests that require a fresh perl.
 t/run/locale.t		Tests related to locale handling
@@ -5113,6 +5179,7 @@ t/uni/tr_sjis.t			See if Unicode tr/// in sjis works
 t/uni/tr_utf8.t			See if Unicode tr/// in utf8 works
 t/uni/upper.t			See if Unicode casing works
 t/uni/write.t			See if Unicode formats work
+t/win32/runenv.t		Test if Win* perl honors its env variables
 t/win32/system.t		See if system works in Win*
 t/win32/system_tests		Test runner for system.t
 t/x2p/s2p.t			See if s2p/psed work

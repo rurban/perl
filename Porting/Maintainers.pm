@@ -20,9 +20,9 @@ use vars qw(@ISA @EXPORT_OK $VERSION);
 @EXPORT_OK = qw(%Modules %Maintainers
 		get_module_files get_module_pat
 		show_results process_options files_to_modules
-        finish_tap_output
+		finish_tap_output
 		reload_manifest);
-$VERSION = 0.05;
+$VERSION = 0.06;
 
 require Exporter;
 
@@ -81,9 +81,11 @@ sub expand_glob {
 			 }, $_);
 		    @files;
 		}
+	    # Not a glob, but doesn't exist
+	    : $_ !~ /[*?{]/ ? $_
 	    # The rest are globbable patterns; expand the glob, then
 	    # recursively perform directory expansion on any results
-	    : expand_glob(grep -e $_,glob($_))
+	    : expand_glob(glob($_))
 	    } @_;
 }
 
@@ -94,7 +96,7 @@ sub filter_excluded {
 	unless my $excluded = $Modules{$m}{EXCLUDED};
 
     my ($pat) = map { qr/$_/ } join '|' => map {
-	ref $_ ? qr/\Q$_\E/ : $_
+	ref $_ ? $_ : qr/\b\Q$_\E$/
     } @{ $excluded };
 
     return grep { $_ !~ $pat } @files;
@@ -132,10 +134,6 @@ or
     --opened  | file ....
 		List the module ownership of modified or the listed files
 
-    --tap-output
-        Show results as valid TAP output. Currently only compatible
-        with --check, --checkmani
-
 Matching is case-ignoring regexp, author matching is both by
 the short id and by the full name and email.  A "module" may
 not be just a module, it may be a file or files or a subdirectory.
@@ -151,7 +149,6 @@ my $Check;
 my $Checkmani;
 my $Opened;
 my $TestCounter = 0;
-my $TapOutput;
 
 sub process_options {
     usage()
@@ -163,7 +160,6 @@ sub process_options {
 		       'check'		=> \$Check,
 		       'checkmani'	=> \$Checkmani,
 		       'opened'		=> \$Opened,
-		       'tap-output' => \$TapOutput,
 		      );
 
     my @Files;
@@ -312,8 +308,9 @@ sub show_results {
 			    : sub { /\.(?:[chty]|p[lm]|xs)\z/msx },
 			@Files
 		    );
-		} else { 
+		} else {
 		    duplicated_maintainers();
+		    superfluous_maintainers();
 		}
     } elsif (@Files) {
 	my $ModuleByFile = files_to_modules(@Files);
@@ -350,32 +347,20 @@ sub maintainers_files {
 sub duplicated_maintainers {
     maintainers_files();
     for my $f (keys %files) {
-        if ($TapOutput) {
-	        if ($files{$f} > 1) {
-	            print  "not ok ".++$TestCounter." - File $f appears $files{$f} times in Maintainers.pl\n";
-            } else {
-	            print  "ok ".++$TestCounter." - File $f appears $files{$f} times in Maintainers.pl\n";
-            }
-        } else {
-	        if ($files{$f} > 1) {
-	            warn "File $f appears $files{$f} times in Maintainers.pl\n";
-	        }
-    }
+	if ($files{$f} > 1) {
+	    print  "not ok ".++$TestCounter." - File $f appears $files{$f} times in Maintainers.pl\n";
+	} else {
+	    print  "ok ".++$TestCounter." - File $f appears $files{$f} times in Maintainers.pl\n";
+	}
     }
 }
 
 sub warn_maintainer {
     my $name = shift;
-    if ($TapOutput) {
-        if ($files{$name}) {
-            print "ok ".++$TestCounter." - $name has a maintainer\n";
-        } else {
-            print "not ok ".++$TestCounter." - $name has NO maintainer\n";
-           
-        } 
-
+    if ($files{$name}) {
+	print "ok ".++$TestCounter." - $name has a maintainer\n";
     } else {
-        warn "File $name has no maintainer\n" if not $files{$name};
+	print "not ok ".++$TestCounter." - $name has NO maintainer\n";
     }
 }
 
@@ -387,6 +372,17 @@ sub missing_maintainers {
 	    if( -d $d ) { push @dir, $d } else { warn_maintainer($d) }
     }
     find sub { warn_maintainer($File::Find::name) if $check->() }, @dir if @dir;
+}
+
+sub superfluous_maintainers {
+    maintainers_files();
+    for my $f (keys %files) {
+	if ($MANIFEST{$f}) {
+	    print "ok ".++$TestCounter." - Maintained file $f appears in MANIFEST\n";
+	} else {
+	    print "not ok ".++$TestCounter." - File $f has has a maintainer but is not in MANIFEST\n";
+	}
+    }
 }
 
 sub finish_tap_output {

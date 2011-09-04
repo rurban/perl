@@ -1,6 +1,6 @@
 package attributes;
 
-our $VERSION = 0.14;
+our $VERSION = 0.15;
 
 @EXPORT_OK = qw(get reftype);
 @EXPORT = ();
@@ -33,6 +33,15 @@ sub _modify_attrs_and_deprecate {
 	$deprecated{$svtype} && /$deprecated{$svtype}/ ? do {
 	    require warnings;
 	    warnings::warnif('deprecated', "Attribute \"$1\" is deprecated");
+	    0;
+	} : $svtype eq 'CODE' && /^-?lvalue\z/ ? do {
+	    require warnings;
+	    warnings::warnif(
+		'misc',
+		"lvalue attribute "
+		   . (/^-/ ? "cannot be removed" : "ignored")
+		   . " after the subroutine has been defined"
+	    );
 	    0;
 	} : 1
     } _modify_attrs(@_);
