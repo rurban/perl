@@ -359,7 +359,7 @@
 /* Rats: if dTHR is just blank then the subsequent ";" throws an error */
 /* Declaring a *function*, instead of a variable, ensures that we don't rely
    on being able to suppress "unused" warnings.  */
-#define dNOOP extern int Perl___notused()
+#define dNOOP extern int Perl___notused(void)
 
 #ifndef pTHX
 /* Don't bother defining tTHX and sTHX; using them outside
@@ -490,9 +490,6 @@ register struct op *Perl_op asm(stringify(OP_IN_REGISTER));
 #  endif
 # endif
 #endif
-
-#define WITH_THX(s) STMT_START { dTHX; s; } STMT_END
-#define WITH_THR(s) WITH_THX(s)
 
 #ifndef BYTEORDER  /* Should never happen -- byteorder is in config.h */
 #   define BYTEORDER 0x1234

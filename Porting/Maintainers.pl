@@ -459,7 +459,7 @@ use File::Glob qw(:case);
     'CPANPLUS' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9108.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9110.tar.gz',
 	'FILES'		=> q[cpan/CPANPLUS],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qr{^t/dummy-.*\.hidden$},
@@ -753,7 +753,7 @@ use File::Glob qw(:case);
     'ExtUtils::ParseXS' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.00_03.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.04_01.tar.gz',
 	'FILES'		=> q[dist/ExtUtils-ParseXS],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -761,10 +761,10 @@ use File::Glob qw(:case);
     'perlfaq' =>
 	{
 	'MAINTAINER'	=> 'perlfaq',
-	'DISTRIBUTION'  => 'FLORA/perlfaq-5.015000.tar.gz',
-	'FILES'		=> q[dist/perlfaq],
+	'DISTRIBUTION'  => 'LLAP/perlfaq-5.01500302.tar.gz',
+	'FILES'		=> q[cpan/perlfaq],
 	'EXCLUDED'	=> [ qw(t/release-pod-syntax.t) ],
-	'UPSTREAM'	=> 'blead',
+	'UPSTREAM'	=> 'cpan',
 	},
 
     'File::Basename' =>
@@ -1101,7 +1101,7 @@ use File::Glob qw(:case);
     'Locale-Codes' =>
 	{
 	'MAINTAINER'	=> 'sbeck',
-	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.17.tar.gz',
+	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.18.tar.gz',
 	'FILES'		=> q[cpan/Locale-Codes],
 	'EXCLUDED'	=> [ qw{t/pod_coverage.t t/pod.t}, qr{^t/runtests}, qr{^t/runtests\.bat},
 			     qr{^internal/}, qr{^examples/} ],
@@ -1878,7 +1878,7 @@ use File::Glob qw(:case);
     'threads' =>
 	{
 	'MAINTAINER'	=> 'jdhedden',
-	'DISTRIBUTION'	=> 'JDHEDDEN/threads-1.83.tar.gz',
+	'DISTRIBUTION'	=> 'JDHEDDEN/threads-1.85.tar.gz',
 	'FILES'		=> q[dist/threads],
 	'EXCLUDED'	=> [ qr{^examples/},
 			     qw(t/pod.t
@@ -1891,7 +1891,7 @@ use File::Glob qw(:case);
     'threads::shared' =>
 	{
 	'MAINTAINER'	=> 'jdhedden',
-	'DISTRIBUTION'	=> 'JDHEDDEN/threads-shared-1.37.tar.gz',
+	'DISTRIBUTION'	=> 'JDHEDDEN/threads-shared-1.39.tar.gz',
 	'FILES'		=> q[dist/threads-shared],
 	'EXCLUDED'	=> [ qw(examples/class.pl
 				shared.h

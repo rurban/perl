@@ -26,7 +26,11 @@
 #include <acedef.h>
 #include <acldef.h>
 #include <armdef.h>
+#if __CRTL_VER < 70300000
+/* needed for home-rolled utime() */
 #include <atrdef.h>
+#include <fibdef.h>
+#endif
 #include <chpdef.h>
 #include <clidef.h>
 #include <climsgdef.h>
@@ -34,7 +38,6 @@
 #include <descrip.h>
 #include <devdef.h>
 #include <dvidef.h>
-#include <fibdef.h>
 #include <float.h>
 #include <fscndef.h>
 #include <iodef.h>
@@ -44,7 +47,6 @@
 #include <libdef.h>
 #include <lib$routines.h>
 #include <lnmdef.h>
-#include <msgdef.h>
 #include <ossdef.h>
 #if __CRTL_VER >= 70301000 && !defined(__VAX)
 #include <ppropdef.h>
@@ -61,7 +63,6 @@
 #include <uaidef.h>
 #include <uicdef.h>
 #include <stsdef.h>
-#include <rmsdef.h>
 #if __CRTL_VER >= 70000000 /* FIXME to earliest version */
 #include <efndef.h>
 #define NO_EFN EFN$C_ENF
@@ -473,8 +474,8 @@ int utf8_flag;
 	/* High bit set, but not a Unicode character! */
 
 	/* Non printing DECMCS or ISO Latin-1 character? */
-	if (*inspec <= 0x9F) {
-	int hex;
+	if ((unsigned char)*inspec <= 0x9F) {
+	    int hex;
 	    outspec[0] = '^';
 	    outspec++;
 	    hex = (*inspec >> 4) & 0xF;
@@ -491,13 +492,13 @@ int utf8_flag;
 	    }
 	    *output_cnt = 3;
 	    return 1;
-	} else if (*inspec == 0xA0) {
+	} else if ((unsigned char)*inspec == 0xA0) {
 	    outspec[0] = '^';
 	    outspec[1] = 'A';
 	    outspec[2] = '0';
 	    *output_cnt = 3;
 	    return 1;
-	} else if (*inspec == 0xFF) {
+	} else if ((unsigned char)*inspec == 0xFF) {
 	    outspec[0] = '^';
 	    outspec[1] = 'F';
 	    outspec[2] = 'F';
@@ -2923,7 +2924,7 @@ struct pipe_details
 struct exit_control_block
 {
     struct exit_control_block *flink;
-    unsigned long int	(*exit_routine)();
+    unsigned long int (*exit_routine)(void);
     unsigned long int arg_count;
     unsigned long int *status_address;
     unsigned long int exit_status;
@@ -2956,7 +2957,7 @@ static $DESCRIPTOR(nl_desc, "NL:");
 
 
 static unsigned long int
-pipe_exit_routine()
+pipe_exit_routine(void)
 {
     pInfo info;
     unsigned long int retsts = SS$_NORMAL, abort = SS$_TIMEOUT;
@@ -5253,14 +5254,14 @@ Stat_t dst_st;
 	    if (vms_dir_file == NULL)
 		_ckvmssts_noperl(SS$_INSFMEM);
 
-	    /* If the dest is a directory, we must remove it
+	    /* If the dest is a directory, we must remove it */
 	    if (dst_sts == 0) {
 		int d_sts;
 		d_sts = mp_do_kill_file(aTHX_ dst_st.st_devnam, 1);
 		if (d_sts != 0) {
 		    PerlMem_free(vms_dst);
 		    errno = EIO;
-		    return sts;
+		    return d_sts;
 		}
 
 		pre_delete = 1;
@@ -9479,7 +9480,7 @@ static int child_st[2];/* Event Flag set when child process completes	*/
 
 static unsigned short child_chan;/* I/O Channel for Pipe Mailbox		*/
 
-static unsigned long int exit_handler(int *status)
+static unsigned long int exit_handler(void)
 {
 short iosb[4];
 
@@ -10473,9 +10474,9 @@ Perl_seekdir(pTHX_ DIR *dd, long count)
 
 static int vfork_called;
 
-/*{{{int my_vfork()*/
+/*{{{int my_vfork(void)*/
 int
-my_vfork()
+my_vfork(void)
 {
   vfork_called++;
   return vfork();
@@ -11622,7 +11623,7 @@ static long int utc_offset_secs;
 static time_t toutc_dst(time_t loc) {
   struct tm *rsltmp;
 
-  if ((rsltmp = localtime(&loc)) == NULL) return -1;
+  if ((rsltmp = localtime(&loc)) == NULL) return -1u;
   loc -= utc_offset_secs;
   if (rsltmp->tm_isdst) loc -= 3600;
   return loc;
@@ -11636,7 +11637,7 @@ static time_t toloc_dst(time_t utc) {
   struct tm *rsltmp;
 
   utc += utc_offset_secs;
-  if ((rsltmp = localtime(&utc)) == NULL) return -1;
+  if ((rsltmp = localtime(&utc)) == NULL) return -1u;
   if (rsltmp->tm_isdst) utc += 3600;
   return utc;
 }
@@ -14259,7 +14260,7 @@ mp_do_vms_realpath(pTHX_ const char *filespec, char *outbuf,
 		    /* 2. ODS-5 / UNIX report mode should return a failure */
 		    /*    if the parent directory also does not exist */
 		    /*    Otherwise, get the real path for the parent */
-		    /*    and add the child to it.
+		    /*    and add the child to it. */
 
 		    /* basename / dirname only available for VMS 7.0+ */
 		    /* So we may need to implement them as common routines */
@@ -14320,7 +14321,7 @@ mp_do_vms_realpath(pTHX_ const char *filespec, char *outbuf,
 					  dir_name, 0, NULL);
 
 		    if (sts == 0) {
-		        /* Now need to pathify it.
+		        /* Now need to pathify it. */
 		        char *tdir = int_pathify_dirspec(vms_dir_name,
 							 outbuf);
 

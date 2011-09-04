@@ -4,9 +4,9 @@ use strict;
 use warnings;
 no warnings 'surrogate';    # surrogates can be inputs to this
 use charnames ();
-use Unicode::Normalize qw(getCombinClass NFKD);
+use Unicode::Normalize qw(getCombinClass NFD);
 
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 
 use Storable qw(dclone);
 
@@ -71,7 +71,7 @@ Unicode::UCD - Unicode character database
     my $unicode_version = Unicode::UCD::UnicodeVersion();
 
     my $convert_to_numeric =
-                Unicode::UCD::num("\N{RUMI DIGIT ONE}\N{RUMI DIGIT TWO}");
+              Unicode::UCD::num("\N{RUMI DIGIT ONE}\N{RUMI DIGIT TWO}");
 
 =head1 DESCRIPTION
 
@@ -271,10 +271,10 @@ my @BIDIS;
 my @CATEGORIES;
 my @DECOMPOSITIONS;
 my @NUMERIC_TYPES;
-my @SIMPLE_LOWER;
-my @SIMPLE_TITLE;
-my @SIMPLE_UPPER;
-my @UNICODE_1_NAMES;
+my %SIMPLE_LOWER;
+my %SIMPLE_TITLE;
+my %SIMPLE_UPPER;
+my %UNICODE_1_NAMES;
 
 sub _charinfo_case {
 
@@ -284,20 +284,20 @@ sub _charinfo_case {
     #   $cased is the case-changed character
     #   $file is the file in lib/unicore/To/$file that contains the data
     #       needed for this, in the form that _search() understands.
-    #   $array_ref points to the array holding the contents of $file.  It will
+    #   $hash_ref points to the hash holding the contents of $file.  It will
     #       be populated if empty.
     # By using the 'uc', etc. functions, we avoid loading more files into
     # memory except for those rare cases where the simple casing (which has
     # been what charinfo() has always returned, is different than the full
     # casing.
-    my ($char, $cased, $file, $array_ref) = @_;
+    my ($char, $cased, $file, $hash_ref) = @_;
 
     return "" if $cased eq $char;
 
     return sprintf("%04X", ord $cased) if length($cased) == 1;
 
-    @$array_ref =_read_table("unicore/To/$file") unless @$array_ref;
-    return _search($array_ref, 0, $#$array_ref, ord $char) // "";
+    %$hash_ref =_read_table("unicore/To/$file", 'use_hash') unless %$hash_ref;
+    return $hash_ref->{ord $char} // "";
 }
 
 sub charinfo {
@@ -340,18 +340,20 @@ sub charinfo {
     # For most code points, we can just read in "unicore/Decomposition.pl", as
     # its contents are exactly what should be output.  But that file doesn't
     # contain the data for the Hangul syllable decompositions, which can be
-    # algorithmically computed, and NFKD() does that, so we call NFKD() for
-    # those.  We can't use NFKD() for everything, as it does a complete
+    # algorithmically computed, and NFD() does that, so we call NFD() for
+    # those.  We can't use NFD() for everything, as it does a complete
     # recursive decomposition, and what this function has always done is to
-    # return what's in UnicodeData.txt which doesn't have the recursivenss
-    # specified in the decomposition types.  No decomposition implies an empty
-    # field; otherwise, all but "Canonical" imply a compatible decomposition,
-    # and the type is prefixed to that, as it is in UnicodeData.txt
+    # return what's in UnicodeData.txt which doesn't show that recursiveness.
+    # Fortunately, the NFD() of the Hanguls doesn't have any recursion
+    # issues.
+    # Having no decomposition implies an empty field; otherwise, all but
+    # "Canonical" imply a compatible decomposition, and the type is prefixed
+    # to that, as it is in UnicodeData.txt
     if ($char =~ /\p{Block=Hangul_Syllables}/) {
         # The code points of the decomposition are output in standard Unicode
         # hex format, separated by blanks.
         $prop{'decomposition'} = join " ", map { sprintf("%04X", $_)}
-                                           unpack "U*", NFKD($char);
+                                           unpack "U*", NFD($char);
     }
     else {
         @DECOMPOSITIONS = _read_table("unicore/Decomposition.pl")
@@ -392,18 +394,17 @@ sub charinfo {
 
     $prop{'mirrored'} = ($char =~ /\p{Bidi_Mirrored}/) ? 'Y' : 'N';
 
-    @UNICODE_1_NAMES =_read_table("unicore/To/Na1.pl") unless @UNICODE_1_NAMES;
-    $prop{'unicode10'} = _search(\@UNICODE_1_NAMES, 0, $#UNICODE_1_NAMES, $code)
-                         // "";
+    %UNICODE_1_NAMES =_read_table("unicore/To/Na1.pl", "use_hash") unless %UNICODE_1_NAMES;
+    $prop{'unicode10'} = $UNICODE_1_NAMES{$code} // "";
 
     # This is true starting in 6.0, but, num() also requires 6.0, so
     # don't need to test for version again here.
     $prop{'comment'} = "";
 
-    $prop{'upper'} = _charinfo_case($char, uc $char, '_suc.pl', \@SIMPLE_UPPER);
-    $prop{'lower'} = _charinfo_case($char, lc $char, '_slc.pl', \@SIMPLE_LOWER);
+    $prop{'upper'} = _charinfo_case($char, uc $char, '_suc.pl', \%SIMPLE_UPPER);
+    $prop{'lower'} = _charinfo_case($char, lc $char, '_slc.pl', \%SIMPLE_LOWER);
     $prop{'title'} = _charinfo_case($char, ucfirst $char, '_stc.pl',
-                                                                \@SIMPLE_TITLE);
+                                                                \%SIMPLE_TITLE);
 
     $prop{block}  = charblock($code);
     $prop{script} = charscript($code);
@@ -430,14 +431,20 @@ sub _search { # Binary search in a [[lo,hi,prop],[...],...] table.
     }
 }
 
-sub _read_table {
+sub _read_table ($;$) {
 
     # Returns the contents of the mktables generated table file located at $1
-    # in the form of an array of arrays.  Each outer array denotes a range
-    # with [0] the start point of that range; [1] the end point; and [2] the
-    # value that every code point in the range has.
+    # in the form of either an array of arrays or a hash, depending on if the
+    # optional second parameter is true (for hash return) or not.  In the case
+    # of a hash return, each key is a code point, and its corresponding value
+    # is what the table gives as the code point's corresponding value.  In the
+    # case of an array return, each outer array denotes a range with [0] the
+    # start point of that range; [1] the end point; and [2] the value that
+    # every code point in the range has.  The hash return is useful for fast
+    # lookup when the table contains only single code point ranges.  The array
+    # return takes much less memory when there are large ranges.
     #
-    # This has the side effect of setting
+    # This function has the side effect of setting
     # $utf8::SwashInfo{$property}{'format'} to be the mktables format of the
     #                                       table; and
     # $utf8::SwashInfo{$property}{'missing'} to be the value for all entries
@@ -450,7 +457,10 @@ sub _read_table {
     # 00AA		Latin
 
     my $table = shift;
+    my $return_hash = shift;
+    $return_hash = 0 unless defined $return_hash;
     my @return;
+    my %return;
     local $_;
 
     for (split /^/m, do $table) {
@@ -458,9 +468,16 @@ sub _read_table {
                                         \s* ( \# .* )?  # Optional comment
                                         $ /x;
         $end = $start if $end eq "";
-        push @return, [ hex $start, hex $end, $value ];
+        if ($return_hash) {
+            foreach my $i (hex $start .. hex $end) {
+                $return{$i} = $value;
+            }
+        }
+        else {
+            push @return, [ hex $start, hex $end, $value ];
+        }
     }
-    return @return;
+    return ($return_hash) ? %return : @return;
 }
 
 sub charinrange {
@@ -489,12 +506,16 @@ it were assigned (which it may in future versions of the Unicode Standard).
 
 See also L</Blocks versus Scripts>.
 
-If supplied with an argument that can't be a code point, charblock() tries
-to do the opposite and interpret the argument as a code point block. The
-return value is a I<range>: an anonymous list of lists that contain
-I<start-of-range>, I<end-of-range> code point pairs. You can test whether
-a code point is in a range using the L</charinrange()> function. If the
-argument is not a known code point block, B<undef> is returned.
+If supplied with an argument that can't be a code point, charblock() tries to
+do the opposite and interpret the argument as a code point block. The return
+value is a I<range>: an anonymous list that consists of another anonymous list
+whose first element is the first code point in the block, and whose second
+(and final) element is the final code point in the block.  (The extra layer of
+indirection is so that the same program logic can be used to handle both this
+return, and the return from L</charscript()> which can have multiple ranges.)
+You can test whether a code point is in a range using the L</charinrange()>
+function.
+If the argument is not a known code point block, B<undef> is returned.
 
 =cut
 
@@ -1273,7 +1294,12 @@ sub _numeric {
 
 =pod
 
-=head2 num
+=head2 B<num()>
+
+    use Unicode::UCD 'num';
+
+    my $val = num("123");
+    my $one_quarter = num("\N{VULGAR FRACTION 1/4}");
 
 C<num> returns the numeric value of the input Unicode string; or C<undef> if it
 doesn't think the entire string has a completely valid, safe numeric value.

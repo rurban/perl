@@ -18,7 +18,7 @@ package Math::BigInt;
 my $class = "Math::BigInt";
 use 5.006002;
 
-$VERSION = '1.996';
+$VERSION = '1.997';
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(objectify bgcd blcm); 
@@ -3507,7 +3507,7 @@ object from the input.
 =item Output
 
 Output values are BigInt objects (normalized), except for the methods which
-return a string (see L<SYNOPSIS>).
+return a string (see L</SYNOPSIS>).
 
 Some routines (C<is_odd()>, C<is_even()>, C<is_zero()>, C<is_one()>,
 C<is_nan()>, etc.) return true or false, while others (C<bcmp()>, C<bacmp()>)
@@ -3520,7 +3520,7 @@ return either undef (if NaN is involved), <0, 0 or >0 and are suited for sort.
 Each of the methods below (except config(), accuracy() and precision())
 accepts three additional parameters. These arguments C<$A>, C<$P> and C<$R>
 are C<accuracy>, C<precision> and C<round_mode>. Please see the section about
-L<ACCURACY and PRECISION> for more information.
+L</ACCURACY and PRECISION> for more information.
 
 =head2 config()
 
@@ -3589,7 +3589,7 @@ influence of C<< CLASS->accuracy($A) >>, all results from math operations with
 that number will also be rounded.
 
 In most cases, you should probably round the results explicitly using one of
-L<round()>, L<bround()> or L<bfround()> or by passing the desired accuracy
+L</round()>, L</bround()> or L</bfround()> or by passing the desired accuracy
 to the math operation as additional parameter:
 
     my $x = Math::BigInt->new(30000);
@@ -3597,7 +3597,7 @@ to the math operation as additional parameter:
     print scalar $x->copy()->bdiv($y, 2);		# print 4300
     print scalar $x->copy()->bdiv($y)->bround(2);	# print 4300
 
-Please see the section about L<ACCURACY and PRECISION> for further details.
+Please see the section about L</ACCURACY and PRECISION> for further details.
 
 Value must be greater than zero. Pass an undef value to disable it:
 
@@ -3638,8 +3638,8 @@ Math::BigInt.
     $P = CLASS->precision();	# read out global precision
     $P = $x->precision();	# read out precision that affects $x
 
-Note: You probably want to use L<accuracy()> instead. With L<accuracy> you
-set the number of digits each result should have, with L<precision> you
+Note: You probably want to use L</accuracy()> instead. With L</accuracy()> you
+set the number of digits each result should have, with L</precision()> you
 set the place where to round!
 
 C<precision()> sets or gets the global or local precision, aka at which digit
@@ -3650,7 +3650,7 @@ In Math::BigInt, passing a negative number precision has no effect since no
 numbers have digits after the dot. In L<Math::BigFloat>, it will round all
 results to P digits after the dot.
 
-Please see the section about L<ACCURACY and PRECISION> for further details.
+Please see the section about L</ACCURACY and PRECISION> for further details.
 
 Pass an undef value to disable it:
 
@@ -3704,7 +3704,7 @@ Creates a new BigInt object from a scalar or another BigInt object. The
 input is accepted as decimal, hex (with leading '0x') or binary (with leading
 '0b').
 
-See L<Input> for more info on accepted input formats.
+See L</Input> for more info on accepted input formats.
 
 =head2 from_oct()
 
@@ -3861,6 +3861,13 @@ Set the number to its absolute value, e.g. change the sign from '-' to '+'
 and from '-inf' to '+inf', respectively. Does nothing for NaN or positive
 numbers.
 
+=head2 bsgn()
+
+	$x->bsgn();
+
+Signum function. Set the number to -1, 0, or 1, depending on whether the
+number is negative, zero, or positive, respectivly. Does not modify NaNs.
+
 =head2 bnorm()
 
 	$x->bnorm();			# normalize (no-op)
@@ -3971,7 +3978,7 @@ Calculates the expression C<e ** $x> where C<e> is Euler's number.
 
 This method was added in v1.82 of Math::BigInt (April 2007).
 
-See also L<blog()>.
+See also L</blog()>.
 
 =head2 bnok()
 
@@ -4210,7 +4217,7 @@ Returns a normalized string representation of C<$x>.
 This returns a normal Perl scalar from $x. It is used automatically
 whenever a scalar is needed, for instance in array index operations.
 
-This loses precision, to avoid this use L<as_int()> instead.
+This loses precision, to avoid this use L<as_int()|/"as_int()/as_number()"> instead.
 
 =head2 modify()
 
@@ -4426,25 +4433,25 @@ This is how it works now:
 
 =item Setting/Accessing
 
-  * You can set the A global via C<< Math::BigInt->accuracy() >> or
-    C<< Math::BigFloat->accuracy() >> or whatever class you are using.
-  * You can also set P globally by using C<< Math::SomeClass->precision() >>
+  * You can set the A global via Math::BigInt->accuracy() or
+    Math::BigFloat->accuracy() or whatever class you are using.
+  * You can also set P globally by using Math::SomeClass->precision()
     likewise.
   * Globals are classwide, and not inherited by subclasses.
-  * to undefine A, use C<< Math::SomeCLass->accuracy(undef); >>
-  * to undefine P, use C<< Math::SomeClass->precision(undef); >>
-  * Setting C<< Math::SomeClass->accuracy() >> clears automatically
-    C<< Math::SomeClass->precision() >>, and vice versa.
+  * to undefine A, use Math::SomeCLass->accuracy(undef);
+  * to undefine P, use Math::SomeClass->precision(undef);
+  * Setting Math::SomeClass->accuracy() clears automatically
+    Math::SomeClass->precision(), and vice versa.
   * To be valid, A must be > 0, P can have any value.
   * If P is negative, this means round to the P'th place to the right of the
     decimal point; positive values mean to the left of the decimal point.
     P of 0 means round to integer.
-  * to find out the current global A, use C<< Math::SomeClass->accuracy() >>
-  * to find out the current global P, use C<< Math::SomeClass->precision() >>
-  * use C<< $x->accuracy() >> respective C<< $x->precision() >> for the local
-    setting of C<< $x >>.
-  * Please note that C<< $x->accuracy() >> respective C<< $x->precision() >>
-    return eventually defined global A or P, when C<< $x >>'s A or P is not
+  * to find out the current global A, use Math::SomeClass->accuracy()
+  * to find out the current global P, use Math::SomeClass->precision()
+  * use $x->accuracy() respective $x->precision() for the local
+    setting of $x.
+  * Please note that $x->accuracy() respective $x->precision()
+    return eventually defined global A or P, when $x's A or P is not
     set.
 
 =item Creating numbers
@@ -4456,11 +4463,11 @@ This is how it works now:
     globals (if set) will be used. Thus changing the global defaults later on
     will not change the A or P of previously created numbers (i.e., A and P of
     $x will be what was in effect when $x was created)
-  * If given undef for A and P, B<no> rounding will occur, and the globals will
-    B<not> be used. This is used by subclasses to create numbers without
+  * If given undef for A and P, NO rounding will occur, and the globals will
+    NOT be used. This is used by subclasses to create numbers without
     suffering rounding in the parent. Thus a subclass is able to have its own
     globals enforced upon creation of a number by using
-    C<< $x = Math::BigInt->new($number,undef,undef) >>:
+    $x = Math::BigInt->new($number,undef,undef):
 
 	use Math::BigInt::SomeSubclass;
 	use Math::BigInt;
@@ -4552,11 +4559,11 @@ This is how it works now:
 
 =item Local settings
 
-  * You can set A or P locally by using C<< $x->accuracy() >> or
-    C<< $x->precision() >>
+  * You can set A or P locally by using $x->accuracy() or
+    $x->precision()
     and thus force different A and P for different objects/numbers.
   * Setting A or P this way immediately rounds $x to the new value.
-  * C<< $x->accuracy() >> clears C<< $x->precision() >>, and vice versa.
+  * $x->accuracy() clears $x->precision(), and vice versa.
 
 =item Rounding
 
@@ -4566,12 +4573,12 @@ This is how it works now:
   * the two rounding functions take as the second parameter one of the
     following rounding modes (R):
     'even', 'odd', '+inf', '-inf', 'zero', 'trunc', 'common'
-  * you can set/get the global R by using C<< Math::SomeClass->round_mode() >>
-    or by setting C<< $Math::SomeClass::round_mode >>
-  * after each operation, C<< $result->round() >> is called, and the result may
+  * you can set/get the global R by using Math::SomeClass->round_mode()
+    or by setting $Math::SomeClass::round_mode
+  * after each operation, $result->round() is called, and the result may
     eventually be rounded (that is, if A or P were set either locally,
     globally or as parameter to the operation)
-  * to manually round a number, call C<< $x->round($A,$P,$round_mode); >>
+  * to manually round a number, call $x->round($A,$P,$round_mode);
     this will round the number by using the appropriate rounding function
     and then normalize it.
   * rounding modifies the local settings of the number:
@@ -4860,13 +4867,13 @@ modules and see if they help you.
 =head2 Alternative math libraries
 
 You can use an alternative library to drive Math::BigInt. See the section
-L<MATH LIBRARY> for more information.
+L</MATH LIBRARY> for more information.
 
 For more benchmark results see L<http://bloodgate.com/perl/benchmarks.html>.
 
-=head2 SUBCLASSING
+=head1 SUBCLASSING
 
-=head1 Subclassing Math::BigInt
+=head2 Subclassing Math::BigInt
 
 The basic design of Math::BigInt allows simple subclasses with very little
 work, as long as a few simple rules are followed:
@@ -5308,7 +5315,7 @@ If you want a better approximation of the square root, then use:
 
 =item brsft()
 
-For negative numbers in base see also L<brsft|brsft>.
+For negative numbers in base see also L<brsft|/brsft()>.
 
 =back
 

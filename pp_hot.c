@@ -74,6 +74,7 @@ PP(pp_null)
     return NORMAL;
 }
 
+/* This is sometimes called directly by pp_coreargs. */
 PP(pp_pushmark)
 {
     dVAR;
@@ -124,6 +125,8 @@ PP(pp_sassign)
 	const U32 cv_type = SvTYPE(cv);
 	const bool is_gv = isGV_with_GP(right);
 	const bool got_coderef = cv_type == SVt_PVCV || cv_type == SVt_PVFM;
+	STRLEN len = 0;
+	const char *nambeg = is_gv ? NULL : SvPV_nomg_const(right, len);
 
 	if (!got_coderef) {
 	    assert(SvROK(cv));
@@ -134,7 +137,9 @@ PP(pp_sassign)
 	   context. */
 	if (!got_coderef && !is_gv && GIMME_V == G_VOID) {
 	    /* Is the target symbol table currently empty?  */
-	    GV * const gv = gv_fetchsv(right, GV_NOINIT, SVt_PVGV);
+	    GV * const gv = gv_fetchpvn_flags(
+		nambeg, len, SvUTF8(right)|GV_NOINIT, SVt_PVGV
+	    );
 	    if (SvTYPE(gv) != SVt_PVGV && !SvOK(gv)) {
 		/* Good. Create a new proxy constant subroutine in the target.
 		   The gv becomes a(nother) reference to the constant.  */
@@ -152,7 +157,9 @@ PP(pp_sassign)
 	/* Need to fix things up.  */
 	if (!is_gv) {
 	    /* Need to fix GV.  */
-	    right = MUTABLE_SV(gv_fetchsv(right, GV_ADD, SVt_PVGV));
+	    right = MUTABLE_SV(gv_fetchpvn_flags(
+		nambeg, len, SvUTF8(right)|GV_ADD, SVt_PVGV
+	    ));
 	}
 
 	if (!got_coderef) {
@@ -321,9 +328,13 @@ PP(pp_padsv)
 PP(pp_readline)
 {
     dVAR;
-    dSP; SvGETMAGIC(TOPs);
-    tryAMAGICunTARGET(iter_amg, 0, 0);
-    PL_last_in_gv = MUTABLE_GV(*PL_stack_sp--);
+    dSP;
+    if (TOPs) {
+	SvGETMAGIC(TOPs);
+	tryAMAGICunTARGET(iter_amg, 0, 0);
+	PL_last_in_gv = MUTABLE_GV(*PL_stack_sp--);
+    }
+    else PL_last_in_gv = PL_argvgv, PL_stack_sp--;
     if (!isGV_with_GP(PL_last_in_gv)) {
 	if (SvROK(PL_last_in_gv) && isGV_with_GP(SvRV(PL_last_in_gv)))
 	    PL_last_in_gv = MUTABLE_GV(SvRV(PL_last_in_gv));
@@ -2289,6 +2300,14 @@ PP(pp_subst)
     else {
 	if (force_on_match) {
 	    force_on_match = 0;
+	    if (rpm->op_pmflags & PMf_NONDESTRUCT) {
+		/* I feel that it should be possible to avoid this mortal copy
+		   given that the code below copies into a new destination.
+		   However, I suspect it isn't worth the complexity of
+		   unravelling the C<goto force_it> for the small number of
+		   cases where it would be viable to drop into the copy code. */
+		TARG = sv_2mortal(newSVsv(TARG));
+	    }
 	    s = SvPV_force(TARG, len);
 	    goto force_it;
 	}

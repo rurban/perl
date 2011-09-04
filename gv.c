@@ -1050,6 +1050,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
     const I32 no_init = flags & (GV_NOADD_NOINIT | GV_NOINIT);
     const I32 no_expand = flags & GV_NOEXPAND;
     const I32 add = flags & ~GV_NOADD_MASK;
+    bool addmg = !!(flags & GV_ADDMG);
     const char *const name_end = nambeg + full_len;
     const char *const name_em1 = name_end - 1;
     U32 faking_it;
@@ -1253,9 +1254,11 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	return NULL;
 
     gvp = (GV**)hv_fetch(stash,name,len,add);
-    if (!gvp || *gvp == (const GV *)&PL_sv_undef)
-	return NULL;
-    gv = *gvp;
+    if (!gvp || *gvp == (const GV *)&PL_sv_undef) {
+	if (addmg) gv = (GV *)newSV(0);
+	else return NULL;
+    }
+    else gv = *gvp;
     if (SvTYPE(gv) == SVt_PVGV) {
 	if (add) {
 	    GvMULTI_on(gv);
@@ -1274,8 +1277,10 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	}
 	return gv;
     } else if (no_init) {
+	assert(!addmg);
 	return gv;
     } else if (no_expand && SvROK(gv)) {
+	assert(!addmg);
 	return gv;
     }
 
@@ -1291,7 +1296,6 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
     if (add & GV_ADDWARN)
 	Perl_ck_warner_d(aTHX_ packWARN(WARN_INTERNAL), "Had to create %s unexpectedly", nambeg);
     gv_init(gv, stash, name, len, add & GV_ADDMULTI);
-    gv_init_sv(gv, faking_it ? SVt_PVCV : sv_type);
 
     if (isALPHA(name[0]) && ! (isLEXWARN_on ? ckWARN(WARN_ONCE)
 			                    : (PL_dowarn & G_WARN_ON ) ) )
@@ -1324,7 +1328,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    default:
 		goto try_core;
 	    }
-	    return gv;
+	    goto add_magical_gv;
 	}
       try_core:
 	if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4) {
@@ -1336,12 +1340,12 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    CV *cv, *oldcompcv;
 	    int opnum = 0;
 	    SV *opnumsv;
-	    bool ampable = FALSE; /* &{}-able */
+	    bool ampable = TRUE; /* &{}-able */
 	    COP *oldcurcop;
 	    yy_parser *oldparser;
 	    I32 oldsavestack_ix;
 
-	    if (code >= 0) return gv; /* not overridable */
+	    if (code >= 0) goto add_magical_gv; /* not overridable */
 	    switch (-code) {
 	     /* no support for \&CORE::infix;
 	        no support for funcs that take labels, as their parsing is
@@ -1350,37 +1354,22 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    case KEY_eq: case KEY_ge:
 	    case KEY_gt: case KEY_le: case KEY_lt: case KEY_ne:
 	    case KEY_or: case KEY_x: case KEY_xor:
-		return gv;
-	    case KEY___FILE__: case KEY___LINE__: case KEY___PACKAGE__:
-	    case KEY_abs: case KEY_alarm: case KEY_atan2: case KEY_chr:
-	    case KEY_chroot: case KEY_crypt:
-	    case KEY_break: case KEY_continue: case KEY_cos:
-	    case KEY_endgrent: case KEY_endhostent:
-	    case KEY_endnetent: case KEY_endprotoent: case KEY_endpwent:
-	    case KEY_endservent: case KEY_exp: case KEY_fork:
-	    case KEY_getgrent: case KEY_getgrgid: case KEY_getgrnam:
-	    case KEY_gethostbyaddr: case KEY_gethostbyname:
-	    case KEY_gethostent: case KEY_getlogin: case KEY_getnetbyaddr:
-	    case KEY_getnetbyname: case KEY_getnetent: case KEY_getppid:
-	    case KEY_getpriority: case KEY_getprotobyname:
-	    case KEY_getprotobynumber: case KEY_getprotoent:
-	    case KEY_getpwnam: case KEY_getpwuid: case KEY_getservbyname:
-	    case KEY_getservbyport: case KEY_getservent: case KEY_getpwent:
-	    case KEY_hex: case KEY_int: case KEY_lc: case KEY_lcfirst: 
-	    case KEY_length: case KEY_link: case KEY_log: case KEY_msgctl:
-	    case KEY_msgget: case KEY_msgrcv: case KEY_msgsnd:
-	    case KEY_not: case KEY_oct: case KEY_ord:
-	    case KEY_quotemeta: case KEY_readlink: case KEY_readpipe:
-	    case KEY_ref: case KEY_rename: case KEY_rmdir: case KEY_semctl:
-	    case KEY_semget: case KEY_semop: case KEY_setgrent:
-	    case KEY_sethostent: case KEY_setnetent: case KEY_setpriority:
-	    case KEY_setprotoent: case KEY_setpwent: case KEY_setservent:
-	    case KEY_shmctl: case KEY_shmget: case KEY_shmread:
-	    case KEY_shmwrite: case KEY_sin: case KEY_sqrt:
-	    case KEY_symlink: case KEY_time: case KEY_times:
-	    case KEY_uc: case KEY_ucfirst: case KEY_vec:
-	    case KEY_wait: case KEY_waitpid: case KEY_wantarray:
-		ampable = TRUE;
+		goto add_magical_gv;
+	    case KEY_chdir:
+	    case KEY_chomp: case KEY_chop:
+	    case KEY_each: case KEY_eof: case KEY_exec:
+	    case KEY_keys:
+	    case KEY_lstat:
+	    case KEY_pop:
+	    case KEY_push:
+	    case KEY_shift:
+	    case KEY_splice:
+	    case KEY_stat:
+	    case KEY_system:
+	    case KEY_truncate: case KEY_unlink:
+	    case KEY_unshift:
+	    case KEY_values:
+		ampable = FALSE;
 	    }
 	    if (ampable) {
 		ENTER;
@@ -1413,7 +1402,11 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	           new ATTRSUB. */
 	    (void)core_prototype((SV *)cv, name, code, &opnum);
 	    if (ampable) {
-		if (opnum == OP_VEC) CvLVALUE_on(cv);
+		if (addmg) {
+		    (void)hv_store(stash,name,len,(SV *)gv,0);
+		    addmg = FALSE;
+		}
+		CvLVALUE_on(cv);
 		newATTRSUB(oldsavestack_ix,
 		           newSVOP(
 		                 OP_CONST, 0,
@@ -1428,6 +1421,8 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		           )
 		);
 		assert(GvCV(gv) == cv);
+		if (opnum != OP_VEC && opnum != OP_SUBSTR)
+		    CvLVALUE_off(cv); /* Now *that* was a neat trick. */
 		LEAVE;
 		PL_parser = oldparser;
 		PL_curcop = oldcurcop;
@@ -1565,7 +1560,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		/* This snippet is taken from is_gv_magical */
 		const char *end = name + len;
 		while (--end > name) {
-		    if (!isDIGIT(*end))	return gv;
+		    if (!isDIGIT(*end))	goto add_magical_gv;
 		}
 		goto magicalize;
 	    }
@@ -1694,7 +1689,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    break;
 	case ']':		/* $] */
 	{
-	    SV * const sv = GvSVn(gv);
+	    SV * const sv = GvSV(gv);
 	    if (!sv_derived_from(PL_patchlevel, "version"))
 		upg_version(PL_patchlevel, TRUE);
 	    GvSV(gv) = vnumify(PL_patchlevel);
@@ -1704,7 +1699,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	break;
 	case '\026':	/* $^V */
 	{
-	    SV * const sv = GvSVn(gv);
+	    SV * const sv = GvSV(gv);
 	    GvSV(gv) = new_version(PL_patchlevel);
 	    SvREADONLY_on(GvSV(gv));
 	    SvREFCNT_dec(sv);
@@ -1712,6 +1707,15 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	break;
 	}
     }
+  add_magical_gv:
+    if (addmg) {
+	if (GvAV(gv) || GvHV(gv) || GvIO(gv) || GvCV(gv) || (
+	     GvSV(gv) && (SvOK(GvSV(gv)) || SvMAGICAL(GvSV(gv)))
+	   ))
+	    (void)hv_store(stash,name,len,(SV *)gv,0);
+	else SvREFCNT_dec(gv), gv = NULL;
+    }
+    if (gv) gv_init_sv(gv, faking_it ? SVt_PVCV : sv_type);
     return gv;
 }
 
@@ -2662,146 +2666,6 @@ Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
       return res;
     }
   }
-}
-
-/*
-=for apidoc is_gv_magical_sv
-
-Returns C<TRUE> if given the name of a magical GV.  Any get-magic that
-C<name_sv> has is ignored.
-
-Currently only useful internally when determining if a GV should be
-created even in rvalue contexts.
-
-C<flags> is not used at present but available for future extension to
-allow selecting particular classes of magical variable.
-
-=cut
-*/
-
-bool
-Perl_is_gv_magical_sv(pTHX_ SV *const name_sv, U32 flags)
-{
-    STRLEN len;
-    const char *const name = SvPV_nomg_const(name_sv, len);
-
-    PERL_UNUSED_ARG(flags);
-    PERL_ARGS_ASSERT_IS_GV_MAGICAL_SV;
-
-    if (len > 1) {
-	const char * const name1 = name + 1;
-	switch (*name) {
-	case 'I':
-	    if (len == 3 && name[1] == 'S' && name[2] == 'A')
-		goto yes;
-	    break;
-	case 'O':
-	    if (len == 8 && strEQ(name1, "VERLOAD"))
-		goto yes;
-	    break;
-	case 'S':
-	    if (len == 3 && name[1] == 'I' && name[2] == 'G')
-		goto yes;
-	    break;
-	    /* Using ${^...} variables is likely to be sufficiently rare that
-	       it seems sensible to avoid the space hit of also checking the
-	       length.  */
-	case '\017':   /* ${^OPEN} */
-	    if (strEQ(name1, "PEN"))
-		goto yes;
-	    break;
-	case '\024':   /* ${^TAINT} */
-	    if (strEQ(name1, "AINT"))
-		goto yes;
-	    break;
-	case '\025':	/* ${^UNICODE} */
-	    if (strEQ(name1, "NICODE"))
-		goto yes;
-	    if (strEQ(name1, "TF8LOCALE"))
-		goto yes;
-	    break;
-	case '\027':   /* ${^WARNING_BITS} */
-	    if (strEQ(name1, "ARNING_BITS"))
-		goto yes;
-	    break;
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	{
-	    const char *end = name + len;
-	    while (--end > name) {
-		if (!isDIGIT(*end))
-		    return FALSE;
-	    }
-	    goto yes;
-	}
-	}
-    } else {
-	/* Because we're already assuming that name is NUL terminated
-	   below, we can treat an empty name as "\0"  */
-	switch (*name) {
-	case '&':
-	case '`':
-	case '\'':
-	case ':':
-	case '?':
-	case '!':
-	case '-':
-	case '#':
-	case '[':
-	case '^':
-	case '~':
-	case '=':
-	case '%':
-	case '.':
-	case '(':
-	case ')':
-	case '<':
-	case '>':
-	case '\\':
-	case '/':
-	case '$':
-	case '|':
-	case '+':
-	case ';':
-	case ']':
-	case '\001':   /* $^A */
-	case '\003':   /* $^C */
-	case '\004':   /* $^D */
-	case '\005':   /* $^E */
-	case '\006':   /* $^F */
-	case '\010':   /* $^H */
-	case '\011':   /* $^I, NOT \t in EBCDIC */
-	case '\014':   /* $^L */
-	case '\016':   /* $^N */
-	case '\017':   /* $^O */
-	case '\020':   /* $^P */
-	case '\023':   /* $^S */
-	case '\024':   /* $^T */
-	case '\026':   /* $^V */
-	case '\027':   /* $^W */
-	case '1':
-	case '2':
-	case '3':
-	case '4':
-	case '5':
-	case '6':
-	case '7':
-	case '8':
-	case '9':
-	yes:
-	    return TRUE;
-	default:
-	    break;
-	}
-    }
-    return FALSE;
 }
 
 void

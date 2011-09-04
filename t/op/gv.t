@@ -12,7 +12,7 @@ BEGIN {
 
 use warnings;
 
-plan( tests => 234 );
+plan( tests => 236 );
 
 # type coersion on assignment
 $foo = 'foo';
@@ -219,8 +219,8 @@ is (*{*x{GLOB}}, "*main::STDOUT");
     # although it *should* if you're talking about magicals
 
     my $a = "]";
-    ok(defined ${$a});
     ok(defined *{$a});
+    ok(defined ${$a});
 
     $a = "1";
     "o" =~ /(o)/;
@@ -897,6 +897,14 @@ ok eval {
  ok $survived,
   'no error when gp_free calls a destructor that assigns to the gv';
 }
+
+# *{undef}
+eval { *{my $undef} = 3 };
+like $@, qr/^Can't use an undefined value as a symbol reference at /,
+  '*{ $undef } assignment';
+eval { *{;undef} = 3 };
+like $@, qr/^Can't use an undefined value as a symbol reference at /,
+  '*{ ;undef } assignment';
 
 __END__
 Perl

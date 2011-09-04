@@ -7,7 +7,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 218);
+    plan (tests => 219);
 }
 
 use strict;
@@ -185,14 +185,14 @@ $dummy  = &$var5        ; check_count '&{}';
     local *1 = sub{};
     $dummy  = &$var1        ; check_count 'symbolic &{}';
 
-    # This test will not be a complete test if ${^OPEN} has been created
+    # This test will not be a complete test if *988 has been created
     # already.  If this dies, change it to use another built-in variable.
     # In 5.10-14, rv2gv calls get-magic more times for built-in vars, which
     # is why we need the test this way.
-    if (exists $::{"\cOPEN"}) {
-	die "*{^OPEN} already exists. Please adjust this test"
+    if (exists $::{988}) {
+	die "*988 already exists. Please adjust this test"
     }
-    tie my $var6 => main => "\cOPEN";
+    tie my $var6 => main => 988;
     no warnings;
     readdir $var6           ; check_count 'symbolic readdir';
     if (exists $::{973}) { # Need a different variable here
@@ -205,6 +205,15 @@ $dummy  = &$var5        ; check_count '&{}';
 tie my $var8 => 'main', 'main';
 sub bolgy {}
 $var8->bolgy            ; check_count '->method';
+{
+    () = *swibble;
+    # This must be the name of an existing glob to trigger the maximum
+    # number of fetches in 5.14:
+    tie my $var9 => 'main', 'swibble';
+    no strict 'refs';
+    use constant glumscrin => 'shreggleboughet';
+    *$var9 = \&{"glumscrin"}; check_count '*$tied = \&{"name of const"}';
+}
 
 ###############################################
 #        Tests for  $foo binop $foo           #

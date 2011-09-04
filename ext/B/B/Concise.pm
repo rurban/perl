@@ -14,7 +14,7 @@ use warnings; # uses #3 and #4, since warnings uses Carp
 
 use Exporter (); # use #5
 
-our $VERSION   = "0.85";
+our $VERSION   = "0.86";
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw( set_style set_style_standard add_callback
 		     concise_subref concise_cv concise_main
@@ -613,7 +613,7 @@ $priv{$_}{4} = "DREFed" for (qw(rv2sv rv2av rv2hv));
   for (qw(rv2gv rv2sv padsv aelem helem));
 $priv{$_}{16} = "STATE" for ("padav", "padhv", "padsv");
 $priv{rv2gv}{4} = "NOINIT";
-@{$priv{"entersub"}}{1,4,16,32,64} = qw( DREF INARGS DBG TARG );
+@{$priv{"entersub"}}{1,4,16,32,64} = qw( INARGS TARG DBG DEREF );
 @{$priv{rv2cv}}{1,8,128} = ("CONST","AMPER","NO()");
 $priv{"gv"}{32} = "EARLYCV";
 $priv{"aelem"}{16} = $priv{"helem"}{16} = "LVDEFER";
@@ -661,6 +661,7 @@ if ($] >= 5.009) {
     for ("mapwhile", "mapstart", "grepwhile", "grepstart");
 }
 $priv{$_}{128} = '+1' for qw "caller wantarray";
+@{$priv{coreargs}}{1,2,64,128} = ('DREF1','DREF2','$MOD','MARK');
 
 our %hints; # used to display each COP's op_hints values
 

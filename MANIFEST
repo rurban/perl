@@ -1807,6 +1807,17 @@ cpan/Parse-CPAN-Meta/t/05_errors.t
 cpan/Parse-CPAN-Meta/t/data/VR-META.json
 cpan/Parse-CPAN-Meta/t/data/VR-META.yml
 cpan/Parse-CPAN-Meta/t/lib/Parse/CPAN/Meta/Test.pm
+cpan/perlfaq/lib/perlfaq1.pod		General Questions About Perl
+cpan/perlfaq/lib/perlfaq2.pod	Obtaining and Learning about Perl
+cpan/perlfaq/lib/perlfaq3.pod	Programming Tools
+cpan/perlfaq/lib/perlfaq4.pod	Data Manipulation
+cpan/perlfaq/lib/perlfaq5.pod	Files and Formats
+cpan/perlfaq/lib/perlfaq6.pod	Regexes
+cpan/perlfaq/lib/perlfaq7.pod	Perl Language Issues
+cpan/perlfaq/lib/perlfaq8.pod	System Interaction
+cpan/perlfaq/lib/perlfaq9.pod	Networking
+cpan/perlfaq/lib/perlfaq.pm	Perl frequently asked questions
+cpan/perlfaq/lib/perlfaq.pod	Perl frequently asked questions
 cpan/PerlIO-via-QuotedPrint/lib/PerlIO/via/QuotedPrint.pm	PerlIO::via::QuotedPrint
 cpan/PerlIO-via-QuotedPrint/t/QuotedPrint.t			PerlIO::via::QuotedPrint
 cpan/Perl-OSType/lib/Perl/OSType.pm			Perl::OSType
@@ -3239,17 +3250,6 @@ dist/Net-Ping/t/410_syn_host.t		Ping Net::Ping
 dist/Net-Ping/t/450_service.t		Ping Net::Ping
 dist/Net-Ping/t/500_ping_icmp.t		Ping Net::Ping
 dist/Net-Ping/t/510_ping_udp.t		Ping Net::Ping
-dist/perlfaq/lib/perlfaq1.pod		General Questions About Perl
-dist/perlfaq/lib/perlfaq2.pod	Obtaining and Learning about Perl
-dist/perlfaq/lib/perlfaq3.pod	Programming Tools
-dist/perlfaq/lib/perlfaq4.pod	Data Manipulation
-dist/perlfaq/lib/perlfaq5.pod	Files and Formats
-dist/perlfaq/lib/perlfaq6.pod	Regexes
-dist/perlfaq/lib/perlfaq7.pod	Perl Language Issues
-dist/perlfaq/lib/perlfaq8.pod	System Interaction
-dist/perlfaq/lib/perlfaq9.pod	Networking
-dist/perlfaq/lib/perlfaq.pm	Perl frequently asked questions
-dist/perlfaq/lib/perlfaq.pod	Perl frequently asked questions
 dist/Pod-Perldoc/lib/perldoc.pod			Look up Perl documentation in Pod format
 dist/Pod-Perldoc/lib/Pod/Perldoc/BaseTo.pm	utility module for perldoc
 dist/Pod-Perldoc/lib/Pod/Perldoc/GetOptsOO.pm	options parsing for perldoc
@@ -3373,6 +3373,7 @@ dist/threads-shared/t/disabled.t	Test threads::shared when threads are disabled.
 dist/threads-shared/t/hv_refs.t		Test shared hashes containing references
 dist/threads-shared/t/hv_simple.t	Tests for basic shared hash functionality.
 dist/threads-shared/t/no_share.t	Tests for disabled share on variables.
+dist/threads-shared/t/object2.t	More shared objects tests
 dist/threads-shared/t/object.t		Shared objects tests
 dist/threads-shared/t/shared_attr.t	Test :shared attribute
 dist/threads-shared/t/stress.t		Stress test
@@ -3606,8 +3607,8 @@ ext/PerlIO-via/hints/aix.pl	Hint for PerlIO::via for named architecture
 ext/PerlIO-via/t/via.t		See if PerlIO::via works
 ext/PerlIO-via/via.pm		PerlIO layer for layers in perl
 ext/PerlIO-via/via.xs		PerlIO layer for layers in perl
-ext/Pod-Html/Html.pm		Convert POD data to HTML
-ext/Pod-Html/pod2html.PL	Precursor for translator to turn pod into HTML
+ext/Pod-Html/bin/pod2html	Translator to turn pod into HTML
+ext/Pod-Html/lib/Pod/Html.pm	Convert POD data to HTML
 ext/Pod-Html/t/htmlescp.pod	pod2html escape test input data
 ext/Pod-Html/t/htmlescp.t	pod2html escape test
 ext/Pod-Html/t/htmllink.pod	pod2html link test input data
@@ -3632,6 +3633,7 @@ ext/POSIX/lib/POSIX.pm		POSIX extension Perl module
 ext/POSIX/lib/POSIX.pod		POSIX extension documentation
 ext/POSIX/Makefile.PL		POSIX extension makefile writer
 ext/POSIX/POSIX.xs		POSIX extension external subroutines
+ext/POSIX/t/export.t		Test @EXPORT and @EXPORT_OK
 ext/POSIX/t/is.t		See if POSIX isxxx() work
 ext/POSIX/t/math.t		Basic math tests for POSIX
 ext/POSIX/t/posix.t		See if POSIX works
@@ -3640,7 +3642,10 @@ ext/POSIX/t/sysconf.t		See if POSIX works
 ext/POSIX/t/taint.t		See if POSIX works with taint
 ext/POSIX/t/termios.t		See if POSIX works
 ext/POSIX/t/time.t		See if POSIX time-related functions work
+ext/POSIX/t/unimplemented.t	Test the diagnostics for unimplemented functions
+ext/POSIX/t/usage.t		Test the diagnostics for usage messages
 ext/POSIX/t/waitpid.t		See if waitpid works
+ext/POSIX/t/wrappers.t		Test the POSIX wrapper subroutines
 ext/POSIX/typemap		POSIX extension interface types
 ext/re/hints/mpeix.pl		Hints for re for named architecture
 ext/re/Makefile.PL		re extension makefile writer
@@ -3807,7 +3812,6 @@ form.h				Public declarations for formats
 generate_uudmap.c		Generate uudmap.h, the uuencode decoding map
 genpacksizetables.pl		Generate the size tables for pack/unpack
 globals.c			File to declare global symbols (for shared library)
-global.sym			Symbols that need hiding when embedded
 globvar.sym			Global variables that need hiding when embedded
 gv.c				Glob value code
 gv.h				Glob value header
@@ -4541,10 +4545,6 @@ Porting/exec-bit.txt		List of files that get +x in release tarball
 Porting/exercise_makedef.pl	Brute force testing for makedef.pl
 Porting/expand-macro.pl		A tool to expand C macro definitions in the Perl source
 Porting/findrfuncs		Find reentrant variants of functions used in an executable
-Porting/findvars		Find occurrences of words
-Porting/fixCORE			Find and fix modules that generate warnings
-Porting/fixvars			Find undeclared variables with C compiler and fix em
-Porting/genlog			Generate formatted changelogs by querying p4d
 Porting/git-deltatool		Mark commits for perldelta in git notes
 Porting/git-find-p4-change	Find the change for a p4 change number
 Porting/git-make-p4-refs	Output git refs for each p4 change number, suitable for appending to .git/packed-refs
@@ -4634,7 +4634,8 @@ regcharclass.h			Generated by regen/regcharclass.pl
 regcomp.c			Regular expression compiler
 regcomp.h			Private declarations for above
 regcomp.sym			Data for regnodes.h
-regen/embed.pl			Produces {embed,embedvar,proto}.h, global.sym
+regen/embed_lib.pl		Reads embed.fnc and regen/opcodes
+regen/embed.pl			Produces {embed,embedvar,proto}.h
 regen/keywords.pl		Program to write keywords.h
 regen/mg_vtable.pl		generate mg_vtable.h
 regen/mk_PL_charclass.pl	Populate the PL_charclass table
@@ -4927,8 +4928,8 @@ t/op/concat2.t			Tests too complex for concat.t
 t/op/concat.t			See if string concatenation works
 t/op/cond.t			See if conditional expressions work
 t/op/context.t			See if context propagation works
-t/op/coreinline.t		Test inlining of \&CORE::subs
-t/op/coresubs.t			Test &CORE::subs()
+t/op/coreamp.t			Test &foo() calls for CORE subs
+t/op/coresubs.t			Generics tests for CORE subs
 t/op/cproto.t			Check builtin prototypes
 t/op/crypt.t			See if crypt works
 t/op/dbm.t			See if dbmopen/dbmclose work
@@ -5231,6 +5232,7 @@ utils/perldoc.PL		A simple tool to find & display perl's documentation
 utils/perlivp.PL		installation verification procedure
 utils/piconv.PL			iconv(1), reinvented in perl
 utils/pl2pm.PL			A pl to pm translator
+utils/pod2html.PL		Translator to turn pod into HTML
 utils/prove.PL			The prove harness utility
 utils/ptardiff.PL		The ptardiff utility
 utils/ptargrep.PL		The ptargrep utility
@@ -5252,8 +5254,6 @@ vms/make_command.com		record MM[SK] command used to build Perl
 vms/mms2make.pl			convert descrip.mms to make syntax
 vms/munchconfig.c		performs shell $var substitution for VMS
 vms/myconfig.com		record local configuration info for bug report
-vms/sockadapt.c			glue for SockshShr socket support
-vms/sockadapt.h			glue for SockshShr socket support
 vms/test.com			DCL driver for regression tests
 vms/vms.c			VMS-specific C code for Perl core
 vms/vmsish.h			VMS-specific C header for Perl core

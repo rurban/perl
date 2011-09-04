@@ -2177,7 +2177,9 @@ Perl_doref(pTHX_ OP *o, I32 type, bool set_op_ref)
 	    o->op_private &= ~1;
 	}
 	else if (type == OP_RV2SV || type == OP_RV2AV || type == OP_RV2HV){
-	    o->op_private |= OPpENTERSUB_DEREF;
+	    o->op_private |= (type == OP_RV2AV ? OPpDEREF_AV
+			      : type == OP_RV2HV ? OPpDEREF_HV
+			      : OPpDEREF_SV);
 	    o->op_flags |= OPf_MOD;
 	}
 
@@ -3091,6 +3093,13 @@ Perl_convert(pTHX_ I32 type, I32 flags, OP *o)
 
     if (!(PL_opargs[type] & OA_MARK))
 	op_null(cLISTOPo->op_first);
+    else {
+	OP * const kid2 = cLISTOPo->op_first->op_sibling;
+	if (kid2 && kid2->op_type == OP_COREARGS) {
+	    op_null(cLISTOPo->op_first);
+	    kid2->op_private |= OPpCOREARGS_PUSHMARK;
+	}
+    }	
 
     o->op_type = (OPCODE)type;
     o->op_ppaddr = PL_ppaddr[type];
@@ -7685,7 +7694,16 @@ Perl_ck_fun(pTHX_ OP *o)
 	    tokid = &kid->op_sibling;
 	    kid = kid->op_sibling;
 	}
-	if (kid && kid->op_type == OP_COREARGS) return o;
+	if (kid && kid->op_type == OP_COREARGS) {
+	    bool optional = FALSE;
+	    while (oa) {
+		numargs++;
+		if (oa & OA_OPTIONAL) optional = TRUE;
+		oa = oa >> 4;
+	    }
+	    if (optional) o->op_private |= numargs;
+	    return o;
+	}
 
 	while (oa) {
 	    if (oa & OA_OPTIONAL || (oa & 7) == OA_LIST) {
@@ -10433,6 +10451,7 @@ Perl_coresub_op(pTHX_ SV * const coreargssv, const int code,
                       const int opnum)
 {
     OP * const argop = newSVOP(OP_COREARGS,0,coreargssv);
+    OP *o;
 
     PERL_ARGS_ASSERT_CORESUB_OP;
 
@@ -10445,6 +10464,19 @@ Perl_coresub_op(pTHX_ SV * const coreargssv, const int code,
 	                          newOP(OP_CALLER,0)
 	               )
 	       );
+    case OP_SELECT: /* which represents OP_SSELECT as well */
+	if (code)
+	    return newCONDOP(
+	                 0,
+	                 newBINOP(OP_GT, 0,
+	                          newAVREF(newGVOP(OP_GV, 0, PL_defgv)),
+	                          newSVOP(OP_CONST, 0, newSVuv(1))
+	                         ),
+	                 coresub_op(newSVuv((UV)OP_SSELECT), 0,
+	                            OP_SSELECT),
+	                 coresub_op(coreargssv, 0, OP_SELECT)
+	           );
+	/* FALL THROUGH */
     default:
 	switch (PL_opargs[opnum] & OA_CLASS_MASK) {
 	case OA_BASEOP:
@@ -10454,9 +10486,25 @@ Perl_coresub_op(pTHX_ SV * const coreargssv, const int code,
 	                      opnum == OP_WANTARRAY ? OPpOFFBYONE << 8 : 0)
 	           );
 	case OA_BASEOP_OR_UNOP:
-	    return newUNOP(opnum,0,argop);
+	    o = newUNOP(opnum,0,argop);
+	    if (opnum == OP_CALLER) o->op_private |= OPpOFFBYONE;
+	    else {
+	  onearg:
+	      if (is_handle_constructor(o, 1))
+		argop->op_private |= OPpCOREARGS_DEREF1;
+	    }
+	    return o;
 	default:
-	    return convert(opnum,0,argop);
+	    o = convert(opnum,0,argop);
+	    if (is_handle_constructor(o, 2))
+		argop->op_private |= OPpCOREARGS_DEREF2;
+	    if (scalar_mod_type(NULL, opnum))
+		argop->op_private |= OPpCOREARGS_SCALARMOD;
+	    if (opnum == OP_SUBSTR) {
+		o->op_private |= OPpMAYBE_LVSUB;
+		return o;
+	    }
+	    else goto onearg;
 	}
     }
 }

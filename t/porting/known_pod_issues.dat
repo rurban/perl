@@ -144,12 +144,9 @@ dist/extutils-parsexs/lib/perlxstut.pod	Verbatim line length including indents e
 dist/filter-simple/lib/filter/simple.pm	Verbatim paragraph in NAME section	1
 dist/locale-maketext/lib/locale/maketext.pod	No items in =over / =back list	1
 dist/locale-maketext/lib/locale/maketext/tpj13.pod	No items in =over / =back list	3
-dist/math-bigint/lib/math/bigfloat.pm	Apparent broken link	7
-dist/math-bigint/lib/math/bigfloat.pm	Apparent internal link is missing its forward slash	6
-dist/math-bigint/lib/math/bigint.pm	Apparent broken link	5
-dist/math-bigint/lib/math/bigint.pm	Apparent internal link is missing its forward slash	7
-dist/math-bigint/lib/math/bigint.pm	Verbatim line length including indents exceeds 79 by	86
-dist/math-bigint/lib/math/bigint.pm	empty section in previous paragraph	1
+dist/math-bigint/lib/math/bigfloat.pm	Apparent broken link	1
+dist/math-bigint/lib/math/bigint.pm	Apparent broken link	1
+dist/math-bigint/lib/math/bigint.pm	Verbatim line length including indents exceeds 79 by	77
 dist/math-bigint/lib/math/bigint/calcemu.pm	Apparent broken link	1
 dist/math-bigint/lib/math/bigint/calcemu.pm	empty section in previous paragraph	3
 dist/math-bigrat/lib/math/bigrat.pm	Apparent broken link	3
@@ -158,13 +155,6 @@ dist/math-bigrat/lib/math/bigrat.pm	Verbatim line length including indents excee
 dist/module-corelist/blib/script/corelist	Verbatim line length including indents exceeds 79 by	1
 dist/module-corelist/lib/module/corelist.pm	Verbatim line length including indents exceeds 79 by	4
 dist/net-ping/lib/net/ping.pm	Verbatim line length including indents exceeds 79 by	2
-dist/perlfaq/lib/perlfaq2.pod	Verbatim line length including indents exceeds 79 by	1
-dist/perlfaq/lib/perlfaq4.pod	Verbatim line length including indents exceeds 79 by	16
-dist/perlfaq/lib/perlfaq5.pod	Verbatim line length including indents exceeds 79 by	40
-dist/perlfaq/lib/perlfaq6.pod	Verbatim line length including indents exceeds 79 by	36
-dist/perlfaq/lib/perlfaq7.pod	Verbatim line length including indents exceeds 79 by	7
-dist/perlfaq/lib/perlfaq8.pod	Verbatim line length including indents exceeds 79 by	20
-dist/perlfaq/lib/perlfaq9.pod	Verbatim line length including indents exceeds 79 by	7
 dist/safe/safe.pm	Verbatim line length including indents exceeds 79 by	1
 dist/safe/safe.pm	empty section in previous paragraph	1
 dist/selfloader/lib/selfloader.pm	Verbatim line length including indents exceeds 79 by	14
@@ -181,6 +171,7 @@ ext/file-glob/glob.pm	Verbatim line length including indents exceeds 79 by	15
 ext/hash-util-fieldhash/lib/hash/util/fieldhash.pm	Verbatim line length including indents exceeds 79 by	2
 ext/i18n-langinfo/langinfo.pm	Verbatim line length including indents exceeds 79 by	1
 ext/opcode/opcode.pm	Verbatim line length including indents exceeds 79 by	10
+ext/pod-html/bin/pod2html	Pod NAME already used	1
 ext/posix/lib/posix.pod	Verbatim line length including indents exceeds 79 by	29
 ext/re/re.pm	Verbatim line length including indents exceeds 79 by	6
 ext/vms-dclsym/dclsym.pm	? Should you be using L<...> instead of	1
@@ -294,6 +285,7 @@ porting/release_schedule.pod	There is no NAME	1
 symbian/perlutil.pod	Verbatim line length including indents exceeds 79 by	4
 utils/c2ph	Verbatim line length including indents exceeds 79 by	44
 utils/libnetcfg	Apparent broken link	1
+utils/pod2html	Pod NAME already used	1
 vms/ext/filespec.pm	Verbatim line length including indents exceeds 79 by	1
 x2p/a2p.pod	empty section in previous paragraph	2
 lib/benchmark.pm	Verbatim line length including indents exceeds 79 by	4
@@ -322,7 +314,6 @@ lib/pod/text/overstrike.pm	Verbatim line length including indents exceeds 79 by	
 lib/tie/array.pm	Verbatim line length including indents exceeds 79 by	1
 lib/tie/hash.pm	Verbatim line length including indents exceeds 79 by	3
 lib/tie/scalar.pm	Verbatim line length including indents exceeds 79 by	1
-lib/unicode/ucd.pm	Verbatim line length including indents exceeds 79 by	1
 lib/deprecate.pm	Verbatim line length including indents exceeds 79 by	2
 lib/integer.pm	Verbatim line length including indents exceeds 79 by	1
 lib/overload.pm	Verbatim line length including indents exceeds 79 by	1
