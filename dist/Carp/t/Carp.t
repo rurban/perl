@@ -1,20 +1,26 @@
-BEGIN {
-    chdir 't' if -d 't';
-    @INC = '../lib';
-    require './test.pl';
-}
-
 use warnings;
 no warnings "once";
 use Config;
+
+use IPC::Open3 1.0103 qw(open3);
+use Test::More tests => 58;
+
+sub runperl {
+    my(%args) = @_;
+    my($w, $r);
+    my $pid = open3($w, $r, undef, $^X, "-e", $args{prog});
+    close $w;
+    my $output = "";
+    while(<$r>) { $output .= $_; }
+    waitpid($pid, 0);
+    return $output;
+}
 
 my $Is_VMS = $^O eq 'VMS';
 
 use Carp qw(carp cluck croak confess);
 
 BEGIN {
-    plan tests => 58;
-
     # This test must be run at BEGIN time, because code later in this file
     # sets CORE::GLOBAL::caller
     ok !exists $CORE::GLOBAL::{caller},
@@ -311,7 +317,9 @@ cluck_undef( 0, "undef", 2, undef, 4 );
 
 # check that Carp respects CORE::GLOBAL::caller override after Carp
 # has been compiled
-for my $bodge_job ( 2, 1, 0 ) {
+for my $bodge_job ( 2, 1, 0 ) { SKIP: {
+    skip "can't safely detect incomplete caller override on perl $]", 6
+	if $bodge_job && !Carp::CALLER_OVERRIDE_CHECK_OK;
     print '# ', ( $bodge_job ? 'Not ' : '' ),
         "setting \@DB::args in caller override\n";
     if ( $bodge_job == 1 ) {
@@ -359,55 +367,61 @@ for my $bodge_job ( 2, 1, 0 ) {
         $got, qr!A::long\($arg\) called at.+\b(?i:carp\.t) line \d+!,
         'Correct arguments for A'
     );
+} }
+
+SKIP: {
+    skip "can't safely detect incomplete caller override on perl $]", 1
+	unless Carp::CALLER_OVERRIDE_CHECK_OK;
+    eval q{
+	no warnings 'redefine';
+	sub CORE::GLOBAL::caller {
+	    my $height = $_[0];
+	    $height++;
+	    return CORE::caller($height);
+	}
+    };
+
+    my $got = A::long(42);
+
+    like(
+	$got,
+	qr!A::long\(\Q** Incomplete caller override detected; \E\@DB::args\Q were not set **\E\) called at.+\b(?i:carp\.t) line \d+!,
+	'Correct arguments for A'
+    );
 }
-
-eval <<'EOT';
-no warnings 'redefine';
-sub CORE::GLOBAL::caller {
-    my $height = $_[0];
-    $height++;
-    return CORE::caller($height);
-}
-EOT
-
-my $got = A::long(42);
-
-like(
-    $got,
-    qr!A::long\(\Q** Incomplete caller override detected; \E\@DB::args\Q were not set **\E\) called at.+\b(?i:carp\.t) line \d+!,
-    'Correct arguments for A'
-);
 
 # UTF8-flagged strings should not cause Carp to try to load modules (even
 # implicitly via utf8_heavy.pl) after a syntax error [perl #82854].
-fresh_perl_like(
- q<
-   use utf8; use strict; use Carp;
-   BEGIN { $SIG{__DIE__} = sub { Carp::croak "aaaaa$_[0]" } }
-   $c
-  >,
- qr/aaaaa/,
- {stderr=>1},
- 'Carp can handle UTF8-flagged strings after a syntax error',
+like(
+  runperl(
+    prog => q<
+      use utf8; use strict; use Carp;
+      BEGIN { $SIG{__DIE__} = sub { Carp::croak "aaaaa$_[0]" } }
+      $c
+    >,
+    stderr=>1,
+  ),
+  qr/aaaaa/,
+  'Carp can handle UTF8-flagged strings after a syntax error',
 );
 
 SKIP:
 {
     skip("B:: always created when static", 1)
       if $Config{static_ext} =~ /\bB\b/;
-
-    fresh_perl_is(
-     q<
-       use Carp;
-       $SIG{__WARN__} = sub{};
-       carp ("A duck, but which duck?");
-       print "ok" unless exists $::{"B::"};
-      >,
-     'ok',
-     {},
-     'Carp does not autovivify *B::'
+    is(
+      runperl(
+	prog => q<
+	  use Carp;
+	  $SIG{__WARN__} = sub{};
+	  carp ("A duck, but which duck?");
+	  print "ok" unless exists $::{"B::"};
+	>,
+      ),
+      'ok',
+      'Carp does not autovivify *B::',
     );
-  }
+}
 
 # New tests go here
 

@@ -342,8 +342,9 @@ use File::Glob qw(:case);
 
     'Carp' =>
 	{
-	'MAINTAINER'	=> 'p5p',
-	'FILES'		=> q[lib/Carp.{pm,t} lib/Carp/Heavy.pm],
+	'MAINTAINER'	=> 'zefram',
+	'DISTRIBUTION'	=> 'ZEFRAM/Carp-1.22.tar.gz',
+	'FILES'		=> q[dist/Carp],
 	'UPSTREAM'	=> 'blead',
 	},
 
@@ -480,7 +481,7 @@ use File::Glob qw(:case);
     'CPANPLUS::Dist::Build' =>
 	{
 	'MAINTAINER'	=> 'bingos',
-	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-Dist-Build-0.56.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-Dist-Build-0.58.tar.gz',
 	'FILES'		=> q[cpan/CPANPLUS-Dist-Build],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qw{ t/99_pod.t
@@ -753,7 +754,7 @@ use File::Glob qw(:case);
     'ExtUtils::ParseXS' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.04_01.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.04_03.tar.gz',
 	'FILES'		=> q[dist/ExtUtils-ParseXS],
 	'UPSTREAM'	=> 'blead',
 	},

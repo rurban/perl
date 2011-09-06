@@ -2918,6 +2918,11 @@ dist/B-Lint/lib/B/Lint/Debug.pm			Adds debugging stringification to B::
 dist/B-Lint/lib/B/Lint.pm			Compiler Lint backend
 dist/B-Lint/t/lint.t				See if B::Lint works
 dist/B-Lint/t/pluglib/B/Lint/Plugin/Test.pm	See if B::Lint works
+dist/Carp/lib/Carp/Heavy.pm	Error message retired workhorse
+dist/Carp/lib/Carp.pm		Error message extension
+dist/Carp/Makefile.PL		makefile writer for Carp
+dist/Carp/t/Carp.t		See if Carp works
+dist/Carp/t/vivify_gv.t		See if Carp leaves utf8:: stuff alone
 dist/constant/lib/constant.pm	For "use constant"
 dist/constant/t/constant.t	See if compile-time constants work
 dist/constant/t/utf8.t		Test Unicode constants under utf8 pragma
@@ -3949,9 +3954,6 @@ lib/blib.t			blib.pm test
 lib/bytes_heavy.pl		Support routines for byte pragma
 lib/bytes.pm			Pragma to enable byte operations
 lib/bytes.t			bytes.pm test
-lib/Carp/Heavy.pm		Error message workhorse
-lib/Carp.pm			Error message base class
-lib/Carp.t			See if Carp works
 lib/charnames.pm		Character names
 lib/charnames.t			See if character names work
 lib/Class/Struct.pm		Declare struct-like datatypes as Perl classes
@@ -4045,6 +4047,10 @@ lib/overload.t			See if operator overloading works
 lib/perl5db.pl			Perl debugging routines
 lib/perl5db.t			Tests for the Perl debugger
 lib/perl5db/t/breakpoint-bug	Test script used by perl5db.t
+lib/perl5db/t/disable-breakpoints-1	Test script used by perl5db.t
+lib/perl5db/t/disable-breakpoints-2	Test script used by perl5db.t
+lib/perl5db/t/disable-breakpoints-3	Test script used by perl5db.t
+lib/perl5db/t/EnableModule.pm	Tests for the Perl debugger
 lib/perl5db/t/eval-line-bug	Tests for the Perl debugger
 lib/perl5db/t/filename-line-breakpoint		Tests for the Perl debugger
 lib/perl5db/t/lvalue-bug	Tests for the Perl debugger

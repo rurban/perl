@@ -470,7 +470,7 @@ perltoc_pod_prereqs = extra.pods pod/perl5153delta.pod pod/perlapi.pod pod/perli
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
-Icwd = -Idist/Cwd -Idist/Cwd/lib
+Icwd = -Idist/Cwd -Idist/Cwd/lib -Idist/Carp/lib
 
 lintflags = \
     -b \
@@ -1300,7 +1300,7 @@ _cleaner2:
 	-rmdir cpan/CPANPLUS-Dist-Build/t/dummy-cpanplus cpan/CPANPLUS/t/dummy-cpanplus cpan/CPANPLUS/t/dummy-localmirror
 	-rmdir ext/B/lib
 	-rmdir lib/Archive/Tar lib/Archive lib/Attribute
-	-rmdir lib/CGI
+	-rmdir lib/CGI lib/Carp
 	-rmdir lib/Data lib/Devel lib/Digest
 	-rmdir lib/ExtUtils/Command lib/ExtUtils/Constant lib/ExtUtils/Liblist lib/ExtUtils/MakeMaker
 	-rmdir lib/File/Spec lib/Filter/Util lib/Filter

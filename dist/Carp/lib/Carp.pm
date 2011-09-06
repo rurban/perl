@@ -1,9 +1,30 @@
 package Carp;
 
+{ use 5.006; }
 use strict;
 use warnings;
 
-our $VERSION = '1.21';
+BEGIN {
+    no strict "refs";
+    if(exists($::{"utf8::"}) && exists($utf8::{"is_utf8"}) &&
+	    defined(*{"utf8::is_utf8"}{CODE})) {
+	*is_utf8 = \&{"utf8::is_utf8"};
+    } else {
+	*is_utf8 = sub { 0 };
+    }
+}
+
+BEGIN {
+    no strict "refs";
+    if(exists($::{"utf8::"}) && exists($utf8::{"downgrade"}) &&
+	    defined(*{"utf8::downgrade"}{CODE})) {
+	*downgrade = \&{"utf8::downgrade"};
+    } else {
+	*downgrade = sub {};
+    }
+}
+
+our $VERSION = '1.22';
 
 our $MaxEvalLen = 0;
 our $Verbose    = 0;
@@ -81,13 +102,29 @@ sub confess { die longmess @_ }
 sub carp    { warn shortmess @_ }
 sub cluck   { warn longmess @_ }
 
+BEGIN {
+    if("$]" >= 5.015002 || ("$]" >= 5.014002 && "$]" < 5.015) ||
+	    ("$]" >= 5.012005 && "$]" < 5.013)) {
+	*CALLER_OVERRIDE_CHECK_OK = sub () { 1 };
+    } else {
+	*CALLER_OVERRIDE_CHECK_OK = sub () { 0 };
+    }
+}
+
 sub caller_info {
     my $i = shift(@_) + 1;
     my %call_info;
     my $cgc = _cgc();
     {
+	# Some things override caller() but forget to implement the
+	# @DB::args part of it, which we need.  We check for this by
+	# pre-populating @DB::args with a sentinel which no-one else
+	# has the address of, so that we can detect whether @DB::args
+	# has been properly populated.  However, on earlier versions
+	# of perl this check tickles a bug in CORE::caller() which
+	# leaks memory.  So we only check on fixed perls.
+        @DB::args = \$i if CALLER_OVERRIDE_CHECK_OK;
         package DB;
-        @DB::args = \$i;    # A sentinel, which no-one else has the address of
         @call_info{
             qw(pack file line sub has_args wantarray evaltext is_require) }
             = $cgc ? $cgc->($i) : caller($i);
@@ -100,7 +137,7 @@ sub caller_info {
     my $sub_name = Carp::get_subname( \%call_info );
     if ( $call_info{has_args} ) {
         my @args;
-        if (   @DB::args == 1
+        if (CALLER_OVERRIDE_CHECK_OK && @DB::args == 1
             && ref $DB::args[0] eq ref \$i
             && $DB::args[0] == \$i ) {
             @DB::args = ();    # Don't let anyone see the address of $i
@@ -120,7 +157,7 @@ sub caller_info {
                 # returning CORE::GLOBAL::caller isn't useful for tracing the cause:
                 return if $package eq 'CORE::GLOBAL' && $subname eq 'caller';
                 " in &${package}::$subname";
-            } // '';
+            } || '';
             @args
                 = "** Incomplete caller override detected$where; \@DB::args were not set **";
         }
@@ -151,16 +188,20 @@ sub format_arg {
         $arg = str_len_trim( $arg, $MaxArgLen );
 
         # Quote it?
+        # Downgrade, and use [0-9] rather than \d, to avoid loading
+        # Unicode tables, which would be liable to fail if we're
+        # processing a syntax error.
+        downgrade($arg, 1);
         $arg = "'$arg'" unless $arg =~ /^-?[0-9.]+\z/;
-    }                                    # 0-9, not \d, as \d will try to
-    else {                               # load Unicode tables
+    }
+    else {
         $arg = 'undef';
     }
 
     # The following handling of "control chars" is direct from
     # the original code - it is broken on Unicode though.
     # Suggestions?
-    utf8::is_utf8($arg)
+    is_utf8($arg)
         or $arg =~ s/([[:cntrl:]]|[[:^ascii:]])/sprintf("\\x{%x}",ord($1))/eg;
     return $arg;
 }
@@ -581,3 +622,25 @@ The Carp routines don't handle exception objects currently.
 If called with a first argument that is a reference, they simply
 call die() or warn(), as appropriate.
 
+=head1 SEE ALSO
+
+L<Carp::Always>,
+L<Carp::Clan>
+
+=head1 AUTHOR
+
+The Carp module first appeared in Larry Wall's perl 5.000 distribution.
+Since then it has been modified by several of the perl 5 porters.
+Andrew Main (Zefram) <zefram@fysh.org> divested Carp into an independent
+distribution.
+
+=head1 COPYRIGHT
+
+Copyright (C) 1994-2011 Larry Wall
+
+Copyright (C) 2011 Andrew Main (Zefram) <zefram@fysh.org>
+
+=head1 LICENSE
+
+This module is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
