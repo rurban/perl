@@ -376,16 +376,45 @@ run through pod and spell checkers, e.g.
 Also, you may want to generate and view an HTML version of it to check
 formatting, e.g.
 
-    $ ./perl -Ilib ext/Pod-Html/pod2html pod/perldelta.pod > /tmp/perldelta.html
+    $ ./perl -Ilib ext/Pod-Html/bin/pod2html pod/perldelta.pod > /tmp/perldelta.html
 
 Another good HTML preview option is http://search.cpan.org/pod2html
 
 If you make changes, be sure to commit them.
 
+=head3 remove stale perldeltas
+
+For the first RC release that is ONLY for a BLEAD-FINAL, the perldeltas
+from the BLEAD-POINT releases since the previous BLEAD_FINAL should have
+now been consolidated into the current perldelta, and hence are now just
+useless clutter.  They can be removed using:
+
+    $ git rm <file1> <file2> ...
+
+For example, for RC0 of 5.16.0:
+
+    $ cd pod
+    $ git rm perldelta515*.pod
+
+All mention to them should also be removed.  Currently the files that
+need to be edited for this task are F<MANIFEST>, F<pod.list>,
+F<pod/perl.pod>, and F<win32/pod.mak> (including C<.man>, C<.html>, and
+C<.tex> entries for each removed pod).
+
+Then build a clean perl and do a full test
+
+    $ git status
+    $ git clean -dxf
+    $ ./Configure -Dusedevel -des
+    $ make
+    $ make test
+
+Once all tests pass, commit your changes.
 
 =head3 build a clean perl
 
-Make sure you have a gitwise-clean perl directory (no modified files,
+If you skipped the previous step (removing the stale perldeltas)
+make sure you have a gitwise-clean perl directory (no modified files,
 unpushed commits etc):
 
     $ git status
@@ -394,7 +423,6 @@ unpushed commits etc):
 then configure and build perl so that you have a Makefile and porting tools:
 
     $ ./Configure -Dusedevel -des && make
-
 
 =head3 update Module::CoreList
 
@@ -418,7 +446,7 @@ Then change to your perl checkout, and if necessary,
 
     $ make
 
-If this not the first update for this version (e.g. if it was updated
+If this is not the first update for this version (e.g. if it was updated
 when the version number was originally bumped), first edit
 F<dist/Module-CoreList/lib/Module/CoreList.pm> to delete the existing
 entries for this version from the C<%released> and C<%version> hashes:
@@ -784,15 +812,17 @@ may need to contact a PAUSE administrator or even bump the version of perl.
 
 Upload both the .gz and .bz2 versions of the tarball.
 
-Wait until you receive notification emails from the PAUSE indexer
-confirming that your uploads have been received.  IMPORTANT -- you will
-probably get an email that indexing has failed, due to module permissions.
-This is considered normal.
-
 Do not proceed any further until you are sure that your tarballs are on
 CPAN.  Check your authors directory on one of the "fast" CPAN mirrors
 (e.g., cpan.hexten.net
 or cpan.cpantesters.org) to confirm that your uploads have been successful.
+
+I<You MUST SKIP this step for RC>
+
+Wait until you receive notification emails from the PAUSE indexer
+confirming that your uploads have been received.  IMPORTANT -- you will
+probably get an email that indexing has failed, due to module permissions.
+This is considered normal.
 
 
 =head3 publish tag

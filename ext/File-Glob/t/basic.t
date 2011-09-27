@@ -10,7 +10,7 @@ BEGIN {
     }
 }
 use strict;
-use Test::More tests => 15;
+use Test::More tests => 18;
 BEGIN {use_ok('File::Glob', ':glob')};
 use Cwd ();
 
@@ -66,6 +66,46 @@ SKIP: {
 	fail(GLOB_ERROR);
     } else {
 	is_deeply (\@a, [$home]);
+    }
+}
+# check plain tilde expansion
+{
+    my $tilde_check = sub {
+        my @a = bsd_glob('~');
+
+        if (GLOB_ERROR) {
+            fail(GLOB_ERROR);
+        } else {
+            is_deeply (\@a, [$_[0]], join ' - ', 'tilde expansion', @_ > 1 ? $_[1] : ());
+        }
+    };
+    my $passwd_home = eval { (getpwuid($>))[7] };
+
+    TODO: {
+        local $TODO = 'directory brackets look like pattern brackets to glob' if $^O eq 'VMS';
+        local $ENV{HOME};
+        delete $ENV{HOME};
+        local $ENV{USERPROFILE};
+        delete $ENV{USERPROFILE};
+        $tilde_check->(defined $passwd_home ? $passwd_home : q{~}, 'no environment');
+    }
+
+    SKIP: {
+        skip 'MSWin32 only', 1 if $^O ne 'MSWin32';
+        local $ENV{HOME};
+        delete $ENV{HOME};
+        local $ENV{USERPROFILE};
+        $ENV{USERPROFILE} = 'sweet win32 home';
+        $tilde_check->(defined $passwd_home ? $passwd_home : $ENV{USERPROFILE}, 'USERPROFILE');
+    }
+
+    TODO: {
+        local $TODO = 'directory brackets look like pattern brackets to glob' if $^O eq 'VMS';
+        my $home = exists $ENV{HOME} ? $ENV{HOME}
+        : eval { getpwuid($>); 1 } ? (getpwuid($>))[7]
+        : $^O eq 'MSWin32' && exists $ENV{USERPROFILE} ? $ENV{USERPROFILE}
+        : q{~};
+        $tilde_check->($home);
     }
 }
 
@@ -124,9 +164,11 @@ print "# @a\n";
 is_deeply(\@a, [($vms_mode ? 'test.' : 'TEST'), 'a', 'b']);
 
 # "~" should expand to $ENV{HOME}
-$ENV{HOME} = "sweet home";
-@a = bsd_glob('~', GLOB_TILDE | GLOB_NOMAGIC);
-is_deeply(\@a, [$ENV{HOME}]);
+{
+    local $ENV{HOME} = "sweet home";
+    @a = bsd_glob('~', GLOB_TILDE | GLOB_NOMAGIC);
+    is_deeply(\@a, [$ENV{HOME}]);
+}
 
 # GLOB_ALPHASORT (default) should sort alphabetically regardless of case
 mkdir "pteerslo", 0777;

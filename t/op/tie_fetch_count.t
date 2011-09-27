@@ -7,7 +7,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 219);
+    plan (tests => 283);
 }
 
 use strict;
@@ -28,6 +28,7 @@ sub STORE { unshift @{$_[0]}, $_[1] }
 sub check_count {
     my $op = shift;
     my $expected = shift() // 1;
+    local $::Level = $::Level + 1;
     is $count, $expected,
         "FETCH called " . (
           $expected == 1 ? "just once" : 
@@ -43,6 +44,7 @@ tie my $var => 'main', 1;
 
 # Assignment.
 $dummy  =  $var         ; check_count "=";
+*dummy  =  $var         ; check_count '*glob = $tied';
 
 # Unary +/-
 $dummy  = +$var         ; check_count "unary +";
@@ -117,33 +119,18 @@ $dummy  = <$var0>       ; check_count '<readline>';
 $dummy  = <${var}>      ; check_count '<glob>';
 
 # File operators
-$dummy  = -r $var       ; check_count '-r';
-$dummy  = -w $var       ; check_count '-w';
-$dummy  = -x $var       ; check_count '-x';
-$dummy  = -o $var       ; check_count '-o';
-$dummy  = -R $var       ; check_count '-R';
-$dummy  = -W $var       ; check_count '-W';
-$dummy  = -X $var       ; check_count '-X';
-$dummy  = -O $var       ; check_count '-O';
-$dummy  = -e $var       ; check_count '-e';
-$dummy  = -z $var       ; check_count '-z';
-$dummy  = -s $var       ; check_count '-s';
-$dummy  = -f $var       ; check_count '-f';
-$dummy  = -d $var       ; check_count '-d';
+for (split //, 'rwxoRWXOezsfdpSbctugkTBMAC') {
+    no warnings 'unopened';
+    $dummy  = eval "-$_ \$var"; check_count "-$_";
+    # Make $var hold a glob:
+    $var = *dummy; $dummy = $var; $count = 0;
+    $dummy  = eval "-$_ \$var"; check_count "-$_ \$tied_glob";
+    next if /[guk]/;
+    $var = *dummy; $dummy = $var; $count = 0;
+    eval "\$dummy = -$_ \\\$var";
+    check_count "-$_ \\\$tied_glob";
+}
 $dummy  = -l $var       ; check_count '-l';
-$dummy  = -p $var       ; check_count '-p';
-$dummy  = -S $var       ; check_count '-S';
-$dummy  = -b $var       ; check_count '-b';
-$dummy  = -c $var       ; check_count '-c';
-$dummy  = -t $var       ; check_count '-t';
-$dummy  = -u $var       ; check_count '-u';
-$dummy  = -g $var       ; check_count '-g';
-$dummy  = -k $var       ; check_count '-k';
-$dummy  = -T $var       ; check_count '-T';
-$dummy  = -B $var       ; check_count '-B';
-$dummy  = -M $var       ; check_count '-M';
-$dummy  = -A $var       ; check_count '-A';
-$dummy  = -C $var       ; check_count '-C';
 
 # Matching
 $_ = "foo";
@@ -206,6 +193,7 @@ tie my $var8 => 'main', 'main';
 sub bolgy {}
 $var8->bolgy            ; check_count '->method';
 {
+    no warnings 'once';
     () = *swibble;
     # This must be the name of an existing glob to trigger the maximum
     # number of fetches in 5.14:
@@ -213,6 +201,19 @@ $var8->bolgy            ; check_count '->method';
     no strict 'refs';
     use constant glumscrin => 'shreggleboughet';
     *$var9 = \&{"glumscrin"}; check_count '*$tied = \&{"name of const"}';
+}
+
+# Functions that operate on filenames or filehandles
+for ([chdir=>''],[chmod=>'0,'],[chown=>'0,0,'],[utime=>'0,0,'],
+     [truncate=>'',',0'],[stat=>''],[lstat=>'']) {
+    my($op,$args,$postargs) = @$_; $postargs //= '';
+    # This line makes $var8 hold a glob:
+    $var8 = *dummy; $dummy = $var8; $count = 0;
+    eval "$op $args \$var8 $postargs";
+    check_count "$op $args\$tied_glob$postargs";
+    $var8 = *dummy; $dummy = $var8; $count = 0;
+    eval "$op $args \\\$var8 $postargs";
+    check_count "$op $args\\\$tied_glob$postargs";
 }
 
 ###############################################

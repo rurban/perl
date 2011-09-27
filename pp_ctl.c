@@ -2917,6 +2917,7 @@ PP(pp_goto)
 			sub_crush_depth(cv);
 		    pad_push(padlist, CvDEPTH(cv));
 		}
+		PL_curcop = cx->blk_oldcop;
 		SAVECOMPPAD();
 		PAD_SET_CUR_NOSAVE(padlist, CvDEPTH(cv));
 		if (CxHASARGS(cx))
@@ -3508,7 +3509,6 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
 
     PL_eval_root = NULL;
     PL_curcop = &PL_compiling;
-    CopARYBASE_set(PL_curcop, 0);
     if (saveop && (saveop->op_type != OP_REQUIRE) && (saveop->op_flags & OPf_SPECIAL))
 	PL_in_eval |= EVAL_KEEPERR;
     else
@@ -3634,7 +3634,7 @@ S_check_type_and_open(pTHX_ SV *name)
     }
 
 #if !defined(PERLIO_IS_STDIO) && !defined(USE_SFIO)
-    return PerlIO_openn(aTHX_ NULL, PERL_SCRIPT_MODE, -1, 0, 0, NULL, 1, &name);
+    return PerlIO_openn(aTHX_ ":", PERL_SCRIPT_MODE, -1, 0, 0, NULL, 1, &name);
 #else
     return PerlIO_open(p, PERL_SCRIPT_MODE);
 #endif
@@ -4445,14 +4445,14 @@ S_destroy_matcher(pTHX_ PMOP *matcher)
 PP(pp_smartmatch)
 {
     DEBUG_M(Perl_deb(aTHX_ "Starting smart match resolution\n"));
-    return do_smartmatch(NULL, NULL);
+    return do_smartmatch(NULL, NULL, 0);
 }
 
 /* This version of do_smartmatch() implements the
  * table of smart matches that is found in perlsyn.
  */
 STATIC OP *
-S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
+S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other, const bool copied)
 {
     dVAR;
     dSP;
@@ -4464,7 +4464,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
     /* Take care only to invoke mg_get() once for each argument.
      * Currently we do this by copying the SV if it's magical. */
     if (d) {
-	if (SvGMAGICAL(d))
+	if (!copied && SvGMAGICAL(d))
 	    d = sv_mortalcopy(d);
     }
     else
@@ -4775,7 +4775,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
 			
 			PUTBACK;
 			DEBUG_M(Perl_deb(aTHX_ "        recursively comparing array element...\n"));
-			(void) do_smartmatch(seen_this, seen_other);
+			(void) do_smartmatch(seen_this, seen_other, 0);
 			SPAGAIN;
 			DEBUG_M(Perl_deb(aTHX_ "        recursion finished\n"));
 			
@@ -4837,7 +4837,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other)
 		    PUTBACK;
 		    /* infinite recursion isn't supposed to happen here */
 		    DEBUG_M(Perl_deb(aTHX_ "        recursively testing array element...\n"));
-		    (void) do_smartmatch(NULL, NULL);
+		    (void) do_smartmatch(NULL, NULL, 1);
 		    SPAGAIN;
 		    DEBUG_M(Perl_deb(aTHX_ "        recursion finished\n"));
 		    if (SvTRUEx(POPs))

@@ -333,7 +333,8 @@ $make_set_make
 
 # If you're going to use valgrind and it can't be invoked as plain valgrind
 # then you'll need to change this, or override it on the make command line.
-VALGRIND=valgrind
+VALGRIND ?= valgrind
+VG_TEST  ?= ./perl -e 1 2>/dev/null
 
 DTRACE = $dtrace
 DTRACE_H = $dtrace_h
@@ -466,7 +467,7 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5153delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5154delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -891,7 +892,7 @@ perl.valgrind.config: config.sh
 	@grep "^usemymalloc="    config.sh
 	@grep "^usemymalloc='n'" config.sh >/dev/null || exit 1
 	@echo "And of course you have to have valgrind..."
-	$(VALGRIND) ./perl -e 1 2>/dev/null || exit 1
+	$(VALGRIND) $(VG_TEST) || exit 1
 
 # Third Degree Perl (Tru64 only)
 
@@ -1037,8 +1038,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5153delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5153delta.pod
+pod/perl5154delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5154delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`

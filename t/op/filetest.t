@@ -10,7 +10,7 @@ BEGIN {
 }
 
 use Config;
-plan(tests => 28 + 27*14);
+plan(tests => 34 + 27*14);
 
 ok( -d 'op' );
 ok( -f 'TEST' );
@@ -88,6 +88,38 @@ is( -s $tempfile, 0 );
 is( -f -s $tempfile, 0 );
 is( -s -f $tempfile, 0 );
 unlink_all $tempfile;
+
+# stacked -l
+eval { -l -e "TEST" };
+like $@, qr/^The stat preceding -l _ wasn't an lstat at /,
+  'stacked -l non-lstat error with warnings off';
+{
+ local $^W = 1;
+ eval { -l -e "TEST" };
+ like $@, qr/^The stat preceding -l _ wasn't an lstat at /,
+  'stacked -l non-lstat error with warnings on';
+}
+# Make sure -l is using the previous stat buffer, and not using the previ-
+# ous op’s return value as a file name.
+SKIP: {
+ use Perl::OSType 'os_type';
+ if (os_type ne 'Unix') { skip "Not Unix", 2 }
+ if (-l "TEST") { skip "TEST is a symlink", 2 }
+ chomp(my $ln = `which ln`);
+ if ( ! -e $ln ) { skip "No ln"   , 2 }
+ lstat "TEST";
+ `ln -s TEST 1`;
+ ok ! -l -e _, 'stacked -l uses previous stat, not previous retval';
+ unlink 1;
+
+ # Since we already have our skip block set up, we might as well put this
+ # test here, too:
+ # -l always treats a non-bareword argument as a file name
+ system qw "ln -s TEST", \*foo;
+ local $^W = 1;
+ ok -l \*foo, '-l \*foo is a file name';
+ unlink \*foo;
+}
 
 # test that _ is a bareword after filetest operators
 
@@ -197,4 +229,21 @@ for my $op (split //, "rwxoRWXOezsfdlpSbctugkTMBAC") {
 
     is( eval "-r -$op \$ft", "-r",      "stacked overloaded -$op" );
     is( eval "-$op -r \$ft", "-$op",    "overloaded stacked -$op" );
+}
+
+# -l stack corruption: this bug occurred from 5.8 to 5.14
+{
+ push my @foo, "bar", -l baz;
+ is $foo[0], "bar", '-l bareword does not corrupt the stack';
+}
+
+# File test ops should not call get-magic on the topmost SV on the stack if
+# it belongs to another op.
+{
+  my $w;
+  sub oon::TIESCALAR{bless[],'oon'}
+  sub oon::FETCH{$w++}
+  tie my $t, 'oon';
+  push my @a, $t, -t;
+  is $w, 1, 'file test does not call FETCH on stack item not its own';
 }

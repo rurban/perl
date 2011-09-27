@@ -861,10 +861,7 @@ Perl_nextargv(pTHX_ register GV *gv)
 #ifdef HAS_FCHMOD
 		(void)fchmod(PL_lastfd,PL_filemode);
 #else
-#  if !(defined(WIN32) && defined(__BORLANDC__))
-		/* Borland runtime creates a readonly file! */
 		(void)PerlLIO_chmod(PL_oldname,PL_filemode);
-#  endif
 #endif
 		if (fileuid != PL_statbuf.st_uid || filegid != PL_statbuf.st_gid) {
 #ifdef HAS_FCHOWN
@@ -1302,12 +1299,7 @@ Perl_my_stat_flags(pTHX_ const U32 flags)
 	const char *s;
 	STRLEN len;
 	PUTBACK;
-	if (isGV_with_GP(sv)) {
-	    gv = MUTABLE_GV(sv);
-	    goto do_fstat;
-	}
-	else if (SvROK(sv) && isGV_with_GP(SvRV(sv))) {
-	    gv = MUTABLE_GV(SvRV(sv));
+	if ((gv = MAYBE_DEREF_GV_flags(sv,flags))) {
 	    goto do_fstat;
 	}
         else if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVIO) {
@@ -1347,22 +1339,19 @@ Perl_my_lstat_flags(pTHX_ const U32 flags)
 	if (ckWARN(WARN_IO)) {
 	    Perl_warner(aTHX_ packWARN(WARN_IO), "Use of -l on filehandle %s",
 		    GvENAME(cGVOP_gv));
-	    return (PL_laststatval = -1);
 	}
+	return (PL_laststatval = -1);
     }
-    else if (PL_laststype != OP_LSTAT
-	    && (PL_op->op_private & OPpFT_STACKED) && ckWARN(WARN_IO))
+    else if (PL_op->op_private & OPpFT_STACKED) {
+      if (PL_laststype != OP_LSTAT)
 	Perl_croak(aTHX_ no_prev_lstat);
+      return PL_laststatval;
+    } 
 
     PL_laststype = OP_LSTAT;
     PL_statgv = NULL;
     sv = POPs;
     PUTBACK;
-    if (SvROK(sv) && isGV_with_GP(SvRV(sv)) && ckWARN(WARN_IO)) {
-	Perl_warner(aTHX_ packWARN(WARN_IO), "Use of -l on filehandle %s",
-		GvENAME((const GV *)SvRV(sv)));
-	return (PL_laststatval = -1);
-    }
     file = SvPV_flags_const_nolen(sv, flags);
     sv_setpv(PL_statname,file);
     PL_laststatval = PerlLIO_lstat(file,&PL_statcache);
@@ -1619,9 +1608,7 @@ Perl_apply(pTHX_ I32 type, register SV **mark, register SV **sp)
 	    tot = sp - mark;
 	    while (++mark <= sp) {
                 GV* gv;
-                if (isGV_with_GP(*mark)) {
-                    gv = MUTABLE_GV(*mark);
-		do_fchmod:
+                if ((gv = MAYBE_DEREF_GV(*mark))) {
 		    if (GvIO(gv) && IoIFP(GvIOp(gv))) {
 #ifdef HAS_FCHMOD
 			APPLY_TAINT_PROPER();
@@ -1635,12 +1622,8 @@ Perl_apply(pTHX_ I32 type, register SV **mark, register SV **sp)
 			tot--;
 		    }
 		}
-		else if (SvROK(*mark) && isGV_with_GP(SvRV(*mark))) {
-		    gv = MUTABLE_GV(SvRV(*mark));
-		    goto do_fchmod;
-		}
 		else {
-		    const char *name = SvPV_nolen_const(*mark);
+		    const char *name = SvPV_nomg_const_nolen(*mark);
 		    APPLY_TAINT_PROPER();
 		    if (PerlLIO_chmod(name, val))
 			tot--;
@@ -1659,9 +1642,7 @@ Perl_apply(pTHX_ I32 type, register SV **mark, register SV **sp)
 	    tot = sp - mark;
 	    while (++mark <= sp) {
                 GV* gv;
-                if (isGV_with_GP(*mark)) {
-                    gv = MUTABLE_GV(*mark);
-		do_fchown:
+		if ((gv = MAYBE_DEREF_GV(*mark))) {
 		    if (GvIO(gv) && IoIFP(GvIOp(gv))) {
 #ifdef HAS_FCHOWN
 			APPLY_TAINT_PROPER();
@@ -1675,12 +1656,8 @@ Perl_apply(pTHX_ I32 type, register SV **mark, register SV **sp)
 			tot--;
 		    }
 		}
-		else if (SvROK(*mark) && isGV_with_GP(SvRV(*mark))) {
-		    gv = MUTABLE_GV(SvRV(*mark));
-		    goto do_fchown;
-		}
 		else {
-		    const char *name = SvPV_nolen_const(*mark);
+		    const char *name = SvPV_nomg_const_nolen(*mark);
 		    APPLY_TAINT_PROPER();
 		    if (PerlLIO_chown(name, val, val2))
 			tot--;
@@ -1845,9 +1822,7 @@ nothing in the core.
 	    tot = sp - mark;
 	    while (++mark <= sp) {
                 GV* gv;
-                if (isGV_with_GP(*mark)) {
-                    gv = MUTABLE_GV(*mark);
-		do_futimes:
+                if ((gv = MAYBE_DEREF_GV(*mark))) {
 		    if (GvIO(gv) && IoIFP(GvIOp(gv))) {
 #ifdef HAS_FUTIMES
 			APPLY_TAINT_PROPER();
@@ -1862,12 +1837,8 @@ nothing in the core.
 			tot--;
 		    }
 		}
-		else if (SvROK(*mark) && isGV_with_GP(SvRV(*mark))) {
-		    gv = MUTABLE_GV(SvRV(*mark));
-		    goto do_futimes;
-		}
 		else {
-		    const char * const name = SvPV_nolen_const(*mark);
+		    const char * const name = SvPV_nomg_const_nolen(*mark);
 		    APPLY_TAINT_PROPER();
 #ifdef HAS_FUTIMES
 		    if (utimes(name, (struct timeval *)utbufp))
@@ -2304,7 +2275,8 @@ Perl_do_shmio(pTHX_ I32 optype, SV **mark, SV **sp)
 	/* suppress warning when reading into undef var (tchrist 3/Mar/00) */
 	if (! SvOK(mstr))
 	    sv_setpvs(mstr, "");
-	SvPV_force_nolen(mstr);
+	SvUPGRADE(mstr, SVt_PV);
+	SvPOK_only(mstr);
 	mbuf = SvGROW(mstr, (STRLEN)msize+1);
 
 	Copy(shm + mpos, mbuf, msize, char);
@@ -2400,6 +2372,7 @@ Perl_vms_start_glob
 #endif
 #endif /* !CSH */
 #endif /* !DOSISH */
+    save_hash(gv_fetchpvs("ENV", 0, SVt_PVHV));
     (void)do_open(PL_last_in_gv, (char*)SvPVX_const(tmpcmd), SvCUR(tmpcmd),
 		  FALSE, O_RDONLY, 0, NULL);
     fp = IoIFP(io);

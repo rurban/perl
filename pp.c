@@ -155,12 +155,11 @@ static SV *
 S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
               const bool noinit)
 {
-    dSP; dVAR;
+    dVAR;
     if (!isGV(sv) || SvFAKE(sv)) SvGETMAGIC(sv);
     if (SvROK(sv)) {
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, to_gv_amg);
-	    SPAGAIN;
 	}
       wasref:
 	sv = SvRV(sv);
@@ -209,10 +208,8 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 	    }
 	    if (noinit)
 	    {
-		STRLEN len;
-		const char * const nambeg = SvPV_nomg_const(sv, len);
-		if (!(sv = MUTABLE_SV(gv_fetchpvn_flags(
-		           nambeg, len, SvUTF8(sv)|GV_ADDMG, SVt_PVGV
+		if (!(sv = MUTABLE_SV(gv_fetchsv_nomg(
+		           sv, GV_ADDMG, SVt_PVGV
 		   ))))
 		    return &PL_sv_undef;
 	    }
@@ -232,15 +229,7 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 		       things.  */
 		    return sv;
 		}
-		{
-		    STRLEN len;
-		    const char * const nambeg = SvPV_nomg_const(sv, len);
-		    sv = MUTABLE_SV(
-			gv_fetchpvn_flags(
-			    nambeg, len, GV_ADD | SvUTF8(sv), SVt_PVGV
-			)
-		    );
-		}
+		sv = MUTABLE_SV(gv_fetchsv_nomg(sv, GV_ADD, SVt_PVGV));
 	    }
 	    /* FAKE globs in the symbol table cause weird bugs (#77810) */
 	    SvFAKE_off(sv);
@@ -306,20 +295,14 @@ Perl_softref2xv(pTHX_ SV *const sv, const char *const what,
     if ((PL_op->op_flags & OPf_SPECIAL) &&
 	!(PL_op->op_flags & OPf_MOD))
 	{
-	    STRLEN len;
-	    const char * const nambeg = SvPV_nomg_const(sv, len);
-	    if (!(gv = gv_fetchpvn_flags(
-	                   nambeg, len, SvUTF8(sv)|GV_ADDMG, type
-	       )))
+	    if (!(gv = gv_fetchsv_nomg(sv, GV_ADDMG, type)))
 		{
 		    **spp = &PL_sv_undef;
 		    return NULL;
 		}
 	}
     else {
-	STRLEN len;
-	const char * const nambeg = SvPV_nomg_const(sv, len);
-	gv = gv_fetchpvn_flags(nambeg, len, GV_ADD | SvUTF8(sv), type);
+	gv = gv_fetchsv_nomg(sv, GV_ADD, type);
     }
     return gv;
 }
@@ -386,9 +369,7 @@ PP(pp_av2arylen)
 	}
 	SETs(*sv);
     } else {
-	SETs(sv_2mortal(newSViv(
-	    AvFILL(MUTABLE_AV(av)) + CopARYBASE_get(PL_curcop)
-	)));
+	SETs(sv_2mortal(newSViv(AvFILL(MUTABLE_AV(av)))));
     }
     RETURN;
 }
@@ -413,7 +394,7 @@ PP(pp_pos)
 		I32 i = mg->mg_len;
 		if (DO_UTF8(sv))
 		    sv_pos_b2u(sv, &i);
-		PUSHi(i + CopARYBASE_get(PL_curcop));
+		PUSHi(i);
 		RETURN;
 	    }
 	}
@@ -1070,64 +1051,29 @@ PP(pp_undef)
     RETPUSHUNDEF;
 }
 
-PP(pp_predec)
-{
-    dVAR; dSP;
-    if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
-	Perl_croak_no_modify(aTHX);
-    if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
-        && SvIVX(TOPs) != IV_MIN)
-    {
-	SvIV_set(TOPs, SvIVX(TOPs) - 1);
-	SvFLAGS(TOPs) &= ~(SVp_NOK|SVp_POK);
-    }
-    else
-	sv_dec(TOPs);
-    SvSETMAGIC(TOPs);
-    return NORMAL;
-}
-
 PP(pp_postinc)
 {
     dVAR; dSP; dTARGET;
-    if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
+    const bool inc =
+	PL_op->op_type == OP_POSTINC || PL_op->op_type == OP_I_POSTINC;
+    if (SvTYPE(TOPs) >= SVt_PVAV || (isGV_with_GP(TOPs) && !SvFAKE(TOPs)))
 	Perl_croak_no_modify(aTHX);
     if (SvROK(TOPs))
 	TARG = sv_newmortal();
     sv_setsv(TARG, TOPs);
     if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
-        && SvIVX(TOPs) != IV_MAX)
+        && SvIVX(TOPs) != (inc ? IV_MAX : IV_MIN))
     {
-	SvIV_set(TOPs, SvIVX(TOPs) + 1);
+	SvIV_set(TOPs, SvIVX(TOPs) + (inc ? 1 : -1));
 	SvFLAGS(TOPs) &= ~(SVp_NOK|SVp_POK);
     }
-    else
+    else if (inc)
 	sv_inc_nomg(TOPs);
+    else sv_dec_nomg(TOPs);
     SvSETMAGIC(TOPs);
     /* special case for undef: see thread at 2003-03/msg00536.html in archive */
-    if (!SvOK(TARG))
+    if (inc && !SvOK(TARG))
 	sv_setiv(TARG, 0);
-    SETs(TARG);
-    return NORMAL;
-}
-
-PP(pp_postdec)
-{
-    dVAR; dSP; dTARGET;
-    if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
-	Perl_croak_no_modify(aTHX);
-    if (SvROK(TOPs))
-	TARG = sv_newmortal();
-    sv_setsv(TARG, TOPs);
-    if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
-        && SvIVX(TOPs) != IV_MIN)
-    {
-	SvIV_set(TOPs, SvIVX(TOPs) - 1);
-	SvFLAGS(TOPs) &= ~(SVp_NOK|SVp_POK);
-    }
-    else
-	sv_dec_nomg(TOPs);
-    SvSETMAGIC(TOPs);
     SETs(TARG);
     return NORMAL;
 }
@@ -3023,7 +2969,6 @@ PP(pp_substr)
     int    len_is_uv = 1;
     const I32 lvalue = PL_op->op_flags & OPf_MOD || LVRET;
     const char *tmps;
-    const IV arybase = CopARYBASE_get(PL_curcop);
     SV *repl_sv = NULL;
     const char *repl = NULL;
     STRLEN repl_len;
@@ -3069,32 +3014,12 @@ PP(pp_substr)
     else
 	utf8_curlen = 0;
 
-    if ( (pos1_is_uv && arybase < 0) || (pos1_iv >= arybase) ) { /* pos >= $[ */
-	UV pos1_uv = pos1_iv-arybase;
-	/* Overflow can occur when $[ < 0 */
-	if (arybase < 0 && pos1_uv < (UV)pos1_iv)
-	    goto bound_fail;
-	pos1_iv = pos1_uv;
-	pos1_is_uv = 1;
+    if (!pos1_is_uv && pos1_iv < 0 && curlen) {
+	pos1_is_uv = curlen-1 > ~(UV)pos1_iv;
+	pos1_iv += curlen;
     }
-    else if (pos1_is_uv ? (UV)pos1_iv > 0 : pos1_iv > 0) {
-	goto bound_fail;  /* $[=3; substr($_,2,...) */
-    }
-    else { /* pos < $[ */
-	if (pos1_iv == 0) { /* $[=1; substr($_,0,...) */
-	    pos1_iv = curlen;
-	    pos1_is_uv = 1;
-	} else {
-	    if (curlen) {
-		pos1_is_uv = curlen-1 > ~(UV)pos1_iv;
-		pos1_iv += curlen;
-	   }
-	}
-    }
-    if (pos1_is_uv || pos1_iv > 0) {
-	if ((UV)pos1_iv > curlen)
-	    goto bound_fail;
-    }
+    if ((pos1_is_uv || pos1_iv > 0) && (UV)pos1_iv > curlen)
+	goto bound_fail;
 
     if (num_args > 2) {
 	if (!len_is_uv && len_iv < 0) {
@@ -3251,17 +3176,13 @@ PP(pp_index)
     I32 retval;
     const char *big_p;
     const char *little_p;
-    const I32 arybase = CopARYBASE_get(PL_curcop);
     bool big_utf8;
     bool little_utf8;
     const bool is_index = PL_op->op_type == OP_INDEX;
     const bool threeargs = MAXARG >= 3 && (TOPs || ((void)POPs,0));
 
-    if (threeargs) {
-	/* arybase is in characters, like offset, so combine prior to the
-	   UTF-8 to bytes calculation.  */
-	offset = POPi - arybase;
-    }
+    if (threeargs)
+	offset = POPi;
     little = POPs;
     big = POPs;
     big_p = SvPV_const(big, biglen);
@@ -3356,7 +3277,7 @@ PP(pp_index)
     }
     SvREFCNT_dec(temp);
  fail:
-    PUSHi(retval + arybase);
+    PUSHi(retval);
     RETURN;
 }
 
@@ -4395,7 +4316,6 @@ PP(pp_aslice)
     register const I32 lval = (PL_op->op_flags & OPf_MOD || LVRET);
 
     if (SvTYPE(av) == SVt_PVAV) {
-	const I32 arybase = CopARYBASE_get(PL_curcop);
 	const bool localizing = PL_op->op_private & OPpLVAL_INTRO;
 	bool can_preserve = FALSE;
 
@@ -4423,8 +4343,6 @@ PP(pp_aslice)
 	    I32 elem = SvIV(*MARK);
 	    bool preeminent = TRUE;
 
-	    if (elem > 0)
-		elem -= arybase;
 	    if (localizing && can_preserve) {
 		/* If we can determine whether the element exist,
 		 * Try to preserve the existenceness of a tied array
@@ -4510,7 +4428,7 @@ PP(pp_aeach)
     }
 
     EXTEND(SP, 2);
-    mPUSHi(CopARYBASE_get(PL_curcop) + current);
+    mPUSHi(current);
     if (gimme == G_ARRAY) {
 	SV **const element = av_fetch(array, current, 0);
         PUSHs(element ? *element : &PL_sv_undef);
@@ -4533,13 +4451,12 @@ PP(pp_akeys)
     }
     else if (gimme == G_ARRAY) {
         IV n = Perl_av_len(aTHX_ array);
-        IV i = CopARYBASE_get(PL_curcop);
+        IV i;
 
         EXTEND(SP, n + 1);
 
 	if (PL_op->op_type == OP_AKEYS || PL_op->op_type == OP_RKEYS) {
-	    n += i;
-	    for (;  i <= n;  i++) {
+	    for (i = 0;  i <= n;  i++) {
 		mPUSHi(i);
 	    }
 	}
@@ -4945,7 +4862,6 @@ PP(pp_lslice)
     SV ** const lastlelem = PL_stack_base + POPMARK;
     SV ** const firstlelem = PL_stack_base + POPMARK + 1;
     register SV ** const firstrelem = lastlelem + 1;
-    const I32 arybase = CopARYBASE_get(PL_curcop);
     I32 is_something_there = FALSE;
 
     register const I32 max = lastrelem - lastlelem;
@@ -4955,8 +4871,6 @@ PP(pp_lslice)
 	I32 ix = SvIV(*lastlelem);
 	if (ix < 0)
 	    ix += max;
-	else
-	    ix -= arybase;
 	if (ix < 0 || ix >= max)
 	    *firstlelem = &PL_sv_undef;
 	else
@@ -4974,8 +4888,6 @@ PP(pp_lslice)
 	I32 ix = SvIV(*lelem);
 	if (ix < 0)
 	    ix += max;
-	else
-	    ix -= arybase;
 	if (ix < 0 || ix >= max)
 	    *lelem = &PL_sv_undef;
 	else {
@@ -5079,8 +4991,6 @@ PP(pp_splice)
 	offset = i = SvIV(*MARK);
 	if (offset < 0)
 	    offset += AvFILLp(ary) + 1;
-	else
-	    offset -= CopARYBASE_get(PL_curcop);
 	if (offset < 0)
 	    DIE(aTHX_ PL_no_aelem, i);
 	if (++MARK < SP) {

@@ -1417,7 +1417,10 @@ Perl_lex_read_unichar(pTHX_ U32 flags)
     if (c != -1) {
 	if (c == '\n')
 	    CopLINE_inc(PL_curcop);
-	PL_parser->bufptr += UTF8SKIP(PL_parser->bufptr);
+	if (UTF)
+	    PL_parser->bufptr += UTF8SKIP(PL_parser->bufptr);
+	else
+	    ++(PL_parser->bufptr);
     }
     return c;
 }
@@ -6023,14 +6026,6 @@ Perl_yylex(pTHX)
 	    PREREF('$');
 	}
 
-	/* This kludge not intended to be bulletproof. */
-	if (PL_tokenbuf[1] == '[' && !PL_tokenbuf[2]) {
-	    pl_yylval.opval = newSVOP(OP_CONST, 0,
-				   newSViv(CopARYBASE_get(&PL_compiling)));
-	    pl_yylval.opval->op_private = OPpCONST_ARYBASE;
-	    TERM(THING);
-	}
-
 	d = s;
 	{
 	    const char tmp = *s;
@@ -6927,8 +6922,7 @@ Perl_yylex(pTHX)
 
 	case KEY___FILE__:
 	    FUN0OP(
-		pl_yylval.opval = (OP*)newSVOP(OP_CONST, 0,
-					newSVpv(CopFILE(PL_curcop),0))
+		(OP*)newSVOP(OP_CONST, 0, newSVpv(CopFILE(PL_curcop),0))
 	    );
 
 	case KEY___LINE__:
@@ -6987,12 +6981,6 @@ Perl_yylex(pTHX)
 #else
 		    if (PerlLIO_setmode(PerlIO_fileno(PL_rsfp), O_TEXT) != -1) {
 #endif	/* NETWARE */
-#ifdef PERLIO_IS_STDIO /* really? */
-#  if defined(__BORLANDC__)
-			/* XXX see note in do_binmode() */
-			((FILE*)PL_rsfp)->flags &= ~_F_BIN;
-#  endif
-#endif
 			if (loc > 0)
 			    PerlIO_seek(PL_rsfp, loc, 0);
 		    }

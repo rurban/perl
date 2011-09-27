@@ -16,18 +16,30 @@ use autodie;
 sub usage
 {
     my $err = shift and select STDERR;
-    print "usage: $0 [--list]\n";
+    print "usage: $0 [--list] [--regen] [--default=value]\n";
     exit $err;
     } # usage
 
 use Getopt::Long;
 my $opt_l = 0;
+my $opt_r = 0;
+my $default;
+my $tap = 0;
+my $test;
 GetOptions (
     "help|?"	=> sub { usage (0); },
     "l|list!"	=> \$opt_l,
+    "regen"	=> \$opt_r,
+    "default=s" => \$default,
+    "tap"	=> \$tap,
     ) or usage (1);
 
+require 'regen/regen_lib.pl' if $opt_r;
+
 my $MASTER_CFG = "config_h.SH";
+# Inclusive bounds on the main part of the file, $section == 1 below:
+my $first = qr/^Author=/;
+my $last = qr/^zip=/;
 
 my @CFG = (
 	   # we check from MANIFEST whether they are expected to be present.
@@ -40,7 +52,6 @@ my @CFG = (
 	   "uconfig.sh",
 	   "uconfig64.sh",
 	   "plan9/config_sh.sample",
-	   "win32/config.bc",
 	   "win32/config.gc",
 	   "win32/config.gc64",
 	   "win32/config.gc64nox",
@@ -76,49 +87,98 @@ my %MANIFEST;
     close $fh;
 }
 
+printf "1..%d\n", 2 * @CFG if $tap;
+
 for my $cfg (sort @CFG) {
     unless (exists $MANIFEST{$cfg}) {
 	print STDERR "[skipping not-expected '$cfg']\n";
 	next;
     }
     my %cfg;
+    my $section = 0;
+    my @lines;
 
     open my $fh, '<', $cfg;
-    while (<$fh>) {
-	next if /^\#/ || /^\s*$/ || /^\:/;
-	if ($cfg eq 'configure.com') {
+
+    if ($cfg eq 'configure.com') {
+	++$cfg{startperl}; # Cheat.
+
+	while (<$fh>) {
+	    next if /^\#/ || /^\s*$/ || /^\:/;
 	    s/(\s*!.*|\s*)$//; # remove trailing comments or whitespace
-	    next if ! /^\$\s+WC "(\w+)='(.*)'"$/;
+	    ++$cfg{$1} if /^\$\s+WC "(\w+)='(?:.*)'"$/;
 	}
-	# foo='bar'
-	# foo=bar
-	if (/^(\w+)='(.*)'$/) {
-	    $cfg{$1}++;
-	}
-	elsif (/^(\w+)=(.*)$/) {
-	    $cfg{$1}++;
-	}
-	elsif (/^\$\s+WC "(\w+)='(.*)'"$/) {
-	    $cfg{$1}++;
-	} else {
-	    warn "$cfg:$.:$_";
+    } else {
+	while (<$fh>) {
+	    if ($_ =~ $first) {
+		die "$cfg:$.:section=$section:$_" unless $section == 0;
+		$section = 1;
+	    }
+	    push @{$lines[$section]}, $_;
+	    next if /^\#/ || /^\s*$/ || /^\:/;
+	    if ($_ =~ $last) {
+		die "$cfg:$.:section=$section:$_" unless $section == 1;
+		$section = 2;
+	    }
+	    # foo='bar'
+	    # foo=bar
+	    # (optionally with a trailing comment)
+	    if (/^(\w+)=(?:'.*'|[^'].*)(?: #.*)?$/) {
+		++$cfg{$1};
+	    } else {
+		warn "$cfg:$.:$_";
+	    }
 	}
     }
     close $fh;
 
+    ++$test;
+    my $missing;
     if ($cfg eq 'configure.com') {
-	$cfg{startperl}++; # Cheat.
+	print "ok $test # skip $cfg doesn't need to be sorted\n"
+	    if $tap;
+    } elsif (join("", @{$lines[1]}) eq join("", sort @{$lines[1]})) {
+	print "ok $test - $cfg sorted\n"
+	    if $tap;
+    } elsif ($tap) {
+	print "not ok $test - $cfg is not sorted\n";
+    } elsif ($opt_r || $opt_l) {
+	# A reference to an empty array is true, hence this flags the
+	# file for later attention by --regen and --list, even if
+	# nothing is missing. Actual sort and output are done later.
+	$missing = [];
+    } else {
+	print "$cfg: unsorted\n"
     }
 
-    my $problems;
     for my $v (@MASTER_CFG) {
-	exists $cfg{$v} and next;
-	if ($opt_l) {
-	    # print the name once, for the first problem we encounter.
-	    print "$cfg\n" unless $problems++;
+	# This only creates a reference in $missing if something is missing:
+	push @$missing, $v unless exists $cfg{$v};
+    }
+
+    ++$test;
+    if ($missing) {
+	if ($tap) {
+	    print "not ok $test - $cfg missing keys @$missing\n";
+	} elsif ($opt_l) {
+	    # print the name once, however many problems
+	    print "$cfg\n";
+	} elsif ($opt_r && $cfg ne 'configure.com') {
+	    if (defined $default) {
+		push @{$lines[1]}, map {"$_='$default'\n"} @$missing;
+	    } else {
+		print "$cfg: missing '$_', use --default to add it\n"
+		    foreach @$missing;
+	    }
+
+	    @{$lines[1]} = sort @{$lines[1]};
+	    my $fh = open_new($cfg);
+	    print $fh @{$_} foreach @lines;
+	    close_and_rename($fh);
+	} else {
+	    print "$cfg: missing '$_'\n" foreach @$missing;
 	}
-	else {
-	    print "$cfg: missing '$v'\n";
-	}
+    } elsif ($tap) {
+	print "ok $test - $cfg has no missing keys\n";
     }
 }

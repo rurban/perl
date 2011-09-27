@@ -362,6 +362,7 @@ cpan/CPAN-Meta/t/data/META-2.json
 cpan/CPAN-Meta/t/data/resources.yml
 cpan/CPAN-Meta/t/data/restricted-2.json
 cpan/CPAN-Meta/t/data/restrictive-1_4.yml
+cpan/CPAN-Meta/t/data/unicode.yml
 cpan/CPAN-Meta/t/load-bad.t
 cpan/CPAN-Meta/t/meta-obj.t
 cpan/CPAN-Meta/t/no-index.t
@@ -562,6 +563,7 @@ cpan/Devel-PPPort/parts/base/5008005	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5008006	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5008007	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5008008	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5008009	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5009000	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5009001	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5009002	Devel::PPPort baseline todo file
@@ -569,7 +571,30 @@ cpan/Devel-PPPort/parts/base/5009003	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5009004	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5009005	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5010000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5010001	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/base/5011000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5011001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5011002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5011003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5011004	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5011005	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5012000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5012001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5012002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5012003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013004	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013005	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013006	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013007	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013008	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013009	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013010	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5013011	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/base/5014000	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/embed.fnc	Devel::PPPort Perl API listing
 cpan/Devel-PPPort/parts/inc/call	Devel::PPPort include
 cpan/Devel-PPPort/parts/inc/cop		Devel::PPPort include
@@ -636,6 +661,7 @@ cpan/Devel-PPPort/parts/todo/5008005	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5008006	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5008007	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5008008	Devel::PPPort todo file
+cpan/Devel-PPPort/parts/todo/5008009	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/todo/5009000	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5009001	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5009002	Devel::PPPort todo file
@@ -643,7 +669,30 @@ cpan/Devel-PPPort/parts/todo/5009003	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5009004	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5009005	Devel::PPPort todo file
 cpan/Devel-PPPort/parts/todo/5010000	Devel::PPPort todo file
+cpan/Devel-PPPort/parts/todo/5010001	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/parts/todo/5011000	Devel::PPPort todo file
+cpan/Devel-PPPort/parts/todo/5011001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5011002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5011003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5011004	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5011005	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5012000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5012001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5012002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5012003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013000	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013001	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013002	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013003	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013004	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013005	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013006	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013007	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013008	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013009	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013010	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5013011	Devel::PPPort baseline todo file
+cpan/Devel-PPPort/parts/todo/5014000	Devel::PPPort baseline todo file
 cpan/Devel-PPPort/ppport_h.PL		Devel::PPPort ppport.h writer
 cpan/Devel-PPPort/PPPort_pm.PL		Devel::PPPort PPPort.pm writer
 cpan/Devel-PPPort/PPPort.xs		Devel::PPPort dummy PPPort.xs
@@ -1818,6 +1867,7 @@ cpan/perlfaq/lib/perlfaq8.pod	System Interaction
 cpan/perlfaq/lib/perlfaq9.pod	Networking
 cpan/perlfaq/lib/perlfaq.pm	Perl frequently asked questions
 cpan/perlfaq/lib/perlfaq.pod	Perl frequently asked questions
+cpan/perlfaq/lib/perlglossary.pod	Perl Glossary
 cpan/PerlIO-via-QuotedPrint/lib/PerlIO/via/QuotedPrint.pm	PerlIO::via::QuotedPrint
 cpan/PerlIO-via-QuotedPrint/t/QuotedPrint.t			PerlIO::via::QuotedPrint
 cpan/Perl-OSType/lib/Perl/OSType.pm			Perl::OSType
@@ -2922,6 +2972,7 @@ dist/Carp/lib/Carp/Heavy.pm	Error message retired workhorse
 dist/Carp/lib/Carp.pm		Error message extension
 dist/Carp/Makefile.PL		makefile writer for Carp
 dist/Carp/t/Carp.t		See if Carp works
+dist/Carp/t/heavy.t		See if Carp::Heavy works
 dist/Carp/t/vivify_gv.t		See if Carp leaves utf8:: stuff alone
 dist/constant/lib/constant.pm	For "use constant"
 dist/constant/t/constant.t	See if compile-time constants work
@@ -3060,11 +3111,13 @@ dist/ExtUtils-ParseXS/t/XSUsage.xs				ExtUtils::ParseXS tests
 dist/File-CheckTree/lib/File/CheckTree.pm	Perl module supporting wholesale file mode validation
 dist/File-CheckTree/t/CheckTree.t		See if File::CheckTree works
 dist/Filter-Simple/lib/Filter/Simple.pm				Simple frontend to Filter::Util::Call
+dist/Filter-Simple/t/code_no_comments.t				See if Filter::Simple works
 dist/Filter-Simple/t/data.t					See if Filter::Simple works
 dist/Filter-Simple/t/export.t					See if Filter::Simple works
 dist/Filter-Simple/t/filter_only.t				See if Filter::Simple works
 dist/Filter-Simple/t/filter.t					See if Filter::Simple works
 dist/Filter-Simple/t/import.t					See if Filter::Simple works
+dist/Filter-Simple/t/lib/Filter/Simple/CodeNoComments.pm	Helper file for Filter::Simple tests
 dist/Filter-Simple/t/lib/Filter/Simple/ExportTest.pm		Helper file for Filter::Simple tests
 dist/Filter-Simple/t/lib/Filter/Simple/FilterOnlyTest.pm	Helper file for Filter::Simple tests
 dist/Filter-Simple/t/lib/Filter/Simple/FilterTest.pm		Helper file for Filter::Simple tests
@@ -3120,6 +3173,7 @@ dist/IO/t/io_taint.t		See if the untaint method from IO works
 dist/IO/t/io_tell.t		See if seek()/tell()-related methods from IO work
 dist/IO/t/io_udp.t		See if UDP socket-related methods from IO work
 dist/IO/t/io_unix.t		See if UNIX socket-related methods from IO work
+dist/IO/t/io_utf8argv.t		See if <> respects open pragma
 dist/IO/t/io_utf8.t		See if perlio opens work
 dist/IO/t/io_xs.t		See if XSUB methods from IO work
 dist/lib/lib_pm.PL		For "use lib", produces lib/lib.pm
@@ -3643,6 +3697,7 @@ ext/POSIX/t/is.t		See if POSIX isxxx() work
 ext/POSIX/t/math.t		Basic math tests for POSIX
 ext/POSIX/t/posix.t		See if POSIX works
 ext/POSIX/t/sigaction.t		See if POSIX::sigaction works
+ext/POSIX/t/sigset.t		See if POSIX::SigSet works
 ext/POSIX/t/sysconf.t		See if POSIX works
 ext/POSIX/t/taint.t		See if POSIX works with taint
 ext/POSIX/t/termios.t		See if POSIX works
@@ -3752,6 +3807,7 @@ ext/XS-APItest/t/customop.t	XS::APItest: tests for custom ops
 ext/XS-APItest/t/eval-filter.t	Simple source filter/eval test
 ext/XS-APItest/t/exception.t	XS::APItest extension
 ext/XS-APItest/t/fetch_pad_names.t	Tests for UTF8 names in pad
+ext/XS-APItest/t/gotosub.t	XS::APItest: tests goto &xsub and hints
 ext/XS-APItest/t/grok.t		XS::APItest: tests for grok* functions
 ext/XS-APItest/t/hash.t		XS::APItest: tests for hash related APIs
 ext/XS-APItest/t/keyword_multiline.t	test keyword plugin parsing across lines
@@ -4381,40 +4437,20 @@ pod/perl5004delta.pod		Perl changes in version 5.004
 pod/perl5005delta.pod		Perl changes in version 5.005
 pod/perl5100delta.pod		Perl changes in version 5.10.0
 pod/perl5101delta.pod		Perl changes in version 5.10.1
-pod/perl5110delta.pod		Perl changes in version 5.11.0
-pod/perl5111delta.pod		Perl changes in version 5.11.1
-pod/perl5112delta.pod		Perl changes in version 5.11.2
-pod/perl5113delta.pod		Perl changes in version 5.11.3
-pod/perl5114delta.pod		Perl changes in version 5.11.4
-pod/perl5115delta.pod		Perl changes in version 5.11.5
 pod/perl5120delta.pod		Perl changes in version 5.12.0
 pod/perl5121delta.pod		Perl changes in version 5.12.1
 pod/perl5122delta.pod		Perl changes in version 5.12.2
 pod/perl5123delta.pod		Perl changes in version 5.12.3
 pod/perl5124delta.pod		Perl changes in version 5.12.4
-pod/perl5130delta.pod		Perl changes in version 5.13.0
-pod/perl51310delta.pod		Perl changes in version 5.13.10
-pod/perl51311delta.pod		Perl changes in version 5.13.11
-pod/perl5131delta.pod		Perl changes in version 5.13.1
-pod/perl5132delta.pod		Perl changes in version 5.13.2
-pod/perl5133delta.pod		Perl changes in version 5.13.3
-pod/perl5134delta.pod		Perl changes in version 5.13.4
-pod/perl5135delta.pod		Perl changes in version 5.13.5
-pod/perl5136delta.pod		Perl changes in version 5.13.6
-pod/perl5137delta.pod		Perl changes in version 5.13.7
-pod/perl5138delta.pod		Perl changes in version 5.13.8
-pod/perl5139delta.pod		Perl changes in version 5.13.9
 pod/perl5140delta.pod		Perl changes in version 5.14.0
 pod/perl5141delta.pod		Perl changes in version 5.14.1
+pod/perl5142delta.pod		Perl changes in version 5.14.2
 pod/perl5150delta.pod		Perl changes in version 5.15.0
 pod/perl5151delta.pod		Perl changes in version 5.15.1
 pod/perl5152delta.pod		Perl changes in version 5.15.2
+pod/perl5153delta.pod		Perl changes in version 5.15.3
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
-pod/perl570delta.pod		Perl changes in version 5.7.0
-pod/perl571delta.pod		Perl changes in version 5.7.1
-pod/perl572delta.pod		Perl changes in version 5.7.2
-pod/perl573delta.pod		Perl changes in version 5.7.3
 pod/perl581delta.pod		Perl changes in version 5.8.1
 pod/perl582delta.pod		Perl changes in version 5.8.2
 pod/perl583delta.pod		Perl changes in version 5.8.3
@@ -4425,17 +4461,11 @@ pod/perl587delta.pod		Perl changes in version 5.8.7
 pod/perl588delta.pod		Perl changes in version 5.8.8
 pod/perl589delta.pod		Perl changes in version 5.8.9
 pod/perl58delta.pod		Perl changes in version 5.8.0
-pod/perl590delta.pod		Perl changes in version 5.9.0
-pod/perl591delta.pod		Perl changes in version 5.9.1
-pod/perl592delta.pod		Perl changes in version 5.9.2
-pod/perl593delta.pod		Perl changes in version 5.9.3
-pod/perl594delta.pod		Perl changes in version 5.9.4
-pod/perl595delta.pod		Perl changes in version 5.9.5
 pod/perlapio.pod		Perl internal IO abstraction interface
 pod/perlartistic.pod		Perl Artistic License
 pod/perlbook.pod		Perl book information
-pod/perlboot.pod		Perl OO tutorial for beginners
-pod/perlbot.pod			Perl OO tricks and examples
+pod/perlboot.pod		
+pod/perlbot.pod			
 pod/perlcall.pod		Perl calling conventions from C
 pod/perlcheat.pod		Perl cheat sheet
 pod/perlclib.pod		Internal replacements for standard C library functions
@@ -4457,7 +4487,6 @@ pod/perlfork.pod		Perl fork() information
 pod/perlform.pod		Perl formats
 pod/perlfunc.pod		Perl built-in functions
 pod/perlgit.pod			Using git with the Perl repository
-pod/perlglossary.pod		Perl Glossary
 pod/perlgpl.pod			GNU General Public License
 pod/perlguts.pod		Perl internal functions for those doing extensions
 pod/perlhack.pod		Perl hackers guide
@@ -4479,6 +4508,7 @@ pod/perlmroapi.pod		Perl method resolution plugin interface
 pod/perlnewmod.pod		Perl modules: preparing a new module for distribution
 pod/perlnumber.pod		Perl number semantics
 pod/perlobj.pod			Perl objects
+pod/perlootut.pod		Perl OO tutorial for beginners
 pod/perlopentut.pod		Perl open() tutorial
 pod/perlop.pod			Perl operators and precedence
 pod/perlpacktut.pod		Perl pack() and unpack() tutorial
@@ -4509,8 +4539,8 @@ pod/perlsyn.pod			Perl syntax
 pod/perlthrtut.pod		Perl threads tutorial
 pod/perltie.pod			Perl objects hidden behind simple variables
 pod/perltodo.pod		Perl things to do
-pod/perltooc.pod		Perl OO tutorial, part 2
-pod/perltoot.pod		Perl OO tutorial, part 1
+pod/perltooc.pod		
+pod/perltoot.pod		
 pod/perltrap.pod		Perl traps for the unwary
 pod/perlunicode.pod		Perl Unicode support
 pod/perlunifaq.pod		Perl Unicode FAQ
@@ -4791,6 +4821,7 @@ t/io/print.t			See if print commands work
 t/io/pvbm.t			See if PVBMs break IO commands
 t/io/read.t			See if read works
 t/io/say.t			See if say works
+t/io/shm.t			See if SysV shared memory works
 t/io/tell.t			See if file seeking works
 t/io/through.t			See if pipe passes data intact
 t/io/utf8.t			See if file seeking works
@@ -4911,8 +4942,7 @@ t/op/anonsub.t			See if anonymous subroutines work
 t/op/append.t			See if . works
 t/op/args.t			See if operations on @_ work
 t/op/arith.t			See if arithmetic works
-t/op/array_base.aux		Auxiliary file for the $[ test
-t/op/array_base.t		Tests for the $[, which is deprecated
+t/op/array_base.t		Tests for the remnant of $[
 t/op/array.t			See if array operations work
 t/op/assignwarn.t		See if OP= operators warn correctly for undef targets
 t/op/attrhand.t			See if attribute handlers work
@@ -5094,6 +5124,7 @@ t/porting/authors.t		Check that all authors have been acknowledged
 t/porting/bincompat.t		Check that {non_,}bincompat_options are ordered
 t/porting/buildtoc.t		Check that various pod lists are consistent
 t/porting/checkcase.t		Check whether we are case-insensitive-fs-friendly
+t/porting/checkcfgvar.t		Check that all config.sh-like files are good
 t/porting/cmp_version.t		Test whether all changed module files have their VERSION bumped
 t/porting/diag.t		Test completeness of perldiag.pod
 t/porting/dual-life.t		Check that dual-life bins are in utils/
@@ -5283,12 +5314,10 @@ win32/ce-helpers/compile.bat	WinCE port
 win32/ce-helpers/comp.pl	WinCE port
 win32/ce-helpers/makedist.pl	WinCE port
 win32/ce-helpers/registry.bat	WinCE port
-win32/config.bc			Win32 base line config.sh (Borland C++ build)
 win32/config.ce			WinCE port
 win32/config.gc			Win32 base line config.sh (MinGW build)
 win32/config.gc64		Win64 base line config.sh (MinGW build)
 win32/config.gc64nox		Win64 base line config.sh (MinGW build)
-win32/config_H.bc		Win32 config header (Borland C++ build)
 win32/config_H.ce		WinCE port
 win32/config_H.gc		Win32 config header (MinGW build)
 win32/config_H.gc64		Win64 config header (MinGW build)
@@ -5303,7 +5332,6 @@ win32/create_perllibst_h.pl	creates perllibst.h file for inclusion from perllib.
 win32/distclean.bat		Remove _ALL_ files not listed here in MANIFEST
 win32/fcrypt.c			crypt() implementation
 win32/FindExt.pm		Scan for extensions
-win32/genmk95.pl		Perl code to generate command.com-usable makefile.95
 win32/include/arpa/inet.h	Win32 port
 win32/include/dirent.h		Win32 port
 win32/include/netdb.h		Win32 port
@@ -5323,7 +5351,6 @@ win32/perlmaince.c		WinCE port
 win32/perl.rc			WinCE port
 win32/pod.mak			Win32 port
 win32/runperl.c			Win32 port
-win32/sync_ext.pl		Win32 port
 win32/vdir.h			Perl "host" virtual directory manager for CE
 win32/vmem.h			Perl "host" memory manager for CE
 win32/win32.c			Win32 port

@@ -30,7 +30,6 @@ isa_ok($deparse, 'B::Deparse', 'instantiate a B::Deparse object');
  $deparse->ambient_pragmas (
      hint_bits    => $hint_bits,
      warning_bits => $warning_bits,
-     '$['         => 0 + $[,
      '%^H'	  => $hinthash,
  );
 }
@@ -766,3 +765,14 @@ CORE::given ($x) {
         CORE::break;
     }
 }
+####
+# $#- $#+ $#{%} etc.
+my @x;
+@x = ($#{`}, $#{~}, $#{!}, $#{@}, $#{$}, $#{%}, $#{^}, $#{&}, $#{*});
+@x = ($#{(}, $#{)}, $#{[}, $#{{}, $#{]}, $#{}}, $#{'}, $#{"}, $#{,});
+@x = ($#{<}, $#{.}, $#{>}, $#{/}, $#{?}, $#{=}, $#+, $#{\}, $#{|}, $#-);
+@x = ($#{;}, $#{:});
+####
+# ${#} interpolated (the first line magically disables the warning)
+() = *#;
+() = "${#}a";

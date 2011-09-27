@@ -4,13 +4,13 @@ require Exporter;
 
 use strict;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 our @ISA = qw(Exporter);
 our @EXPORT = qw(look);
 
 =head1 NAME
 
-Search::Dict, look - search for key in dictionary file
+Search::Dict - look - search for key in dictionary file
 
 =head1 SYNOPSIS
 

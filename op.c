@@ -1170,8 +1170,6 @@ Perl_scalarvoid(pTHX_ OP *o)
 		}
 		else
 		    useless = "a constant (undef)";
-		if (o->op_private & OPpCONST_ARYBASE)
-		    useless = NULL;
 		/* don't warn on optimised away booleans, eg 
 		 * use constant Foo, 5; Foo || print; */
 		if (cSVOPo->op_private & OPpCONST_SHORTCIRCUIT)
@@ -1732,24 +1730,6 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 	localize = 0;
 	PL_modcount++;
 	return o;
-    case OP_CONST:
-	if (!(o->op_private & OPpCONST_ARYBASE))
-	    goto nomod;
-	localize = 0;
-	if (PL_eval_start && PL_eval_start->op_type == OP_CONST) {
-	    CopARYBASE_set(&PL_compiling,
-			   (I32)SvIV(cSVOPx(PL_eval_start)->op_sv));
-	    PL_eval_start = 0;
-	}
-	else if (!type) {
-	    SAVECOPARYBASE(&PL_compiling);
-	    CopARYBASE_set(&PL_compiling, 0);
-	}
-	else if (type == OP_REFGEN)
-	    goto nomod;
-	else
-	    Perl_croak(aTHX_ "That use of $[ is unsupported");
-	break;
     case OP_STUB:
 	if ((o->op_flags & OPf_PARENS) || PL_madskills)
 	    break;
@@ -5015,18 +4995,7 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
 	bool maybe_common_vars = TRUE;
 
 	PL_modcount = 0;
-	/* Grandfathering $[ assignment here.  Bletch.*/
-	/* Only simple assignments like C<< ($[) = 1 >> are allowed */
-	PL_eval_start = (left->op_type == OP_CONST) ? right : NULL;
 	left = op_lvalue(left, OP_AASSIGN);
-	if (PL_eval_start)
-	    PL_eval_start = 0;
-	else if (left->op_type == OP_CONST) {
-	    deprecate("assignment to $[");
-	    /* FIXME for MAD */
-	    /* Result of assignment is always 1 (or we'd be dead already) */
-	    return newSVOP(OP_CONST, 0, newSViv(1));
-	}
 	curop = list(force_list(left));
 	o = newBINOP(OP_AASSIGN, flags, list(force_list(right)), curop);
 	o->op_private = (U8)(0 | (flags >> 8));
@@ -5168,19 +5137,8 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
 		scalar(right));
     }
     else {
-	PL_eval_start = right;	/* Grandfathering $[ assignment here.  Bletch.*/
 	o = newBINOP(OP_SASSIGN, flags,
 	    scalar(right), op_lvalue(scalar(left), OP_SASSIGN) );
-	if (PL_eval_start)
-	    PL_eval_start = 0;
-	else {
-	    if (!PL_madskills) { /* assignment to $[ is ignored when making a mad dump */
-		deprecate("assignment to $[");
-		op_free(o);
-		o = newSVOP(OP_CONST, 0, newSViv(CopARYBASE_get(&PL_compiling)));
-		o->op_private |= OPpCONST_ARYBASE;
-	    }
-	}
     }
     return o;
 }
@@ -5228,9 +5186,6 @@ Perl_newSTATEOP(pTHX_ I32 flags, char *label, OP *o)
     cop->op_next = (OP*)cop;
 
     cop->cop_seq = seq;
-    /* CopARYBASE is now "virtual", in that it's stored as a flag bit in
-       CopHINTS and a possible value in cop_hints_hash, so no need to copy it.
-    */
     cop->cop_warnings = DUP_WARNINGS(PL_curcop->cop_warnings);
     CopHINTHASH_set(cop, cophh_copy(CopHINTHASH_get(PL_curcop)));
     if (label) {
@@ -7260,14 +7215,6 @@ Perl_ck_bitop(pTHX_ OP *o)
 
     PERL_ARGS_ASSERT_CK_BITOP;
 
-#define OP_IS_NUMCOMPARE(op) \
-	((op) == OP_LT   || (op) == OP_I_LT || \
-	 (op) == OP_GT   || (op) == OP_I_GT || \
-	 (op) == OP_LE   || (op) == OP_I_LE || \
-	 (op) == OP_GE   || (op) == OP_I_GE || \
-	 (op) == OP_EQ   || (op) == OP_I_EQ || \
-	 (op) == OP_NE   || (op) == OP_I_NE || \
-	 (op) == OP_NCMP || (op) == OP_I_NCMP)
     o->op_private = (U8)(PL_hints & HINT_INTEGER);
     if (!(o->op_flags & OPf_STACKED) /* Not an assignment */
 	    && (o->op_type == OP_BIT_OR
@@ -9292,10 +9239,9 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
     PERL_ARGS_ASSERT_CK_ENTERSUB_ARGS_CORE;
 
     if (!opnum) {
-	OP *prev, *cvop;
+	OP *cvop;
 	if (!aop->op_sibling)
 	    aop = cUNOPx(aop)->op_first;
-	prev = aop;
 	aop = aop->op_sibling;
 	for (cvop = aop; cvop->op_sibling; cvop = cvop->op_sibling) ;
 	if (PL_madskills) while (aop != cvop && aop->op_type == OP_STUB) {
@@ -9981,9 +9927,7 @@ Perl_rpeep(pTHX_ register OP *o)
 		    pop->op_next->op_type == OP_AELEM &&
 		    !(pop->op_next->op_private &
 		      (OPpLVAL_INTRO|OPpLVAL_DEFER|OPpDEREF|OPpMAYBE_LVSUB)) &&
-		    (i = SvIV(((SVOP*)pop)->op_sv) - CopARYBASE_get(PL_curcop))
-				<= 255 &&
-		    i >= 0)
+		    (i = SvIV(((SVOP*)pop)->op_sv)) <= 255 && i >= 0)
 		{
 		    GV *gv;
 		    if (cSVOPx(pop)->op_private & OPpCONST_STRICT)

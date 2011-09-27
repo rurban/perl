@@ -17,7 +17,7 @@ BEGIN {
 use strict;
 use Config;
 
-plan tests => 784;
+plan tests => 786;
 
 $| = 1;
 
@@ -137,22 +137,6 @@ my $TEST = 'TEST';
 {
     $ENV{'DCL$PATH'} = '' if $Is_VMS;
 
-    if ($Is_MSWin32 && $Config{ccname} =~ /bcc32/ && ! -f 'cc3250mt.dll') {
-	my $bcc_dir;
-	foreach my $dir (split /$Config{path_sep}/, $ENV{PATH}) {
-	    if (-f "$dir/cc3250mt.dll") {
-		$bcc_dir = $dir and last;
-	    }
-	}
-	if (defined $bcc_dir) {
-	    require File::Copy;
-	    File::Copy::copy("$bcc_dir/cc3250mt.dll", '.') or
-		die "$0: failed to copy cc3250mt.dll: $!\n";
-	    eval q{
-		END { unlink "cc3250mt.dll" }
-	    };
-	}
-    }
     $ENV{PATH} = ($Is_Cygwin) ? '/usr/bin' : '';
     delete @ENV{@MoreEnv};
     $ENV{TERM} = 'dumb';
@@ -2180,6 +2164,10 @@ end
     ok(!tainted "", "tainting still works after index() of the constant");
 }
 
+# Tainted values with smartmatch
+# [perl #93590] S_do_smartmatch stealing its own string buffers
+ok "M$TAINT" ~~ ['m', 'M'], '$tainted ~~ ["whatever", "match"]';
+ok !("M$TAINT" ~~ ['m', undef]), '$tainted ~~ ["whatever", undef]';
 
 
 # This may bomb out with the alarm signal so keep it last

@@ -238,6 +238,11 @@ spots.  This is now heavily deprecated.
 
 (P) A general assertion failed.  The file in question must be examined.
 
+=item Assigning non-zero to $[ is no longer possible
+
+(F) The special variable C<$[>, deprecated in older perls, is now a fixed
+zero value, because the feature that it used to control has been removed.
+
 =item Assignment to both a list and a scalar
 
 (F) If you assign to a conditional operator, the 2nd and 3rd arguments
@@ -3408,13 +3413,6 @@ there are in the savestack.
 (P) Failed an internal consistency check while trying to reset a weak
 reference.
 
-=item panic: Devel::DProf inconsistent subroutine return
-
-(P) Devel::DProf called a subroutine that exited using goto(LABEL),
-last(LABEL) or next(LABEL). Leaving that way a subroutine called from
-an XSUB will lead very probably to a crash of the interpreter. This is
-a bug that will hopefully one day get fixed.
-
 =item panic: die %s
 
 (P) We popped the context stack to an eval context, and then discovered
@@ -3563,6 +3561,12 @@ scalar's string buffer.
 
 (P) The sv_insert() routine was told to remove more string than there
 was string.
+
+=item panic: strxfrm() gets absurd - a => %u, ab => %u
+
+(P) The interpreter's sanity check of the C function strxfrm() failed.
+In your current locale the returned transformation of the string "ab" is
+shorter than that of the string "a", which makes no sense.
 
 =item panic: top_env
 
@@ -4505,21 +4509,6 @@ a dirhandle.  Check your control flow.
 (W unopened) You tried to use the tell() function on a filehandle that
 was either never opened or has since been closed.
 
-=item That use of $[ is unsupported
-
-(F) Assignment to C<$[> is now strictly circumscribed, and interpreted
-as a compiler directive.  You may say only one of
-
-    $[ = 0;
-    $[ = 1;
-    ...
-    local $[ = 0;
-    local $[ = 1;
-    ...
-
-This is to prevent the problem of one module changing the array base out
-from under another module inadvertently.  See L<perlvar/$[>.
-
 =item The crypt() function is unimplemented due to excessive paranoia
 
 (F) Configure couldn't find the crypt() function on your machine,
@@ -5119,11 +5108,6 @@ you can write it as C<push(@tied_array,())> to avoid this warning.
 
 (F) The "use" keyword is recognized and executed at compile time, and
 returns no useful value.  See L<perlmod>.
-
-=item Use of assignment to $[ is deprecated
-
-(D deprecated) The C<$[> variable (index of the first element in an array)
-is deprecated. See L<perlvar/"$[">.
 
 =item Use of bare << to mean <<"" is deprecated
 

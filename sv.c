@@ -4161,7 +4161,7 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
 			   "Undefined value assigned to typeglob");
 	}
 	else {
-	    GV *gv = gv_fetchsv(sstr, GV_ADD, SVt_PVGV);
+	    GV *gv = gv_fetchsv_nomg(sstr, GV_ADD, SVt_PVGV);
 	    if (dstr != (const SV *)gv) {
 		const char * const name = GvNAME((const GV *)dstr);
 		const STRLEN len = GvNAMELEN(dstr);
@@ -5395,6 +5395,7 @@ Perl_sv_rvweaken(pTHX_ SV *const sv)
 	Perl_ck_warner(aTHX_ packWARN(WARN_MISC), "Reference is already weak");
 	return sv;
     }
+    else if (SvREADONLY(sv)) croak_no_modify();
     tsv = SvRV(sv);
     Perl_sv_add_backref(aTHX_ tsv, sv);
     SvWEAKREF_on(sv);
@@ -7847,7 +7848,7 @@ Perl_sv_inc_nomg(pTHX_ register SV *const sv)
     if (!sv)
 	return;
     if (SvTHINKFIRST(sv)) {
-	if (SvIsCOW(sv))
+	if (SvIsCOW(sv) || isGV_with_GP(sv))
 	    sv_force_normal_flags(sv, 0);
 	if (SvREADONLY(sv)) {
 	    if (IN_PERL_RUNTIME)
@@ -8028,7 +8029,7 @@ Perl_sv_dec_nomg(pTHX_ register SV *const sv)
     if (!sv)
 	return;
     if (SvTHINKFIRST(sv)) {
-	if (SvIsCOW(sv))
+	if (SvIsCOW(sv) || isGV_with_GP(sv))
 	    sv_force_normal_flags(sv, 0);
 	if (SvREADONLY(sv)) {
 	    if (IN_PERL_RUNTIME)
@@ -8837,15 +8838,6 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 	*st = NULL;
 	*gvp = NULL;
 	return NULL;
-    case SVt_PVGV:
-	if (isGV_with_GP(sv)) {
-	    gv = MUTABLE_GV(sv);
-	    *gvp = gv;
-	    *st = GvESTASH(gv);
-	    goto fix_gv;
-	}
-	/* FALL THROUGH */
-
     default:
 	SvGETMAGIC(sv);
 	if (SvROK(sv)) {
@@ -8870,11 +8862,7 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 	    gv = MUTABLE_GV(sv);
 	}
 	else {
-	    STRLEN len;
-	    const char * const nambeg = SvPV_nomg_const(sv, len);
-	    gv = gv_fetchpvn_flags(
-		nambeg, len, lref | SvUTF8(sv), SVt_PVCV
-	    );
+	    gv = gv_fetchsv_nomg(sv, lref, SVt_PVCV);
 	}
 	*gvp = gv;
 	if (!gv) {
@@ -8887,7 +8875,6 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 	    return NULL;
 	}
 	*st = GvESTASH(gv);
-    fix_gv:
 	if (lref & ~GV_ADDMG && !GvCVu(gv)) {
 	    SV *tmpsv;
 	    ENTER;
@@ -12343,7 +12330,6 @@ Perl_ss_dup(pTHX_ PerlInterpreter *proto_perl, CLONE_PARAMS* param)
 	    TOPLONG(nss,ix) = longval;
 	    break;
 	case SAVEt_I32:				/* I32 reference */
-	case SAVEt_COP_ARYBASE:			/* call CopARYBASE_set */
 	    ptr = POPPTR(ss,ix);
 	    TOPPTR(nss,ix) = any_dup(ptr, proto_perl);
 	    i = POPINT(ss,ix);

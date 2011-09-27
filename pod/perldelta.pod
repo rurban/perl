@@ -1,23 +1,20 @@
 =encoding utf8
 
-=for comment
-This has been completed up to 527d644b124fe.
-
 =head1 NAME
 
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.15.3
+perldelta - what is new for perl v5.15.4
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.15.2 release and
-the 5.15.3 release.
+This document describes differences between the 5.15.3 release and
+the 5.15.4 release.
 
-If you are upgrading from an earlier release such as 5.15.1, first read
-L<perl5152delta>, which describes differences between 5.15.1 and
-5.15.2.
+If you are upgrading from an earlier release such as 5.15.3, first read
+L<perl5153delta>, which describes differences between 5.15.3 and
+5.15.4.
 
 =head1 Notice
 
@@ -31,16 +28,6 @@ here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
 
-=head2 More CORE subs are callable through references
-
-Perl 5.15.2 introduced subroutines in the CORE namespace.  Most of them
-could only be called as barewords; i.e., they could be aliased at compile
-time and then inlined under new names.
-
-Almost all of these functions can now be called through references and via
-C<&foo()> syntax, bypassing the prototype.  See L<CORE> for a list of the
-exceptions.
-
 =head1 Security
 
 XXX Any security-related notices go here.  In particular, any security
@@ -49,33 +36,14 @@ L</Selected Bug Fixes> section.
 
 [ List each security issue as a =head2 entry ]
 
-=head2 C<File::Glob::bsd_glob()> memory error with GLOB_ALTDIRFUNC (CVE-2011-2728).
-
-Calling C<File::Glob::bsd_glob> with the unsupported flag GLOB_ALTDIRFUNC would 
-cause an access violation / segfault.  A Perl program that accepts a flags value from
-an external source could expose itself to denial of service or arbitrary code
-execution attacks.  There are no known exploits in the wild.  The problem has been
-corrected by explicitly disabling all unsupported flags and setting unused function
-pointers to null.  Bug reported by Clément Lecigne.
-
 =head1 Incompatible Changes
 
-=head2 User-defined case changing operations.
+XXX For a release on a stable branch, this section aspires to be:
 
-This feature was deprecated in Perl 5.14, and has now been removed.
-The CPAN module L<Unicode::Casing> provides better functionality without
-the drawbacks that this feature had, as are detailed in the 5.14
-documentation:
-L<http://perldoc.perl.org/5.14.0/perlunicode.html#User-Defined-Case-Mappings-%28for-serious-hackers-only%29>
+    There are no changes intentionally incompatible with 5.XXX.XXX
+    If any exist, they are bugs and reports are welcome.
 
-=head2 XSUBs are now 'static'
-
-XSUB C functions are now 'static', that is, they are not visible from
-outside the compilation unit. For the exceedingly rare case where
-this is not desired, a new public macro C<XS_EXTERNAL(name)> can be
-used in place of C<XS(name)>. C<ExtUtils::ParseXS> (C<xsubpp>)
-can be made to declare XSUBs with C<XS_EXTERNAL> using the
-C<EXPORT_XSUB_SYMBOLS> keyword, see L<perlxs> for details.
+[ List each incompatible change as a =head2 entry ]
 
 =head1 Deprecations
 
@@ -128,65 +96,7 @@ XXX
 
 =item *
 
-L<AnyDBM_File> has been upgraded from version 1.00 to version 1.01.
-
-This is only a minor documentation update.
-
-=item *
-
-L<Archive::Extract> has been upgraded from version 0.52 to version 0.56.
-
-Resolved an issue where C<unzip> executable was present in C<PATH> on MSWin32
-
-=item *
-
-L<CPANPLUS> has been upgraded from version 0.9109 to version 0.9110.
-
-=item *
-
-L<CPANPLUS::Dist::Build> has been upgraded from version 0.56 to version 0.58.
-
-=item *
-
-L<diagnostics> has been upgraded from version 1.24 to version 1.25.
-
-It now strips out C<SZ<><...>> formatting codes before displaying
-descriptions [perl #94488].
-
-=item *
-
-L<Locale::Codes> has been upgraded from version 3.17 to version 3.18.
-
-The CIA world added non-standard values, so this is no longer used as a source
-of data.
-
-=item *
-
-L<File::Glob> has been upgraded from version 1.12 to version 1.13.
-
-See L</Security>.
-
-=item *
-
-L<Math::BigRat> has been upgraded from version 0.2602 to version 0.2603.
-
-C<int()> on a Math::BigRat object containing -1/2 now creates a
-Math::BigInt containing 0, rather than -0.  L<Math::BigInt> does not even
-support negative zero, so the resulting object was actually malformed
-[perl #95530].
-
-=item *
-
-L<Pod::Simple> has been upgraded from version 3.18 to version 3.19.
-
-=item *
-
-L<POSIX> has been upgraded from version 1.24 to version 1.25.
-
-L<POSIX> no longer uses L<AutoLoader>. Any code which was relying on this
-implementation detail was buggy, and may fail as a result of this change.
-The module's Perl code has been considerably simplified, roughly halving
-the number of lines, with no change in functionality.
+L<perlfaq> has been upgraded from version 5.0150034 to version 5.0150035.
 
 =back
 
@@ -314,15 +224,7 @@ L</Platform Support> section, instead.
 
 =item *
 
-The file F<global.sym> is no longer needed, and has been removed. It
-contained a list of all exported functions, one of the files generated by
-F<regen/embed.pl> from data in F<embed.fnc> and F<regen/opcodes>. The code
-has been refactored so that the only user of F<global.sym>, F<makedef.pl>,
-now reads F<embed.fnc> and F<regen/opcodes> directly, removing the need to
-store the list of exported functions in an intermediate file.
-
-As F<global.sym> was never installed, this change will not be visible
-outside the build process.
+XXX
 
 =back
 
@@ -340,14 +242,9 @@ that they represent may be covered elsewhere.
 
 =item *
 
-F<t/porting/globvar.t> has been added, to run a sanity check on F<globar.sym>.
-F<globar.sym> is not needed on most *nix platforms, but is for Win32, hence
-previously was it was possible to inadvertently commit changes that worked
-perfectly locally, but broke the build on Win32.
-
-=item *
-
-F<t/op/unlink.t> has been added to test the C<unlink> function.
+F<t/porting/checkcfgvar.t> now tests that all config.sh-style files are
+complete. These are used by the various non-*nix to generate their
+F<config.h>, and an incomplete input file will generate invalid output.
 
 =back
 
@@ -428,97 +325,7 @@ L</Modules and Pragmata>.
 
 =item *
 
-In Perl 5.15.0 C<defined(${'$'})> stopped returning true if the C<$$>
-variable had not been used yet.  This has been fixed.
-
-=item *
-
-C<defined(${"..."})>, C<defined(*{"..."})>, etc., used to
-return true for most, but not all built-in variables, if
-they had not been used yet.  Many times that new built-in
-variables were added in past versions, this construct was
-not taken into account, so this affected C<${^GLOBAL_PHASE}> and
-C<${^UTF8CACHE}>, among others.  It also used to return false if the
-package name was given as well (C<${"::!"}>) and for subroutines in the
-CORE package [perl #97978] [perl #97492] [perl #97484].
-
-=item *
-
-Perl 5.10.0 introduced a similar bug: C<defined(*{"foo"})> where "foo"
-represents the name of a built-in global variable used to return false if
-the variable had never been used before, but only on the I<first> call.
-This, too, has been fixed.
-
-=item *
-
-Various functions that take a filehandle argument in rvalue context
-(C<close>, C<readline>, etc.) used to call C<FETCH> multiple times, if it
-was a tied variable, and warn twice, if it was C<undef> [perl #97482].
-
-=item *
-
-C<close> and similar filehandle functions, when called on built-in global
-variables (like C<$+>), used to die if the variable happened to hold the
-undefined value, instead of producing the usual "Use of uninitialized
-value" warning.
-
-=item *
-
-When autovivified file handles were introduced in Perl 5.6.0, C<readline>
-was inadvertently made to autovivify when called as C<readline($foo)> (but
-not as C<< <$foo> >>).  It has now been fixed never to autovivify.
-
-=item *
-
-C<defined ${ $tied_variable }> used to call C<FETCH> multiple times, but
-now calls it just once.
-
-=item *
-
-Some cases of dereferencing a complex expression, such as
-C<${ (), $tied } = 1>, used to call C<FETCH> multiple times, but now call
-it once.
-
-=item *
-
-For a tied variable returning a package name, C<< $tied->method >> used to
-call C<FETCH> multiple times (even up to six!), and sometimes would
-fail to call the method, due to memory corruption.
-
-=item *
-
-Calling an undefined anonymous subroutine (e.g., what $x holds after
-C<undef &{$x = sub{}}>) used to cause a "Not a CODE reference" error, which
-has been corrected to "Undefined subroutine called" [perl #71154].
-
-=item *
-
-Causing C<@DB::args> to be freed between uses of C<caller> no longer
-results in a crash [perl #93320].
-
-=item *
-
-Since 5.6.0, C<*{ ... }> has been inconsistent in how it treats undefined
-values.  It would die in strict mode or lvalue context for most undefined
-values, but would be treated as the empty string (with a warning) for the
-specific scalar return by C<undef()> (C<&PL_sv_undef> internally).  This
-has been corrected.  C<undef()> is now treated like other undefined
-scalars, as in Perl 5.005.
-
-=item *
-
-It used to be possible to free the typeglob of a localised array or hash
-(e.g., C<local @{"x"}; delete $::{x}>), resulting in a crash on scope exit.
-
-=item *
-
-C<setpgrp($foo)> used to be equivalent to C<($foo, setpgrp)>, because
-C<setpgrp> was ignoring its argument if there was just one.  Now it is
-equivalent to C<setpgrp($foo,0)>.
-
-=item *
-
-An assignment like C<*$tied = \&{"..."}> now calls FETCH only once.
+XXX
 
 =back
 
@@ -550,7 +357,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.2..HEAD
+  perl Porting/acknowledgements.pl v5.15.3..HEAD
 
 =head1 Reporting Bugs
 

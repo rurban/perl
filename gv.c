@@ -16,7 +16,7 @@
  * history of Middle-earth and Over-heaven and of the Sundering Seas,'
  * laughed Pippin.
  *
- *     [p.599 of _The Lord of the Rings_, III/xi: "The Palantír"]
+ *     [p.599 of _The Lord of the Rings_, III/xi: "The PalantÃ­r"]
  */
 
 /*
@@ -59,11 +59,7 @@ Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
 	     * if it walks like a dirhandle, then let's assume that
 	     * this is a dirhandle.
 	     */
-	    what = PL_op->op_type ==  OP_READDIR ||
-		PL_op->op_type ==  OP_TELLDIR ||
-		PL_op->op_type ==  OP_SEEKDIR ||
-		PL_op->op_type ==  OP_REWINDDIR ||
-		PL_op->op_type ==  OP_CLOSEDIR ?
+	    what = OP_IS_DIRHOP(PL_op->op_type) ?
 		"dirhandle" : "filehandle";
 	    /* diag_listed_as: Bad symbol for filehandle */
 	} else if (type == SVt_PVHV) {
@@ -378,6 +374,127 @@ S_gv_init_sv(pTHX_ GV *gv, const svtype sv_type)
     }
 }
 
+static void core_xsub(pTHX_ CV* cv);
+
+static GV *
+S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
+                          const char * const name, const STRLEN len,
+                          const char * const fullname, STRLEN const fullen)
+{
+    const int code = keyword(name, len, 1);
+    static const char file[] = __FILE__;
+    CV *cv, *oldcompcv;
+    int opnum = 0;
+    SV *opnumsv;
+    bool ampable = TRUE; /* &{}-able */
+    COP *oldcurcop;
+    yy_parser *oldparser;
+    I32 oldsavestack_ix;
+
+    assert(gv || stash);
+    assert(name);
+    assert(stash || fullname);
+
+    if (!fullname && !HvENAME(stash)) return NULL; /* pathological case
+                                                     that would require
+                                                    inlining newATTRSUB */
+    if (code >= 0) return NULL; /* not overridable */
+    switch (-code) {
+     /* no support for \&CORE::infix;
+        no support for funcs that take labels, as their parsing is
+        weird  */
+    case KEY_and: case KEY_cmp: case KEY_CORE: case KEY_dump:
+    case KEY_eq: case KEY_ge:
+    case KEY_gt: case KEY_le: case KEY_lt: case KEY_ne:
+    case KEY_or: case KEY_x: case KEY_xor:
+	return NULL;
+    case KEY_chdir:
+    case KEY_chomp: case KEY_chop:
+    case KEY_each: case KEY_eof: case KEY_exec:
+    case KEY_keys:
+    case KEY_lstat:
+    case KEY_pop:
+    case KEY_push:
+    case KEY_shift:
+    case KEY_splice:
+    case KEY_stat:
+    case KEY_system:
+    case KEY_truncate: case KEY_unlink:
+    case KEY_unshift:
+    case KEY_values:
+	ampable = FALSE;
+    }
+    if (!gv) {
+	gv = (GV *)newSV(0);
+	gv_init(gv, stash, name, len, TRUE);
+    }
+    if (ampable) {
+	ENTER;
+	oldcurcop = PL_curcop;
+	oldparser = PL_parser;
+	lex_start(NULL, NULL, 0);
+	oldcompcv = PL_compcv;
+	PL_compcv = NULL; /* Prevent start_subparse from setting
+	                     CvOUTSIDE. */
+	oldsavestack_ix = start_subparse(FALSE,0);
+	cv = PL_compcv;
+    }
+    else {
+	/* Avoid calling newXS, as it calls us, and things start to
+	   get hairy. */
+	cv = MUTABLE_CV(newSV_type(SVt_PVCV));
+	GvCV_set(gv,cv);
+	GvCVGEN(gv) = 0;
+	mro_method_changed_in(GvSTASH(gv));
+	CvISXSUB_on(cv);
+	CvXSUB(cv) = core_xsub;
+    }
+    CvGV_set(cv, gv); /* This stops new ATTRSUB from setting CvFILE
+                         from PL_curcop. */
+    (void)gv_fetchfile(file);
+    CvFILE(cv) = (char *)file;
+    /* XXX This is inefficient, as doing things this order causes
+           a prototype check in newATTRSUB.  But we have to do
+           it this order as we need an op number before calling
+           new ATTRSUB. */
+    (void)core_prototype((SV *)cv, name, code, &opnum);
+    if (stash && (fullname || !fullen))
+	(void)hv_store(stash,name,len,(SV *)gv,0);
+    if (ampable) {
+	SV *tmpstr;
+	CvLVALUE_on(cv);
+	if (!fullname) {
+	    tmpstr = newSVhek(HvENAME_HEK(stash));
+	    sv_catpvs(tmpstr, "::");
+	    sv_catpvn(tmpstr,name,len);
+	}
+	else tmpstr = newSVpvn_share(fullname,fullen,0);
+	newATTRSUB(oldsavestack_ix,
+	           newSVOP(OP_CONST, 0, tmpstr),
+	           NULL,NULL,
+	           coresub_op(
+	             opnum
+	               ? newSVuv((UV)opnum)
+	               : newSVpvn(name,len),
+	             code, opnum
+	           )
+	);
+	assert(GvCV(gv) == cv);
+	if (opnum != OP_VEC && opnum != OP_SUBSTR)
+	    CvLVALUE_off(cv); /* Now *that* was a neat trick. */
+	LEAVE;
+	PL_parser = oldparser;
+	PL_curcop = oldcurcop;
+	PL_compcv = oldcompcv;
+    }
+    opnumsv = opnum ? newSVuv((UV)opnum) : (SV *)NULL;
+    cv_set_call_checker(
+       cv, Perl_ck_entersub_args_core, opnumsv ? opnumsv : (SV *)cv
+    );
+    SvREFCNT_dec(opnumsv);
+    return gv;
+}
+
 /*
 =for apidoc gv_fetchmeth
 
@@ -445,6 +562,7 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
     gvp = (GV**)hv_fetch(stash, name, len, create);
     if(gvp) {
         topgv = *gvp;
+      have_gv:
         assert(topgv);
         if (SvTYPE(topgv) != SVt_PVGV)
             gv_init(topgv, stash, name, len, TRUE);
@@ -465,6 +583,10 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
             /* cache indicates no such method definitively */
             return 0;
         }
+	else if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4
+              && strnEQ(hvname, "CORE", 4)
+              && S_maybe_add_coresub(aTHX_ stash,topgv,name,len,0,1))
+	    goto have_gv;
     }
 
     packlen = HvNAMELEN_get(stash);
@@ -494,8 +616,19 @@ Perl_gv_fetchmeth(pTHX_ HV *stash, const char *name, STRLEN len, I32 level)
         assert(cstash);
 
         gvp = (GV**)hv_fetch(cstash, name, len, 0);
-        if (!gvp) continue;
-        candidate = *gvp;
+        if (!gvp) {
+            if (len > 1 && HvNAMELEN_get(cstash) == 4) {
+                const char *hvname = HvNAME(cstash); assert(hvname);
+                if (strnEQ(hvname, "CORE", 4)
+                 && (candidate =
+                      S_maybe_add_coresub(aTHX_ cstash,NULL,name,len,0,0)
+                    ))
+                    goto have_candidate;
+            }
+            continue;
+        }
+        else candidate = *gvp;
+       have_candidate:
         assert(candidate);
         if (SvTYPE(candidate) != SVt_PVGV) gv_init(candidate, cstash, name, len, TRUE);
         if (SvTYPE(candidate) == SVt_PVGV && (cand_cv = GvCV(candidate)) && !GvCVGEN(candidate)) {
@@ -1004,7 +1137,8 @@ Perl_gv_fetchpv(pTHX_ const char *nambeg, I32 add, const svtype sv_type) {
 GV *
 Perl_gv_fetchsv(pTHX_ SV *name, I32 flags, const svtype sv_type) {
     STRLEN len;
-    const char * const nambeg = SvPV_const(name, len);
+    const char * const nambeg =
+       SvPV_flags_const(name, len, flags & GV_NO_SVGMAGIC ? 0 : SV_GMAGIC);
     PERL_ARGS_ASSERT_GV_FETCHSV;
     return gv_fetchpvn_flags(nambeg, len, flags | SvUTF8(name), sv_type);
 }
@@ -1033,8 +1167,6 @@ S_gv_magicalize_overload(pTHX_ GV *gv)
     GvMULTI_on(gv);
     hv_magic(hv, NULL, PERL_MAGIC_overload);
 }
-
-static void core_xsub(pTHX_ CV* cv);
 
 GV *
 Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
@@ -1258,7 +1390,10 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	if (addmg) gv = (GV *)newSV(0);
 	else return NULL;
     }
-    else gv = *gvp;
+    else gv = *gvp, addmg = 0;
+    /* From this point on, addmg means gv has not been inserted in the
+       symtab yet. */
+
     if (SvTYPE(gv) == SVt_PVGV) {
 	if (add) {
 	    GvMULTI_on(gv);
@@ -1334,106 +1469,11 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4) {
 	  /* Avoid null warning: */
 	  const char * const stashname = HvNAME(stash); assert(stashname);
-	  if (strnEQ(stashname, "CORE", 4)) {
-	    const int code = keyword(name, len, 1);
-	    static const char file[] = __FILE__;
-	    CV *cv, *oldcompcv;
-	    int opnum = 0;
-	    SV *opnumsv;
-	    bool ampable = TRUE; /* &{}-able */
-	    COP *oldcurcop;
-	    yy_parser *oldparser;
-	    I32 oldsavestack_ix;
-
-	    if (code >= 0) goto add_magical_gv; /* not overridable */
-	    switch (-code) {
-	     /* no support for \&CORE::infix;
-	        no support for funcs that take labels, as their parsing is
-	        weird  */
-	    case KEY_and: case KEY_cmp: case KEY_CORE: case KEY_dump:
-	    case KEY_eq: case KEY_ge:
-	    case KEY_gt: case KEY_le: case KEY_lt: case KEY_ne:
-	    case KEY_or: case KEY_x: case KEY_xor:
-		goto add_magical_gv;
-	    case KEY_chdir:
-	    case KEY_chomp: case KEY_chop:
-	    case KEY_each: case KEY_eof: case KEY_exec:
-	    case KEY_keys:
-	    case KEY_lstat:
-	    case KEY_pop:
-	    case KEY_push:
-	    case KEY_shift:
-	    case KEY_splice:
-	    case KEY_stat:
-	    case KEY_system:
-	    case KEY_truncate: case KEY_unlink:
-	    case KEY_unshift:
-	    case KEY_values:
-		ampable = FALSE;
-	    }
-	    if (ampable) {
-		ENTER;
-		oldcurcop = PL_curcop;
-		oldparser = PL_parser;
-		lex_start(NULL, NULL, 0);
-		oldcompcv = PL_compcv;
-		PL_compcv = NULL; /* Prevent start_subparse from setting
-		                     CvOUTSIDE. */
-		oldsavestack_ix = start_subparse(FALSE,0);
-		cv = PL_compcv;
-	    }
-	    else {
-		/* Avoid calling newXS, as it calls us, and things start to
-		   get hairy. */
-		cv = MUTABLE_CV(newSV_type(SVt_PVCV));
-		GvCV_set(gv,cv);
-		GvCVGEN(gv) = 0;
-		mro_method_changed_in(GvSTASH(gv));
-		CvISXSUB_on(cv);
-		CvXSUB(cv) = core_xsub;
-	    }
-	    CvGV_set(cv, gv); /* This stops new ATTRSUB from setting CvFILE
-	                         from PL_curcop. */
-	    (void)gv_fetchfile(file);
-	    CvFILE(cv) = (char *)file;
-	    /* XXX This is inefficient, as doing things this order causes
-	           a prototype check in newATTRSUB.  But we have to do
-	           it this order as we need an op number before calling
-	           new ATTRSUB. */
-	    (void)core_prototype((SV *)cv, name, code, &opnum);
-	    if (ampable) {
-		if (addmg) {
-		    (void)hv_store(stash,name,len,(SV *)gv,0);
-		    addmg = FALSE;
-		}
-		CvLVALUE_on(cv);
-		newATTRSUB(oldsavestack_ix,
-		           newSVOP(
-		                 OP_CONST, 0,
-		                 newSVpvn_share(nambeg,full_len,0)
-		           ),
-		           NULL,NULL,
-		           coresub_op(
-		             opnum
-		               ? newSVuv((UV)opnum)
-		               : newSVpvn(name,len),
-		             code, opnum
-		           )
-		);
-		assert(GvCV(gv) == cv);
-		if (opnum != OP_VEC && opnum != OP_SUBSTR)
-		    CvLVALUE_off(cv); /* Now *that* was a neat trick. */
-		LEAVE;
-		PL_parser = oldparser;
-		PL_curcop = oldcurcop;
-		PL_compcv = oldcompcv;
-	    }
-	    opnumsv = opnum ? newSVuv((UV)opnum) : (SV *)NULL;
-	    cv_set_call_checker(
-	       cv, Perl_ck_entersub_args_core, opnumsv ? opnumsv : (SV *)cv
-	    );
-	    SvREFCNT_dec(opnumsv);
-	  }
+	  if (strnEQ(stashname, "CORE", 4)
+	   && S_maybe_add_coresub(aTHX_
+	        addmg ? stash : 0, gv, name, len, nambeg, full_len
+	      ))
+	    addmg = 0;
 	}
     }
     else if (len > 1) {

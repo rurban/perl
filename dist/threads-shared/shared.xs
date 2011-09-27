@@ -661,14 +661,13 @@ Perl_sharedsv_cond_timedwait(perl_cond *cond, perl_mutex *mut, double abs)
 }
 
 
-/* Given a shared RV, copy it's value to a private RV, also copying the
- * object status of the referent.
+/* Given a thingy referenced by a shared RV, copy it's value to a private
+ * RV, also copying the object status of the referent.
  * If the private side is already an appropriate RV->SV combination, keep
  * it if possible.
  */
 STATIC void
-S_get_RV(pTHX_ SV *sv, SV *ssv) {
-    SV *sobj = SvRV(ssv);
+S_get_RV(pTHX_ SV *sv, SV *sobj) {
     SV *obj;
     if (! (SvROK(sv) &&
            ((obj = SvRV(sv))) &&
@@ -683,7 +682,7 @@ S_get_RV(pTHX_ SV *sv, SV *ssv) {
             sv_setsv_nomg(sv, &PL_sv_undef);
             SvROK_on(sv);
         }
-        obj = S_sharedsv_new_private(aTHX_ SvRV(ssv));
+        obj = S_sharedsv_new_private(aTHX_ sobj);
         SvRV_set(sv, obj);
     }
 
@@ -702,6 +701,16 @@ S_get_RV(pTHX_ SV *sv, SV *ssv) {
     }
 }
 
+/* Every caller of S_get_RV needs this incantation (which cannot go inside
+   S_get_RV itself, as we do not want recursion beyond one level): */
+#define get_RV(sv, sobj)                     \
+        S_get_RV(aTHX_ sv, sobj);             \
+        /* Look ahead for refs of refs */      \
+        if (SvROK(sobj)) {                      \
+            SvROK_on(SvRV(sv));                  \
+            S_get_RV(aTHX_ SvRV(sv), SvRV(sobj)); \
+        }
+
 
 /* ------------ PERL_MAGIC_shared_scalar(n) functions -------------- */
 
@@ -715,12 +724,7 @@ sharedsv_scalar_mg_get(pTHX_ SV *sv, MAGIC *mg)
 
     ENTER_LOCK;
     if (SvROK(ssv)) {
-        S_get_RV(aTHX_ sv, ssv);
-        /* Look ahead for refs of refs */
-        if (SvROK(SvRV(ssv))) {
-            SvROK_on(SvRV(sv));
-            S_get_RV(aTHX_ SvRV(sv), SvRV(ssv));
-        }
+        get_RV(sv, SvRV(ssv));
     } else {
         sv_setsv_nomg(sv, ssv);
     }
@@ -739,6 +743,11 @@ sharedsv_scalar_store(pTHX_ SV *sv, SV *ssv)
     bool allowed = TRUE;
 
     assert(PL_sharedsv_lock.owner == aTHX);
+    if (!PL_dirty && SvROK(ssv) && SvREFCNT(SvRV(ssv)) == 1) {
+        SV *sv = sv_newmortal();
+        sv_upgrade(sv, SVt_RV);
+        get_RV(sv, SvRV(ssv));
+    }
     if (SvROK(sv)) {
         SV *obj = SvRV(sv);
         SV *sobj = Perl_sharedsv_find(aTHX_ obj);
@@ -809,7 +818,15 @@ int
 sharedsv_scalar_mg_free(pTHX_ SV *sv, MAGIC *mg)
 {
     PERL_UNUSED_ARG(sv);
+    ENTER_LOCK;
+    if (!PL_dirty
+     && SvROK((SV *)mg->mg_ptr) && SvREFCNT(SvRV((SV *)mg->mg_ptr)) == 1) {
+        SV *sv = sv_newmortal();
+        sv_upgrade(sv, SVt_RV);
+        get_RV(sv, SvRV((SV *)mg->mg_ptr));
+    }
     S_sharedsv_dec(aTHX_ (SV*)mg->mg_ptr);
+    LEAVE_LOCK;
     return (0);
 }
 
@@ -898,12 +915,7 @@ sharedsv_elem_mg_FETCH(pTHX_ SV *sv, MAGIC *mg)
     if (svp) {
         /* Exists in the array */
         if (SvROK(*svp)) {
-            S_get_RV(aTHX_ sv, *svp);
-            /* Look ahead for refs of refs */
-            if (SvROK(SvRV(*svp))) {
-                SvROK_on(SvRV(sv));
-                S_get_RV(aTHX_ SvRV(sv), SvRV(*svp));
-            }
+            get_RV(sv, SvRV(*svp));
         } else {
             /* $ary->[elem] or $ary->{elem} is a scalar */
             Perl_sharedsv_associate(aTHX_ sv, *svp);
@@ -1052,13 +1064,29 @@ sharedsv_array_mg_CLEAR(pTHX_ SV *sv, MAGIC *mg)
 {
     dTHXc;
     SV *ssv = (SV *) mg->mg_ptr;
+    const bool isav = SvTYPE(ssv) == SVt_PVAV;
     PERL_UNUSED_ARG(sv);
     SHARED_EDIT;
-    if (SvTYPE(ssv) == SVt_PVAV) {
-        av_clear((AV*) ssv);
-    } else {
-        hv_clear((HV*) ssv);
+    if (!PL_dirty) {
+            SV **svp = isav ? AvARRAY((AV *)ssv) : NULL;
+            I32 items = isav ? AvFILLp((AV *)ssv) + 1 : 0;
+            HE *iter;
+            if (!isav) hv_iterinit((HV *)ssv);
+            while (isav ? items-- : !!(iter = hv_iternext((HV *)ssv))) {
+                SV *sv = isav ? *svp++ : HeVAL(iter);
+                if (!sv) continue;
+                if ( (SvOBJECT(sv) || (SvROK(sv) && (sv = SvRV(sv))))
+                  && SvREFCNT(sv) == 1 ) {
+                    SV *tmp = Perl_sv_newmortal(caller_perl);
+                    PERL_SET_CONTEXT((aTHX = caller_perl));
+                    sv_upgrade(tmp, SVt_RV);
+                    get_RV(tmp, sv);
+                    PERL_SET_CONTEXT((aTHX = PL_sharedsv_space));
+                }
+            }
     }
+    if (isav) av_clear((AV*) ssv);
+    else      hv_clear((HV*) ssv);
     SHARED_RELEASE;
     return (0);
 }

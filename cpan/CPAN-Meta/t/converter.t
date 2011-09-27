@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More 0.88;
+use utf8;
 
 use CPAN::Meta;
 use CPAN::Meta::Validator;
@@ -9,6 +10,8 @@ use File::Spec;
 use IO::Dir;
 use Parse::CPAN::Meta 1.4400;
 use version;
+
+delete $ENV{$_} for qw/PERL_JSON_BACKEND PERL_YAML_BACKEND/; # use defaults
 
 # mock file object
 package
@@ -172,6 +175,16 @@ for my $f ( reverse sort @files ) {
   pass( "replaced some data fields with objects" );
   my $cmc = CPAN::Meta::Converter->new( $original );
   ok( my $converted = $cmc->convert( version => 2 ), "conversion successful" );
+}
+
+# specific test for UTF-8 handling
+{
+  my $path = File::Spec->catfile('t','data','unicode.yml');
+  my $original = CPAN::Meta->load_file( $path  )
+    or die "Couldn't load $path";
+  ok( $original, "unicode.yml" );
+  my @authors = $original->authors;
+  like( $authors[0], qr/Williåms/, "Unicode characters preserved in authors" );
 }
 
 done_testing;

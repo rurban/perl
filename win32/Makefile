@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.15.2
+#INST_VER	= \5.15.3
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -843,13 +843,13 @@ config.w32 : $(CFGSH_TMPL)
 
 # this target is for when changes to the main config.sh happen.
 # edit config.vc, then make perl in a minimal configuration (i.e. with MULTI,
-# ITHREADS, IMP_SYS, LARGE_FILES, PERLIO and CRYPT off), then make this target
+# ITHREADS, IMP_SYS, LARGE_FILES and PERLIO off), then make this target
 # to regenerate config_H.vc.
+# unfortunately, some further manual editing is also then required to restore all
+# the special __GNUC__ handling that is otherwise lost.
 # repeat for config.vc64 and config_H.vc64 if you have a suitable build
 # environment, otherwise hand-edit them to maintain the same differences with
 # config.vc and config_H.vc as before.
-# unfortunately, some further manual editing is also then required to restore all
-# the special __GNUC__ handling that is otherwise lost.
 regen_config_h:
 	$(MINIPERL) -I..\lib config_sh.PL $(CFG_VARS) $(CFGSH_TMPL) > ..\config.sh
 	$(MINIPERL) -I..\lib ..\configpm --chdir=..
@@ -1073,7 +1073,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5153delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5154delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
@@ -1166,7 +1166,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5153delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5154delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \

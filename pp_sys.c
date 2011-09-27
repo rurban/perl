@@ -49,10 +49,6 @@
 #   include <shadow.h>
 #endif
 
-#ifdef I_SYS_WAIT
-# include <sys/wait.h>
-#endif
-
 #ifdef I_SYS_RESOURCE
 # include <sys/resource.h>
 #endif
@@ -2188,14 +2184,14 @@ PP(pp_truncate)
     /* XXX Configure probe for the signedness of the length type of *truncate() needed? XXX */
     SETERRNO(0,0);
     {
+	SV * const sv = POPs;
 	int result = 1;
 	GV *tmpgv;
 	IO *io;
 
-	if (PL_op->op_flags & OPf_SPECIAL) {
-	    tmpgv = gv_fetchsv(POPs, 0, SVt_PVIO);
-
-	do_ftruncate_gv:
+	if ((tmpgv = PL_op->op_flags & OPf_SPECIAL
+	               ? gv_fetchsv(sv, 0, SVt_PVIO)
+	               : MAYBE_DEREF_GV(sv) )) {
 	    io = GvIO(tmpgv);
 	    if (!io)
 		result = 0;
@@ -2217,24 +2213,12 @@ PP(pp_truncate)
 		}
 	    }
 	}
-	else {
-	    SV * const sv = POPs;
-	    const char *name;
-
-	    if (isGV_with_GP(sv)) {
-	        tmpgv = MUTABLE_GV(sv);		/* *main::FRED for example */
-		goto do_ftruncate_gv;
-	    }
-	    else if (SvROK(sv) && isGV_with_GP(SvRV(sv))) {
-	        tmpgv = MUTABLE_GV(SvRV(sv));	/* \*main::FRED for example */
-		goto do_ftruncate_gv;
-	    }
-	    else if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVIO) {
+	else if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVIO) {
 		io = MUTABLE_IO(SvRV(sv)); /* *main::FRED{IO} for example */
 		goto do_ftruncate_io;
-	    }
-
-	    name = SvPV_nolen_const(sv);
+	}
+	else {
+	    const char * const name = SvPV_nomg_const_nolen(sv);
 	    TAINT_PROPER("truncate");
 #ifdef HAS_TRUNCATE
 	    if (truncate(name, len) < 0)
@@ -2756,19 +2740,20 @@ PP(pp_stat)
     IO *io;
     I32 gimme;
     I32 max = 13;
+    SV* sv;
 
-    if (PL_op->op_flags & OPf_REF) {
-	gv = cGVOP_gv;
+    if (PL_op->op_flags & OPf_REF ? (gv = cGVOP_gv, 1)
+                                  : !!(sv=POPs, gv = MAYBE_DEREF_GV(sv))) {
 	if (PL_op->op_type == OP_LSTAT) {
 	    if (gv != PL_defgv) {
 	    do_fstat_warning_check:
 		Perl_ck_warner(aTHX_ packWARN(WARN_IO),
 			       "lstat() on filehandle %s", gv ? GvENAME(gv) : "");
 	    } else if (PL_laststype != OP_LSTAT)
+		/* diag_listed_as: The stat preceding %s wasn't an lstat */
 		Perl_croak(aTHX_ "The stat preceding lstat() wasn't an lstat");
 	}
 
-      do_fstat:
 	if (gv != PL_defgv) {
 	    PL_laststype = OP_STAT;
 	    PL_statgv = gv;
@@ -2796,23 +2781,14 @@ PP(pp_stat)
 	}
     }
     else {
-	SV* const sv = POPs;
-	if (isGV_with_GP(sv)) {
-	    gv = MUTABLE_GV(sv);
-	    goto do_fstat;
-	} else if(SvROK(sv) && isGV_with_GP(SvRV(sv))) {
-            gv = MUTABLE_GV(SvRV(sv));
-            if (PL_op->op_type == OP_LSTAT)
-                goto do_fstat_warning_check;
-            goto do_fstat;
-        } else if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVIO) { 
+	if (SvROK(sv) && SvTYPE(SvRV(sv)) == SVt_PVIO) { 
             io = MUTABLE_IO(SvRV(sv));
             if (PL_op->op_type == OP_LSTAT)
                 goto do_fstat_warning_check;
             goto do_fstat_have_io; 
         }
         
-	sv_setpv(PL_statname, SvPV_nolen_const(sv));
+	sv_setpv(PL_statname, SvPV_nomg_const_nolen(sv));
 	PL_statgv = NULL;
 	PL_laststype = PL_op->op_type;
 	if (PL_op->op_type == OP_LSTAT)
@@ -2897,6 +2873,7 @@ PP(pp_stat)
 
 #define tryAMAGICftest_MG(chr) STMT_START { \
 	if ( (SvFLAGS(TOPs) & (SVf_ROK|SVs_GMG)) \
+		&& PL_op->op_flags & OPf_KIDS    \
 		&& S_try_amagic_ftest(aTHX_ chr)) \
 	    return NORMAL; \
     } STMT_END
@@ -2910,8 +2887,7 @@ S_try_amagic_ftest(pTHX_ char chr) {
     assert(chr != '?');
     SvGETMAGIC(arg);
 
-    if ((PL_op->op_flags & OPf_KIDS)
-	    && SvAMAGIC(TOPs))
+    if (SvAMAGIC(TOPs))
     {
 	const char tmpchr = chr;
 	SV * const tmpsv = amagic_call(arg,
@@ -3238,6 +3214,7 @@ PP(pp_ftlink)
     I32 result;
 
     tryAMAGICftest_MG('l');
+    STACKED_FTEST_CHECK;
     result = my_lstat_flags(0);
     SPAGAIN;
 
@@ -3264,11 +3241,7 @@ PP(pp_fttty)
 
     if (PL_op->op_flags & OPf_REF)
 	gv = cGVOP_gv;
-    else if (isGV_with_GP(TOPs))
-	gv = MUTABLE_GV(POPs);
-    else if (SvROK(TOPs) && isGV(SvRV(TOPs)))
-	gv = MUTABLE_GV(SvRV(POPs));
-    else {
+    else if (!(gv = MAYBE_DEREF_GV_nomg(TOPs))) {
 	tmpsv = POPs;
 	name = SvPV_nomg(tmpsv, namelen);
 	gv = gv_fetchpvn_flags(name, namelen, SvUTF8(tmpsv), SVt_PVIO);
@@ -3317,12 +3290,7 @@ PP(pp_fttext)
 
     if (PL_op->op_flags & OPf_REF)
 	gv = cGVOP_gv;
-    else if (isGV_with_GP(TOPs))
-	gv = MUTABLE_GV(POPs);
-    else if (SvROK(TOPs) && isGV(SvRV(TOPs)))
-	gv = MUTABLE_GV(SvRV(POPs));
-    else
-	gv = NULL;
+    else gv = MAYBE_DEREF_GV_nomg(TOPs);
 
     if (gv) {
 	EXTEND(SP, 1);
@@ -3466,15 +3434,8 @@ PP(pp_chdir)
 	if (PL_op->op_flags & OPf_SPECIAL) {
 	    gv = gv_fetchsv(sv, 0, SVt_PVIO);
 	}
-        else if (isGV_with_GP(sv)) {
-	    gv = MUTABLE_GV(sv);
-        }
-	else if (SvROK(sv) && isGV_with_GP(SvRV(sv))) {
-            gv = MUTABLE_GV(SvRV(sv));
-        }
-        else {
-	    tmps = SvPV_nolen_const(sv);
-	}
+        else if (!(gv = MAYBE_DEREF_GV(sv)))
+		tmps = SvPV_nomg_const_nolen(sv);
     }
 
     if( !gv && (!tmps || !*tmps) ) {

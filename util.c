@@ -12,7 +12,7 @@
  * 'Very useful, no doubt, that was to Saruman; yet it seems that he was
  *  not content.'                                    --Gandalf to Pippin
  *
- *     [p.598 of _The Lord of the Rings_, III/xi: "The Palantír"]
+ *     [p.598 of _The Lord of the Rings_, III/xi: "The PalantÃ­r"]
  */
 
 /* This file contains assorted utility routines.
@@ -39,10 +39,6 @@
 #ifdef __Lynx__
 /* Missing protos on LynxOS */
 int putenv(char *);
-#endif
-
-#ifdef I_SYS_WAIT
-#  include <sys/wait.h>
 #endif
 
 #ifdef HAS_SELECT

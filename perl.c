@@ -13,7 +13,7 @@
 /*
  *      A ship then new they built for him
  *      of mithril and of elven-glass
- *              --from Bilbo's song of Eärendil
+ *              --from Bilbo's song of EÃ¤rendil
  *
  *     [p.236 of _The Lord of the Rings_, II/i: "Many Meetings"]
  */
@@ -38,15 +38,7 @@
 #include "nwutil.h"	
 #endif
 
-/* XXX If this causes problems, set i_unistd=undef in the hint file.  */
-#ifdef I_UNISTD
-#include <unistd.h>
-#endif
-
 #ifdef DEBUG_LEAKING_SCALARS_FORK_DUMP
-#  ifdef I_SYS_WAIT
-#   include <sys/wait.h>
-#  endif
 #  ifdef I_SYSUIO
 #    include <sys/uio.h>
 #  endif
@@ -1389,54 +1381,42 @@ Perl_call_atexit(pTHX_ ATEXIT_t fn, void *ptr)
     ++PL_exitlistlen;
 }
 
-#ifdef HAS_PROCSELFEXE
-/* This is a function so that we don't hold on to MAXPATHLEN
-   bytes of stack longer than necessary
- */
-STATIC void
-S_procself_val(pTHX_ SV *sv, const char *arg0)
-{
-    char buf[MAXPATHLEN];
-    int len = readlink(PROCSELFEXE_PATH, buf, sizeof(buf) - 1);
-
-    /* On Playstation2 Linux V1.0 (kernel 2.2.1) readlink(/proc/self/exe)
-       includes a spurious NUL which will cause $^X to fail in system
-       or backticks (this will prevent extensions from being built and
-       many tests from working). readlink is not meant to add a NUL.
-       Normal readlink works fine.
-     */
-    if (len > 0 && buf[len-1] == '\0') {
-      len--;
-    }
-
-    /* FreeBSD's implementation is acknowledged to be imperfect, sometimes
-       returning the text "unknown" from the readlink rather than the path
-       to the executable (or returning an error from the readlink).  Any valid
-       path has a '/' in it somewhere, so use that to validate the result.
-       See http://www.freebsd.org/cgi/query-pr.cgi?pr=35703
-    */
-    if (len > 0 && memchr(buf, '/', len)) {
-	sv_setpvn(sv,buf,len);
-    }
-    else {
-	sv_setpv(sv,arg0);
-    }
-}
-#endif /* HAS_PROCSELFEXE */
-
 STATIC void
 S_set_caret_X(pTHX) {
     dVAR;
     GV* tmpgv = gv_fetchpvs("\030", GV_ADD|GV_NOTQUAL, SVt_PV); /* $^X */
     if (tmpgv) {
-#ifdef HAS_PROCSELFEXE
-	S_procself_val(aTHX_ GvSV(tmpgv), PL_origargv[0]);
+	SV *const caret_x = GvSV(tmpgv);
+#if defined(OS2)
+	sv_setpv(caret_x, os2_execname(aTHX));
 #else
-#ifdef OS2
-	sv_setpv(GvSVn(tmpgv), os2_execname(aTHX));
-#else
-	sv_setpv(GvSVn(tmpgv),PL_origargv[0]);
-#endif
+#  ifdef HAS_PROCSELFEXE
+	char buf[MAXPATHLEN];
+	int len = readlink(PROCSELFEXE_PATH, buf, sizeof(buf) - 1);
+
+	/* On Playstation2 Linux V1.0 (kernel 2.2.1) readlink(/proc/self/exe)
+	   includes a spurious NUL which will cause $^X to fail in system
+	   or backticks (this will prevent extensions from being built and
+	   many tests from working). readlink is not meant to add a NUL.
+	   Normal readlink works fine.
+	*/
+	if (len > 0 && buf[len-1] == '\0') {
+	    len--;
+	}
+
+	/* FreeBSD's implementation is acknowledged to be imperfect, sometimes
+	   returning the text "unknown" from the readlink rather than the path
+	   to the executable (or returning an error from the readlink). Any
+	   valid path has a '/' in it somewhere, so use that to validate the
+	   result. See http://www.freebsd.org/cgi/query-pr.cgi?pr=35703
+	*/
+	if (len > 0 && memchr(buf, '/', len)) {
+	    sv_setpvn(caret_x, buf, len);
+	    return;
+	}
+#  endif
+	/* Fallback to this:  */
+	sv_setpv(caret_x, PL_origargv[0]);
 #endif
     }
 }
@@ -1658,6 +1638,9 @@ S_Internals_V(pTHX_ CV *cv)
     static char non_bincompat_options[] = 
 #  ifdef DEBUGGING
 			     " DEBUGGING"
+#  endif
+#  ifdef HOMEGROWN_POSIX_SIGNALS
+			     " HOMEGROWN_POSIX_SIGNALS"
 #  endif
 #  ifdef NO_MATHOMS
 			     " NO_MATHOMS"

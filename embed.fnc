@@ -1106,7 +1106,6 @@ Ap	|void	|save_padsv_and_mortalize|PADOFFSET off
 Ap	|void	|save_sptr	|NN SV** sptr
 Ap	|SV*	|save_svref	|NN SV** sptr
 Ap	|void	|save_pushptr	|NULLOK void *const ptr|const int type
-: Used by SAVECOPARYBASE() in op.c
 Ap	|void	|save_pushi32ptr|const I32 i|NULLOK void *const ptr|const int type
 : Used by SAVESWITCHSTACK() in pp.c
 Ap	|void	|save_pushptrptr|NULLOK void *const ptr1 \
@@ -1756,7 +1755,8 @@ sR	|I32	|run_user_filter|int idx|NN SV *buf_sv|int maxlen
 sR	|PMOP*	|make_matcher	|NN REGEXP* re
 sR	|bool	|matcher_matches_sv|NN PMOP* matcher|NN SV* sv
 s	|void	|destroy_matcher|NN PMOP* matcher
-s	|OP*	|do_smartmatch	|NULLOK HV* seen_this|NULLOK HV* seen_other
+s	|OP*	|do_smartmatch	|NULLOK HV* seen_this \
+				|NULLOK HV* seen_other|const bool copied
 #endif
 
 #if defined(PERL_IN_PP_HOT_C)

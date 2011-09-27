@@ -14,7 +14,7 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 OPf_KIDS OPf_REF OPf_STACKED OPf_SPECIAL OPf_MOD
 	 OPpLVAL_INTRO OPpOUR_INTRO OPpENTERSUB_AMPER OPpSLICE OPpCONST_BARE
 	 OPpTRANS_SQUASH OPpTRANS_DELETE OPpTRANS_COMPLEMENT OPpTARGET_MY
-	 OPpCONST_ARYBASE OPpEXISTS_SUB OPpSORT_NUMERIC OPpSORT_INTEGER
+	 OPpEXISTS_SUB OPpSORT_NUMERIC OPpSORT_INTEGER
 	 OPpSORT_REVERSE
 	 SVf_IOK SVf_NOK SVf_ROK SVf_POK SVpad_OUR SVf_FAKE SVs_RMG SVs_SMG
          CVf_METHOD CVf_LVALUE
@@ -25,8 +25,16 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 ($] < 5.008009 ? () : qw(OPpCONST_NOVER OPpPAD_STATE)),
 	 ($] < 5.009 ? 'PMf_SKIPWHITE' : qw(RXf_SKIPWHITE)),
 	 ($] < 5.011 ? 'CVf_LOCKED' : 'OPpREVERSE_INPLACE'),
-	 ($] < 5.013 ? () : 'PMf_NONDESTRUCT');
-$VERSION = "1.06";
+	 ($] < 5.013 ? () : 'PMf_NONDESTRUCT'),
+	 ($] < 5.015003 &&
+	     # This empirical feature test is required during the
+	     # transitional phase where blead still identifies itself
+	     # as 5.15.2 but has had $[ removed.  After blead has its
+	     # version number bumped to 5.15.3, this can be reduced to
+	     # just test $] < 5.015003.
+	     ($] < 5.015002 || do { require B; exists(&B::OPpCONST_ARYBASE) })
+	     ? qw(OPpCONST_ARYBASE) : ());
+$VERSION = "1.08";
 use strict;
 use vars qw/$AUTOLOAD/;
 use warnings ();
@@ -36,7 +44,7 @@ BEGIN {
     # be to fake up a dummy constant that will never actually be true.
     foreach (qw(OPpSORT_INPLACE OPpSORT_DESCEND OPpITER_REVERSED OPpCONST_NOVER
 		OPpPAD_STATE RXf_SKIPWHITE CVf_LOCKED OPpREVERSE_INPLACE
-		PMf_NONDESTRUCT)) {
+		PMf_NONDESTRUCT OPpCONST_ARYBASE)) {
 	no strict 'refs';
 	*{$_} = sub () {0} unless *{$_}{CODE};
     }
@@ -737,7 +745,11 @@ sub ambient_pragmas {
 	}
 
 	elsif ($name eq '$[') {
-	    $arybase = $val;
+	    if (OPpCONST_ARYBASE) {
+		$arybase = $val;
+	    } else {
+		croak "\$[ can't be non-zero on this perl" unless $val == 0;
+	    }
 	}
 
 	elsif ($name eq 'integer'
@@ -1285,10 +1297,16 @@ sub stash_variable {
 	return "$prefix$name";
     }
 
-    if (defined $cx && $cx == 26) {
-	if ($prefix eq '@' && $name =~ /^[^\w+-]$/) {
+    if ($name =~ /^[^\w+-]$/) {
+      if (defined $cx && $cx == 26) {
+	if ($prefix eq '@') {
 	    return "$prefix\{$name}";
 	}
+	elsif ($name eq '#') { return '${#}' } #  "${#}a" vs "$#a"
+      }
+      if ($prefix eq '$#') {
+	return "\$#{$name}";
+      }
     }
 
     my $v = ($prefix eq '$#' ? '@' : $prefix) . $name;
@@ -1412,7 +1430,7 @@ sub pp_nextstate {
 	$self->{'curstash'} = $stash;
     }
 
-    if ($self->{'arybase'} != $op->arybase) {
+    if (OPpCONST_ARYBASE && $self->{'arybase'} != $op->arybase) {
 	push @text, '$[ = '. $op->arybase .";\n";
 	$self->{'arybase'} = $op->arybase;
     }
@@ -4786,6 +4804,7 @@ expect.
 =item $[
 
 Takes a number, the value of the array base $[.
+Cannot be non-zero on Perl 5.15.3 or later.
 
 =item bytes
 
