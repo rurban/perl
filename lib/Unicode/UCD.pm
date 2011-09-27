@@ -6,7 +6,7 @@ no warnings 'surrogate';    # surrogates can be inputs to this
 use charnames ();
 use Unicode::Normalize qw(getCombinClass NFD);
 
-our $VERSION = '0.35';
+our $VERSION = '0.36';
 
 use Storable qw(dclone);
 
@@ -467,14 +467,22 @@ sub _read_table ($;$) {
         my ($start, $end, $value) = / ^ (.+?) \t (.*?) \t (.+?)
                                         \s* ( \# .* )?  # Optional comment
                                         $ /x;
-        $end = $start if $end eq "";
+        my $decimal_start = hex $start;
+        my $decimal_end = ($end eq "") ? $decimal_start : hex $end;
         if ($return_hash) {
-            foreach my $i (hex $start .. hex $end) {
+            foreach my $i ($decimal_start .. $decimal_end) {
                 $return{$i} = $value;
             }
         }
+        elsif (@return &&
+               $return[-1][1] == $decimal_start - 1
+               && $return[-1][2] eq $value)
+        {
+            # If this is merely extending the previous range, do just that.
+            $return[-1]->[1] = $decimal_end;
+        }
         else {
-            push @return, [ hex $start, hex $end, $value ];
+            push @return, [ $decimal_start, $decimal_end, $value ];
         }
     }
     return ($return_hash) ? %return : @return;

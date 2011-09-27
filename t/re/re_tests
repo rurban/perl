@@ -1535,4 +1535,10 @@ abc\N{def	-	c	-	\\N{NAME} must be resolved by the lexer
 /^\p{L_}/	\x{3400}	n	-	-
 /^\p{L}/	\x{3400}	y	$&	\x{3400}
 
+# RT #89774
+/s\xDF/ui	\xDFs	yT	$&	\xDFs
+
+# RT #99928
+/^\R\x0A$/	\x0D\x0A	yT	$&	\x0D\x0A
+
 # vim: softtabstop=0 noexpandtab

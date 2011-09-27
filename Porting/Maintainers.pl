@@ -764,9 +764,10 @@ use File::Glob qw(:case);
     'perlfaq' =>
 	{
 	'MAINTAINER'	=> 'perlfaq',
-	'DISTRIBUTION'  => 'LLAP/perlfaq-5.0150034.tar.gz',
+	'DISTRIBUTION'  => 'LLAP/perlfaq-5.0150035.tar.gz',
 	'FILES'		=> q[cpan/perlfaq],
-	'EXCLUDED'	=> [ qw(t/release-pod-syntax.t) ],
+	'EXCLUDED'	=> [ qw(t/release-pod-syntax.t t/release-eol.t
+				t/release-no-tabs.t) ],
 	'UPSTREAM'	=> 'cpan',
 	},
 
@@ -1258,7 +1259,7 @@ use File::Glob qw(:case);
     'Module::CoreList' =>
 	{
 	'MAINTAINER'	=> 'bingos',
-	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.55.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.56.tar.gz',
 	'FILES'		=> q[dist/Module-CoreList],
 	'UPSTREAM'	=> 'blead',
 	},

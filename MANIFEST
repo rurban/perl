@@ -1867,6 +1867,7 @@ cpan/perlfaq/lib/perlfaq8.pod	System Interaction
 cpan/perlfaq/lib/perlfaq9.pod	Networking
 cpan/perlfaq/lib/perlfaq.pm	Perl frequently asked questions
 cpan/perlfaq/lib/perlfaq.pod	Perl frequently asked questions
+cpan/perlfaq/lib/perlglossary.pod	Perl Glossary
 cpan/PerlIO-via-QuotedPrint/lib/PerlIO/via/QuotedPrint.pm	PerlIO::via::QuotedPrint
 cpan/PerlIO-via-QuotedPrint/t/QuotedPrint.t			PerlIO::via::QuotedPrint
 cpan/Perl-OSType/lib/Perl/OSType.pm			Perl::OSType
@@ -4443,6 +4444,7 @@ pod/perl5123delta.pod		Perl changes in version 5.12.3
 pod/perl5124delta.pod		Perl changes in version 5.12.4
 pod/perl5140delta.pod		Perl changes in version 5.14.0
 pod/perl5141delta.pod		Perl changes in version 5.14.1
+pod/perl5142delta.pod		Perl changes in version 5.14.2
 pod/perl5150delta.pod		Perl changes in version 5.15.0
 pod/perl5151delta.pod		Perl changes in version 5.15.1
 pod/perl5152delta.pod		Perl changes in version 5.15.2
@@ -4485,7 +4487,6 @@ pod/perlfork.pod		Perl fork() information
 pod/perlform.pod		Perl formats
 pod/perlfunc.pod		Perl built-in functions
 pod/perlgit.pod			Using git with the Perl repository
-pod/perlglossary.pod		Perl Glossary
 pod/perlgpl.pod			GNU General Public License
 pod/perlguts.pod		Perl internal functions for those doing extensions
 pod/perlhack.pod		Perl hackers guide
@@ -5123,6 +5124,7 @@ t/porting/authors.t		Check that all authors have been acknowledged
 t/porting/bincompat.t		Check that {non_,}bincompat_options are ordered
 t/porting/buildtoc.t		Check that various pod lists are consistent
 t/porting/checkcase.t		Check whether we are case-insensitive-fs-friendly
+t/porting/checkcfgvar.t		Check that all config.sh-like files are good
 t/porting/cmp_version.t		Test whether all changed module files have their VERSION bumped
 t/porting/diag.t		Test completeness of perldiag.pod
 t/porting/dual-life.t		Check that dual-life bins are in utils/
