@@ -331,11 +331,21 @@ $make_set_make
 
 # Mention $gmake here so it gets probed for by Configure.
 
+!GROK!THIS!
+
+case "${osname}" in
+linux*|darwin)
+$spitshell >>$Makefile <<!GROK!THIS!
 # If you're going to use valgrind and it can't be invoked as plain valgrind
 # then you'll need to change this, or override it on the make command line.
 VALGRIND ?= valgrind
 VG_TEST  ?= ./perl -e 1 2>/dev/null
 
+!GROK!THIS!
+	;;
+esac
+
+$spitshell >>$Makefile <<!GROK!THIS!
 DTRACE = $dtrace
 DTRACE_H = $dtrace_h
 DTRACE_O = $dtrace_o
@@ -879,7 +889,12 @@ purecov$(PERL_EXE): $& perlmain$(OBJ_EXT) $(LIBPERL) $(static_ext) ext.libs $(PE
 quant$(PERL_EXE): $& perlmain$(OBJ_EXT) $(LIBPERL) $(static_ext) ext.libs $(PERLEXPORT)
 	$(SHRPENV) $(LDLIBPTH) quantify $(CC) -o quantperl $(CLDFLAGS) $(CCDLFLAGS) perlmain$(OBJ_EXT) $(static_ext) $(LLIBPERL) `cat ext.libs` $(libs)
 
-# Valgrind perl (currently Linux only)
+!NO!SUBS!
+
+case "${osname}${osvers}" in
+linux*|darwin*)
+	$spitshell >>$Makefile <<'!NO!SUBS!'
+# Valgrind perl (currently Linux, Darwin only)
 
 perl.valgrind.config: config.sh
 	@echo "To build perl.valgrind you must Configure -Doptimize=-g -Uusemymalloc, checking..."
@@ -889,6 +904,11 @@ perl.valgrind.config: config.sh
 	@grep "^usemymalloc='n'" config.sh >/dev/null || exit 1
 	@echo "And of course you have to have valgrind..."
 	$(VALGRIND) $(VG_TEST) || exit 1
+!NO!SUBS!
+	;;
+esac	
+
+$spitshell >>$Makefile <<'!NO!SUBS!'
 
 # Third Degree Perl (Tru64 only)
 
@@ -1431,6 +1451,11 @@ test.utf16 check.utf16: test_prep
 utest.utf16 ucheck.utf16: test_prep
 	TEST_ARGS="-utf8 -utf16" $(RUN_TESTS) choose
 
+!NO!SUBS!
+
+case "${osname}${osvers}" in
+linux*|darwin*)
+	$spitshell >>$Makefile <<'!NO!SUBS!'
 # Targets for valgrind testing:
 
 test_prep.valgrind: test_prep perl.valgrind
@@ -1443,6 +1468,11 @@ utest.valgrind ucheck.valgrind: test_prep.valgrind perl.valgrind.config
 
 test_notty.valgrind: test_prep.valgrind perl.valgrind.config
 	PERL_VALGRIND=1 $(RUN_TESTS) no-tty
+!NO!SUBS!
+	;;
+esac
+
+$spitshell >>$Makefile <<'!NO!SUBS!'
 
 # Targets for Third Degree testing.
 
