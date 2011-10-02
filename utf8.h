@@ -201,17 +201,18 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define UTF8_EIGHT_BIT_LO(c)	UTF8_TWO_BYTE_LO((U8)(c))
 
 /*
- * Note: we try to be careful never to call the isXXX_utf8() functions
- * unless we're pretty sure we've seen the beginning of a UTF-8 or UTFEBCDIC
- * character.  Otherwise we risk loading in the heavy-duty swash_init and
- * swash_fetch routines unnecessarily.
+ * 'UTF' is whether or not p is encoded in UTF8.  The names 'foo_lazy_if' stem
+ * from an earlier version of these macros in which they didn't call the
+ * foo_utf8() macros (i.e. were 'lazy') unless they decided that *p is the
+ * beginning of a utf8 character.  Now that foo_utf8() determines that itself,
+ * no need to do it again here
  */
-#define isIDFIRST_lazy_if(p,c) ((IN_BYTES || (!c || ! UTF8_IS_START(*((const U8*)p)))) \
-				? isIDFIRST(*(p)) \
-				: isIDFIRST_utf8((const U8*)p))
-#define isALNUM_lazy_if(p,c)   ((IN_BYTES || (!c || ! UTF8_IS_START(*((const U8*)p)))) \
-				? isALNUM(*(p)) \
-				: isALNUM_utf8((const U8*)p))
+#define isIDFIRST_lazy_if(p,UTF) ((IN_BYTES || !UTF ) \
+				 ? isIDFIRST(*(p)) \
+				 : isIDFIRST_utf8((const U8*)p))
+#define isALNUM_lazy_if(p,UTF)   ((IN_BYTES || (!UTF )) \
+				 ? isALNUM(*(p)) \
+				 : isALNUM_utf8((const U8*)p))
 
 #define isIDFIRST_lazy(p)	isIDFIRST_lazy_if(p,1)
 #define isALNUM_lazy(p)		isALNUM_lazy_if(p,1)

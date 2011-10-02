@@ -1236,9 +1236,7 @@ Perl_is_uni_alpha(pTHX_ UV c)
 bool
 Perl_is_uni_ascii(pTHX_ UV c)
 {
-    U8 tmpbuf[UTF8_MAXBYTES+1];
-    uvchr_to_utf8(tmpbuf, c);
-    return is_utf8_ascii(tmpbuf);
+    return isASCII(c);
 }
 
 bool
@@ -1276,9 +1274,7 @@ Perl_is_uni_lower(pTHX_ UV c)
 bool
 Perl_is_uni_cntrl(pTHX_ UV c)
 {
-    U8 tmpbuf[UTF8_MAXBYTES+1];
-    uvchr_to_utf8(tmpbuf, c);
-    return is_utf8_cntrl(tmpbuf);
+    return isCNTRL_L1(c);
 }
 
 bool
@@ -1514,14 +1510,22 @@ Perl_is_utf8_xidfirst(pTHX_ const U8 *p) /* The naming is historical. */
 }
 
 bool
+Perl__is_utf8__perl_idstart(pTHX_ const U8 *p)
+{
+    dVAR;
+
+    PERL_ARGS_ASSERT__IS_UTF8__PERL_IDSTART;
+
+    return is_utf8_common(p, &PL_utf8_perl_idstart, "_Perl_IDStart");
+}
+
+bool
 Perl_is_utf8_idcont(pTHX_ const U8 *p)
 {
     dVAR;
 
     PERL_ARGS_ASSERT_IS_UTF8_IDCONT;
 
-    if (*p == '_')
-	return TRUE;
     return is_utf8_common(p, &PL_utf8_idcont, "IdContinue");
 }
 
@@ -1532,8 +1536,6 @@ Perl_is_utf8_xidcont(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_XIDCONT;
 
-    if (*p == '_')
-	return TRUE;
     return is_utf8_common(p, &PL_utf8_idcont, "XIdContinue");
 }
 
@@ -1554,7 +1556,9 @@ Perl_is_utf8_ascii(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_ASCII;
 
-    return is_utf8_common(p, &PL_utf8_ascii, "IsAscii");
+    /* ASCII characters are the same whether in utf8 or not.  So the macro
+     * works on both utf8 and non-utf8 representations. */
+    return isASCII(*p);
 }
 
 bool
@@ -1564,7 +1568,7 @@ Perl_is_utf8_space(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_SPACE;
 
-    return is_utf8_common(p, &PL_utf8_space, "IsSpacePerl");
+    return is_utf8_common(p, &PL_utf8_space, "IsXPerlSpace");
 }
 
 bool
@@ -1574,7 +1578,9 @@ Perl_is_utf8_perl_space(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_PERL_SPACE;
 
-    return is_utf8_common(p, &PL_utf8_perl_space, "IsPerlSpace");
+    /* Only true if is an ASCII space-like character, and ASCII is invariant
+     * under utf8, so can just use the macro */
+    return isSPACE_A(*p);
 }
 
 bool
@@ -1584,7 +1590,9 @@ Perl_is_utf8_perl_word(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_PERL_WORD;
 
-    return is_utf8_common(p, &PL_utf8_perl_word, "IsPerlWord");
+    /* Only true if is an ASCII word character, and ASCII is invariant
+     * under utf8, so can just use the macro */
+    return isWORDCHAR_A(*p);
 }
 
 bool
@@ -1604,7 +1612,9 @@ Perl_is_utf8_posix_digit(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_POSIX_DIGIT;
 
-    return is_utf8_common(p, &PL_utf8_posix_digit, "IsPosixDigit");
+    /* Only true if is an ASCII digit character, and ASCII is invariant
+     * under utf8, so can just use the macro */
+    return isDIGIT_A(*p);
 }
 
 bool
@@ -1634,7 +1644,15 @@ Perl_is_utf8_cntrl(pTHX_ const U8 *p)
 
     PERL_ARGS_ASSERT_IS_UTF8_CNTRL;
 
-    return is_utf8_common(p, &PL_utf8_cntrl, "IsCntrl");
+    if (isASCII(*p)) {
+	return isCNTRL_A(*p);
+    }
+
+    /* All controls are in Latin1 */
+    if (! UTF8_IS_DOWNGRADEABLE_START(*p)) {
+	return 0;
+    }
+    return isCNTRL_L1(TWO_BYTE_UTF8_TO_UNI(*p, *(p+1)));
 }
 
 bool
@@ -2050,6 +2068,8 @@ Perl_swash_init(pTHX_ const char* pkg, const char* name, SV *listsv, I32 minbits
     ENTER;
     SAVEHINTS();
     save_re_context();
+    if (PL_parser && PL_parser->error_count)
+	SAVEI8(PL_parser->error_count), PL_parser->error_count = 0;
     method = gv_fetchmeth(stash, "SWASHNEW", 8, -1);
     if (!method) {	/* demand load utf8 */
 	ENTER;
@@ -2162,12 +2182,13 @@ Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
 	    const UV code_point = utf8n_to_uvuni(ptr, UTF8_MAXBYTES, 0, 0);
 
 	    /* This outputs warnings for binary properties only, assuming that
-	     * to_utf8_case() will output any.  Also, surrogates aren't checked
-	     * for, as that would warn on things like /\p{Gc=Cs}/ */
+	     * to_utf8_case() will output any for non-binary.  Also, surrogates
+	     * aren't checked for, as that would warn on things like
+	     * /\p{Gc=Cs}/ */
 	    SV** const bitssvp = hv_fetchs(hv, "BITS", FALSE);
 	    if (SvUV(*bitssvp) == 1) {
 		Perl_warner(aTHX_ packWARN(WARN_NON_UNICODE),
-		    "Code point 0x%04"UVXf" is not Unicode, no properties match it; all inverse properties do", code_point);
+		    "Code point 0x%04"UVXf" is not Unicode, all \\p{} matches fail; all \\P{} matches succeed", code_point);
 	    }
 	}
     }
@@ -2472,12 +2493,26 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
     } /* while */
   go_out_list:
 
-    /* Invert if the data says it should be */
+    /* Invert if the data says it should be.  Assumes that bits == 1 */
     if (invert_it_svp && SvUV(*invert_it_svp)) {
-	send = s + scur;
-	while (s < send) {
-	    *s = ~(*s);
-	    s++;
+
+	/* Unicode properties should come with all bits above PERL_UNICODE_MAX
+	 * be 0, and their inversion should also be 0, as we don't succeed any
+	 * Unicode property matches for non-Unicode code points */
+	if (start <= PERL_UNICODE_MAX) {
+
+	    /* The code below assumes that we never cross the
+	     * Unicode/above-Unicode boundary in a range, as otherwise we would
+	     * have to figure out where to stop flipping the bits.  Since this
+	     * boundary is divisible by a large power of 2, and swatches comes
+	     * in small powers of 2, this should be a valid assumption */
+	    assert(start + span - 1 <= PERL_UNICODE_MAX);
+
+	    send = s + scur;
+	    while (s < send) {
+		*s = ~(*s);
+		s++;
+	    }
 	}
     }
 
@@ -2961,7 +2996,7 @@ Perl__swash_to_invlist(pTHX_ SV* const swash)
 
     /* Invert if the data says it should be */
     if (invert_it_svp && SvUV(*invert_it_svp)) {
-	_invlist_invert(invlist);
+	_invlist_invert_prop(invlist);
     }
 
     /* This code is copied from swash_get()

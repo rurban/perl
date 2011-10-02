@@ -571,13 +571,8 @@ PERLVAR(I, numeric_radix_sv, SV *)	/* The radix separator if not '.' */
 
 /* utf8 character classes */
 PERLVAR(I, utf8_alnum,	SV *)
-PERLVAR(I, utf8_ascii,	SV *)
 PERLVAR(I, utf8_alpha,	SV *)
 PERLVAR(I, utf8_space,	SV *)
-PERLVAR(I, utf8_perl_space, SV *)
-PERLVAR(I, utf8_perl_word, SV *)
-PERLVAR(I, utf8_posix_digit, SV *)
-PERLVAR(I, utf8_cntrl,	SV *)
 PERLVAR(I, utf8_graph,	SV *)
 PERLVAR(I, utf8_digit,	SV *)
 PERLVAR(I, utf8_upper,	SV *)
@@ -673,6 +668,7 @@ PERLVAR(I, debug_pad,	struct perl_debug_pad)	/* always needed because of the re 
 PERLVAR(I, utf8_idstart, SV *)
 PERLVAR(I, utf8_idcont,	SV *)
 PERLVAR(I, utf8_xidstart, SV *)
+PERLVAR(I, utf8_perl_idstart, SV *)
 PERLVAR(I, utf8_xidcont, SV *)
 
 PERLVAR(I, sort_RealCmp, SVCOMPARE_t)

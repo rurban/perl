@@ -595,6 +595,7 @@ Anpd	|bool	|is_utf8_string_loclen|NN const U8 *s|STRLEN len|NULLOK const U8 **ep
 ApR	|bool	|is_utf8_alnum	|NN const U8 *p
 ApR	|bool	|is_utf8_idfirst|NN const U8 *p
 ApR	|bool	|is_utf8_xidfirst|NN const U8 *p
+EXpR	|bool	|_is_utf8__perl_idstart|NN const U8 *p
 ApR	|bool	|is_utf8_idcont	|NN const U8 *p
 ApR	|bool	|is_utf8_xidcont	|NN const U8 *p
 ApR	|bool	|is_utf8_alpha	|NN const U8 *p
@@ -1320,6 +1321,7 @@ EXpM	|void	|_invlist_intersection	|NN SV* const a|NN SV* const b|NN SV** i
 EXpM	|void	|_invlist_union	|NN SV* const a|NN SV* const b|NN SV** output
 EXpM	|void	|_invlist_subtract|NN SV* const a|NN SV* const b|NN SV** result
 EXpM	|void	|_invlist_invert|NN SV* const invlist
+EXpM	|void	|_invlist_invert_prop|NN SV* const invlist
 EXMpR	|HV*	|_swash_inversion_hash	|NN SV* const swash
 EXMpR	|SV*	|_new_invlist	|IV initial_size
 EXMpR	|SV*	|_swash_to_invlist	|NN SV* const swash

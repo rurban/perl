@@ -11546,8 +11546,8 @@ sub compile_perl() {
 
     # Earliest releases didn't have title case.  Initialize it to empty if not
     # otherwise present
-    my $Title = $perl->add_match_table('Title');
-    $Title->add_alias('Titlecase');
+    my $Title = $perl->add_match_table('Title', Full_Name => 'Titlecase',
+                                       Description => '(= \p{Gc=Lt})');
     my $lt = $gc->table('Lt');
 
     # Earlier versions of mktables had this related to $lt since they have
@@ -11844,6 +11844,17 @@ sub compile_perl() {
     # These are used in Unicode's definition of \X
     my $begin = $perl->add_match_table('_X_Begin', Perl_Extension => 1);
     my $extend = $perl->add_match_table('_X_Extend', Perl_Extension => 1);
+
+    # For backward compatibility, Perl has its own definition for IDStart
+    # First, we include the underscore, and then the regular XID_Start also
+    # have to be Words
+    $perl->add_match_table('_Perl_IDStart',
+                           Perl_Extension => 1,
+                           Internal_Only => 1,
+                           Initialize =>
+                             ord('_')
+                             + (property_ref('XID_Start')->table('Y') & $Word)
+                           );
 
     my $gcb = property_ref('Grapheme_Cluster_Break');
 

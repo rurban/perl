@@ -21,7 +21,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan tests => 451;  # Update this when adding/deleting tests.
+plan tests => 463;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -1167,6 +1167,47 @@ sub run_tests {
         is($got,$want,'RT #84294: check that "ab" =~ /((\w+)(?{ push @got, $2 })){2}/ leaves @got in the correct state');
     }
 
+    {
+        # Suppress warnings, as the non-unicode one comes out even if turn off
+        # warnings here (because the execution is done in another scope).
+        local $SIG{__WARN__} = sub {};
+        my $str = "\x{110000}";
+
+        # No non-unicode code points match any Unicode property, even inverse
+        # ones
+        unlike($str, qr/\p{ASCII_Hex_Digit=True}/, "Non-Unicode doesn't match \\p{}");
+        unlike($str, qr/\p{ASCII_Hex_Digit=False}/, "Non-Unicode doesn't match \\p{}");
+        like($str, qr/\P{ASCII_Hex_Digit=True}/, "Non-Unicode matches \\P{}");
+        like($str, qr/\P{ASCII_Hex_Digit=False}/, "Non-Unicode matches \\P{}");
+    }
+
+    {
+        # Test that IDstart works, but doing because the author (khw) knows
+        # regexes much better than the rest of the core, it is being done here
+        # in the context of a regex which relies on buffer names beginng with
+        # IDStarts.
+        use utf8;
+        my $str = "abc";
+        like($str, qr/(?<a>abc)/, "'a' is legal IDStart");
+        like($str, qr/(?<_>abc)/, "'_' is legal IDStart");
+        like($str, qr/(?<ß>abc)/, "U+00DF is legal IDStart");
+        like($str, qr/(?<ℕ>abc)/, "U+2115' is legal IDStart");
+
+        # This test works on Unicode 6.0 in which U+2118 and U+212E are legal
+        # IDStarts there, but are not Word characters, and therefore Perl
+        # doesn't allow them to be IDStarts.  But there is no guarantee that
+        # Unicode won't change things around in the future so that at some
+        # future Unicode revision these tests would need to be revised.
+        foreach my $char ("%", "×", chr(0x2118), chr(0x212E)) {
+            my $prog = <<"EOP";
+use utf8;;
+"abc" =~ qr/(?<$char>abc)/;
+EOP
+            utf8::encode($prog);
+            fresh_perl_like($prog, qr!Sequence.* not recognized!, "",
+                        sprintf("'U+%04X not legal IDFirst'", ord($char)));
+        }
+    }
 } # End of sub run_tests
 
 1;
