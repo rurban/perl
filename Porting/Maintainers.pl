@@ -579,7 +579,7 @@ use File::Glob qw(:case);
     'Digest' =>
 	{
 	'MAINTAINER'	=> 'gaas',
-	'DISTRIBUTION'	=> 'GAAS/Digest-1.16.tar.gz',
+	'DISTRIBUTION'	=> 'GAAS/Digest-1.17.tar.gz',
 	'FILES'		=> q[cpan/Digest],
 	'EXCLUDED'	=> [ qw{digest-bench} ],
 	'UPSTREAM'	=> "cpan",
@@ -1970,7 +1970,7 @@ use File::Glob qw(:case);
     'Unicode::Collate' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.78.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.79.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Collate],
 	'EXCLUDED'	=> [ qr{N$},
                    qr{^data/},

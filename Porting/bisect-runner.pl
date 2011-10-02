@@ -1,42 +1,63 @@
 #!/usr/bin/perl -w
 use strict;
 
-use Getopt::Long;
+use Getopt::Long qw(:config bundling no_auto_abbrev);
 
-my @targets = qw(miniperl lib/Config.pm perl test_prep);
+my @targets = qw(config.sh miniperl lib/Config.pm perl test_prep);
 
-my $target = 'test_prep';
-my $j = '9';
-my $test_should_pass = 1;
-my $clean = 1;
-my $one_liner;
-my $match;
-my $force_manifest;
-my $test_build;
+my %options =
+    (
+     target => 'test_prep',
+     jobs => 9,
+     'expect-pass' => 1,
+     clean => 1, # mostly for debugging this
+    );
+
+my @paths = qw(/usr/local/lib64 /lib64 /usr/lib64);
+
+my %defines =
+    (
+     usedevel => '',
+     optimize => '-g',
+     cc => 'ccache gcc',
+     ld => 'gcc',
+     'libpth' => \@paths,
+    );
 
 sub usage {
-    die "$0: [--target=...] [-j=4] [--expect-pass=0|1] thing to test";
+    die "$0: [--target=...] [-j4] [--expect-pass=0|1] thing to test";
 }
 
-unless(GetOptions('target=s' => \$target,
-		  'jobs|j=i' => \$j,
-		  'expect-pass=i' => \$test_should_pass,
-		  'expect-fail' => sub { $test_should_pass = 0; },
-		  'clean!' => \$clean, # mostly for debugging this
-		  'one-liner|e=s' => \$one_liner,
-                  'match=s' => \$match,
-                  'force-manifest' => \$force_manifest,
-                  'test-build' => \$test_build,
+unless(GetOptions(\%options,
+                  'target=s', 'jobs|j=i', 'expect-pass=i',
+                  'expect-fail' => sub { $options{'expect-pass'} = 0; },
+                  'clean!', 'one-liner|e=s', 'match=s', 'force-manifest',
+                  'test-build', 'check-args', 'A=s@', 'verbose+',
+                  'D=s@' => sub {
+                      my (undef, $val) = @_;
+                      if ($val =~ /\A([^=]+)=(.*)/s) {
+                          $defines{$1} = length $2 ? $2 : "\0";
+                      } else {
+                          $defines{$val} = '';
+                      }
+                  },
+                  'U=s@' => sub {
+                      $defines{$_[1]} = undef;
+                  },
 		 )) {
     usage();
 }
 
+my ($target, $j, $match) = @options{qw(target jobs match)};
+
 my $exe = $target eq 'perl' || $target eq 'test_prep' ? 'perl' : 'miniperl';
 my $expected = $target eq 'test_prep' ? 'perl' : $target;
 
-unshift @ARGV, "./$exe", '-Ilib', '-e', $one_liner if defined $one_liner;
+unshift @ARGV, "./$exe", '-Ilib', '-e', $options{'one-liner'}
+    if defined $options{'one-liner'};
 
-usage() unless @ARGV || $match || $test_build;
+usage() unless @ARGV || $match || $options{'test-build'};
+exit 0 if $options{'check-args'};
 
 die "$0: Can't build $target" unless grep {@targets} $target;
 
@@ -60,7 +81,7 @@ sub extract_from_file {
 }
 
 sub clean {
-    if ($clean) {
+    if ($options{clean}) {
         # Needed, because files that are build products in this checked out
         # version might be in git in the next desired version.
         system 'git clean -dxf';
@@ -82,7 +103,7 @@ sub report_and_exit {
 
     clean();
 
-    my $got = ($test_should_pass ? !$ret : $ret) ? 'good' : 'bad';
+    my $got = ($options{'expect-pass'} ? !$ret : $ret) ? 'good' : 'bad';
     if ($ret) {
         print "$got - $fail $desc\n";
     } else {
@@ -184,14 +205,9 @@ EOPATCH
 # Remove this if you're actually bisecting a problem related to makedepend.SH
 system 'git show blead:makedepend.SH > makedepend.SH' and die;
 
-my @paths = qw(/usr/local/lib64 /lib64 /usr/lib64);
-
 # if Encode is not needed for the test, you can speed up the bisect by
 # excluding it from the runs with -Dnoextensions=Encode
 # ccache is an easy win. Remove it if it causes problems.
-my @ARGS = ('-des', '-Dusedevel', '-Doptimize=-g', '-Dcc=ccache gcc',
-	    '-Dld=gcc', "-Dlibpth=@paths");
-
 # Commit 1cfa4ec74d4933da adds ignore_versioned_solibs to Configure, and sets it
 # to true in hints/linux.sh
 # On dromedary, from that point on, Configure (by default) fails to find any
@@ -218,20 +234,20 @@ unless (extract_from_file('Configure', 'ignore_versioned_solibs')) {
 	    last;
 	}
     }
-    push @ARGS, "-Dlibs=@libs";
+    $defines{libs} = \@libs unless exists $defines{libs};
 }
 
 # This seems to be necessary to avoid makedepend becoming confused, and hanging
 # on stdin. Seems that the code after make shlist || ...here... is never run.
-push @ARGS, q{-Dtrnl='\n'}
-    if $major < 4;
+$defines{trnl} = q{'\n'}
+    if $major < 4 && !exists $defines{trnl};
 
-push @ARGS, '-Uusenm'
-    if $major < 2;
+$defines{usenm} = undef
+    if $major < 2 && !exists $defines{usenm};
 
 my (@missing, @created_dirs);
 
-if ($force_manifest) {
+if ($options{'force-manifest'}) {
     open my $fh, '<', 'MANIFEST'
         or die "Could not open MANIFEST: $!";
     while (<$fh>) {
@@ -257,6 +273,22 @@ if ($force_manifest) {
     }
 }
 
+my @ARGS = $target eq 'config.sh' ? '-dEs' : '-des';
+foreach my $key (sort keys %defines) {
+    my $val = $defines{$key};
+    if (ref $val) {
+        push @ARGS, "-D$key=@$val";
+    } elsif (!defined $val) {
+        push @ARGS, "-U$key";
+    } elsif (!length $val) {
+        push @ARGS, "-D$key";
+    } else {
+        $val = "" if $val eq "\0";
+        push @ARGS, "-D$key=$val";
+    }
+}
+push @ARGS, map {"-A$_"} @{$options{A}};
+
 # </dev/null because it seems that some earlier versions of Configure can
 # call commands in a way that now has them reading from stdin (and hanging)
 my $pid = fork;
@@ -266,7 +298,7 @@ if (!$pid) {
     # tty. With that commit, the tty requirement was dropped for -de and -dE
     if($major > 4) {
         open STDIN, '<', '/dev/null';
-    } elsif (!$force_manifest) {
+    } elsif (!$options{'force-manifest'}) {
         # If a file in MANIFEST is missing, Configure asks if you want to
         # continue (the default being 'n'). With stdin closed or /dev/null,
         # it exit immediately and the check for config.sh below will skip.
@@ -288,8 +320,13 @@ if (!$pid) {
 waitpid $pid, 0
     or die "wait for Configure, pid $pid failed: $!";
 
-# Skip if something went wrong with Configure
-skip('no config.sh') unless -f 'config.sh';
+if ($target eq 'config.sh') {
+    report_and_exit(!-f $target, 'could build', 'could not build', $target);
+} elsif (!-f 'config.sh') {
+    # Skip if something went wrong with Configure
+
+    skip('could not build config.sh');
+}
 
 # This is probably way too paranoid:
 if (@missing) {
@@ -405,7 +442,7 @@ if ($target ne 'miniperl') {
 
 my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
 
-if ($test_build) {
+if ($options{'test-build'}) {
     report_and_exit($missing_target, 'could build', 'could not build', $target);
 } elsif ($missing_target) {
     skip("could not build $target");
