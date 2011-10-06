@@ -756,7 +756,7 @@ use File::Glob qw(:case);
     'ExtUtils::ParseXS' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.04_04.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.05.tar.gz',
 	'FILES'		=> q[dist/ExtUtils-ParseXS],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1267,7 +1267,7 @@ use File::Glob qw(:case);
     'Module::Load' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Module-Load-0.20.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-Load-0.22.tar.gz',
 	'FILES'		=> q[cpan/Module-Load],
 	'UPSTREAM'	=> 'cpan',
 	},

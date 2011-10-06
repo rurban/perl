@@ -3,12 +3,25 @@ use strict;
 
 use Getopt::Long qw(:config bundling no_auto_abbrev);
 use Pod::Usage;
+use Config;
 
-my @targets = qw(config.sh config.h miniperl lib/Config.pm perl test_prep);
+my @targets
+    = qw(config.sh config.h miniperl lib/Config.pm Fcntl perl test_prep);
+
+my $cpus;
+if (open my $fh, '<', '/proc/cpuinfo') {
+    while (<$fh>) {
+        ++$cpus if /^processor\s+:\s+\d+$/;
+    }
+} elsif (-x '/sbin/sysctl') {
+    $cpus = 1 + $1 if `/sbin/sysctl hw.ncpu` =~ /^hw\.ncpu: (\d+)$/;
+} elsif (-x '/usr/bin/getconf') {
+    $cpus = 1 + $1 if `/usr/bin/getconf _NPROCESSORS_ONLN` =~ /^(\d+)$/;
+}
 
 my %options =
     (
-     jobs => 9,
+     jobs => defined $cpus ? $cpus + 1 : 2,
      'expect-pass' => 1,
      clean => 1, # mostly for debugging this
     );
@@ -21,7 +34,7 @@ my %defines =
      optimize => '-g',
      cc => 'ccache gcc',
      ld => 'gcc',
-     'libpth' => \@paths,
+     (`uname -sm` eq "Linux x86_64\n" ? (libpth => \@paths) : ()),
     );
 
 unless(GetOptions(\%options,
@@ -115,6 +128,17 @@ Because the test case is the complete argument to C<system>, it is easy to
 run something other than the F<perl> built, if necessary. If you need to run
 the perl built, you'll probably need to invoke it as C<./perl -Ilib ...>
 
+You need a clean checkout to run a bisect, and you can't use the checkout
+which contains F<Porting/bisect.pl> (because C<git bisect>) will check out
+a revision before F<Porting/bisect-runner.pl> was added, which
+C<git bisect run> needs). If your working checkout is called F<perl>, the
+simplest solution is to make a local clone, and run from that. I<i.e.>:
+
+    cd ..
+    git clone perl perl2
+    cd perl2
+    ../perl/Porting/bisect.pl ...
+
 =head1 OPTIONS
 
 =over 4
@@ -133,7 +157,7 @@ the test case passes.
 --end I<commit-ish>
 
 Most recent revision to test, as a I<commit-ish>. If not specified, defaults
-to I<blead>
+to I<blead>.
 
 =item *
 
@@ -170,10 +194,19 @@ Use F<miniperl> to build F<lib/Config.pm>
 
 =item *
 
+I<Fcntl>
+
+Build F<lib/auto/Fcntl/Fnctl.so> (strictly, C<.$Config{so}>). As L<Fcntl>
+is simple XS module present since 5.000, this provides a fast test of
+whether XS modules can be built. Note, XS modules are built by F<miniperl>,
+hence this target will not build F<perl>.
+
+=item *
+
 I<perl>
 
 Build F<perl>. This also builds pure-Perl modules in F<cpan>, F<dist> and
-F<ext>.
+F<ext>. XS modules (such as L<Fcntl>) are not built.
 
 =item *
 
@@ -181,7 +214,7 @@ I<test_prep>
 
 Build everything needed to run the tests. This is the default if we're
 running test code, but is time consuming, as it means building all
-C<XS> modules. For older F<Makefile>s, the previous name of C<test-prep>
+XS modules. For older F<Makefile>s, the previous name of C<test-prep>
 is automatically substituted. For very old F<Makefile>s, C<make test> is
 run, as there is no target provided to just get things ready, and for 5.004
 and earlier the tests run very quickly.
@@ -196,10 +229,10 @@ and earlier the tests run very quickly.
 
 -e 'code to run'
 
-Example code to run, just like you'd use with C<perl -e>. 
+Example code to run, just like you'd use with C<perl -e>.
 
 This prepends C<./perl -Ilib -e 'code to run'> to the test case given,
-or C<./miniperl> if I<target> is C<miniperl>
+or C<./miniperl> if I<target> is C<miniperl>.
 
 (Usually you'll use C<-e> instead of providing a test case in the
 non-option arguments to C<bisect.pl>)
@@ -232,17 +265,20 @@ previous settings for the same parameter.
 
 =item *
 
---jobs
+--jobs I<jobs>
 
 =item *
 
--j
+-j I<jobs>
 
-Number of C<make> jobs to run in parallel. Currently defaults to 9.
+Number of C<make> jobs to run in parallel. If F</proc/cpuinfo> exists and
+can be parsed, or F</sbin/sysctl> exists and reports C<hw.ncpu>, or
+F</usr/bin/getconf> exists and reports C<_NPROCESSORS_ONLN> defaults to 1 +
+I<number of CPUs>. Otherwise defaults to 2.
 
 =item *
 
---match
+--match pattern
 
 Instead of running a test program to determine I<pass> or I<fail>, pass
 if the given regex matches, and hence search for the commit that removes
@@ -266,7 +302,22 @@ to "builds && fails". If instead one is interested in which commit broke the
 build (possibly for particular F<Configure> options), use I<--test-build>
 to treat a build failure as a failure, not a "skip".
 
+Often this option isn't as useful as it first seems, because I<any> build
+failure will be reported to C<git bisect> as a failure, not just the failure
+that you're interested in. Generally, to debug a particular problem, it's
+more useful to use a I<target> that builds properly at the point of interest,
+and then a test case that runs C<make>. For example:
+
+    .../Porting/bisect.pl --start=perl-5.000 --end=perl-5.002 \
+        --expect-fail --force-manifest --target=miniperl make perl
+
+will find the first revision capable of building C<DynaLoader> and then
+C<perl>, without becoming confused by revisions where C<miniperl> won't
+even link.
+
 =item *
+
+--force-manifest
 
 By default, a build will "skip" if any files listed in F<MANIFEST> are not
 present. Usually this is useful, as it avoids false-failures. However, there
@@ -342,10 +393,10 @@ sub clean {
     if ($options{clean}) {
         # Needed, because files that are build products in this checked out
         # version might be in git in the next desired version.
-        system 'git clean -dxf';
+        system 'git clean -dxf </dev/null';
         # Needed, because at some revisions the build alters checked out files.
         # (eg pod/perlapi.pod). Also undoes any changes to makedepend.SH
-        system 'git reset --hard HEAD';
+        system 'git reset --hard HEAD </dev/null';
     }
 }
 
@@ -413,7 +464,7 @@ sub apply_patch {
 }
 
 # Not going to assume that system perl is yet new enough to have autodie
-system 'git clean -dxf' and die;
+system 'git clean -dxf </dev/null' and die;
 
 if (!defined $target) {
     match_and_exit() if $match;
@@ -477,11 +528,124 @@ index 3d3b38d..78ffe16 100755
 EOPATCH
     }
 }
-    
+
+if ($major < 5 && extract_from_file('Configure',
+                                    qr/^if test ! -t 0; then$/)) {
+    # Before dfe9444ca7881e71, Configure would refuse to run if stdin was not a
+    # tty. With that commit, the tty requirement was dropped for -de and -dE
+    # For those older versions, it's probably easiest if we simply remove the
+    # sanity test.
+    apply_patch(<<'EOPATCH');
+diff --git a/Configure b/Configure
+index 0071a7c..8a61caa 100755
+--- a/Configure
++++ b/Configure
+@@ -93,7 +93,2 @@ esac
+ 
+-: Sanity checks
+-if test ! -t 0; then
+-	echo "Say 'sh $me', not 'sh <$me'"
+-	exit 1
+-fi
+ 
+EOPATCH
+}
+
+if ($major < 10 && extract_from_file('Configure', qr/^set malloc\.h i_malloc$/)) {
+    # This is commit 01d07975f7ef0e7d, trimmed, with $compile inlined as
+    # prior to bd9b35c97ad661cc Configure had the malloc.h test before the
+    # definition of $compile.
+    apply_patch(<<'EOPATCH');
+diff --git a/Configure b/Configure
+index 3d2e8b9..6ce7766 100755
+--- a/Configure
++++ b/Configure
+@@ -6743,5 +6743,22 @@ set d_dosuid
+ 
+ : see if this is a malloc.h system
+-set malloc.h i_malloc
+-eval $inhdr
++: we want a real compile instead of Inhdr because some systems have a
++: malloc.h that just gives a compile error saying to use stdlib.h instead
++echo " "
++$cat >try.c <<EOCP
++#include <stdlib.h>
++#include <malloc.h>
++int main () { return 0; }
++EOCP
++set try
++if $cc $optimize $ccflags $ldflags -o try $* try.c $libs > /dev/null 2>&1; then
++    echo "<malloc.h> found." >&4
++    val="$define"
++else
++    echo "<malloc.h> NOT found." >&4
++    val="$undef"
++fi
++$rm -f try.c try
++set i_malloc
++eval $setvar
+ 
+EOPATCH
+}
+
 # There was a bug in makedepend.SH which was fixed in version 96a8704c.
 # Symptom was './makedepend: 1: Syntax error: Unterminated quoted string'
 # Remove this if you're actually bisecting a problem related to makedepend.SH
-system 'git show blead:makedepend.SH > makedepend.SH' and die;
+system 'git show blead:makedepend.SH > makedepend.SH </dev/null' and die;
+
+if ($^O eq 'freebsd') {
+    # There are rather too many version-specific FreeBSD hints fixes to patch
+    # individually. Also, more than once the FreeBSD hints file has been
+    # written in what turned out to be a rather non-future-proof style,
+    # with case statements treating the most recent version as the exception,
+    # instead of treating previous versions' behaviour explicitly and changing
+    # the default to cater for the current behaviour. (As strangely, future
+    # versions inherit the current behaviour.)
+    system 'git show blead:hints/freebsd.sh > hints/freebsd.sh </dev/null'
+      and die;
+
+    if ($major < 2) {
+        # 5.002 Configure and later have code to
+        #
+        # : Try to guess additional flags to pick up local libraries.
+        #
+        # which will automatically add --L/usr/local/lib because libpth
+        # contains /usr/local/lib
+        #
+        # Without it, if Configure finds libraries in /usr/local/lib (eg
+        # libgdbm.so) and adds them to the compiler commandline (as -lgdbm),
+        # then the link will fail. We can't fix this up in config.sh because
+        # the link will *also* fail in the test compiles that Configure does
+        # (eg $inlibc) which makes Configure get all sorts of things
+        # wrong. :-( So bodge it here.
+        #
+        # Possibly other platforms will need something similar. (if they
+        # have "wanted" libraries in /usr/local/lib, but the compiler
+        # doesn't default to putting that directory in its link path)
+        apply_patch(<<'EOPATCH');
+--- perl2/hints/freebsd.sh.orig	2011-10-05 16:44:55.000000000 +0200
++++ perl2/hints/freebsd.sh	2011-10-05 16:45:52.000000000 +0200
+@@ -125,7 +125,7 @@
+         else
+             libpth="/usr/lib /usr/local/lib"
+             glibpth="/usr/lib /usr/local/lib"
+-            ldflags="-Wl,-E "
++            ldflags="-Wl,-E -L/usr/local/lib "
+             lddlflags="-shared "
+         fi
+         cccdlflags='-DPIC -fPIC'
+@@ -133,7 +133,7 @@
+ *)
+        libpth="/usr/lib /usr/local/lib"
+        glibpth="/usr/lib /usr/local/lib"
+-       ldflags="-Wl,-E "
++       ldflags="-Wl,-E -L/usr/local/lib "
+         lddlflags="-shared "
+         cccdlflags='-DPIC -fPIC'
+        ;;
+EOPATCH
+    }
+}
 
 # if Encode is not needed for the test, you can speed up the bisect by
 # excluding it from the runs with -Dnoextensions=Encode
@@ -572,26 +736,10 @@ push @ARGS, map {"-A$_"} @{$options{A}};
 my $pid = fork;
 die "Can't fork: $!" unless defined $pid;
 if (!$pid) {
-    # Before dfe9444ca7881e71, Configure would refuse to run if stdin was not a
-    # tty. With that commit, the tty requirement was dropped for -de and -dE
-    if($major > 4) {
-        open STDIN, '<', '/dev/null';
-    } elsif (!$options{'force-manifest'}) {
-        # If a file in MANIFEST is missing, Configure asks if you want to
-        # continue (the default being 'n'). With stdin closed or /dev/null,
-        # it exit immediately and the check for config.sh below will skip.
-        # To avoid a hang, we need to check MANIFEST for ourselves, and skip
-        # if anything is missing.
-        open my $fh, '<', 'MANIFEST';
-        skip("Could not open MANIFEST: $!")
-            unless $fh;
-        while (<$fh>) {
-            next unless /^(\S+)/;
-            skip("$1 from MANIFEST doesn't exist")
-                unless -f $1;
-        }
-        close $fh or die "Can't close MANIFEST: $!";
-    }
+    open STDIN, '<', '/dev/null';
+    # If a file in MANIFEST is missing, Configure asks if you want to
+    # continue (the default being 'n'). With stdin closed or /dev/null,
+    # it exits immediately and the check for config.sh below will skip.
     exec './Configure', @ARGS;
     die "Failed to start Configure: $!";
 }
@@ -701,19 +849,25 @@ EOPATCH
 }
 
 # Parallel build for miniperl is safe
-system "make $j miniperl";
+system "make $j miniperl </dev/null";
+
+my $expected = $target =~ /^test/ ? 't/perl'
+    : $target eq 'Fcntl' ? "lib/auto/Fcntl/Fcntl.$Config{so}"
+    : $target;
+my $real_target = $target eq 'Fcntl' ? $expected : $target;
 
 if ($target ne 'miniperl') {
     # Nearly all parallel build issues fixed by 5.10.0. Untrustworthy before that.
     $j = '' if $major < 10;
 
-    if ($target eq 'test_prep') {
+    if ($real_target eq 'test_prep') {
         if ($major < 8) {
             # test-prep was added in 5.004_01, 3e3baf6d63945cb6.
             # renamed to test_prep in 2001 in 5fe84fd29acaf55c.
             # earlier than that, just make test. It will be fast enough.
-            $target = extract_from_file('Makefile.SH', qr/^(test[-_]prep):/,
-                                        'test');
+            $real_target = extract_from_file('Makefile.SH',
+                                             qr/^(test[-_]prep):/,
+                                             'test');
         }
     }
 
@@ -736,22 +890,22 @@ index 35a8fde..62a7965 100644
  #ifndef HAS_SEM
 EOPATCH
     }
-    system "make $j $target";
+    system "make $j $real_target </dev/null";
 }
 
-my $expected = $target =~ /^test/ ? 't/perl' : $target;
 my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
 
 if ($options{'test-build'}) {
-    report_and_exit($missing_target, 'could build', 'could not build', $target);
+    report_and_exit($missing_target, 'could build', 'could not build',
+                    $real_target);
 } elsif ($missing_target) {
-    skip("could not build $target");
+    skip("could not build $real_target");
 }
 
-match_and_exit($target) if $match;
+match_and_exit($real_target) if $match;
 
 if (defined $options{'one-liner'}) {
-    my $exe = $target ne 'miniperl' ? 'perl' : 'miniperl';
+    my $exe = $target =~ /^(?:perl$|test)/ ? 'perl' : 'miniperl';
     unshift @ARGV, "./$exe", '-Ilib', '-e', $options{'one-liner'};
 }
 
