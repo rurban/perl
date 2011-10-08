@@ -217,9 +217,13 @@ S_hv_notallowed(pTHX_ int flags, const char *key, I32 klen,
 /*
 =for apidoc hv_store
 
-Stores an SV in a hash.  The hash key is specified as C<key> and C<klen> is
-the length of the key.  The C<hash> parameter is the precomputed hash
-value; if it is zero then Perl will compute it.  The return value will be
+Stores an SV in a hash.  The hash key is specified as C<key> and the
+absolute value of C<klen> is the length of the key.  If C<klen> is
+negative the key is assumed to be in UTF-8-encoded Unicode.  The
+C<hash> parameter is the precomputed hash value; if it is zero then
+Perl will compute it.
+
+The return value will be
 NULL if the operation failed or if the value did not need to be actually
 stored within the hash (as in the case of tied hashes).  Otherwise it can
 be dereferenced to get the original C<SV*>.  Note that the caller is
@@ -265,14 +269,16 @@ information on how to use this function on tied hashes.
 =for apidoc hv_exists
 
 Returns a boolean indicating whether the specified hash key exists.  The
-C<klen> is the length of the key.
+absolute value of C<klen> is the length of the key.  If C<klen> is
+negative the key is assumed to be in UTF-8-encoded Unicode.
 
 =for apidoc hv_fetch
 
-Returns the SV which corresponds to the specified key in the hash.  The
-C<klen> is the length of the key.  If C<lval> is set then the fetch will be
-part of a store.  Check that the return value is non-null before
-dereferencing it to an C<SV*>.
+Returns the SV which corresponds to the specified key in the hash.
+The absolute value of C<klen> is the length of the key.  If C<klen> is
+negative the key is assumed to be in UTF-8-encoded Unicode.  If
+C<lval> is set then the fetch will be part of a store.  Check that the
+return value is non-null before dereferencing it to an C<SV*>.
 
 See L<perlguts/"Understanding the Magic of Tied Hashes and Arrays"> for more
 information on how to use this function on tied hashes.
@@ -877,10 +883,12 @@ Perl_hv_scalar(pTHX_ HV *hv)
 /*
 =for apidoc hv_delete
 
-Deletes a key/value pair in the hash.  The value's SV is removed from the
-hash, made mortal, and returned to the caller.  The C<klen> is the length of
-the key.  The C<flags> value will normally be zero; if set to G_DISCARD then
-NULL will be returned.  NULL will also be returned if the key is not found.
+Deletes a key/value pair in the hash.  The value's SV is removed from
+the hash, made mortal, and returned to the caller.  The absolute
+value of C<klen> is the length of the key.  If C<klen> is negative the
+key is assumed to be in UTF-8-encoded Unicode.  The C<flags> value
+will normally be zero; if set to G_DISCARD then NULL will be returned.
+NULL will also be returned if the key is not found.
 
 =for apidoc hv_delete_ent
 
@@ -1780,7 +1788,10 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
      * in sv_clear(), and changes here should be done there too */
     if (PL_phase != PERL_PHASE_DESTRUCT && (name = HvNAME(hv))) {
         if (PL_stashcache)
-	    (void)hv_delete(PL_stashcache, name, HvNAMELEN_get(hv), G_DISCARD);
+	    (void)hv_delete(PL_stashcache, name,
+                            HEK_UTF8(HvNAME_HEK(hv)) ? -HvNAMELEN_get(hv) : HvNAMELEN_get(hv),
+                            G_DISCARD
+                           );
 	hv_name_set(hv, NULL, 0, 0);
     }
     hfreeentries(hv);
@@ -1793,7 +1804,9 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
 	    mro_isa_changed_in(hv);
         if (PL_stashcache)
 	    (void)hv_delete(
-	            PL_stashcache, name, HvENAMELEN_get(hv), G_DISCARD
+	            PL_stashcache, name,
+                    HEK_UTF8(HvENAME_HEK(hv)) ? -HvENAMELEN_get(hv) : HvENAMELEN_get(hv),
+                    G_DISCARD
 	          );
       }
 
@@ -1802,7 +1815,7 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
       name = HvNAME(hv);
       if (flags & HV_NAME_SETALL ? !!aux->xhv_name_u.xhvnameu_name : !!name) {
         if (name && PL_stashcache)
-	    (void)hv_delete(PL_stashcache, name, HvNAMELEN_get(hv), G_DISCARD);
+	    (void)hv_delete(PL_stashcache, name, (HEK_UTF8(HvNAME_HEK(hv)) ? -HvNAMELEN_get(hv) : HvNAMELEN_get(hv)), G_DISCARD);
 	hv_name_set(hv, NULL, 0, flags);
       }
       if((meta = aux->xhv_mro_meta)) {
@@ -2016,7 +2029,6 @@ Perl_hv_name_set(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
     HEK **spot;
 
     PERL_ARGS_ASSERT_HV_NAME_SET;
-    PERL_UNUSED_ARG(flags);
 
     if (len > I32_MAX)
 	Perl_croak(aTHX_ "panic: hv name too long (%"UVuf")", (UV) len);
@@ -2077,7 +2089,29 @@ Perl_hv_name_set(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 	spot = &iter->xhv_name_u.xhvnameu_name;
     }
     PERL_HASH(hash, name, len);
-    *spot = name ? share_hek(name, len, hash) : NULL;
+    *spot = name ? share_hek(name, flags & SVf_UTF8 ? -(I32)len : (I32)len, hash) : NULL;
+}
+
+/*
+This is basically sv_eq_flags() in sv.c, but we avoid the magic
+and bytes checking.
+*/
+
+STATIC I32
+hek_eq_pvn_flags(pTHX_ const HEK *hek, const char* pv, const I32 pvlen, const U32 flags) {
+    if ( (HEK_UTF8(hek) ? 1 : 0) != (flags & SVf_UTF8 ? 1 : 0) ) {
+        if (flags & SVf_UTF8)
+            return (bytes_cmp_utf8(
+                        (const U8*)HEK_KEY(hek), HEK_LEN(hek),
+		        (const U8*)pv, pvlen) == 0);
+        else
+            return (bytes_cmp_utf8(
+                        (const U8*)pv, pvlen,
+		        (const U8*)HEK_KEY(hek), HEK_LEN(hek)) == 0);
+    }
+    else
+        return HEK_LEN(hek) == pvlen && ((HEK_KEY(hek) == pv)
+                    || memEQ(HEK_KEY(hek), pv, pvlen));
 }
 
 /*
@@ -2100,7 +2134,6 @@ Perl_hv_ename_add(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
     U32 hash;
 
     PERL_ARGS_ASSERT_HV_ENAME_ADD;
-    PERL_UNUSED_ARG(flags);
 
     if (len > I32_MAX)
 	Perl_croak(aTHX_ "panic: hv name too long (%"UVuf")", (UV) len);
@@ -2113,8 +2146,10 @@ Perl_hv_ename_add(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 	HEK **hekp = xhv_name + (count < 0 ? -count : count);
 	while (hekp-- > xhv_name)
 	    if (
-	     HEK_LEN(*hekp) == (I32)len && memEQ(HEK_KEY(*hekp), name, len)
-	    ) {
+                 (HEK_UTF8(*hekp) || (flags & SVf_UTF8)) 
+                    ? hek_eq_pvn_flags(aTHX_ *hekp, name, (I32)len, flags)
+	            : (HEK_LEN(*hekp) == (I32)len && memEQ(HEK_KEY(*hekp), name, len))
+               ) {
 		if (hekp == xhv_name && count < 0)
 		    aux->xhv_name_count = -count;
 		return;
@@ -2122,18 +2157,21 @@ Perl_hv_ename_add(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 	if (count < 0) aux->xhv_name_count--, count = -count;
 	else aux->xhv_name_count++;
 	Renew(aux->xhv_name_u.xhvnameu_names, count + 1, HEK *);
-	(aux->xhv_name_u.xhvnameu_names)[count] = share_hek(name, len, hash);
+	(aux->xhv_name_u.xhvnameu_names)[count] = share_hek(name, (flags & SVf_UTF8 ? -(I32)len : (I32)len), hash);
     }
     else {
 	HEK *existing_name = aux->xhv_name_u.xhvnameu_name;
 	if (
-	    existing_name && HEK_LEN(existing_name) == (I32)len
-	 && memEQ(HEK_KEY(existing_name), name, len)
+	    existing_name && (
+             (HEK_UTF8(existing_name) || (flags & SVf_UTF8))
+                ? hek_eq_pvn_flags(aTHX_ existing_name, name, (I32)len, flags)
+	        : (HEK_LEN(existing_name) == (I32)len && memEQ(HEK_KEY(existing_name), name, len))
+	    )
 	) return;
 	Newx(aux->xhv_name_u.xhvnameu_names, 2, HEK *);
 	aux->xhv_name_count = existing_name ? 2 : -2;
 	*aux->xhv_name_u.xhvnameu_names = existing_name;
-	(aux->xhv_name_u.xhvnameu_names)[1] = share_hek(name, len, hash);
+	(aux->xhv_name_u.xhvnameu_names)[1] = share_hek(name, (flags & SVf_UTF8 ? -(I32)len : (I32)len), hash);
     }
 }
 
@@ -2156,7 +2194,6 @@ Perl_hv_ename_delete(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
     struct xpvhv_aux *aux;
 
     PERL_ARGS_ASSERT_HV_ENAME_DELETE;
-    PERL_UNUSED_ARG(flags);
 
     if (len > I32_MAX)
 	Perl_croak(aTHX_ "panic: hv name too long (%"UVuf")", (UV) len);
@@ -2172,8 +2209,9 @@ Perl_hv_ename_delete(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 	HEK **victim = namep + (count < 0 ? -count : count);
 	while (victim-- > namep + 1)
 	    if (
-	        HEK_LEN(*victim) == (I32)len
-	     && memEQ(HEK_KEY(*victim), name, len)
+             (HEK_UTF8(*victim) || (flags & SVf_UTF8)) 
+                ? hek_eq_pvn_flags(aTHX_ *victim, name, (I32)len, flags)
+	        : (HEK_LEN(*victim) == (I32)len && memEQ(HEK_KEY(*victim), name, len))
 	    ) {
 		unshare_hek_or_pvn(*victim, 0, 0, 0);
 		if (count < 0) ++aux->xhv_name_count;
@@ -2194,15 +2232,18 @@ Perl_hv_ename_delete(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 		return;
 	    }
 	if (
-	    count > 0 && HEK_LEN(*namep) == (I32)len
-	 && memEQ(HEK_KEY(*namep),name,len)
+	    count > 0 && (HEK_UTF8(*namep) || (flags & SVf_UTF8)) 
+                ? hek_eq_pvn_flags(aTHX_ *namep, name, (I32)len, flags)
+	        : (HEK_LEN(*namep) == (I32)len && memEQ(HEK_KEY(*namep), name, len))
 	) {
 	    aux->xhv_name_count = -count;
 	}
     }
     else if(
-        HEK_LEN(aux->xhv_name_u.xhvnameu_name) == (I32)len
-     && memEQ(HEK_KEY(aux->xhv_name_u.xhvnameu_name), name, len)
+        (HEK_UTF8(aux->xhv_name_u.xhvnameu_name) || (flags & SVf_UTF8)) 
+                ? hek_eq_pvn_flags(aTHX_ aux->xhv_name_u.xhvnameu_name, name, (I32)len, flags)
+	        : (HEK_LEN(aux->xhv_name_u.xhvnameu_name) == (I32)len &&
+                            memEQ(HEK_KEY(aux->xhv_name_u.xhvnameu_name), name, len))
     ) {
 	HEK * const namehek = aux->xhv_name_u.xhvnameu_name;
 	Newx(aux->xhv_name_u.xhvnameu_names, 1, HEK *);
@@ -2637,8 +2678,10 @@ Perl_share_hek(pTHX_ const char *str, I32 len, register U32 hash)
       /* If we found we were able to downgrade the string to bytes, then
          we should flag that it needs upgrading on keys or each.  Also flag
          that we need share_hek_flags to free the string.  */
-      if (str != save)
+      if (str != save) {
+          PERL_HASH(hash, str, len);
           flags |= HVhek_WASUTF8 | HVhek_FREEKEY;
+      }
     }
 
     return share_hek_flags (str, len, hash, flags);

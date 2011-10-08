@@ -592,8 +592,8 @@ PP(pp_open)
 
 	if (IoDIRP(io))
 	    Perl_ck_warner_d(aTHX_ packWARN2(WARN_IO, WARN_DEPRECATED),
-			     "Opening dirhandle %s also as a file",
-			     GvENAME(gv));
+			     "Opening dirhandle %"HEKf" also as a file",
+			     HEKfARG(GvENAME_HEK(gv)));
 
 	mg = SvTIED_mg((const SV *)io, PERL_MAGIC_tiedscalar);
 	if (mg) {
@@ -884,10 +884,8 @@ PP(pp_tie)
 	 * wrong error message, and worse case, supreme action at a distance.
 	 * (Sorry obfuscation writers. You're not going to be given this one.)
 	 */
-	STRLEN len;
-	const char *name = SvPV_nomg_const(*MARK, len);
-	stash = gv_stashpvn(name, len, 0);
-	if (!stash || !(gv = gv_fetchmethod(stash, methname))) {
+       stash = gv_stashsv(*MARK, 0);
+       if (!stash || !(gv = gv_fetchmethod(stash, methname))) {
 	    DIE(aTHX_ "Can't locate object method \"%s\" via package \"%"SVf"\"",
 		 methname, SVfARG(SvOK(*MARK) ? *MARK : &PL_sv_no));
 	}
@@ -1228,7 +1226,7 @@ PP(pp_select)
     if (! hv)
 	XPUSHs(&PL_sv_undef);
     else {
-	GV * const * const gvp = (GV**)hv_fetch(hv, GvNAME(egv), GvNAMELEN(egv), FALSE);
+	GV * const * const gvp = (GV**)hv_fetch(hv, GvNAME(egv), HEK_UTF8(GvNAME_HEK(egv)) ? -GvNAMELEN(egv) : GvNAMELEN(egv), FALSE);
 	if (gvp && *gvp == egv) {
 	    gv_efullname4(TARG, PL_defoutgv, NULL, TRUE);
 	    XPUSHTARG;
@@ -1349,12 +1347,10 @@ PP(pp_enterwrite)
 
     cv = GvFORM(fgv);
     if (!cv) {
-	const char *name;
 	tmpsv = sv_newmortal();
 	gv_efullname4(tmpsv, fgv, NULL, FALSE);
-	name = SvPV_nolen_const(tmpsv);
-	if (name && *name)
-	    DIE(aTHX_ "Undefined format \"%s\" called", name);
+	if (SvPOK(tmpsv) && *SvPV_nolen_const(tmpsv))
+	    DIE(aTHX_ "Undefined format \"%"SVf"\" called", SVfARG(tmpsv));
 
 	not_a_format_reference:
 	DIE(aTHX_ "Not a format reference");
@@ -1393,7 +1389,8 @@ PP(pp_leavewrite)
 		SV *topname;
 		if (!IoFMT_NAME(io))
 		    IoFMT_NAME(io) = savepv(GvNAME(gv));
-		topname = sv_2mortal(Perl_newSVpvf(aTHX_ "%s_TOP", GvNAME(gv)));
+		topname = sv_2mortal(Perl_newSVpvf(aTHX_ "%"HEKf"_TOP",
+                                        HEKfARG(GvNAME_HEK(gv))));
 		topgv = gv_fetchsv(topname, 0, SVt_PVFM);
 		if ((topgv && GvFORM(topgv)) ||
 		  !gv_fetchpvs("top", GV_NOTQUAL, SVt_PVFM))
@@ -1440,11 +1437,9 @@ PP(pp_leavewrite)
 	cv = GvFORM(fgv);
 	if (!cv) {
 	    SV * const sv = sv_newmortal();
-	    const char *name;
 	    gv_efullname4(sv, fgv, NULL, FALSE);
-	    name = SvPV_nolen_const(sv);
-	    if (name && *name)
-		DIE(aTHX_ "Undefined top format \"%s\" called", name);
+	    if (SvPOK(sv) && *SvPV_nolen_const(sv))
+		DIE(aTHX_ "Undefined top format \"%"SVf"\" called", SVfARG(sv));
 	    else
 		DIE(aTHX_ "Undefined top format called");
 	}
@@ -1575,12 +1570,12 @@ PP(pp_sysopen)
 PP(pp_sysread)
 {
     dVAR; dSP; dMARK; dORIGMARK; dTARGET;
-    int offset;
+    SSize_t offset;
     IO *io;
     char *buffer;
+    STRLEN orig_size;
     SSize_t length;
     SSize_t count;
-    Sock_size_t bufsize;
     SV *bufsv;
     STRLEN blen;
     int fp_utf8;
@@ -1641,6 +1636,7 @@ PP(pp_sysread)
 
 #ifdef HAS_SOCKET
     if (PL_op->op_type == OP_RECV) {
+	Sock_size_t bufsize;
 	char namebuf[MAXPATHLEN];
 #if (defined(VMS_DO_SOCKETS) && defined(DECCRTL_SOCKETS)) || defined(MPE) || defined(__QNXNTO__)
 	bufsize = sizeof (struct sockaddr_in);
@@ -1684,7 +1680,7 @@ PP(pp_sysread)
 	blen = sv_len_utf8(bufsv);
     }
     if (offset < 0) {
-	if (-offset > (int)blen)
+	if (-offset > (SSize_t)blen)
 	    DIE(aTHX_ "Offset outside string");
 	offset += blen;
     }
@@ -1696,15 +1692,15 @@ PP(pp_sysread)
 	    offset = utf8_hop((U8 *)buffer,offset) - (U8 *) buffer;
     }
  more_bytes:
-    bufsize = SvCUR(bufsv);
+    orig_size = SvCUR(bufsv);
     /* Allocating length + offset + 1 isn't perfect in the case of reading
        bytes from a byte file handle into a UTF8 buffer, but it won't harm us
        unduly.
        (should be 2 * length + offset + 1, or possibly something longer if
        PL_encoding is true) */
     buffer  = SvGROW(bufsv, (STRLEN)(length+offset+1));
-    if (offset > 0 && (Sock_size_t)offset > bufsize) { /* Zero any newly allocated space */
-    	Zero(buffer+bufsize, offset-bufsize, char);
+    if (offset > 0 && offset > (SSize_t)orig_size) { /* Zero any newly allocated space */
+    	Zero(buffer+orig_size, offset-orig_size, char);
     }
     buffer = buffer + offset;
     if (!buffer_utf8) {
@@ -1738,6 +1734,7 @@ PP(pp_sysread)
     else
 #ifdef HAS_SOCKET__bad_code_maybe
     if (IoTYPE(io) == IoTYPE_SOCKET) {
+	Sock_size_t bufsize;
 	char namebuf[MAXPATHLEN];
 #if defined(VMS_DO_SOCKETS) && defined(DECCRTL_SOCKETS)
 	bufsize = sizeof (struct sockaddr_in);
@@ -2748,7 +2745,9 @@ PP(pp_stat)
 	    if (gv != PL_defgv) {
 	    do_fstat_warning_check:
 		Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-			       "lstat() on filehandle %s", gv ? GvENAME(gv) : "");
+			       "lstat() on filehandle %"SVf, SVfARG(gv
+                                        ? sv_2mortal(newSVhek(GvENAME_HEK(gv)))
+                                        : &PL_sv_no));
 	    } else if (PL_laststype != OP_LSTAT)
 		/* diag_listed_as: The stat preceding %s wasn't an lstat */
 		Perl_croak(aTHX_ "The stat preceding lstat() wasn't an lstat");
@@ -3789,8 +3788,8 @@ PP(pp_open_dir)
 
     if ((IoIFP(io) || IoOFP(io)))
 	Perl_ck_warner_d(aTHX_ packWARN2(WARN_IO, WARN_DEPRECATED),
-			 "Opening filehandle %s also as a directory",
-			 GvENAME(gv));
+			 "Opening filehandle %"HEKf" also as a directory",
+			     HEKfARG(GvENAME_HEK(gv)) );
     if (IoDIRP(io))
 	PerlDir_close(IoDIRP(io));
     if (!(IoDIRP(io) = PerlDir_open(dirname)))
@@ -3825,7 +3824,8 @@ PP(pp_readdir)
 
     if (!io || !IoDIRP(io)) {
 	Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-		       "readdir() attempted on invalid dirhandle %s", GvENAME(gv));
+		       "readdir() attempted on invalid dirhandle %"HEKf,
+                            HEKfARG(GvENAME_HEK(gv)));
         goto nope;
     }
 
@@ -3876,7 +3876,8 @@ PP(pp_telldir)
 
     if (!io || !IoDIRP(io)) {
 	Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-		       "telldir() attempted on invalid dirhandle %s", GvENAME(gv));
+		       "telldir() attempted on invalid dirhandle %"HEKf,
+                            HEKfARG(GvENAME_HEK(gv)));
         goto nope;
     }
 
@@ -3901,7 +3902,8 @@ PP(pp_seekdir)
 
     if (!io || !IoDIRP(io)) {
 	Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-		       "seekdir() attempted on invalid dirhandle %s", GvENAME(gv));
+		       "seekdir() attempted on invalid dirhandle %"HEKf,
+                                HEKfARG(GvENAME_HEK(gv)));
         goto nope;
     }
     (void)PerlDir_seek(IoDIRP(io), along);
@@ -3925,7 +3927,8 @@ PP(pp_rewinddir)
 
     if (!io || !IoDIRP(io)) {
 	Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-		       "rewinddir() attempted on invalid dirhandle %s", GvENAME(gv));
+		       "rewinddir() attempted on invalid dirhandle %"HEKf,
+                                HEKfARG(GvENAME_HEK(gv)));
 	goto nope;
     }
     (void)PerlDir_rewind(IoDIRP(io));
@@ -3948,7 +3951,8 @@ PP(pp_closedir)
 
     if (!io || !IoDIRP(io)) {
 	Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-		       "closedir() attempted on invalid dirhandle %s", GvENAME(gv));
+		       "closedir() attempted on invalid dirhandle %"HEKf,
+                                HEKfARG(GvENAME_HEK(gv)));
         goto nope;
     }
 #ifdef VOID_CLOSEDIR

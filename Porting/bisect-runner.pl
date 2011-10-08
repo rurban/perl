@@ -26,7 +26,9 @@ my %options =
      clean => 1, # mostly for debugging this
     );
 
-my @paths = qw(/usr/local/lib64 /lib64 /usr/lib64);
+my $linux64 = `uname -sm` eq "Linux x86_64\n" ? '64' : '';
+
+my @paths = map {$_ . $linux64} qw(/usr/local/lib /lib /usr/lib);
 
 my %defines =
     (
@@ -34,7 +36,7 @@ my %defines =
      optimize => '-g',
      cc => 'ccache gcc',
      ld => 'gcc',
-     (`uname -sm` eq "Linux x86_64\n" ? (libpth => \@paths) : ()),
+     ($linux64 ? (libpth => \@paths) : ()),
     );
 
 unless(GetOptions(\%options,
@@ -138,6 +140,12 @@ simplest solution is to make a local clone, and run from that. I<i.e.>:
     git clone perl perl2
     cd perl2
     ../perl/Porting/bisect.pl ...
+
+By default, C<bisect-runner.pl> will automatically disable the build of
+L<DB_File> for commits earlier than ccb44e3bf3be2c30, as it's not practical
+to patch DB_File 1.70 and earlier to build with current Berkeley DB headers.
+(ccb44e3bf3be2c30 was in September 1999, between 5.005_62 and 5.005_63.)
+If your F<db.h> is old enough you can override this with C<-Unoextensions>.
 
 =head1 OPTIONS
 
@@ -249,7 +257,7 @@ revision. The bisect run will find the first commit where it passes.
 
 =item *
 
--Dusethreads
+-Dnoextensions=Encode
 
 =item *
 
@@ -261,7 +269,9 @@ revision. The bisect run will find the first commit where it passes.
 
 Arguments to pass to F<Configure>. Repeated C<-A> arguments are passed
 through as is. C<-D> and C<-U> are processed in order, and override
-previous settings for the same parameter.
+previous settings for the same parameter. F<bisect-runner.pl> emulates
+C<-Dnoextensions> when F<Configure> itself does not provide it, as it's
+often very useful to be able to disable some XS extensions.
 
 =item *
 
@@ -389,6 +399,30 @@ sub extract_from_file {
     return;
 }
 
+sub edit_file {
+    my ($file, $munger) = @_;
+    local $/;
+    open my $fh, '<', $file or die "Can't open $file: $!";
+    my $orig = <$fh>;
+    die "Can't read $file: $!" unless defined $orig && close $fh;
+    my $new = $munger->($orig);
+    return if $new eq $orig;
+    open $fh, '>', $file or die "Can't open $file: $!";
+    print $fh $new or die "Can't print to $file: $!";
+    close $fh or die "Can't close $file: $!";
+}
+
+sub apply_patch {
+    my $patch = shift;
+
+    my ($file) = $patch =~ qr!^diff.*a/(\S+) b/\1!;
+    open my $fh, '|-', 'patch', '-p1' or die "Can't run patch: $!";
+    print $fh $patch;
+    return if close $fh;
+    print STDERR "Patch is <<'EOPATCH'\n${patch}EOPATCH\n";
+    die "Can't patch $file: $?, $!";
+}
+
 sub clean {
     if ($options{clean}) {
         # Needed, because files that are build products in this checked out
@@ -452,15 +486,6 @@ sub match_and_exit {
     report_and_exit(!$matches,
                     $matches == 1 ? '1 match for' : "$matches matches for",
                     'no matches for', $match);
-}
-
-sub apply_patch {
-    my $patch = shift;
-
-    my ($file) = $patch =~ qr!^diff.*a/(\S+) b/\1!;
-    open my $fh, '|-', 'patch', '-p1' or die "Can't run patch: $!";
-    print $fh $patch;
-    close $fh or die "Can't patch $file: $?, $!";
 }
 
 # Not going to assume that system perl is yet new enough to have autodie
@@ -529,26 +554,18 @@ EOPATCH
     }
 }
 
-if ($major < 5 && extract_from_file('Configure',
-                                    qr/^if test ! -t 0; then$/)) {
+if ($major < 8 && !extract_from_file('Configure',
+                                    qr/^\t\tif test ! -t 0; then$/)) {
     # Before dfe9444ca7881e71, Configure would refuse to run if stdin was not a
     # tty. With that commit, the tty requirement was dropped for -de and -dE
+    # Commit aaeb8e512e8e9e14 dropped the tty requirement for -S
     # For those older versions, it's probably easiest if we simply remove the
     # sanity test.
-    apply_patch(<<'EOPATCH');
-diff --git a/Configure b/Configure
-index 0071a7c..8a61caa 100755
---- a/Configure
-+++ b/Configure
-@@ -93,7 +93,2 @@ esac
- 
--: Sanity checks
--if test ! -t 0; then
--	echo "Say 'sh $me', not 'sh <$me'"
--	exit 1
--fi
- 
-EOPATCH
+    edit_file('Configure', sub {
+                  my $code = shift;
+                  $code =~ s/test ! -t 0/test Perl = rules/;
+                  return $code;
+              });
 }
 
 if ($major < 10 && extract_from_file('Configure', qr/^set malloc\.h i_malloc$/)) {
@@ -584,6 +601,52 @@ index 3d2e8b9..6ce7766 100755
 +$rm -f try.c try
 +set i_malloc
 +eval $setvar
+ 
+EOPATCH
+}
+
+if ($major < 10 && -d 'ext/Unicode/Normalize/'
+    && !extract_from_file('Configure', qr/^extra_dep=''$/)) {
+    # The Makefile.PL for Unicode::Normalize needs
+    # lib/unicore/CombiningClass.pl. Even without a parallel build, we need
+    # a dependency to ensure that it builds. This is a variant of commit
+    # 9f3ef600c170f61e
+    apply_patch(<<'EOPATCH');
+diff --git a/Makefile.SH b/Makefile.SH
+index f61d0db..6097954 100644
+--- a/Makefile.SH
++++ b/Makefile.SH
+@@ -155,10 +155,20 @@ esac
+ 
+ : Prepare dependency lists for Makefile.
+ dynamic_list=' '
++extra_dep=''
+ for f in $dynamic_ext; do
+     : the dependency named here will never exist
+       base=`echo "$f" | sed 's/.*\///'`
+-    dynamic_list="$dynamic_list lib/auto/$f/$base.$dlext"
++    this_target="lib/auto/$f/$base.$dlext"
++    dynamic_list="$dynamic_list $this_target"
++
++    : Parallel makes reveal that we have some interdependencies
++    case $f in
++	Math/BigInt/FastCalc) extra_dep="$extra_dep
++$this_target: lib/auto/List/Util/Util.$dlext" ;;
++	Unicode/Normalize) extra_dep="$extra_dep
++$this_target: lib/unicore/CombiningClass.pl" ;;
++    esac
+ done
+ 
+ static_list=' '
+@@ -987,2 +997,9 @@ n_dummy $(nonxs_ext):	miniperl$(EXE_EXT) preplibrary $(DYNALOADER) FORCE
+ 	@$(LDLIBPTH) sh ext/util/make_ext nonxs $@ MAKE=$(MAKE) LIBPERL_A=$(LIBPERL)
++!NO!SUBS!
++
++$spitshell >>Makefile <<EOF
++$extra_dep
++EOF
++
++$spitshell >>Makefile <<'!NO!SUBS!'
  
 EOPATCH
 }
@@ -643,6 +706,51 @@ if ($^O eq 'freebsd') {
          lddlflags="-shared "
          cccdlflags='-DPIC -fPIC'
         ;;
+EOPATCH
+    }
+}
+
+if ($major < 10) {
+    if (!extract_from_file('ext/DB_File/DB_File.xs',
+                           qr!^#else /\* Berkeley DB Version > 2 \*/$!)) {
+        # This DB_File.xs is really too old to patch up.
+        # Skip DB_File, unless we're invoked with an explicit -Unoextensions
+        if (!exists $defines{noextensions}) {
+            $defines{noextensions} = 'DB_File';
+        } elsif (defined $defines{noextensions}) {
+            $defines{noextensions} .= ' DB_File';
+        }
+    } elsif (!extract_from_file('ext/DB_File/DB_File.xs',
+                                qr/^#ifdef AT_LEAST_DB_4_1$/)) {
+        # This line is changed by commit 3245f0580c13b3ab
+        my $line = extract_from_file('ext/DB_File/DB_File.xs',
+                                     qr/^(        status = \(?RETVAL->dbp->open\)?\(RETVAL->dbp, name, NULL, RETVAL->type, $)/);
+        apply_patch(<<"EOPATCH");
+diff --git a/ext/DB_File/DB_File.xs b/ext/DB_File/DB_File.xs
+index 489ba96..fba8ded 100644
+--- a/ext/DB_File/DB_File.xs
++++ b/ext/DB_File/DB_File.xs
+\@\@ -183,4 +187,8 \@\@
+ #endif
+ 
++#if DB_VERSION_MAJOR > 4 || (DB_VERSION_MAJOR == 4 && DB_VERSION_MINOR >= 1)
++#    define AT_LEAST_DB_4_1
++#endif
++
+ /* map version 2 features & constants onto their version 1 equivalent */
+ 
+\@\@ -1334,7 +1419,12 \@\@ SV *   sv ;
+ #endif
+ 
++#ifdef AT_LEAST_DB_4_1
++        status = (RETVAL->dbp->open)(RETVAL->dbp, NULL, name, NULL, RETVAL->type, 
++	    			Flags, mode) ; 
++#else
+ $line
+ 	    			Flags, mode) ; 
++#endif
+ 	/* printf("open returned %d %s\\n", status, db_strerror(status)) ; */
+ 
 EOPATCH
     }
 }
@@ -715,7 +823,7 @@ if ($options{'force-manifest'}) {
     }
 }
 
-my @ARGS = $target eq 'config.sh' ? '-dEs' : '-des';
+my @ARGS = '-dEs';
 foreach my $key (sort keys %defines) {
     my $val = $defines{$key};
     if (ref $val) {
@@ -745,6 +853,24 @@ if (!$pid) {
 }
 waitpid $pid, 0
     or die "wait for Configure, pid $pid failed: $!";
+
+# Emulate noextensions if Configure doesn't support it.
+if (-f 'config.sh') {
+    if ($major < 10 && $defines{noextensions}) {
+        edit_file('config.sh', sub {
+                      my @lines = split /\n/, shift;
+                      my @ext = split /\s+/, $defines{noextensions};
+                      foreach (@lines) {
+                          next unless /^extensions=/ || /^dynamic_ext/;
+                          foreach my $ext (@ext) {
+                              s/\b$ext( )?\b/$1/;
+                          }
+                      }
+                      return join "\n", @lines;
+                  });
+    }
+    system './Configure -S </dev/null' and die;
+}
 
 if ($target =~ /config\.s?h/) {
     match_and_exit($target) if $match && -f $target;
@@ -848,6 +974,45 @@ index 03c4d48..3c814a2 100644
 EOPATCH
 }
 
+if ($major < 10 and -f 'ext/IPC/SysV/SysV.xs') {
+    edit_file('ext/IPC/SysV/SysV.xs', sub {
+                  my $xs = shift;
+                  my $fixed = <<'EOFIX';
+
+#include <sys/types.h>
+#if defined(HAS_MSG) || defined(HAS_SEM) || defined(HAS_SHM)
+#ifndef HAS_SEM
+#   include <sys/ipc.h>
+#endif
+#   ifdef HAS_MSG
+#       include <sys/msg.h>
+#   endif
+#   ifdef HAS_SHM
+#       if defined(PERL_SCO) || defined(PERL_ISC)
+#           include <sys/sysmacros.h>	/* SHMLBA */
+#       endif
+#      include <sys/shm.h>
+#      ifndef HAS_SHMAT_PROTOTYPE
+           extern Shmat_t shmat (int, char *, int);
+#      endif
+#      if defined(HAS_SYSCONF) && defined(_SC_PAGESIZE)
+#          undef  SHMLBA /* not static: determined at boot time */
+#          define SHMLBA sysconf(_SC_PAGESIZE)
+#      elif defined(HAS_GETPAGESIZE)
+#          undef  SHMLBA /* not static: determined at boot time */
+#          define SHMLBA getpagesize()
+#      endif
+#   endif
+#endif
+EOFIX
+                  $xs =~ s!
+#include <sys/types\.h>
+.*
+(#ifdef newCONSTSUB|/\* Required)!$fixed$1!ms;
+                  return $xs;
+              });
+}
+
 # Parallel build for miniperl is safe
 system "make $j miniperl </dev/null";
 
@@ -871,25 +1036,6 @@ if ($target ne 'miniperl') {
         }
     }
 
-    if ($major < 10
-	and -f 'ext/IPC/SysV/SysV.xs',
-	and my ($line) = extract_from_file('ext/IPC/SysV/SysV.xs',
-					   qr!^(# *include <asm/page.h>)$!)) {
-	apply_patch(<<"EOPATCH");
-diff --git a/ext/IPC/SysV/SysV.xs b/ext/IPC/SysV/SysV.xs
-index 35a8fde..62a7965 100644
---- a/ext/IPC/SysV/SysV.xs
-+++ b/ext/IPC/SysV/SysV.xs
-\@\@ -4,7 +4,6 \@\@
- 
- #include <sys/types.h>
- #ifdef __linux__
--$line
- #endif
- #if defined(HAS_MSG) || defined(HAS_SEM) || defined(HAS_SHM)
- #ifndef HAS_SEM
-EOPATCH
-    }
     system "make $j $real_target </dev/null";
 }
 

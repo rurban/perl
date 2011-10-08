@@ -3208,6 +3208,18 @@ typedef pthread_key_t	perl_key;
 
 #define SVfARG(p) ((void*)(p))
 
+#ifndef HEKf
+#  define HEKf "2p"
+#endif
+
+/* Not ideal, but we cannot easily include a number in an already-numeric
+ * format sequence. */
+#ifndef HEKf256
+#  define HEKf256 "3p"
+#endif
+
+#define HEKfARG(p) ((void*)(p))
+
 #ifdef PERL_CORE
 /* not used; but needed for backward compatibility with XS code? - RMB */
 #  undef VDf
@@ -4215,6 +4227,8 @@ START_EXTERN_C
 /* handy constants */
 EXTCONST char PL_warn_uninit[]
   INIT("Use of uninitialized value%s%s%s");
+EXTCONST char PL_warn_uninit_sv[]
+  INIT("Use of uninitialized value%"SVf"%s%s");
 EXTCONST char PL_warn_nosemi[]
   INIT("Semicolon seems to be missing");
 EXTCONST char PL_warn_reserved[]
