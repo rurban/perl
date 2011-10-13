@@ -1063,10 +1063,22 @@ filter_call(pTHX_ int idx, SV *buf_sv, int maxlen)
     return SvCUR(buf_sv);
 }
 
+static AV *
+myget_linear_isa(pTHX_ HV *stash, U32 level) {
+    GV **gvp = (GV **)hv_fetchs(stash, "ISA", 0);
+    PERL_UNUSED_ARG(level);
+    return gvp && *gvp && GvAV(*gvp)
+	 ? GvAV(*gvp)
+	 : (AV *)sv_2mortal((SV *)newAV());
+}
+
 
 XS_EXTERNAL(XS_XS__APItest__XSUB_XS_VERSION_undef);
 XS_EXTERNAL(XS_XS__APItest__XSUB_XS_VERSION_empty);
 XS_EXTERNAL(XS_XS__APItest__XSUB_XS_APIVERSION_invalid);
+
+static struct mro_alg mymro;
+
 
 #include "const-c.inc"
 
@@ -1143,6 +1155,12 @@ BOOT:
     newXS("XS::APItest::XSUB::XS_VERSION_undef", XS_XS__APItest__XSUB_XS_VERSION_undef, __FILE__);
     newXS("XS::APItest::XSUB::XS_VERSION_empty", XS_XS__APItest__XSUB_XS_VERSION_empty, __FILE__);
     newXS("XS::APItest::XSUB::XS_APIVERSION_invalid", XS_XS__APItest__XSUB_XS_APIVERSION_invalid, __FILE__);
+    mymro.resolve = myget_linear_isa;
+    mymro.name    = "justisa";
+    mymro.length  = 7;
+    mymro.kflags  = 0;
+    mymro.hash    = 0;
+    Perl_mro_register(aTHX_ &mymro);
 
 void
 XS_VERSION_defined(...)
@@ -1516,6 +1534,24 @@ XS::APItest::PtrTable table
 void
 ptr_table_clear(table)
 XS::APItest::PtrTable table
+
+MODULE = XS::APItest::AutoLoader	PACKAGE = XS::APItest::AutoLoader
+
+SV *
+AUTOLOAD()
+    CODE:
+	RETVAL = newSVpvn_flags(SvPVX(cv), SvCUR(cv), SvUTF8(cv));
+    OUTPUT:
+	RETVAL
+
+SV *
+AUTOLOADp(...)
+    PROTOTYPE: *$
+    CODE:
+	RETVAL = newSVpvn_flags(SvPVX(cv), SvCUR(cv), SvUTF8(cv));
+    OUTPUT:
+	RETVAL
+
 
 MODULE = XS::APItest		PACKAGE = XS::APItest
 
@@ -2117,6 +2153,21 @@ sv_setsv_cow_hashkey_core()
 
 bool
 sv_setsv_cow_hashkey_notcore()
+
+void
+sv_set_deref(SV *sv, SV *sv2, int which)
+    CODE:
+    {
+	STRLEN len;
+	const char *pv = SvPV(sv2,len);
+	if (!SvROK(sv)) croak("Not a ref");
+	sv = SvRV(sv);
+	switch (which) {
+	    case 0: sv_setsv(sv,sv2); break;
+	    case 1: sv_setpv(sv,pv); break;
+	    case 2: sv_setpvn(sv,pv,len); break;
+	}
+    }
 
 void
 rmagical_cast(sv, type)
@@ -3189,6 +3240,30 @@ CODE:
 	      : NULL;
 OUTPUT:
     RETVAL
+
+
+MODULE = XS::APItest PACKAGE = XS::APItest::AUTOLOADtest
+
+int
+AUTOLOAD(...)
+  INIT:
+    SV* comms;
+    SV* class_and_method;
+    SV* tmp;
+  CODE:
+    class_and_method = GvSV(CvGV(cv));
+    comms = get_sv("main::the_method", 1);
+    if (class_and_method == NULL) {
+      RETVAL = 1;
+    } else if (!SvOK(class_and_method)) {
+      RETVAL = 2;
+    } else if (!SvPOK(class_and_method)) {
+      RETVAL = 3;
+    } else {
+      sv_setsv(comms, class_and_method);
+      RETVAL = 0;
+    }
+  OUTPUT: RETVAL
 
 
 MODULE = XS::APItest		PACKAGE = XS::APItest::Magic

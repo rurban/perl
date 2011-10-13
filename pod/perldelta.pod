@@ -9,7 +9,6 @@ d9018cbe5b480ba29cc6151aba8f5102a7e009c4 (Eric Brine)
 a04eb69c733e84250299f12df200f10b76b0a45c (David Golden)
 7a799f6bb3cac2e1bf9bede83579324cffa59c16 (David Golden)
 be48bbe8d671b6841c3ec7cb734b98071afe3cd9 (Chip)
-0bda3001dd6310abfca950134ed78f6192d3d8a7 (Karl Williamson)
 
 =head1 NAME
 
@@ -67,7 +66,7 @@ Package names
 
 =item *
 
-Constant subroutine names (not nul-clean yet)
+Constant subroutine names (not null-clean yet)
 
 =item *
 
@@ -114,12 +113,12 @@ letter.  That has been extended to all Unicode identifier characters.
 C<$é> is now subject to "Used only once" warnings.  It used to be exempt,
 as it was treated as a punctuation variable.
 
-=head2 Support for Embedded Nuls
+=head2 Support for Embedded Nulls
 
-Some parts of Perl did not work correctly with nuls (C<chr 0>) embedded in
+Some parts of Perl did not work correctly with nulls (C<chr 0>) embedded in
 strings.  That meant that, for instance, C<< $m = "a\0b"; foo->$m >> would
 call the "a" method, instead of the actual method name contained in $m.
-These parts of perl have been fixed to support nuls:
+These parts of perl have been fixed to support nulls:
 
 =over
 
@@ -237,7 +236,7 @@ XXX
 
 =item *
 
-L<perlfaq> has been upgraded from version 5.0150034 to version 5.0150035.
+L<Archive::Tar> has been upgraded from version 1.78 to version 1.80.
 
 =item *
 
@@ -248,7 +247,7 @@ L<Digest> has been upgraded from version 1.16 to version 1.17.
 L<DynaLoader> has been upgraded from version 1.13 to 1.14.
 
 It stopped exporting its symbols with the ExtUtils::ParseXS changes in
-5.15.2.  Now it exports them once more.  
+5.15.2.  Now it exports them once more.
 
 =item *
 
@@ -267,7 +266,14 @@ module can 'jump' out of @INC
 
 =item *
 
-L<Unicode::Collate> has been upgraded from version 0.78 to version 0.79.
+L<perlfaq> has been upgraded from version 5.0150034 to version 5.0150035.
+
+=item *
+
+L<Unicode::Collate> has been upgraded from version 0.78 to version 0.80.
+
+Locales updated to CLDR 2.0: ar, be, bg, ha, hr, kk, lt.
+Newly supported locales: as, fi__phonebook, gu, hi, kn, kok and ln.
 
 =back
 
@@ -593,6 +599,12 @@ Undefining C<%overload::> no longer causes a crash.
 C<our $::é; $é> (which is invalid) no longer produces the "Compilation
 error at lib/utf8_heavy.pl..." error message, which it started emitting in
 5.10.0 [perl #99984].
+
+=item *
+
+A minor regression, introduced Perl 5.15.0, has been fixed in which some
+regular expression Unicode property matches (C<\p{...}>) matched
+non-Unicode code points.
 
 =back
 

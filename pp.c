@@ -457,7 +457,9 @@ PP(pp_prototype)
     }
     cv = sv_2cv(TOPs, &stash, &gv, 0);
     if (cv && SvPOK(cv))
-	ret = newSVpvn_flags(SvPVX_const(cv), SvCUR(cv), SVs_TEMP | SvUTF8(cv));
+	ret = newSVpvn_flags(
+	    CvPROTO(cv), CvPROTOLEN(cv), SVs_TEMP | SvUTF8(cv)
+	);
   set:
     SETs(ret);
     RETURN;
@@ -2969,6 +2971,7 @@ PP(pp_substr)
     IV     len_iv = 0;
     int    len_is_uv = 1;
     const I32 lvalue = PL_op->op_flags & OPf_MOD || LVRET;
+    const bool rvalue = (GIMME_V != G_VOID);
     const char *tmps;
     SV *repl_sv = NULL;
     const char *repl = NULL;
@@ -3097,16 +3100,18 @@ PP(pp_substr)
 	    RETURN;
 	}
 
-	SvTAINTED_off(TARG);			/* decontaminate */
-	SvUTF8_off(TARG);			/* decontaminate */
-
 	tmps += byte_pos;
-	sv_setpvn(TARG, tmps, byte_len);
+
+	if (rvalue) {
+	    SvTAINTED_off(TARG);			/* decontaminate */
+	    SvUTF8_off(TARG);			/* decontaminate */
+	    sv_setpvn(TARG, tmps, byte_len);
 #ifdef USE_LOCALE_COLLATE
-	sv_unmagic(TARG, PERL_MAGIC_collxfrm);
+	    sv_unmagic(TARG, PERL_MAGIC_collxfrm);
 #endif
-	if (utf8_curlen)
-	    SvUTF8_on(TARG);
+	    if (utf8_curlen)
+		SvUTF8_on(TARG);
+	}
 
 	if (repl) {
 	    SV* repl_sv_copy = NULL;
@@ -3126,8 +3131,10 @@ PP(pp_substr)
 	}
     }
     SPAGAIN;
-    SvSETMAGIC(TARG);
-    PUSHs(TARG);
+    if (rvalue) {
+	SvSETMAGIC(TARG);
+	PUSHs(TARG);
+    }
     RETURN;
 
 bound_fail:

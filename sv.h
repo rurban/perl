@@ -685,6 +685,9 @@ Only use when you are sure SvNOK is true. See also C<SvNV()>.
 Returns a pointer to the physical string in the SV.  The SV must contain a
 string.
 
+This is also used to store the name of an autoloaded subroutine in an XS
+AUTOLOAD routine.  See L<perlguts/Autoloading with XSUBs>.
+
 =for apidoc Am|STRLEN|SvCUR|SV* sv
 Returns the length of the string which is in the SV.  See C<SvLEN>.
 
@@ -693,8 +696,13 @@ Returns the size of the string buffer in the SV, not including any part
 attributable to C<SvOOK>.  See C<SvCUR>.
 
 =for apidoc Am|char*|SvEND|SV* sv
-Returns a pointer to the last character in the string which is in the SV.
+Returns a pointer to the spot just after the last character in
+the string which is in the SV, where there is usually a trailing
+null (even though Perl scalars do not strictly require it).
 See C<SvCUR>.  Access the character as *(SvEND(sv)).
+
+Warning: If C<SvCUR> is equal to C<SvLEN>, then C<SvEND> points to
+unallocated memory.
 
 =for apidoc Am|HV*|SvSTASH|SV* sv
 Returns the stash of the SV.

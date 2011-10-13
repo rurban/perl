@@ -28,7 +28,25 @@ my %options =
 
 my $linux64 = `uname -sm` eq "Linux x86_64\n" ? '64' : '';
 
-my @paths = map {$_ . $linux64} qw(/usr/local/lib /lib /usr/lib);
+my @paths;
+
+if ($^O eq 'linux') {
+    # This is the search logic for a multi-arch library layout
+    # added to linux.sh in commits 40f026236b9959b7 and dcffd848632af2c7.
+    my $gcc = -x '/usr/bin/gcc' ? '/usr/bin/gcc' : 'gcc';
+
+    foreach (`$gcc -print-search-dirs`) {
+        next unless /^libraries: =(.*)/;
+        foreach (split ':', $1) {
+            next if m/gcc/;
+            next unless -d $_;
+            s!/$!!;
+            push @paths, $_;
+        }
+    }
+}
+
+push @paths, map {$_ . $linux64} qw(/usr/local/lib /lib /usr/lib);
 
 my %defines =
     (
@@ -82,7 +100,7 @@ bisect.pl - use git bisect to pinpoint changes
     # When did this start matching?
     .../Porting/bisect.pl --expect-fail --match '\buseithreads\b'
     # When did this test program stop working?
-    .../Porting/bisect.pl --target=perl -- ./perl -Ilib test_prog.pl
+    .../Porting/bisect.pl -- ./perl -Ilib test_prog.pl
     # When did this first become valid syntax?
     .../Porting/bisect.pl --target=miniperl --end=v5.10.0 \
          --expect-fail -e 'my $a := 2;'
@@ -91,7 +109,7 @@ bisect.pl - use git bisect to pinpoint changes
 
 =head1 DESCRIPTION
 
-Together C<bisect.pl> and C<bisect-runner.pl> attempt to automate the use
+Together F<bisect.pl> and F<bisect-runner.pl> attempt to automate the use
 of C<git bisect> as much as possible. With one command (and no other files)
 it's easy to find out
 
@@ -118,12 +136,12 @@ Which commit removed the last to match this regex?
 usually without needing to know which versions of perl to use as start and
 end revisions.
 
-By default C<bisect.pl> will process all options, then use the rest of the
+By default F<bisect.pl> will process all options, then use the rest of the
 command line as arguments to list C<system> to run a test case. By default,
 the test case should pass (exit with 0) on earlier perls, and fail (exit
-non-zero) on I<blead>. C<bisect.pl> will use C<bisect-runner.pl> to find the
+non-zero) on I<blead>. F<bisect.pl> will use F<bisect-runner.pl> to find the
 earliest stable perl version on which the test case passes, check that it
-fails on blead, and then use C<bisect-runner.pl> with C<git bisect run> to
+fails on blead, and then use F<bisect-runner.pl> with C<git bisect run> to
 find the commit which caused the failure.
 
 Because the test case is the complete argument to C<system>, it is easy to
@@ -141,7 +159,7 @@ simplest solution is to make a local clone, and run from that. I<i.e.>:
     cd perl2
     ../perl/Porting/bisect.pl ...
 
-By default, C<bisect-runner.pl> will automatically disable the build of
+By default, F<bisect-runner.pl> will automatically disable the build of
 L<DB_File> for commits earlier than ccb44e3bf3be2c30, as it's not practical
 to patch DB_File 1.70 and earlier to build with current Berkeley DB headers.
 (ccb44e3bf3be2c30 was in September 1999, between 5.005_62 and 5.005_63.)
@@ -156,7 +174,7 @@ If your F<db.h> is old enough you can override this with C<-Unoextensions>.
 --start I<commit-ish>
 
 Earliest revision to test, as a I<commit-ish> (a tag, commit or anything
-else C<git> understands as a revision). If not specified, C<bisect.pl> will
+else C<git> understands as a revision). If not specified, F<bisect.pl> will
 search stable perl releases from 5.002 to 5.14.0 until it finds one where
 the test case passes.
 
@@ -180,7 +198,7 @@ this should be one of
 
 I<config.sh>
 
-Just run C<Configure>
+Just run F<./Configure>
 
 =item *
 
@@ -240,10 +258,10 @@ and earlier the tests run very quickly.
 Example code to run, just like you'd use with C<perl -e>.
 
 This prepends C<./perl -Ilib -e 'code to run'> to the test case given,
-or C<./miniperl> if I<target> is C<miniperl>.
+or F<./miniperl> if I<target> is C<miniperl>.
 
 (Usually you'll use C<-e> instead of providing a test case in the
-non-option arguments to C<bisect.pl>)
+non-option arguments to F<bisect.pl>)
 
 C<-E> intentionally isn't supported, as it's an error in 5.8.0 and earlier,
 which interferes with detecting errors in the example code itself.
@@ -321,8 +339,8 @@ and then a test case that runs C<make>. For example:
     .../Porting/bisect.pl --start=perl-5.000 --end=perl-5.002 \
         --expect-fail --force-manifest --target=miniperl make perl
 
-will find the first revision capable of building C<DynaLoader> and then
-C<perl>, without becoming confused by revisions where C<miniperl> won't
+will find the first revision capable of building L<DynaLoader> and then
+F<perl>, without becoming confused by revisions where F<miniperl> won't
 even link.
 
 =item *
@@ -708,6 +726,123 @@ if ($^O eq 'freebsd') {
         ;;
 EOPATCH
     }
+} elsif ($^O eq 'darwin') {
+    if ($major < 8) {
+        my $faking_it;
+        # We can't build on darwin without some of the data in the hints file.
+        foreach ('ext/DynaLoader/dl_dyld.xs', 'hints/darwin.sh') {
+            next if -f $_;
+            ++$faking_it;
+            # Probably less surprising to use the earliest version of
+            # hints/darwin.sh and then edit in place just below, than use
+            # blead's version, as that would create a discontinuity at
+            # f556e5b971932902 - before it, hints bugs would be "fixed", after
+            # it they'd resurface. This way, we should give the illusion of
+            # monotonic bug fixing.
+            system "git show f556e5b971932902:$_ >$_"
+                and die "while attempting to extract $_";
+        }
+        if ($faking_it) {
+            apply_patch(<<'EOPATCH');
+diff -u a/ext/DynaLoader/dl_dyld.xs~ a/ext/DynaLoader/dl_dyld.xs
+--- a/ext/DynaLoader/dl_dyld.xs~	2011-10-11 21:41:27.000000000 +0100
++++ b/ext/DynaLoader/dl_dyld.xs	2011-10-11 21:42:20.000000000 +0100
+@@ -41,6 +41,35 @@
+ #include "perl.h"
+ #include "XSUB.h"
+ 
++#ifndef pTHX
++#  define pTHX		void
++#  define pTHX_
++#endif
++#ifndef aTHX
++#  define aTHX
++#  define aTHX_
++#endif
++#ifndef dTHX
++#  define dTHXa(a)	extern int Perl___notused(void)
++#  define dTHX		extern int Perl___notused(void)
++#endif
++
++#ifndef Perl_form_nocontext
++#  define Perl_form_nocontext form
++#endif
++
++#ifndef Perl_warn_nocontext
++#  define Perl_warn_nocontext warn
++#endif
++
++#ifndef PTR2IV
++#  define PTR2IV(p)	(IV)(p)
++#endif
++
++#ifndef get_av
++#  define get_av perl_get_av
++#endif
++
+ #define DL_LOADONCEONLY
+ 
+ #include "dlutils.c"	/* SaveError() etc	*/
+@@ -185,7 +191,7 @@
+     CODE:
+     DLDEBUG(1,PerlIO_printf(Perl_debug_log, "dl_load_file(%s,%x):\n", filename,flags));
+     if (flags & 0x01)
+-	Perl_warn(aTHX_ "Can't make loaded symbols global on this platform while loading %s",filename);
++	Perl_warn_nocontext("Can't make loaded symbols global on this platform while loading %s",filename);
+     RETVAL = dlopen(filename, mode) ;
+     DLDEBUG(2,PerlIO_printf(Perl_debug_log, " libref=%x\n", RETVAL));
+     ST(0) = sv_newmortal() ;
+EOPATCH
+            if ($major < 4 && !extract_from_file('util.c', qr/^form/m)) {
+                apply_patch(<<'EOPATCH');
+diff -u a/ext/DynaLoader/dl_dyld.xs~ a/ext/DynaLoader/dl_dyld.xs
+--- a/ext/DynaLoader/dl_dyld.xs~	2011-10-11 21:56:25.000000000 +0100
++++ b/ext/DynaLoader/dl_dyld.xs	2011-10-11 22:00:00.000000000 +0100
+@@ -60,6 +60,18 @@
+ #  define get_av perl_get_av
+ #endif
+ 
++static char *
++form(char *pat, ...)
++{
++    char *retval;
++    va_list args;
++    va_start(args, pat);
++    vasprintf(&retval, pat, &args);
++    va_end(args);
++    SAVEFREEPV(retval);
++    return retval;
++}
++
+ #define DL_LOADONCEONLY
+ 
+ #include "dlutils.c"	/* SaveError() etc	*/
+EOPATCH
+            }
+        }
+
+        edit_file('hints/darwin.sh', sub {
+                      my $code = shift;
+                      # Part of commit 8f4f83badb7d1ba9, which mostly undoes
+                      # commit 0511a818910f476c.
+                      $code =~ s/^cppflags='-traditional-cpp';$/cppflags="\${cppflags} -no-cpp-precomp"/m;
+                      # commit 14c11978e9b52e08/803bb6cc74d36a3f
+                      # Without this, code in libperl.bundle links against op.o
+                      # in preference to opmini.o on the linker command line,
+                      # and hence miniperl tries to use File::Glob instead of
+                      # csh
+                      $code =~ s/^(lddlflags=)/ldflags="\${ldflags} -flat_namespace"\n$1/m;
+                      # f556e5b971932902 also patches Makefile.SH with some
+                      # special case code to deal with useshrplib for darwin.
+                      # Given that post 5.8.0 the darwin hints default was
+                      # changed to false, and it would be very complex to splice
+                      # in that code in various versions of Makefile.SH back
+                      # to 5.002, lets just turn it off.
+                      $code =~ s/^useshrplib='true'/useshrplib='false'/m
+                          if $faking_it;
+                      return $code;
+                  });
+    }
 }
 
 if ($major < 10) {
@@ -1056,6 +1191,18 @@ if (defined $options{'one-liner'}) {
 }
 
 # This is what we came here to run:
+
+if (exists $Config{ldlibpthname}) {
+    require Cwd;
+    my $varname = $Config{ldlibpthname};
+    my $cwd = Cwd::getcwd();
+    if (defined $ENV{$varname}) {
+        $ENV{$varname} = $cwd . $Config{path_sep} . $ENV{$varname};
+    } else {
+        $ENV{$varname} = $cwd;
+    }
+}
+
 my $ret = system @ARGV;
 
 report_and_exit($ret, 'zero exit from', 'non-zero exit from', "@ARGV");

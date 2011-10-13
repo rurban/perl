@@ -1467,7 +1467,7 @@ Perl_finalize_optree(pTHX_ OP* o)
     LEAVE;
 }
 
-void
+STATIC void
 S_finalize_op(pTHX_ OP* o)
 {
     PERL_ARGS_ASSERT_FINALIZE_OP;
@@ -6250,9 +6250,23 @@ void
 Perl_cv_ckproto_len_flags(pTHX_ const CV *cv, const GV *gv, const char *p,
 		    const STRLEN len, const U32 flags)
 {
+    const char * const cvp = CvPROTO(cv);
+    const STRLEN clen = CvPROTOLEN(cv);
+
     PERL_ARGS_ASSERT_CV_CKPROTO_LEN_FLAGS;
-    if (((!p != !SvPOK(cv)) /* One has prototype, one has not.  */
-        || (p && !sv_eq((SV*)cv, newSVpvn_flags(p, len, flags | SVs_TEMP))))
+
+    if (((!p != !cvp) /* One has prototype, one has not.  */
+	|| (p && (
+		  (flags & SVf_UTF8) == SvUTF8(cv)
+		   ? len != clen || memNE(cvp, p, len)
+		   : flags & SVf_UTF8
+		      ? bytes_cmp_utf8((const U8 *)cvp, clen,
+				       (const U8 *)p, len)
+		      : bytes_cmp_utf8((const U8 *)p, len,
+				       (const U8 *)cvp, clen)
+		 )
+	   )
+        )
 	 && ckWARN_d(WARN_PROTOTYPE)) {
 	SV* const msg = sv_newmortal();
 	SV* name = NULL;
@@ -6263,7 +6277,9 @@ Perl_cv_ckproto_len_flags(pTHX_ const CV *cv, const GV *gv, const char *p,
 	if (name)
 	    Perl_sv_catpvf(aTHX_ msg, " sub %"SVf, SVfARG(name));
 	if (SvPOK(cv))
-	    Perl_sv_catpvf(aTHX_ msg, " (%"SVf")", SVfARG(cv));
+	    Perl_sv_catpvf(aTHX_ msg, " (%"SVf")",
+		SVfARG(newSVpvn_flags(cvp,clen, SvUTF8(cv)|SVs_TEMP))
+	    );
 	else
 	    sv_catpvs(msg, ": none");
 	sv_catpvs(msg, " vs ");
@@ -6654,12 +6670,6 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	CvFILE_set_from_cop(cv, PL_curcop);
 	CvSTASH_set(cv, PL_curstash);
     }
-  attrs:
-    if (attrs) {
-	/* Need to do a C<use attributes $stash_of_cv,\&cv,@attrs>. */
-	HV *stash = name && GvSTASH(CvGV(cv)) ? GvSTASH(CvGV(cv)) : PL_curstash;
-	apply_attrs(stash, MUTABLE_SV(cv), attrs, FALSE);
-    }
 
     if (ps) {
 	sv_setpvn(MUTABLE_SV(cv), ps, ps_len);
@@ -6687,7 +6697,7 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
     }
  install_block:
     if (!block)
-	goto done;
+	goto attrs;
 
     /* If we assign an optree to a PVCV, then we've defined a subroutine that
        the debugger could be able to set a breakpoint in, so signal to
@@ -6727,7 +6737,14 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	    CvCONST_on(cv);
     }
 
-    if (has_name) {
+  attrs:
+    if (attrs) {
+	/* Need to do a C<use attributes $stash_of_cv,\&cv,@attrs>. */
+	HV *stash = name && GvSTASH(CvGV(cv)) ? GvSTASH(CvGV(cv)) : PL_curstash;
+	apply_attrs(stash, MUTABLE_SV(cv), attrs, FALSE);
+    }
+
+    if (block && has_name) {
 	if (PERLDB_SUBLINE && PL_curstash != PL_debstash) {
 	    SV * const tmpstr = sv_newmortal();
 	    GV * const db_postponed = gv_fetchpvs("DB::postponed",
@@ -6937,14 +6954,14 @@ Perl_newXS_flags(pTHX_ const char *name, XSUBADDR_t subaddr,
             }
             else if (CvROOT(cv) || CvXSUB(cv) || GvASSUMECV(gv)) {
                 /* already defined (or promised) */
-                /* XXX It's possible for this HvNAME_get to return null, and get passed into strEQ */
                 if (ckWARN(WARN_REDEFINE)) {
                     GV * const gvcv = CvGV(cv);
                     if (gvcv) {
                         HV * const stash = GvSTASH(gvcv);
                         if (stash) {
                             const char *redefined_name = HvNAME_get(stash);
-                            if ( strEQ(redefined_name,"autouse") ) {
+                            if ( redefined_name &&
+                                 strEQ(redefined_name,"autouse") ) {
                                 const line_t oldline = CopLINE(PL_curcop);
                                 if (PL_parser && PL_parser->copline != NOLINE)
                                     CopLINE_set(PL_curcop, PL_parser->copline);
@@ -8997,7 +9014,9 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
     PERL_ARGS_ASSERT_CK_ENTERSUB_ARGS_PROTO;
     if (SvTYPE(protosv) == SVt_PVCV ? !SvPOK(protosv) : !SvOK(protosv))
 	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto");
-    proto = SvPV(protosv, proto_len);
+    if (SvTYPE(protosv) == SVt_PVCV)
+	 proto = CvPROTO(protosv), proto_len = CvPROTOLEN(protosv);
+    else proto = SvPV(protosv, proto_len);
     proto_end = proto + proto_len;
     aop = cUNOPx(entersubop)->op_first;
     if (!aop->op_sibling)
