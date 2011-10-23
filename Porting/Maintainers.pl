@@ -200,7 +200,7 @@ use File::Glob qw(:case);
     'Archive::Extract' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Archive-Extract-0.56.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Archive-Extract-0.58.tar.gz',
 	'FILES'		=> q[cpan/Archive-Extract],
 	'UPSTREAM'	=> 'cpan',
 	'BUGS'		=> 'bug-archive-extract@rt.cpan.org',
@@ -764,7 +764,7 @@ use File::Glob qw(:case);
     'perlfaq' =>
 	{
 	'MAINTAINER'	=> 'perlfaq',
-	'DISTRIBUTION'  => 'LLAP/perlfaq-5.0150035.tar.gz',
+	'DISTRIBUTION'  => 'LLAP/perlfaq-5.0150036.tar.gz',
 	'FILES'		=> q[cpan/perlfaq],
 	'EXCLUDED'	=> [ qw(t/release-pod-syntax.t t/release-eol.t
 				t/release-no-tabs.t) ],
@@ -978,7 +978,7 @@ use File::Glob qw(:case);
     'HTTP::Tiny' =>
 	{
 	'MAINTAINER'	=> 'dagolden',
-	'DISTRIBUTION'	=> 'DAGOLDEN/HTTP-Tiny-0.013.tar.gz',
+	'DISTRIBUTION'	=> 'DAGOLDEN/HTTP-Tiny-0.014.tar.gz',
 	'FILES'		=> q[cpan/HTTP-Tiny],
 	'EXCLUDED'	=> [
 				't/200_live.t',
@@ -2120,6 +2120,7 @@ use File::Glob qw(:case);
 	{
 	'MAINTAINER'	=> 'p5p',
 	'FILES'		=> q[
+				ext/arybase/
 				ext/XS-APItest/
 				lib/CORE.pod
 				lib/Config.t

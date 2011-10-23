@@ -10702,17 +10702,24 @@ parseit:
 	    else {
 		op = EXACT;
 	    }
-	}   /* else 2 chars in the bit map: the folds of each other */
-	else if (AT_LEAST_UNI_SEMANTICS || !isASCII(value)) {
-
-	    /* To join adjacent nodes, they must be the exact EXACTish type.
-	     * Try to use the most likely type, by using EXACTFU if the regex
-	     * calls for them, or is required because the character is
-	     * non-ASCII */
-	    op = EXACTFU;
 	}
-	else {    /* Otherwise, more likely to be EXACTF type */
-	    op = EXACTF;
+	else {   /* else 2 chars in the bit map: the folds of each other */
+
+	    /* Use the folded value, which for the cases where we get here,
+	     * is just the lower case of the current one (which may resolve to
+	     * itself, or to the other one */
+	    value = toLOWER_LATIN1(value);
+	    if (AT_LEAST_UNI_SEMANTICS || !isASCII(value)) {
+
+		/* To join adjacent nodes, they must be the exact EXACTish
+		 * type.  Try to use the most likely type, by using EXACTFU if
+		 * the regex calls for them, or is required because the
+		 * character is non-ASCII */
+		op = EXACTFU;
+	    }
+	    else {    /* Otherwise, more likely to be EXACTF type */
+		op = EXACTF;
+	    }
 	}
 
 	ret = reg_node(pRExC_state, op);

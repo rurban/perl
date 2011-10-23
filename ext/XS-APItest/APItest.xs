@@ -1155,12 +1155,6 @@ BOOT:
     newXS("XS::APItest::XSUB::XS_VERSION_undef", XS_XS__APItest__XSUB_XS_VERSION_undef, __FILE__);
     newXS("XS::APItest::XSUB::XS_VERSION_empty", XS_XS__APItest__XSUB_XS_VERSION_empty, __FILE__);
     newXS("XS::APItest::XSUB::XS_APIVERSION_invalid", XS_XS__APItest__XSUB_XS_APIVERSION_invalid, __FILE__);
-    mymro.resolve = myget_linear_isa;
-    mymro.name    = "justisa";
-    mymro.length  = 7;
-    mymro.kflags  = 0;
-    mymro.hash    = 0;
-    Perl_mro_register(aTHX_ &mymro);
 
 void
 XS_VERSION_defined(...)
@@ -1556,6 +1550,14 @@ AUTOLOADp(...)
 MODULE = XS::APItest		PACKAGE = XS::APItest
 
 PROTOTYPES: DISABLE
+
+BOOT:
+    mymro.resolve = myget_linear_isa;
+    mymro.name    = "justisa";
+    mymro.length  = 7;
+    mymro.kflags  = 0;
+    mymro.hash    = 0;
+    Perl_mro_register(aTHX_ &mymro);
 
 HV *
 xop_custom_ops ()
@@ -3238,6 +3240,24 @@ CODE:
 		  (HvENAMEUTF8(hv) ? SVf_UTF8 : 0)
 		)
 	      : NULL;
+OUTPUT:
+    RETVAL
+
+int
+xs_cmp(int a, int b)
+CODE:
+    /* Odd sorting (odd numbers first), to make sure we are actually
+       being called */
+    RETVAL = a % 2 != b % 2
+	       ? a % 2 ? -1 : 1
+	       : a < b ? -1 : a == b ? 0 : 1;
+OUTPUT:
+    RETVAL
+
+SV *
+xs_cmp_undef(SV *a, SV *b)
+CODE:
+    RETVAL = &PL_sv_undef;
 OUTPUT:
     RETVAL
 

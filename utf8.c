@@ -1210,7 +1210,9 @@ Perl_utf16_to_utf8_reversed(pTHX_ U8* p, U8* d, I32 bytelen, I32 *newlen)
     return utf16_to_utf8(p, d, bytelen, newlen);
 }
 
-/* for now these are all defined (inefficiently) in terms of the utf8 versions */
+/* for now these are all defined (inefficiently) in terms of the utf8 versions.
+ * Note that the macros in handy.h that call these short-circuit calling them
+ * for Latin-1 range inputs */
 
 bool
 Perl_is_uni_alnum(pTHX_ UV c)
@@ -1312,9 +1314,18 @@ Perl_is_uni_xdigit(pTHX_ UV c)
     return is_utf8_xdigit(tmpbuf);
 }
 
+
 UV
 Perl_to_uni_upper(pTHX_ UV c, U8* p, STRLEN *lenp)
 {
+    /* Convert the Unicode character whose ordinal is c to its uppercase
+     * version and store that in UTF-8 in p and its length in bytes in lenp.
+     * Note that the p needs to be at least UTF8_MAXBYTES_CASE+1 bytes since
+     * the changed version may be longer than the original character.
+     *
+     * The ordinal of the first character of the changed version is returned
+     * (but note, as explained above, that there may be more.) */
+
     PERL_ARGS_ASSERT_TO_UNI_UPPER;
 
     uvchr_to_utf8(p, c);
@@ -1335,8 +1346,24 @@ Perl_to_uni_lower(pTHX_ UV c, U8* p, STRLEN *lenp)
 {
     PERL_ARGS_ASSERT_TO_UNI_LOWER;
 
-    uvchr_to_utf8(p, c);
-    return to_utf8_lower(p, p, lenp);
+    if (c > 255) {
+	uvchr_to_utf8(p, c);
+	return to_utf8_lower(p, p, lenp);
+    }
+
+    /* We have the latin1-range values compiled into the core, so just use
+     * those, converting the result to utf8 */
+    c = toLOWER_LATIN1(c);
+    if (UNI_IS_INVARIANT(c)) {
+	*p = c;
+	*lenp = 1;
+    }
+    else {
+	*p = UTF8_TWO_BYTE_HI(c);
+	*(p+1) = UTF8_TWO_BYTE_LO(c);
+	*lenp = 2;
+    }
+    return c;
 }
 
 UV
@@ -3343,6 +3370,9 @@ http://www.unicode.org/unicode/reports/tr21/ (Case Mappings).
  *			    points below 256; unicode rules for above 255; and
  *			    folds that cross those boundaries are disallowed,
  *			    like the NOMIX_ASCII option
+ *  FOLDEQ_S1_ALREADY_FOLDED s1 has already been folded before calling this
+ *                           routine.  This allows that step to be skipped.
+ *  FOLDEQ_S2_ALREADY_FOLDED   Similarly.
  */
 I32
 Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1, const char *s2, char **pe2, register UV l2, bool u2, U32 flags)
@@ -3363,6 +3393,11 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
                                    these always fit in 2 bytes */
 
     PERL_ARGS_ASSERT_FOLDEQ_UTF8_FLAGS;
+
+    /* The algorithm requires that input with the flags on the first line of
+     * the assert not be pre-folded. */
+    assert( ! ((flags & (FOLDEQ_UTF8_NOMIX_ASCII | FOLDEQ_UTF8_LOCALE))
+	&& (flags & (FOLDEQ_S1_ALREADY_FOLDED | FOLDEQ_S2_ALREADY_FOLDED))));
 
     if (pe1) {
         e1 = *(U8**)pe1;
@@ -3405,6 +3440,10 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
 	assert(e2);
     }
 
+    /* If both operands are already folded, we could just do a memEQ on the
+     * whole strings at once, but it would be better if the caller realized
+     * this and didn't even call us */
+
     /* Look through both strings, a character at a time */
     while (p1 < e1 && p2 < e2) {
 
@@ -3412,96 +3451,111 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
 	 * and the length of the fold.  (exception: locale rules just get the
 	 * character to a single byte) */
         if (n1 == 0) {
+	    if (flags & FOLDEQ_S1_ALREADY_FOLDED) {
+		f1 = (U8 *) p1;
+		n1 = UTF8SKIP(f1);
 
 	    /* If in locale matching, we use two sets of rules, depending on if
 	     * the code point is above or below 255.  Here, we test for and
 	     * handle locale rules */
-	    if ((flags & FOLDEQ_UTF8_LOCALE)
-		&& (! u1 || UTF8_IS_INVARIANT(*p1) || UTF8_IS_DOWNGRADEABLE_START(*p1)))
-	    {
-		/* There is no mixing of code points above and below 255. */
-		if (u2 && (! UTF8_IS_INVARIANT(*p2)
-		    && ! UTF8_IS_DOWNGRADEABLE_START(*p2)))
+	    }
+	    else {
+		if ((flags & FOLDEQ_UTF8_LOCALE)
+		    && (! u1 || UTF8_IS_INVARIANT(*p1)
+			|| UTF8_IS_DOWNGRADEABLE_START(*p1)))
 		{
-		    return 0;
-		}
+		    /* There is no mixing of code points above and below 255. */
+		    if (u2 && (! UTF8_IS_INVARIANT(*p2)
+			&& ! UTF8_IS_DOWNGRADEABLE_START(*p2)))
+		    {
+			return 0;
+		    }
 
-		/* We handle locale rules by converting, if necessary, the code
-		 * point to a single byte. */
-		if (! u1 || UTF8_IS_INVARIANT(*p1)) {
-		    *foldbuf1 = *p1;
+		    /* We handle locale rules by converting, if necessary, the
+		     * code point to a single byte. */
+		    if (! u1 || UTF8_IS_INVARIANT(*p1)) {
+			*foldbuf1 = *p1;
+		    }
+		    else {
+			*foldbuf1 = TWO_BYTE_UTF8_TO_UNI(*p1, *(p1 + 1));
+		    }
+		    n1 = 1;
 		}
-		else {
-		    *foldbuf1 = TWO_BYTE_UTF8_TO_UNI(*p1, *(p1 + 1));
-		}
-		n1 = 1;
-	    }
-	    else if (isASCII(*p1)) {	/* Note, that here won't be both ASCII
-					   and using locale rules */
+		else if (isASCII(*p1)) {	/* Note, that here won't be
+						   both ASCII and using locale
+						   rules */
 
-		/* If trying to mix non- with ASCII, and not supposed to, fail */
-		if ((flags & FOLDEQ_UTF8_NOMIX_ASCII) && ! isASCII(*p2)) {
-		    return 0;
+		    /* If trying to mix non- with ASCII, and not supposed to,
+		     * fail */
+		    if ((flags & FOLDEQ_UTF8_NOMIX_ASCII) && ! isASCII(*p2)) {
+			return 0;
+		    }
+		    n1 = 1;
+		    *foldbuf1 = toLOWER(*p1);   /* Folds in the ASCII range are
+						   just lowercased */
 		}
-		n1 = 1;
-		*foldbuf1 = toLOWER(*p1);   /* Folds in the ASCII range are
-					       just lowercased */
+		else if (u1) {
+		    to_utf8_fold(p1, foldbuf1, &n1);
+		}
+		else {  /* Not utf8, convert to it first and then get fold */
+		    uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p1)));
+		    to_utf8_fold(natbuf, foldbuf1, &n1);
+		}
+		f1 = foldbuf1;
 	    }
-	    else if (u1) {
-                to_utf8_fold(p1, foldbuf1, &n1);
-            }
-            else {  /* Not utf8, convert to it first and then get fold */
-                uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p1)));
-                to_utf8_fold(natbuf, foldbuf1, &n1);
-            }
-            f1 = foldbuf1;
         }
 
         if (n2 == 0) {    /* Same for s2 */
-	    if ((flags & FOLDEQ_UTF8_LOCALE)
-		&& (! u2 || UTF8_IS_INVARIANT(*p2) || UTF8_IS_DOWNGRADEABLE_START(*p2)))
-	    {
-		/* Here, the next char in s2 is < 256.  We've already worked on
-		 * s1, and if it isn't also < 256, can't match */
-		if (u1 && (! UTF8_IS_INVARIANT(*p1)
-		    && ! UTF8_IS_DOWNGRADEABLE_START(*p1)))
+	    if (flags & FOLDEQ_S2_ALREADY_FOLDED) {
+		f2 = (U8 *) p2;
+		n2 = UTF8SKIP(f2);
+	    }
+	    else {
+		if ((flags & FOLDEQ_UTF8_LOCALE)
+		    && (! u2 || UTF8_IS_INVARIANT(*p2) || UTF8_IS_DOWNGRADEABLE_START(*p2)))
 		{
-		    return 0;
+		    /* Here, the next char in s2 is < 256.  We've already
+		     * worked on s1, and if it isn't also < 256, can't match */
+		    if (u1 && (! UTF8_IS_INVARIANT(*p1)
+			&& ! UTF8_IS_DOWNGRADEABLE_START(*p1)))
+		    {
+			return 0;
+		    }
+		    if (! u2 || UTF8_IS_INVARIANT(*p2)) {
+			*foldbuf2 = *p2;
+		    }
+		    else {
+			*foldbuf2 = TWO_BYTE_UTF8_TO_UNI(*p2, *(p2 + 1));
+		    }
+
+		    /* Use another function to handle locale rules.  We've made
+		     * sure that both characters to compare are single bytes */
+		    if (! foldEQ_locale((char *) f1, (char *) foldbuf2, 1)) {
+			return 0;
+		    }
+		    n1 = n2 = 0;
 		}
-		if (! u2 || UTF8_IS_INVARIANT(*p2)) {
-		    *foldbuf2 = *p2;
+		else if (isASCII(*p2)) {
+		    if (flags && ! isASCII(*p1)) {
+			return 0;
+		    }
+		    n2 = 1;
+		    *foldbuf2 = toLOWER(*p2);
+		}
+		else if (u2) {
+		    to_utf8_fold(p2, foldbuf2, &n2);
 		}
 		else {
-		    *foldbuf2 = TWO_BYTE_UTF8_TO_UNI(*p2, *(p2 + 1));
+		    uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p2)));
+		    to_utf8_fold(natbuf, foldbuf2, &n2);
 		}
-
-		/* Use another function to handle locale rules.  We've made
-		 * sure that both characters to compare are single bytes */
-		if (! foldEQ_locale((char *) f1, (char *) foldbuf2, 1)) {
-		    return 0;
-		}
-		n1 = n2 = 0;
+		f2 = foldbuf2;
 	    }
-	    else if (isASCII(*p2)) {
-		if (flags && ! isASCII(*p1)) {
-		    return 0;
-		}
-		n2 = 1;
-		*foldbuf2 = toLOWER(*p2);
-	    }
-	    else if (u2) {
-                to_utf8_fold(p2, foldbuf2, &n2);
-            }
-            else {
-                uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p2)));
-                to_utf8_fold(natbuf, foldbuf2, &n2);
-            }
-            f2 = foldbuf2;
         }
 
 	/* Here f1 and f2 point to the beginning of the strings to compare.
-	 * These strings are the folds of the input characters, stored in utf8.
-	 */
+	 * These strings are the folds of the next character from each input
+	 * string, stored in utf8. */
 
         /* While there is more to look for in both folds, see if they
         * continue to match */

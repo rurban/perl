@@ -508,21 +508,6 @@ cherry-pick it back).
     $ git commit -m 'Update Module::CoreList for 5.x.y' dist/Module-CoreList/lib/Module/CoreList.pm
 
 
-=head3 check MANIFEST
-
-Check that the manifest is sorted and correct:
-
-    $ make distclean
-    $ git clean -xdf # This shouldn't be necessary if distclean is correct
-    $ perl Porting/manicheck
-
-If manicheck turns up anything wrong, update MANIFEST and begin this step again.
-
-    $ ./configure -des -Dusedevel
-    $ make test_porting
-    $ git commit -m 'Update MANIFEST' MANIFEST
-
-
 =head3 update perlhist.pod
 
 I<You MUST SKIP this step for a RC release>
@@ -855,6 +840,7 @@ Be sure to commit your change:
 
 Mail p5p to announce your new release, with a quote you prepared earlier.
 
+Use the template at Porting/release_announcement_template.txt
 
 =head3 update epigraphs.pod
 
@@ -923,7 +909,7 @@ Manually create a temporary link to the new delta file; normally this is
 done from the Makefile, but the Makefile is updated by buildtoc, and
 buildtoc won't run without the file there:
 
-    $ ln -s perldelta.pod pod/perl5102delta.pod
+    $ ln -s pod/perldelta.pod pod/perl5102delta.pod
 
 Run C<perl pod/buildtoc --build-all> to update the F<perldelta> version in
 the following files:

@@ -1463,22 +1463,11 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    folder = foldEQ_latin1;	    /* /a, except the sharp s one which */
 	    goto do_exactf_non_utf8;	    /* isn't dealt with by these */
 
-	case EXACTFU:
-	    if (UTF_PATTERN || utf8_target) {
-		utf8_fold_flags = 0;
-		goto do_exactf_utf8;
-	    }
-
-	    /* Any 'ss' in the pattern should have been replaced by regcomp,
-	     * so we don't have to worry here about this single special case
-	     * in the Latin1 range */
-	    fold_array = PL_fold_latin1;
-	    folder = foldEQ_latin1;
-	    goto do_exactf_non_utf8;
-
 	case EXACTF:
 	    if (UTF_PATTERN || utf8_target) {
-		utf8_fold_flags = 0;
+
+		/* regcomp.c already folded this if pattern is in UTF-8 */
+		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
 		goto do_exactf_utf8;
 	    }
 	    fold_array = PL_fold;
@@ -1492,6 +1481,19 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    }
 	    fold_array = PL_fold_locale;
 	    folder = foldEQ_locale;
+	    goto do_exactf_non_utf8;
+
+	case EXACTFU:
+	    if (UTF_PATTERN || utf8_target) {
+		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
+		goto do_exactf_utf8;
+	    }
+
+	    /* Any 'ss' in the pattern should have been replaced by regcomp,
+	     * so we don't have to worry here about this single special case
+	     * in the Latin1 range */
+	    fold_array = PL_fold_latin1;
+	    folder = foldEQ_latin1;
 
 	    /* FALL THROUGH */
 
@@ -1506,6 +1508,11 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    pat_string = STRING(c);
 	    ln  = STR_LEN(c);	/* length to match in octets/bytes */
 
+	    /* We know that we have to match at least 'ln' bytes (which is the
+	     * same as characters, since not utf8).  If we have to match 3
+	     * characters, and there are only 2 availabe, we know without
+	     * trying that it will fail; so don't start a match past the
+	     * required minimum number from the far end */
 	    e = HOP3c(strend, -((I32)ln), s);
 
 	    if (!reginfo && e < s) {
@@ -1523,6 +1530,9 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    break;
 
 	do_exactf_utf8:
+	{
+	    unsigned expansion;
+
 
 	    /* If one of the operands is in utf8, we can't use the simpler
 	     * folding above, due to the fact that many different characters
@@ -1535,11 +1545,32 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 		    ? utf8_length((U8 *) pat_string, (U8 *) pat_end)
 		    : ln;
 
+	    /* We have 'lnc' characters to match in the pattern, but because of
+	     * multi-character folding, each character in the target can match
+	     * up to 3 characters (Unicode guarantees it will never exceed
+	     * this) if it is utf8-encoded; and up to 2 if not (based on the
+	     * fact that the Latin 1 folds are already determined, and the
+	     * only multi-char fold in that range is the sharp-s folding to
+	     * 'ss'.  Thus, a pattern character can match as little as 1/3 of a
+	     * string character.  Adjust lnc accordingly, always matching at
+	     * least 1 */
+	    expansion = (utf8_target) ? UTF8_MAX_FOLD_CHAR_EXPAND : 2;
+	    lnc = (lnc < expansion) ? 1 : lnc / expansion;
+
+	    /* As in the non-UTF8 case, if we have to match 3 characters, and
+	     * only 2 are left, it's guaranteed to fail, so don't start a
+	     * match that would require us to go beyond the end of the string
+	     */
 	    e = HOP3c(strend, -((I32)lnc), s);
 
 	    if (!reginfo && e < s) {
 		e = s;			/* Due to minlen logic of intuit() */
 	    }
+
+	    /* XXX Note that we could recalculate e every so-often through the
+	     * loop to stop earlier, as the worst case expansion above will
+	     * rarely be met, and as we go along we would usually find that e
+	     * moves further to the left.  Unclear if worth the expense */
 
 	    while (s <= e) {
 		char *my_strend= (char *)strend;
@@ -1552,6 +1583,7 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 		s += UTF8SKIP(s);
 	    }
 	    break;
+	}
 	case BOUNDL:
 	    PL_reg_flags |= RF_tainted;
 	    FBC_BOUND(isALNUM_LC,
@@ -3629,7 +3661,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	case EXACTFU:
 	    folder = foldEQ_latin1;
 	    fold_array = PL_fold_latin1;
-	    fold_utf8_flags = 0;
+	    fold_utf8_flags = (UTF_PATTERN) ? FOLDEQ_S1_ALREADY_FOLDED : 0;
 	    goto do_exactf;
 
 	case EXACTFA:
@@ -3641,7 +3673,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	case EXACTF:
 	    folder = foldEQ;
 	    fold_array = PL_fold;
-	    fold_utf8_flags = 0;
+	    fold_utf8_flags = (UTF_PATTERN) ? FOLDEQ_S1_ALREADY_FOLDED : 0;
 
 	  do_exactf:
 	    s = STRING(scan);
@@ -6001,7 +6033,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 
     case EXACTF:
     case EXACTFU:
-	utf8_flags = 0;
+	utf8_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
 
 	/* The comments for the EXACT case above apply as well to these fold
 	 * ones */
@@ -6804,6 +6836,10 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 STATIC U8 *
 S_reghop3(U8 *s, I32 off, const U8* lim)
 {
+    /* return the position 'off' UTF-8 characters away from 's', forward if
+     * 'off' >= 0, backwards if negative.  But don't go outside of position
+     * 'lim', which better be < s  if off < 0 */
+
     dVAR;
 
     PERL_ARGS_ASSERT_REGHOP3;

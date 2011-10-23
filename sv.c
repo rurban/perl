@@ -4613,6 +4613,7 @@ Perl_sv_sethek(pTHX_ register SV *const sv, const HEK *const hek)
 	    sv_setpvn(sv, HEK_KEY(hek), HEK_LEN(hek));
 	    if (HEK_UTF8(hek))
 		SvUTF8_on(sv);
+	    else SvUTF8_off(sv);
             return;
 	}
         {
@@ -4624,6 +4625,7 @@ Perl_sv_sethek(pTHX_ register SV *const sv, const HEK *const hek)
 	    SvPOK_on(sv);
 	    if (HEK_UTF8(hek))
 		SvUTF8_on(sv);
+	    else SvUTF8_off(sv);
             return;
 	}
     }
@@ -13210,7 +13212,7 @@ perl_clone_using(PerlInterpreter *proto_perl, UV flags,
 
     /* symbol tables */
     PL_defstash		= hv_dup_inc(proto_perl->Idefstash, param);
-    PL_curstash		= hv_dup(proto_perl->Icurstash, param);
+    PL_curstash		= hv_dup_inc(proto_perl->Icurstash, param);
     PL_debstash		= hv_dup(proto_perl->Idebstash, param);
     PL_globalstash	= hv_dup(proto_perl->Iglobalstash, param);
     PL_curstname	= sv_dup_inc(proto_perl->Icurstname, param);
@@ -14314,7 +14316,7 @@ Perl_report_uninit(pTHX_ const SV *uninit_sv)
     dVAR;
     if (PL_op) {
 	SV* varname = NULL;
-	if (uninit_sv) {
+	if (uninit_sv && PL_curpad) {
 	    varname = find_uninit_var(PL_op, uninit_sv,0);
 	    if (varname)
 		sv_insert(varname, 0, 0, " ", 1);

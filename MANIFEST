@@ -1161,10 +1161,19 @@ cpan/HTTP-Tiny/t/040_content.t
 cpan/HTTP-Tiny/t/050_chunked_body.t
 cpan/HTTP-Tiny/t/060_http_date.t
 cpan/HTTP-Tiny/t/100_get.t
+cpan/HTTP-Tiny/t/101_head.t
+cpan/HTTP-Tiny/t/102_put.t
+cpan/HTTP-Tiny/t/103_delete.t
+cpan/HTTP-Tiny/t/104_post.t
 cpan/HTTP-Tiny/t/110_mirror.t
-cpan/HTTP-Tiny/t/120_put.t
 cpan/HTTP-Tiny/t/130_redirect.t
 cpan/HTTP-Tiny/t/140_proxy.t
+cpan/HTTP-Tiny/t/150_post_form.t
+cpan/HTTP-Tiny/t/cases/delete-01.txt
+cpan/HTTP-Tiny/t/cases/form-01.txt
+cpan/HTTP-Tiny/t/cases/form-02.txt
+cpan/HTTP-Tiny/t/cases/form-03.txt
+cpan/HTTP-Tiny/t/cases/form-04.txt
 cpan/HTTP-Tiny/t/cases/get-01.txt
 cpan/HTTP-Tiny/t/cases/get-02.txt
 cpan/HTTP-Tiny/t/cases/get-03.txt
@@ -1186,11 +1195,13 @@ cpan/HTTP-Tiny/t/cases/get-18.txt
 cpan/HTTP-Tiny/t/cases/get-19.txt
 cpan/HTTP-Tiny/t/cases/get-20.txt
 cpan/HTTP-Tiny/t/cases/get-21.txt
+cpan/HTTP-Tiny/t/cases/head-01.txt
 cpan/HTTP-Tiny/t/cases/mirror-01.txt
 cpan/HTTP-Tiny/t/cases/mirror-02.txt
 cpan/HTTP-Tiny/t/cases/mirror-03.txt
 cpan/HTTP-Tiny/t/cases/mirror-04.txt
 cpan/HTTP-Tiny/t/cases/mirror-05.txt
+cpan/HTTP-Tiny/t/cases/post-01.txt
 cpan/HTTP-Tiny/t/cases/put-01.txt
 cpan/HTTP-Tiny/t/cases/put-02.txt
 cpan/HTTP-Tiny/t/cases/put-03.txt
@@ -3507,6 +3518,23 @@ epoc/epocish.c		EPOC port
 epoc/epocish.h		EPOC port
 epoc/epoc_stubs.c	EPOC port
 epoc/link.pl		EPOC port link a exe
+ext/arybase/arybase.pm		For $[
+ext/arybase/arybase.xs		For $[
+ext/arybase/Makefile.PL		For $[
+ext/arybase/ptable.h		For $[
+ext/arybase/t/aeach.t		For $[
+ext/arybase/t/aelem.t		For $[
+ext/arybase/t/akeys.t		For $[
+ext/arybase/t/arybase.t		For $[
+ext/arybase/t/aslice.t		For $[
+ext/arybase/t/av2arylen.t	For $[
+ext/arybase/t/index.t		For $[
+ext/arybase/t/lslice.t		For $[
+ext/arybase/t/pos.t		For $[
+ext/arybase/t/scope_0.pm	For $[
+ext/arybase/t/scope.t		For $[
+ext/arybase/t/splice.t		For $[
+ext/arybase/t/substr.t		For $[
 ext/attributes/attributes.pm		For "sub foo : attrlist"
 ext/attributes/attributes.xs		For "sub foo : attrlist"
 ext/B/B/Concise.pm	Compiler Concise backend
@@ -3867,6 +3895,7 @@ ext/XS-APItest/t/rmagical.t	XS::APItest extension
 ext/XS-APItest/t/rv2cv_op_cv.t	test rv2cv_op_cv() API
 ext/XS-APItest/t/savehints.t	test SAVEHINTS() API
 ext/XS-APItest/t/scopelessblock.t	test recursive descent statement-sequence parsing
+ext/XS-APItest/t/sort.t		Test sort(xs_cmp ...)
 ext/XS-APItest/t/stmtasexpr.t	test recursive descent statement parsing
 ext/XS-APItest/t/stmtsasexpr.t	test recursive descent statement-sequence parsing
 ext/XS-APItest/t/stuff_modify_bug.t	test for eval side-effecting source string
@@ -4477,6 +4506,7 @@ pod/perl5150delta.pod		Perl changes in version 5.15.0
 pod/perl5151delta.pod		Perl changes in version 5.15.1
 pod/perl5152delta.pod		Perl changes in version 5.15.2
 pod/perl5153delta.pod		Perl changes in version 5.15.3
+pod/perl5154delta.pod		Perl changes in version 5.15.4
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl581delta.pod		Perl changes in version 5.8.1
@@ -4633,6 +4663,7 @@ Porting/perlhist_calculate.pl		Perform calculations to update perlhist
 Porting/podtidy			Reformat pod using Pod::Tidy
 Porting/pumpkin.pod		Guidelines and hints for Perl maintainers
 Porting/README.y2038		Perl notes for the 2038 fix
+Porting/release_announcement_template.txt
 Porting/release_managers_guide.pod	Release Manager's Guide
 Porting/release_schedule.pod	Schedule for future releases
 Porting/rt_list_patches		A tool to help you apply patches from RT

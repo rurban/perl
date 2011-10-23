@@ -1,29 +1,19 @@
 =encoding utf8
 
-=for comment
-This has been completed up to c60dbbc38, except for:
-d9018cbe5b480ba29cc6151aba8f5102a7e009c4 (Eric Brine)
-    -- while I (use git blame to find out who) see how this change within
-       lex_read_unichar is correct, I cannot tell at a glance what visible
-       effects this bug has at the Perl level or through the lexer API.
-a04eb69c733e84250299f12df200f10b76b0a45c (David Golden)
-7a799f6bb3cac2e1bf9bede83579324cffa59c16 (David Golden)
-be48bbe8d671b6841c3ec7cb734b98071afe3cd9 (Chip)
-
 =head1 NAME
 
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.15.4
+perldelta - what is new for perl v5.15.5
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.15.3 release and
-the 5.15.4 release.
+This document describes differences between the 5.15.4 release and
+the 5.15.5 release.
 
 If you are upgrading from an earlier release such as 5.15.3, first read
-L<perl5153delta>, which describes differences between 5.15.3 and
+L<perl5154delta>, which describes differences between 5.15.3 and
 5.15.4.
 
 =head1 Notice
@@ -32,141 +22,11 @@ XXX Any important notices here
 
 =head1 Core Enhancements
 
-=head2 $^X converted to an absolute path on FreeBSD, OS X and Solaris
+XXX New core language features go here. Summarise user-visible core language
+enhancements. Particularly prominent performance optimisations could go
+here, but most should go in the L</Performance Enhancements> section.
 
-C<$^X> is now converted to an absolute path on OS X, FreeBSD (without
-needing F</proc> mounted) and Solaris 10 and 11. This augments the
-previous approach of using F</proc> on Linux, FreeBSD and NetBSD
-(in all cases, where mounted).
-
-This makes relocatable perl installations more useful on these platforms.
-(See "Relocatable @INC" in F<INSTALL>)
-
-=head2 Unicode Symbol Names
-
-Perl now has proper support for Unicode in symbol names.  It used to be
-that C<*{$foo}> would ignore the internal UTF8 flag and use the bytes of
-the underlying representation to look up the symbol.  That meant that
-C<*{"\x{100}"}> and C<*{"\xc4\x80"}> would return the same thing.  All
-these parts of Perl have been fixed to account for Unicode:
-
-=over
-
-=item *
-
-Method names (including those passed to C<use overload>)
-
-=item *
-
-Typeglob names (including names of variables, subroutines and filehandles)
-
-=item *
-
-Package names
-
-=item *
-
-Constant subroutine names (not null-clean yet)
-
-=item *
-
-C<goto>
-
-=item *
-
-Symbolic dereferencing
-
-=item *
-
-Second argument to C<bless()> and C<tie()>
-
-=item *
-
-Return value of C<ref()>
-
-=item *
-
-Package names returned by C<caller()>
-
-=item *
-
-Subroutine prototypes
-
-=item *
-
-Attributes
-
-=item *
-
-Various warnings and error messages that mention variable names or values,
-methods, etc.
-
-=back
-
-In addition, a parsing bug has been fixed that prevented C<*{é}> from
-implicitly quoting the name, but instead interpreted it as C<*{+é}>, which
-would cause a strict violation.
-
-C<*{"*a::b"}> automatically strips off the * if it is followed by an ASCII
-letter.  That has been extended to all Unicode identifier characters.
-
-C<$é> is now subject to "Used only once" warnings.  It used to be exempt,
-as it was treated as a punctuation variable.
-
-=head2 Support for Embedded Nulls
-
-Some parts of Perl did not work correctly with nulls (C<chr 0>) embedded in
-strings.  That meant that, for instance, C<< $m = "a\0b"; foo->$m >> would
-call the "a" method, instead of the actual method name contained in $m.
-These parts of perl have been fixed to support nulls:
-
-=over
-
-=item *
-
-Method names
-
-=item *
-
-Typeglob names (including filehandle names)
-
-=item *
-
-Package names
-
-=item *
-
-Autoloading
-
-=item *
-
-Return value of C<ref()>
-
-=item *
-
-Package names returned by C<caller()>
-
-=item *
-
-Filehandle warnings
-
-=item *
-
-Typeglob elements (C<*foo{"THING\0stuff"}>)
-
-=item *
-
-Signal names
-
-=item *
-
-Various warnings and error messages that mention variable names or values,
-methods, etc.
-
-=back
-
-One side effect of these changes is that blessing into "\0" no longer
-causes C<ref()> to return false.
+[ List each enhancement as a =head2 entry ]
 
 =head1 Security
 
@@ -236,44 +96,19 @@ XXX
 
 =item *
 
-L<Archive::Tar> has been upgraded from version 1.78 to version 1.80.
+L<Archive::Extract> has been upgraded from version 0.56 to version 0.58.
 
 =item *
 
-L<Digest> has been upgraded from version 1.16 to version 1.17.
+L<HTTP::Tiny> has been upgraded from version 0.013 to version 0.014.
+
+Adds additional shorthand methods for all common HTTP verbs,
+a C<post_form()> method for POST-ing x-www-form-urlencoded data and
+a C<www_form_urlencode()> utility method.
 
 =item *
 
-L<DynaLoader> has been upgraded from version 1.13 to 1.14.
-
-It stopped exporting its symbols with the ExtUtils::ParseXS changes in
-5.15.2.  Now it exports them once more.
-
-=item *
-
-L<ExtUtils::MakeMaker> has been upgraded from version 6.59 to version 6.61_01.
-
-=item *
-
-L<ExtUtils::ParseXS> has been upgraded from version 3.04_04 to version 3.05.
-
-=item *
-
-L<Module::Load> has been upgraded from version 0.20 to version 0.22.
-
-Resolve possible security problem [http://goo.gl/YzHRU] where a '::' prefixed
-module can 'jump' out of @INC
-
-=item *
-
-L<perlfaq> has been upgraded from version 5.0150034 to version 5.0150035.
-
-=item *
-
-L<Unicode::Collate> has been upgraded from version 0.78 to version 0.80.
-
-Locales updated to CLDR 2.0: ar, be, bg, ha, hr, kk, lt.
-Newly supported locales: as, fi__phonebook, gu, hi, kn, kok and ln.
+L<perlfaq> has been upgraded from version 5.0150035 to version 5.0150036.
 
 =back
 
@@ -306,16 +141,13 @@ XXX Changes which significantly change existing files in F<pod/> go here.
 However, any changes to F<pod/perldiag.pod> should go in the L</Diagnostics>
 section.
 
-=head3 L<perlfunc>, L<open>
+=head3 L<XXX>
 
 =over 4
 
 =item *
 
-As an accident of history, C<open $fh, "<:", ...> applies the default
-layers for the platform (C<:raw> on Unix, C<:crlf> on Windows), ignoring
-whatever is declared by L<open.pm|open>.  This seems such a useful feature
-it has been documented in L<perlfunc|perlfunc/open> and L<open>.
+XXX Description of the change here
 
 =back
 
@@ -368,11 +200,7 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-The message,
-"Code point 0x%X is not Unicode, no properties match it; all inverse
-prop erties do" has been changed to "Code point 0x%X is not Unicode, all
-\p{} matches fail; all \P{} matches succeed"
-
+XXX Describe change here
 
 =back
 
@@ -426,9 +254,7 @@ that they represent may be covered elsewhere.
 
 =item *
 
-F<t/porting/checkcfgvar.t> now tests that all config.sh-style files are
-complete. These are used by the various non-*nix to generate their
-F<config.h>, and an incomplete input file will generate invalid output.
+XXX
 
 =back
 
@@ -493,60 +319,7 @@ be noted as well.
 
 =item *
 
-These new functions have been added as part of the work on Unicode symbols:
-
-    HvNAMELEN
-    HvNAMEUTF8
-    HvENAMELEN
-    HvENAMEUTF8
-    gv_init_pv
-    gv_init_pvn
-    gv_init_pvsv
-    gv_fetchmeth_pv
-    gv_fetchmeth_pvn
-    gv_fetchmeth_sv
-    gv_fetchmeth_pv_autoload
-    gv_fetchmeth_pvn_autoload
-    gv_fetchmeth_sv_autoload
-    gv_fetchmethod_pv_flags
-    gv_fetchmethod_pvn_flags
-    gv_fetchmethod_sv_flags
-    gv_autoload_pv
-    gv_autoload_pvn
-    gv_autoload_sv
-    newGVgen_flags
-    sv_derived_from_pv
-    sv_derived_from_pvn
-    sv_derived_from_sv
-    sv_does_pv
-    sv_does_pvn
-    sv_does_sv
-    whichsig_pv
-    whichsig_pvn
-    whichsig_sv
-
-The gv_fetchmethod_*_flags functions, like gv_fetchmethod_flags, are
-experimental and may change in a future release.
-
-=item *
-
-The following functions were added.  These are I<not> part of the API:
-
-    GvNAMEUTF8
-    GvENAMELEN
-    GvENAME_HEK
-    CopSTASH_flags
-    CopSTASH_flags_set
-    PmopSTASH_flags
-    PmopSTASH_flags_set
-    sv_sethek
-
-=item *
-
-C<sv_catpvn_flags> takes a couple of new internal-only flags,
-C<SV_CATBYTES> and C<SV_CATUTF8>, which tell it whether the char array to
-be concatenated is UTF8.  This allows for more efficient concatenation than
-creating temporary SVs to pass to C<sv_catsv>.
+XXX
 
 =back
 
@@ -562,49 +335,7 @@ L</Modules and Pragmata>.
 
 =item *
 
-In Perl 5.14.0, C<$tainted ~~ @array> stopped working properly.  Sometimes
-it would erroneously fail (when C<$tainted> contained a string that occurs
-in the array I<after> the first element) or erroneously succeed (when
-C<undef> occurred after the first element) [perl #93590].
-
-=item *
-
-Perl 5.15.0 introduced a minor regression, in that an object referenced by
-a deleted hash element would be able to access the freed element from its
-DESTROY method, causing panic errors [perl #99660].
-
-=item *
-
-Functions in the CORE package can now be called as methods.  That used to
-work only when they had been called or referenced already.  So
-C<< "foo"->CORE::ucfirst >> returns Foo.
-
-=item *
-
-C<use> and C<require> are no longer affected by the I/O layers active in
-the caller's scope (enabled by L<open.pm|open>) [perl #96008].
-
-=item *
-
-Errors that occur when methods cannot be found during overloading now
-mention the correct package name, as they did in 5.8.x, instead of
-erroneously mentioning the "overload" package, as they have since 5.10.0.
-
-=item *
-
-Undefining C<%overload::> no longer causes a crash.
-
-=item *
-
-C<our $::é; $é> (which is invalid) no longer produces the "Compilation
-error at lib/utf8_heavy.pl..." error message, which it started emitting in
-5.10.0 [perl #99984].
-
-=item *
-
-A minor regression, introduced Perl 5.15.0, has been fixed in which some
-regular expression Unicode property matches (C<\p{...}>) matched
-non-Unicode code points.
+XXX
 
 =back
 
@@ -623,8 +354,7 @@ from either 5.XXX.XXX or 5.XXX.XXX.
 
 =item *
 
-XXX A couple of modules were broken by stdbool.h changes, or was that in
-5.15.3?
+XXX
 
 =back
 
@@ -637,7 +367,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.3..HEAD
+  perl Porting/acknowledgements.pl v5.15.4..HEAD
 
 =head1 Reporting Bugs
 
