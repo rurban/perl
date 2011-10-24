@@ -623,13 +623,16 @@ index 3d2e8b9..6ce7766 100755
 EOPATCH
 }
 
-if ($major < 10 && -d 'ext/Unicode/Normalize/'
-    && !extract_from_file('Configure', qr/^extra_dep=''$/)) {
-    # The Makefile.PL for Unicode::Normalize needs
-    # lib/unicore/CombiningClass.pl. Even without a parallel build, we need
-    # a dependency to ensure that it builds. This is a variant of commit
-    # 9f3ef600c170f61e
-    apply_patch(<<'EOPATCH');
+# Cwd.xs added in commit 0d2079faa739aaa9. Cwd.pm moved to ext/ 8 years later
+# in commit 403f501d5b37ebf0
+if ($major > 0 && <*/Cwd/Cwd.xs>) {
+    if ($major < 10 && !extract_from_file('Makefile.SH', qr/^extra_dep=''$/)) {
+        # The Makefile.PL for Unicode::Normalize needs
+        # lib/unicore/CombiningClass.pl. Even without a parallel build, we need
+        # a dependency to ensure that it builds. This is a variant of commit
+        # 9f3ef600c170f61e. Putting this for earlier versions gives us a spot
+        # on which to hang the edits below
+        apply_patch(<<'EOPATCH');
 diff --git a/Makefile.SH b/Makefile.SH
 index f61d0db..6097954 100644
 --- a/Makefile.SH
@@ -667,6 +670,43 @@ index f61d0db..6097954 100644
 +$spitshell >>Makefile <<'!NO!SUBS!'
  
 EOPATCH
+    }
+    if ($major < 14) {
+        # Commits dc0655f797469c47 and d11a62fe01f2ecb2
+        edit_file('Makefile.SH', sub {
+                      my $code = shift;
+                      foreach my $ext (qw(Encode SDBM_File)) {
+                          next if $code =~ /\b$ext\) extra_dep=/s;
+                          $code =~ s!(\) extra_dep="\$extra_dep
+\$this_target: .*?" ;;)
+(    esac
+)!$1
+	$ext) extra_dep="\$extra_dep
+\$this_target: lib/auto/Cwd/Cwd.\$dlext" ;;
+$2!;
+                      }
+                      return $code;
+                  });
+    }
+}
+if ($major == 7) {
+    # Remove commits 9fec149bb652b6e9 and 5bab1179608f81d8, which add/amend
+    # rules to automatically run regen scripts that rebuild C headers. These
+    # cause problems because a git checkout doesn't preserve relative file
+    # modification times, hence the regen scripts may fire. This will obscure
+    # whether the repository had the correct generated headers checked in.
+    # Also, the dependency rules for running the scripts were not correct,
+    # which could cause spurious re-builds on re-running make, and can cause
+    # complete build failures for a parallel make.
+    if (extract_from_file('Makefile.SH',
+                          qr/Writing it this way gives make a big hint to always run opcode\.pl before/)) {
+        system 'git show 70c6e6715e8fec53 | patch -p1'
+            and die;
+    } elsif (extract_from_file('Makefile.SH',
+                               qr/^opcode\.h opnames\.h pp_proto\.h pp\.sym: opcode\.pl$/)) {
+        system 'git show 9fec149bb652b6e9 | patch -p1 -R'
+            and die;
+    }
 }
 
 # There was a bug in makedepend.SH which was fixed in version 96a8704c.
@@ -899,6 +939,292 @@ index 2a6cbcd..eab2de1 100644
 EOPATCH
         }
     }
+} elsif ($^O eq 'openbsd') {
+    if (!-f 'hints/openbsd.sh') {
+        system 'git show 43051805d53a3e4c:hints/openbsd.sh > hints/openbsd.sh'
+          and die;
+    }
+
+    if ($major < 8) {
+        my $which = extract_from_file('hints/openbsd.sh',
+                                      qr/# from (2\.8|3\.1) onwards/,
+                                      '');
+        if ($which eq '') {
+            my $was = extract_from_file('hints/openbsd.sh',
+                                        qr/(lddlflags="(?:-Bforcearchive )?-Bshareable)/);
+            # This is commit 154d43cbcf57271c and parts of 5c75dbfa77b0949c
+            # and 29b5585702e5e025
+            apply_patch(sprintf <<'EOPATCH', $was);
+diff --git a/hints/openbsd.sh b/hints/openbsd.sh
+index a7d8bf2..5b79709 100644
+--- a/hints/openbsd.sh
++++ b/hints/openbsd.sh
+@@ -37,7 +37,25 @@ OpenBSD.alpha|OpenBSD.mips|OpenBSD.powerpc|OpenBSD.vax)
+ 	# we use -fPIC here because -fpic is *NOT* enough for some of the
+ 	# extensions like Tk on some OpenBSD platforms (ie: sparc)
+ 	cccdlflags="-DPIC -fPIC $cccdlflags"
+-	%s $lddlflags"
++	case "$osvers" in
++	[01].*|2.[0-7]|2.[0-7].*)
++		lddlflags="-Bshareable $lddlflags"
++		;;
++	2.[8-9]|3.0)
++		ld=${cc:-cc}
++		lddlflags="-shared -fPIC $lddlflags"
++		;;
++	*) # from 3.1 onwards
++		ld=${cc:-cc}
++		lddlflags="-shared -fPIC $lddlflags"
++		libswanted=`echo $libswanted | sed 's/ dl / /'`
++		;;
++	esac
++
++	# We need to force ld to export symbols on ELF platforms.
++	# Without this, dlopen() is crippled.
++	ELF=`${cc:-cc} -dM -E - </dev/null | grep __ELF__`
++	test -n "$ELF" && ldflags="-Wl,-E $ldflags"
+ 	;;
+ esac
+ 
+EOPATCH
+        } elsif ($which eq '2.8') {
+            # This is parts of 5c75dbfa77b0949c and 29b5585702e5e025, and
+            # possibly eb9cd59d45ad2908
+            my $was = extract_from_file('hints/openbsd.sh',
+                                        qr/lddlflags="(-shared(?: -fPIC)?) \$lddlflags"/);
+
+            apply_patch(sprintf <<'EOPATCH', $was);
+--- a/hints/openbsd.sh	2011-10-21 17:25:20.000000000 +0200
++++ b/hints/openbsd.sh	2011-10-21 16:58:43.000000000 +0200
+@@ -44,11 +44,21 @@
+ 	[01].*|2.[0-7]|2.[0-7].*)
+ 		lddlflags="-Bshareable $lddlflags"
+ 		;;
+-	*) # from 2.8 onwards
++	2.[8-9]|3.0)
+ 		ld=${cc:-cc}
+-		lddlflags="%s $lddlflags"
++		lddlflags="-shared -fPIC $lddlflags"
++		;;
++	*) # from 3.1 onwards
++		ld=${cc:-cc}
++		lddlflags="-shared -fPIC $lddlflags"
++		libswanted=`echo $libswanted | sed 's/ dl / /'`
+ 		;;
+ 	esac
++
++	# We need to force ld to export symbols on ELF platforms.
++	# Without this, dlopen() is crippled.
++	ELF=`${cc:-cc} -dM -E - </dev/null | grep __ELF__`
++	test -n "$ELF" && ldflags="-Wl,-E $ldflags"
+ 	;;
+ esac
+ 
+EOPATCH
+        } elsif ($which eq '3.1'
+                && !extract_from_file('hints/openbsd.sh',
+                                     qr/We need to force ld to export symbols on ELF platforms/)) {
+            # This is part of 29b5585702e5e025
+            apply_patch(<<'EOPATCH');
+diff --git a/hints/openbsd.sh b/hints/openbsd.sh
+index c6b6bc9..4839d04 100644
+--- a/hints/openbsd.sh
++++ b/hints/openbsd.sh
+@@ -54,6 +54,11 @@ alpha-2.[0-8]|mips-*|vax-*|powerpc-2.[0-7]|m88k-*)
+ 		libswanted=`echo $libswanted | sed 's/ dl / /'`
+ 		;;
+ 	esac
++
++	# We need to force ld to export symbols on ELF platforms.
++	# Without this, dlopen() is crippled.
++	ELF=`${cc:-cc} -dM -E - </dev/null | grep __ELF__`
++	test -n "$ELF" && ldflags="-Wl,-E $ldflags"
+ 	;;
+ esac
+ 
+EOPATCH
+        }
+    }
+    if ($major < 4) {
+        my $bad;
+        # Need changes from commit a6e633defa583ad5.
+        # Commits c07a80fdfe3926b5 and f82b3d4130164d5f changed the same part
+        # of perl.h
+
+        if (extract_from_file('perl.h',
+                              qr/^#ifdef HAS_GETPGRP2$/)) {
+            $bad = <<'EOBAD';
+***************
+*** 57,71 ****
+  #define TAINT_PROPER(s)	if (tainting) taint_proper(no_security, s)
+  #define TAINT_ENV()	if (tainting) taint_env()
+  
+! #ifdef HAS_GETPGRP2
+! #   ifndef HAS_GETPGRP
+! #	define HAS_GETPGRP
+! #   endif
+! #endif
+! 
+! #ifdef HAS_SETPGRP2
+! #   ifndef HAS_SETPGRP
+! #	define HAS_SETPGRP
+! #   endif
+  #endif
+  
+EOBAD
+        } elsif (extract_from_file('perl.h',
+                                   qr/Gack, you have one but not both of getpgrp2/)) {
+            $bad = <<'EOBAD';
+***************
+*** 56,76 ****
+  #define TAINT_PROPER(s)	if (tainting) taint_proper(no_security, s)
+  #define TAINT_ENV()	if (tainting) taint_env()
+  
+! #if defined(HAS_GETPGRP2) && defined(HAS_SETPGRP2)
+! #   define getpgrp getpgrp2
+! #   define setpgrp setpgrp2
+! #   ifndef HAS_GETPGRP
+! #	define HAS_GETPGRP
+! #   endif
+! #   ifndef HAS_SETPGRP
+! #	define HAS_SETPGRP
+! #   endif
+! #   ifndef USE_BSDPGRP
+! #	define USE_BSDPGRP
+! #   endif
+! #else
+! #   if defined(HAS_GETPGRP2) || defined(HAS_SETPGRP2)
+! 	#include "Gack, you have one but not both of getpgrp2() and setpgrp2()."
+! #   endif
+  #endif
+  
+EOBAD
+        } elsif (extract_from_file('perl.h',
+                                   qr/^#ifdef USE_BSDPGRP$/)) {
+            $bad = <<'EOBAD'
+***************
+*** 91,116 ****
+  #define TAINT_PROPER(s)	if (tainting) taint_proper(no_security, s)
+  #define TAINT_ENV()	if (tainting) taint_env()
+  
+! #ifdef USE_BSDPGRP
+! #   ifdef HAS_GETPGRP
+! #       define BSD_GETPGRP(pid) getpgrp((pid))
+! #   endif
+! #   ifdef HAS_SETPGRP
+! #       define BSD_SETPGRP(pid, pgrp) setpgrp((pid), (pgrp))
+! #   endif
+! #else
+! #   ifdef HAS_GETPGRP2
+! #       define BSD_GETPGRP(pid) getpgrp2((pid))
+! #       ifndef HAS_GETPGRP
+! #    	    define HAS_GETPGRP
+! #    	endif
+! #   endif
+! #   ifdef HAS_SETPGRP2
+! #       define BSD_SETPGRP(pid, pgrp) setpgrp2((pid), (pgrp))
+! #       ifndef HAS_SETPGRP
+! #    	    define HAS_SETPGRP
+! #    	endif
+! #   endif
+  #endif
+  
+  #ifndef _TYPES_		/* If types.h defines this it's easy. */
+EOBAD
+        }
+        if ($bad) {
+            apply_patch(<<"EOPATCH");
+*** a/perl.h	2011-10-21 09:46:12.000000000 +0200
+--- b/perl.h	2011-10-21 09:46:12.000000000 +0200
+$bad--- 91,144 ----
+  #define TAINT_PROPER(s)	if (tainting) taint_proper(no_security, s)
+  #define TAINT_ENV()	if (tainting) taint_env()
+  
+! /* XXX All process group stuff is handled in pp_sys.c.  Should these 
+!    defines move there?  If so, I could simplify this a lot. --AD  9/96.
+! */
+! /* Process group stuff changed from traditional BSD to POSIX.
+!    perlfunc.pod documents the traditional BSD-style syntax, so we'll
+!    try to preserve that, if possible.
+! */
+! #ifdef HAS_SETPGID
+! #  define BSD_SETPGRP(pid, pgrp)	setpgid((pid), (pgrp))
+! #else
+! #  if defined(HAS_SETPGRP) && defined(USE_BSD_SETPGRP)
+! #    define BSD_SETPGRP(pid, pgrp)	setpgrp((pid), (pgrp))
+! #  else
+! #    ifdef HAS_SETPGRP2  /* DG/UX */
+! #      define BSD_SETPGRP(pid, pgrp)	setpgrp2((pid), (pgrp))
+! #    endif
+! #  endif
+! #endif
+! #if defined(BSD_SETPGRP) && !defined(HAS_SETPGRP)
+! #  define HAS_SETPGRP  /* Well, effectively it does . . . */
+! #endif
+! 
+! /* getpgid isn't POSIX, but at least Solaris and Linux have it, and it makes
+!     our life easier :-) so we'll try it.
+! */
+! #ifdef HAS_GETPGID
+! #  define BSD_GETPGRP(pid)		getpgid((pid))
+! #else
+! #  if defined(HAS_GETPGRP) && defined(USE_BSD_GETPGRP)
+! #    define BSD_GETPGRP(pid)		getpgrp((pid))
+! #  else
+! #    ifdef HAS_GETPGRP2  /* DG/UX */
+! #      define BSD_GETPGRP(pid)		getpgrp2((pid))
+! #    endif
+! #  endif
+! #endif
+! #if defined(BSD_GETPGRP) && !defined(HAS_GETPGRP)
+! #  define HAS_GETPGRP  /* Well, effectively it does . . . */
+! #endif
+! 
+! /* These are not exact synonyms, since setpgrp() and getpgrp() may 
+!    have different behaviors, but perl.h used to define USE_BSDPGRP
+!    (prior to 5.003_05) so some extension might depend on it.
+! */
+! #if defined(USE_BSD_SETPGRP) || defined(USE_BSD_GETPGRP)
+! #  ifndef USE_BSDPGRP
+! #    define USE_BSDPGRP
+! #  endif
+  #endif
+  
+  #ifndef _TYPES_		/* If types.h defines this it's easy. */
+EOPATCH
+        }
+    }
+    if ($major < 3 && !extract_from_file('pp_sys.c', qr/BSD_GETPGRP/)) {
+        # Part of commit c3293030fd1b7489
+        apply_patch(<<'EOPATCH');
+diff --git a/pp_sys.c b/pp_sys.c
+index 4608a2a..f0c9d1d 100644
+--- a/pp_sys.c
++++ b/pp_sys.c
+@@ -2903,8 +2903,8 @@ PP(pp_getpgrp)
+ 	pid = 0;
+     else
+ 	pid = SvIVx(POPs);
+-#ifdef USE_BSDPGRP
+-    value = (I32)getpgrp(pid);
++#ifdef BSD_GETPGRP
++    value = (I32)BSD_GETPGRP(pid);
+ #else
+     if (pid != 0)
+ 	DIE("POSIX getpgrp can't take an argument");
+@@ -2933,8 +2933,8 @@ PP(pp_setpgrp)
+     }
+ 
+     TAINT_PROPER("setpgrp");
+-#ifdef USE_BSDPGRP
+-    SETi( setpgrp(pid, pgrp) >= 0 );
++#ifdef BSD_SETPGRP
++    SETi( BSD_SETPGRP(pid, pgrp) >= 0 );
+ #else
+     if ((pgrp != 0) || (pid != 0)) {
+ 	DIE("POSIX setpgrp can't take an argument");
+EOPATCH
+    }
 }
 
 if ($major < 10) {
@@ -1071,7 +1397,11 @@ if (-f 'config.sh') {
 
 if ($target =~ /config\.s?h/) {
     match_and_exit($target) if $match && -f $target;
-    report_and_exit(!-f $target, 'could build', 'could not build', $target);
+    report_and_exit(!-f $target, 'could build', 'could not build', $target)
+        if $options{'test-build'};
+
+    my $ret = system @ARGV;
+    report_and_exit($ret, 'zero exit from', 'non-zero exit from', "@ARGV");
 } elsif (!-f 'config.sh') {
     # Skip if something went wrong with Configure
 
@@ -1171,6 +1501,29 @@ index 03c4d48..3c814a2 100644
 EOPATCH
 }
 
+if ($major < 8 && $^O eq 'openbsd'
+    && !extract_from_file('perl.h', qr/include <unistd\.h>/)) {
+    # This is part of commit 3f270f98f9305540, applied at a slightly different
+    # location in perl.h, where the context is stable back to 5.000
+    apply_patch(<<'EOPATCH');
+diff --git a/perl.h b/perl.h
+index 9418b52..b8b1a7c 100644
+--- a/perl.h
++++ b/perl.h
+@@ -496,6 +496,10 @@ register struct op *Perl_op asm(stringify(OP_IN_REGISTER));
+ #   include <sys/param.h>
+ #endif
+ 
++/* If this causes problems, set i_unistd=undef in the hint file.  */
++#ifdef I_UNISTD
++#   include <unistd.h>
++#endif
+ 
+ /* Use all the "standard" definitions? */
+ #if defined(STANDARD_C) && defined(I_STDLIB)
+EOPATCH
+}
+
 if ($major < 10 and -f 'ext/IPC/SysV/SysV.xs') {
     edit_file('ext/IPC/SysV/SysV.xs', sub {
                   my $xs = shift;
@@ -1208,6 +1561,30 @@ EOFIX
 (#ifdef newCONSTSUB|/\* Required)!$fixed$1!ms;
                   return $xs;
               });
+}
+
+if (-f 'ext/POSIX/Makefile.PL'
+    && extract_from_file('ext/POSIX/Makefile.PL',
+                         qr/Explicitly avoid including/)) {
+    # commit 6695a346c41138df, which effectively reverts 170888cff5e2ffb7
+
+    # PERL5LIB is populated by make_ext.pl with paths to the modules we need
+    # to run, don't override this with "../../lib" since that may not have
+    # been populated yet in a parallel build.
+    apply_patch(<<'EOPATCH');
+diff --git a/ext/POSIX/Makefile.PL b/ext/POSIX/Makefile.PL
+index 392b6fb..9e6d091 100644
+--- a/ext/POSIX/Makefile.PL
++++ b/ext/POSIX/Makefile.PL
+@@ -1,7 +1,3 @@
+-# Explicitly avoid including '.' in @INC; autoloader gets confused since it
+-# can find POSIX.pm, but can't find autosplit.ix.
+-BEGIN { @INC = '../../lib';}
+-#
+ use ExtUtils::MakeMaker;
+ use ExtUtils::Constant 0.11 'WriteConstants';
+ use Config;
+EOPATCH
 }
 
 # Parallel build for miniperl is safe
