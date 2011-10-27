@@ -52,8 +52,8 @@ my %defines =
     (
      usedevel => '',
      optimize => '-g',
-     cc => 'ccache gcc',
-     ld => 'gcc',
+     cc => 'ccache cc',
+     ld => 'cc',
      ($linux64 ? (libpth => \@paths) : ()),
     );
 
@@ -572,6 +572,197 @@ EOPATCH
     }
 }
 
+if ($major < 2
+    && !extract_from_file('Configure',
+                          qr/Try to guess additional flags to pick up local libraries/)) {
+    my $mips = extract_from_file('Configure',
+                                 qr!(''\) if (?:\./)?mips; then)!);
+    # This is part of perl-5.001n. It's needed, to add -L/usr/local/lib to the
+    # ld flags if libraries are found there. It shifts the code to set up
+    # libpth earlier, and then adds the code to add libpth entries to ldflags
+    # mips was changed to ./mips in ecfc54246c2a6f42, perl5.000 patch.0g
+    apply_patch(sprintf <<'EOPATCH', $mips);
+diff --git a/Configure b/Configure
+index 53649d5..0635a6e 100755
+--- a/Configure
++++ b/Configure
+@@ -2749,6 +2749,52 @@ EOM
+ 	;;
+ esac
+ 
++: Set private lib path
++case "$plibpth" in
++'') if ./mips; then
++		plibpth="$incpath/usr/lib /usr/local/lib /usr/ccs/lib"
++	fi;;
++esac
++case "$libpth" in
++' ') dlist='';;
++'') dlist="$plibpth $glibpth";;
++*) dlist="$libpth";;
++esac
++
++: Now check and see which directories actually exist, avoiding duplicates
++libpth=''
++for xxx in $dlist
++do
++    if $test -d $xxx; then
++		case " $libpth " in
++		*" $xxx "*) ;;
++		*) libpth="$libpth $xxx";;
++		esac
++    fi
++done
++$cat <<'EOM'
++
++Some systems have incompatible or broken versions of libraries.  Among
++the directories listed in the question below, please remove any you
++know not to be holding relevant libraries, and add any that are needed.
++Say "none" for none.
++
++EOM
++case "$libpth" in
++'') dflt='none';;
++*)
++	set X $libpth
++	shift
++	dflt=${1+"$@"}
++	;;
++esac
++rp="Directories to use for library searches?"
++. ./myread
++case "$ans" in
++none) libpth=' ';;
++*) libpth="$ans";;
++esac
++
+ : flags used in final linking phase
+ case "$ldflags" in
+ '') if ./venix; then
+@@ -2765,6 +2811,23 @@ case "$ldflags" in
+ 	;;
+ *) dflt="$ldflags";;
+ esac
++
++: Possible local library directories to search.
++loclibpth="/usr/local/lib /opt/local/lib /usr/gnu/lib"
++loclibpth="$loclibpth /opt/gnu/lib /usr/GNU/lib /opt/GNU/lib"
++
++: Try to guess additional flags to pick up local libraries.
++for thislibdir in $libpth; do
++	case " $loclibpth " in
++	*" $thislibdir "*)
++		case "$dflt " in 
++		"-L$thislibdir ") ;;
++		*)  dflt="$dflt -L$thislibdir" ;;
++		esac
++		;;
++	esac
++done
++
+ echo " "
+ rp="Any additional ld flags (NOT including libraries)?"
+ . ./myread
+@@ -2828,52 +2891,6 @@ n) echo "OK, that should do.";;
+ esac
+ $rm -f try try.* core
+ 
+-: Set private lib path
+-case "$plibpth" in
+-%s
+-		plibpth="$incpath/usr/lib /usr/local/lib /usr/ccs/lib"
+-	fi;;
+-esac
+-case "$libpth" in
+-' ') dlist='';;
+-'') dlist="$plibpth $glibpth";;
+-*) dlist="$libpth";;
+-esac
+-
+-: Now check and see which directories actually exist, avoiding duplicates
+-libpth=''
+-for xxx in $dlist
+-do
+-    if $test -d $xxx; then
+-		case " $libpth " in
+-		*" $xxx "*) ;;
+-		*) libpth="$libpth $xxx";;
+-		esac
+-    fi
+-done
+-$cat <<'EOM'
+-
+-Some systems have incompatible or broken versions of libraries.  Among
+-the directories listed in the question below, please remove any you
+-know not to be holding relevant libraries, and add any that are needed.
+-Say "none" for none.
+-
+-EOM
+-case "$libpth" in
+-'') dflt='none';;
+-*)
+-	set X $libpth
+-	shift
+-	dflt=${1+"$@"}
+-	;;
+-esac
+-rp="Directories to use for library searches?"
+-. ./myread
+-case "$ans" in
+-none) libpth=' ';;
+-*) libpth="$ans";;
+-esac
+-
+ : compute shared library extension
+ case "$so" in
+ '')
+EOPATCH
+}
+
+if ($major < 5 && extract_from_file('Configure',
+                                    qr!if \$cc \$ccflags try\.c -o try >/dev/null 2>&1; then!)) {
+    # Analogous to the more general fix of dfe9444ca7881e71
+    # Without this flags such as -m64 may not be passed to this compile, which
+    # results in a byteorder of '1234' instead of '12345678', which can then
+    # cause crashes.
+    
+    if (extract_from_file('Configure', qr/xxx_prompt=y/)) {
+        # 8e07c86ebc651fe9 or later
+        # ("This is my patch  patch.1n  for perl5.001.")
+        apply_patch(<<'EOPATCH');
+diff --git a/Configure b/Configure
+index 62249dd..c5c384e 100755
+--- a/Configure
++++ b/Configure
+@@ -8247,7 +8247,7 @@ main()
+ }
+ EOCP
+ 	xxx_prompt=y
+-	if $cc $ccflags try.c -o try >/dev/null 2>&1 && ./try > /dev/null; then
++	if $cc $ccflags $ldflags try.c -o try >/dev/null 2>&1 && ./try > /dev/null; then
+ 		dflt=`./try`
+ 		case "$dflt" in
+ 		[1-4][1-4][1-4][1-4]|12345678|87654321)
+EOPATCH
+    } else {
+        apply_patch(<<'EOPATCH');
+diff --git a/Configure b/Configure
+index 53649d5..f1cd64a 100755
+--- a/Configure
++++ b/Configure
+@@ -6362,7 +6362,7 @@ main()
+ 	printf("\n");
+ }
+ EOCP
+-	if $cc $ccflags try.c -o try >/dev/null 2>&1 ; then
++	if $cc $ccflags $ldflags try.c -o try >/dev/null 2>&1 ; then
+ 		dflt=`./try`
+ 		case "$dflt" in
+ 		????|????????) echo "(The test program ran ok.)";;
+EOPATCH
+    }
+}
+
 if ($major < 8 && !extract_from_file('Configure',
                                     qr/^\t\tif test ! -t 0; then$/)) {
     # Before dfe9444ca7881e71, Configure would refuse to run if stdin was not a
@@ -582,6 +773,66 @@ if ($major < 8 && !extract_from_file('Configure',
     edit_file('Configure', sub {
                   my $code = shift;
                   $code =~ s/test ! -t 0/test Perl = rules/;
+                  return $code;
+              });
+}
+
+if ($major == 8 || $major == 9) {
+    # Fix symbol detection to that of commit 373dfab3839ca168 if it's any
+    # intermediate version 5129fff43c4fe08c or later, as the intermediate
+    # versions don't work correctly on (at least) Sparc Linux.
+    # 5129fff43c4fe08c adds the first mention of mistrustnm.
+    # 373dfab3839ca168 removes the last mention of lc=""
+    edit_file('Configure', sub {
+                  my $code = shift;
+                  return $code
+                      if $code !~ /\btc="";/; # 373dfab3839ca168 or later
+                  return $code
+                      if $code !~ /\bmistrustnm\b/; # before 5129fff43c4fe08c
+                  my $fixed = <<'EOC';
+
+: is a C symbol defined?
+csym='tlook=$1;
+case "$3" in
+-v) tf=libc.tmp; tdc="";;
+-a) tf=libc.tmp; tdc="[]";;
+*) tlook="^$1\$"; tf=libc.list; tdc="()";;
+esac;
+tx=yes;
+case "$reuseval-$4" in
+true-) ;;
+true-*) tx=no; eval "tval=\$$4"; case "$tval" in "") tx=yes;; esac;;
+esac;
+case "$tx" in
+yes)
+	tval=false;
+	if $test "$runnm" = true; then
+		if $contains $tlook $tf >/dev/null 2>&1; then
+			tval=true;
+		elif $test "$mistrustnm" = compile -o "$mistrustnm" = run; then
+			echo "void *(*(p()))$tdc { extern void *$1$tdc; return &$1; } int main() { if(p()) return(0); else return(1); }"> try.c;
+			$cc -o try $optimize $ccflags $ldflags try.c >/dev/null 2>&1 $libs && tval=true;
+			$test "$mistrustnm" = run -a -x try && { $run ./try$_exe >/dev/null 2>&1 || tval=false; };
+			$rm -f try$_exe try.c core core.* try.core;
+		fi;
+	else
+		echo "void *(*(p()))$tdc { extern void *$1$tdc; return &$1; } int main() { if(p()) return(0); else return(1); }"> try.c;
+		$cc -o try $optimize $ccflags $ldflags try.c $libs >/dev/null 2>&1 && tval=true;
+		$rm -f try$_exe try.c;
+	fi;
+	;;
+*)
+	case "$tval" in
+	$define) tval=true;;
+	*) tval=false;;
+	esac;
+	;;
+esac;
+eval "$2=$tval"'
+
+EOC
+                  $code =~ s/\n: is a C symbol defined\?\n.*?\neval "\$2=\$tval"'\n\n/$fixed/sm
+                      or die "substitution failed";
                   return $code;
               });
 }
@@ -724,48 +975,6 @@ if ($^O eq 'freebsd') {
     # versions inherit the current behaviour.)
     system 'git show blead:hints/freebsd.sh > hints/freebsd.sh </dev/null'
       and die;
-
-    if ($major < 2) {
-        # 5.002 Configure and later have code to
-        #
-        # : Try to guess additional flags to pick up local libraries.
-        #
-        # which will automatically add --L/usr/local/lib because libpth
-        # contains /usr/local/lib
-        #
-        # Without it, if Configure finds libraries in /usr/local/lib (eg
-        # libgdbm.so) and adds them to the compiler commandline (as -lgdbm),
-        # then the link will fail. We can't fix this up in config.sh because
-        # the link will *also* fail in the test compiles that Configure does
-        # (eg $inlibc) which makes Configure get all sorts of things
-        # wrong. :-( So bodge it here.
-        #
-        # Possibly other platforms will need something similar. (if they
-        # have "wanted" libraries in /usr/local/lib, but the compiler
-        # doesn't default to putting that directory in its link path)
-        apply_patch(<<'EOPATCH');
---- perl2/hints/freebsd.sh.orig	2011-10-05 16:44:55.000000000 +0200
-+++ perl2/hints/freebsd.sh	2011-10-05 16:45:52.000000000 +0200
-@@ -125,7 +125,7 @@
-         else
-             libpth="/usr/lib /usr/local/lib"
-             glibpth="/usr/lib /usr/local/lib"
--            ldflags="-Wl,-E "
-+            ldflags="-Wl,-E -L/usr/local/lib "
-             lddlflags="-shared "
-         fi
-         cccdlflags='-DPIC -fPIC'
-@@ -133,7 +133,7 @@
- *)
-        libpth="/usr/lib /usr/local/lib"
-        glibpth="/usr/lib /usr/local/lib"
--       ldflags="-Wl,-E "
-+       ldflags="-Wl,-E -L/usr/local/lib "
-         lddlflags="-shared "
-         cccdlflags='-DPIC -fPIC'
-        ;;
-EOPATCH
-    }
 } elsif ($^O eq 'darwin') {
     if ($major < 8) {
         my $faking_it;
@@ -1225,6 +1434,41 @@ index 4608a2a..f0c9d1d 100644
  	DIE("POSIX setpgrp can't take an argument");
 EOPATCH
     }
+} elsif ($^O eq 'linux') {
+    if ($major < 1) {
+        # sparc linux seems to need the -Dbool=char -DHAS_BOOL part of
+        # perl5.000 patch.0n: [address Configure and build issues]
+        edit_file('hints/linux.sh', sub {
+                      my $code = shift;
+                      $code =~ s!-I/usr/include/bsd!-Dbool=char -DHAS_BOOL!g;
+                      return $code;
+                  });
+    }
+
+    if ($major <= 9) {
+        if (`uname -sm` =~ qr/^Linux sparc/) {
+            if (extract_from_file('hints/linux.sh', qr/sparc-linux/)) {
+                # Be sure to use -fPIC not -fpic on Linux/SPARC
+                system 'git show f6527d0ef0c13ad4 | patch -p1'
+                    and die;
+            } elsif(!extract_from_file('hints/linux.sh', qr/^sparc-linux\)$/)) {
+                open my $fh, '>>', 'hints/linux.sh'
+                    or die "Can't open hints/linux.sh: $!";
+                print $fh <<'EOT' or die $!;
+
+case "`uname -m`" in
+sparc*)
+	case "$cccdlflags" in
+	*-fpic*) cccdlflags="`echo $cccdlflags|sed 's/-fpic/-fPIC/'`" ;;
+	*)	 cccdlflags="$cccdlflags -fPIC" ;;
+	esac
+	;;
+esac
+EOT
+                close $fh or die "Can't close hints/linux.sh: $!";
+            }
+        }
+    }
 }
 
 if ($major < 10) {
@@ -1314,8 +1558,10 @@ if ($options{'force-manifest'}) {
         or die "Could not open MANIFEST: $!";
     while (<$fh>) {
         next unless /^(\S+)/;
+        # -d is special case needed (at least) between 27332437a2ed1941 and
+        # bf3d9ec563d25054^ inclusive, as manifest contains ext/Thread/Thread
         push @missing, $1
-            unless -f $1;
+            unless -f $1 || -d $1;
     }
     close $fh or die "Can't close MANIFEST: $!";
 
@@ -1501,6 +1747,60 @@ index 03c4d48..3c814a2 100644
 EOPATCH
 }
 
+if (($major >= 7 || $major <= 9) && $^O eq 'openbsd'
+    && `uname -m` eq "sparc64\n"
+    # added in 2000 by commit cb434fcc98ac25f5:
+    && extract_from_file('regexec.c',
+                         qr!/\* No need to save/restore up to this paren \*/!)
+    # re-indented in 2006 by commit 95b2444054382532:
+    && extract_from_file('regexec.c', qr/^\t\tCURCUR cc;$/)) {
+    # Need to work around a bug in (at least) OpenBSD's 4.6's sparc64 compiler
+    # ["gcc (GCC) 3.3.5 (propolice)"]. Between commits 3ec562b0bffb8b8b (2002)
+    # and 1a4fad37125bac3e^ (2005) the darling thing fails to compile any code
+    # for the statement cc.oldcc = PL_regcc;
+    # If you refactor the code to "fix" that, or force the issue using set in
+    # the debugger, the stack smashing detection code fires on return from
+    # S_regmatch(). Turns out that the compiler doesn't allocate any (or at
+    # least enough) space for cc.
+    # Restore the "uninitialised" value for cc before function exit, and the
+    # stack smashing code is placated.
+    # "Fix" 3ec562b0bffb8b8b (which changes the size of auto variables used
+    # elsewhere in S_regmatch), and the crash is visible back to
+    # bc517b45fdfb539b (which also changes buffer sizes). "Unfix"
+    # 1a4fad37125bac3e and the crash is visible until 5b47454deb66294b.
+    # Problem goes away if you compile with -O, or hack the code as below.
+    #
+    # Hence this turns out to be a bug in (old) gcc. Not a security bug we
+    # still need to fix.
+    apply_patch(<<'EOPATCH');
+diff --git a/regexec.c b/regexec.c
+index 900b491..6251a0b 100644
+--- a/regexec.c
++++ b/regexec.c
+@@ -2958,7 +2958,11 @@ S_regmatch(pTHX_ regnode *prog)
+ 				I,I
+  *******************************************************************/
+ 	case CURLYX: {
+-		CURCUR cc;
++	    union {
++		CURCUR hack_cc;
++		char hack_buff[sizeof(CURCUR) + 1];
++	    } hack;
++#define cc hack.hack_cc
+ 		CHECKPOINT cp = PL_savestack_ix;
+ 		/* No need to save/restore up to this paren */
+ 		I32 parenfloor = scan->flags;
+@@ -2983,6 +2987,7 @@ S_regmatch(pTHX_ regnode *prog)
+ 		n = regmatch(PREVOPER(next));	/* start on the WHILEM */
+ 		regcpblow(cp);
+ 		PL_regcc = cc.oldcc;
++#undef cc
+ 		saySAME(n);
+ 	    }
+ 	    /* NOT REACHED */
+EOPATCH
+}
+
 if ($major < 8 && $^O eq 'openbsd'
     && !extract_from_file('perl.h', qr/include <unistd\.h>/)) {
     # This is part of commit 3f270f98f9305540, applied at a slightly different
@@ -1522,6 +1822,121 @@ index 9418b52..b8b1a7c 100644
  /* Use all the "standard" definitions? */
  #if defined(STANDARD_C) && defined(I_STDLIB)
 EOPATCH
+}
+
+if ($major == 4 && extract_from_file('scope.c', qr/\(SV\*\)SSPOPINT/)) {
+    # [PATCH] 5.004_04 +MAINT_TRIAL_1 broken when sizeof(int) != sizeof(void)
+    # Fixes a bug introduced in 161b7d1635bc830b
+    system 'git show 9002cb76ec83ef7f | patch -p1'
+        and die;
+}
+
+if ($major == 4 && extract_from_file('av.c', qr/AvARRAY\(av\) = 0;/)) {
+    # Fixes a bug introduced in 1393e20655efb4bc
+    system 'git show e1c148c28bf3335b av.c | patch -p1'
+        and die;
+}
+
+if ($major == 4 && $^O eq 'linux') {
+    # Whilst this is fixed properly in f0784f6a4c3e45e1 which provides the
+    # Configure probe, it's easier to back out the problematic changes made in
+    # these previous commits:
+    if (extract_from_file('doio.c',
+                          qr!^/\* XXX REALLY need metaconfig test \*/$!)) {
+        system 'git show -R 4682965a1447ea44 doio.c | patch -p1'
+            and die;
+    }
+    if (my $token = extract_from_file('doio.c',
+                                      qr!^#if (defined\(__sun(?:__)?\)) && defined\(__svr4__\) /\* XXX Need metaconfig test \*/$!)) {
+        my $patch = `git show -R 9b599b2a63d2324d doio.c`;
+        $patch =~ s/defined\(__sun__\)/$token/g;
+        apply_patch($patch);
+    }
+    if (extract_from_file('doio.c',
+                          qr!^/\* linux \(and Solaris2\?\) uses :$!)) {
+        system 'git show -R 8490252049bf42d3 doio.c | patch -p1'
+            and die;
+    }
+    if (extract_from_file('doio.c',
+                          qr/^	    unsemds.buf = &semds;$/)) {
+        system 'git show -R 8e591e46b4c6543e | patch -p1'
+            and die;
+    }
+    if (extract_from_file('doio.c',
+                          qr!^#ifdef __linux__	/\* XXX Need metaconfig test \*/$!)) {
+        # Part of commit 3e3baf6d63945cb6
+        apply_patch(<<'EOPATCH');
+diff --git b/doio.c a/doio.c
+index 62b7de9..0d57425 100644
+--- b/doio.c
++++ a/doio.c
+@@ -1333,9 +1331,6 @@ SV **sp;
+     char *a;
+     I32 id, n, cmd, infosize, getinfo;
+     I32 ret = -1;
+-#ifdef __linux__	/* XXX Need metaconfig test */
+-    union semun unsemds;
+-#endif
+ 
+     id = SvIVx(*++mark);
+     n = (optype == OP_SEMCTL) ? SvIVx(*++mark) : 0;
+@@ -1364,29 +1359,11 @@ SV **sp;
+ 	    infosize = sizeof(struct semid_ds);
+ 	else if (cmd == GETALL || cmd == SETALL)
+ 	{
+-#ifdef __linux__	/* XXX Need metaconfig test */
+-/* linux uses :
+-   int semctl (int semid, int semnun, int cmd, union semun arg)
+-
+-       union semun {
+-            int val;
+-            struct semid_ds *buf;
+-            ushort *array;
+-       };
+-*/
+-            union semun semds;
+-	    if (semctl(id, 0, IPC_STAT, semds) == -1)
+-#else
+ 	    struct semid_ds semds;
+ 	    if (semctl(id, 0, IPC_STAT, &semds) == -1)
+-#endif
+ 		return -1;
+ 	    getinfo = (cmd == GETALL);
+-#ifdef __linux__	/* XXX Need metaconfig test */
+-	    infosize = semds.buf->sem_nsems * sizeof(short);
+-#else
+ 	    infosize = semds.sem_nsems * sizeof(short);
+-#endif
+ 		/* "short" is technically wrong but much more portable
+ 		   than guessing about u_?short(_t)? */
+ 	}
+@@ -1429,12 +1406,7 @@ SV **sp;
+ #endif
+ #ifdef HAS_SEM
+     case OP_SEMCTL:
+-#ifdef __linux__	/* XXX Need metaconfig test */
+-        unsemds.buf = (struct semid_ds *)a;
+-	ret = semctl(id, n, cmd, unsemds);
+-#else
+ 	ret = semctl(id, n, cmd, (struct semid_ds *)a);
+-#endif
+ 	break;
+ #endif
+ #ifdef HAS_SHM
+EOPATCH
+    }
+    # Incorrect prototype added as part of 8ac853655d9b7447, fixed as part of
+    # commit dc45a647708b6c54, with at least one intermediate modification.
+    # Correct prototype for gethostbyaddr has socklen_t second. Linux has
+    # uint32_t first for getnetbyaddr.
+    # Easiest just to remove, instead of attempting more complex patching.
+    # Something similar may be needed on other platforms.
+    edit_file('pp_sys.c', sub {
+                  my $code = shift;
+                  $code =~ s/^    struct hostent \*(?:PerlSock_)?gethostbyaddr\([^)]+\);$//m;
+                  $code =~ s/^    struct netent \*getnetbyaddr\([^)]+\);$//m;
+                  return $code;
+              });
 }
 
 if ($major < 10 and -f 'ext/IPC/SysV/SysV.xs') {
