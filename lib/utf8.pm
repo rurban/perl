@@ -16,8 +16,9 @@ sub unimport {
 sub AUTOLOAD {
     require "utf8_heavy.pl";
     goto &$AUTOLOAD if defined &$AUTOLOAD;
-    require Carp;
-    Carp::croak("Undefined subroutine $AUTOLOAD called");
+    #require Carp;
+    #Carp::croak("Undefined subroutine $AUTOLOAD called");
+    die "Undefined subroutine $AUTOLOAD called";
 }
 
 1;
