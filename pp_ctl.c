@@ -205,9 +205,7 @@ PP(pp_regcomp)
 	    if (PL_op->op_flags & OPf_SPECIAL)
 		PL_reginterp_cnt = I32_MAX; /* Mark as safe.  */
 
-	    if (DO_UTF8(tmpstr)) {
-		assert (SvUTF8(tmpstr));
-	    } else if (SvUTF8(tmpstr)) {
+	    if (!DO_UTF8(tmpstr) && SvUTF8(tmpstr)) {
 		/* Not doing UTF-8, despite what the SV says. Is this only if
 		   we're trapped in use 'bytes'?  */
 		/* Make a copy of the octet sequence, but without the flag on,
@@ -216,17 +214,9 @@ PP(pp_regcomp)
 		const char *const p = SvPV(tmpstr, len);
 		tmpstr = newSVpvn_flags(p, len, SVs_TEMP);
 	    }
-	    else if (SvAMAGIC(tmpstr)) {
+	    else if (SvAMAGIC(tmpstr) || SvGMAGICAL(tmpstr)) {
 		/* make a copy to avoid extra stringifies */
 		tmpstr = newSVpvn_flags(t, len, SVs_TEMP | SvUTF8(tmpstr));
-	    }
-
-	    /* If it is gmagical, create a mortal copy, but without calling
-	       get-magic, as we have already done that. */
-	    if(SvGMAGICAL(tmpstr)) {
-		SV *mortalcopy = sv_newmortal();
-		sv_setsv_flags(mortalcopy, tmpstr, 0);
-		tmpstr = mortalcopy;
 	    }
 
 	    if (eng)

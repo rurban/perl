@@ -17,9 +17,7 @@
 
  * Don't forget to re-run regen/embed.pl to propagate changes! */
 
-/* New variables must be added to the very end for binary compatibility.
- * XSUB.h provides wrapper functions via perlapi.h that make this
- * irrelevant, but not all code may be expected to #include XSUB.h. */
+/* New variables must be added to the very end for binary compatibility. */
 
 /* Don't forget to add your variable also to perl_clone()! */
 
@@ -725,6 +723,9 @@ PERLVARI(I, utf8_foldclosures, HV *, NULL)
 PERLVARI(I, utf8_foldable, SV *, NULL)
 
 PERLVAR(I, custom_ops,	HV *)		/* custom op registrations */
+
+/* Hook for File::Glob */
+PERLVARI(I, globhook,	globhook_t, NULL)
 
 PERLVAR(I, reentrant_retint, int)	/* Integer return value from reentrant functions */
 
