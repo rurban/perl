@@ -29,10 +29,12 @@ use feature 'switch';
         GLOB_NOSPACE
         GLOB_QUOTE
         GLOB_TILDE
-        glob
         bsd_glob
+        glob
     ) ],
 );
+$EXPORT_TAGS{bsd_glob} = [@{$EXPORT_TAGS{glob}}];
+pop @{$EXPORT_TAGS{bsd_glob}}; # no "glob"
 
 @EXPORT_OK   = (@{$EXPORT_TAGS{'glob'}}, 'csh_glob');
 
@@ -49,6 +51,9 @@ sub import {
 	    when (':globally') {
 		no warnings 'redefine';
 		*CORE::GLOBAL::glob = \&File::Glob::csh_glob;
+	    }
+	    if ($_ eq ':bsd_glob') {
+		no strict; *{caller."::glob"} = \&bsd_glob_override;
 	    }
 	    $passthrough = 1;
 	}
@@ -79,7 +84,7 @@ File::Glob - Perl extension for BSD glob routine
 
 =head1 SYNOPSIS
 
-  use File::Glob ':glob';
+  use File::Glob ':bsd_glob';
 
   @list = bsd_glob('*.[ch]');
   $homedir = bsd_glob('~gnat', GLOB_TILDE | GLOB_ERR);
@@ -122,7 +127,8 @@ Since v5.6.0, Perl's CORE::glob() is implemented in terms of bsd_glob().
 Note that they don't share the same prototype--CORE::glob() only accepts
 a single argument.  Due to historical reasons, CORE::glob() will also
 split its argument on whitespace, treating it as multiple patterns,
-whereas bsd_glob() considers them as one pattern.
+whereas bsd_glob() considers them as one pattern.  But see C<:bsd_glob>
+under L</EXPORTS>, below.
 
 =head2 META CHARACTERS
 
@@ -135,8 +141,35 @@ whereas bsd_glob() considers them as one pattern.
 
 The metanotation C<a{b,c,d}e> is a shorthand for C<abe ace ade>.  Left to
 right order is preserved, with results of matches being sorted separately
-at a low level to preserve this order. As a special case C<{>, C<}>, and
+at a low level to preserve this order.  As a special case C<{>, C<}>, and
 C<{}> are passed undisturbed.
+
+=head2 EXPORTS
+
+The C<:bsd_glob> export tag exports bsd_glob() and the constants listed
+below.  It also overrides glob() in the calling package with one that
+behaves like bsd_glob() with regard to spaces (the space is treated as part
+of a file name), but supports iteration in scalar context; i.e., it
+preserves the core function's feature of returning the next item each time
+it is called.
+
+The C<:glob> tag, now discouraged, is the old version of C<:bsd_glob>.  It
+exports the same constants and functions, but its glob() override does not
+support iteration; it returns the last file name in scalar context.  That
+means this will loop forever:
+
+    use File::Glob ':glob';
+    while (my $file = <* copy.txt>) {
+	...
+    }
+
+The bsd_glob() function and the constants below can be exported
+individually.
+
+The csh_glob() function can also be exported, but you should not use it
+directly unless you really know what you are doing.  It splits the pattern
+into words and feeds each one to bsd_glob().  Perl's own glob() function
+uses this internally.
 
 =head2 POSIX FLAGS
 
@@ -278,10 +311,10 @@ Remember that you can use a backslash to escape things.
 
 On DOSISH systems, backslash is a valid directory separator character.
 In this case, use of backslash as a quoting character (via GLOB_QUOTE)
-interferes with the use of backslash as a directory separator. The
+interferes with the use of backslash as a directory separator.  The
 best (simplest, most portable) solution is to use forward slashes for
-directory separators, and backslashes for quoting. However, this does
-not match "normal practice" on these systems. As a concession to user
+directory separators, and backslashes for quoting.  However, this does
+not match "normal practice" on these systems.  As a concession to user
 expectation, therefore, backslashes (under GLOB_QUOTE) only quote the
 glob metacharacters '[', ']', '{', '}', '-', '~', and backslash itself.
 All other backslashes are passed through unchanged.
@@ -291,46 +324,6 @@ All other backslashes are passed through unchanged.
 Win32 users should use the real slash.  If you really want to use
 backslashes, consider using Sarathy's File::DosGlob, which comes with
 the standard Perl distribution.
-
-=item *
-
-Mac OS (Classic) users should note a few differences. Since
-Mac OS is not Unix, when the glob code encounters a tilde glob (e.g.
-~user) and the C<GLOB_TILDE> flag is used, it simply returns that
-pattern without doing any expansion.
-
-Glob on Mac OS is case-insensitive by default (if you don't use any
-flags). If you specify any flags at all and still want glob
-to be case-insensitive, you must include C<GLOB_NOCASE> in the flags.
-
-The path separator is ':' (aka colon), not '/' (aka slash). Mac OS users
-should be careful about specifying relative pathnames. While a full path
-always begins with a volume name, a relative pathname should always
-begin with a ':'.  If specifying a volume name only, a trailing ':' is
-required.
-
-The specification of pathnames in glob patterns adheres to the usual Mac
-OS conventions: The path separator is a colon ':', not a slash '/'. A
-full path always begins with a volume name. A relative pathname on Mac
-OS must always begin with a ':', except when specifying a file or
-directory name in the current working directory, where the leading colon
-is optional. If specifying a volume name only, a trailing ':' is
-required. Due to these rules, a glob like E<lt>*:E<gt> will find all
-mounted volumes, while a glob like E<lt>*E<gt> or E<lt>:*E<gt> will find
-all files and directories in the current directory.
-
-Note that updirs in the glob pattern are resolved before the matching begins,
-i.e. a pattern like "*HD:t?p::a*" will be matched as "*HD:a*". Note also,
-that a single trailing ':' in the pattern is ignored (unless it's a volume
-name pattern like "*HD:"), i.e. a glob like E<lt>:*:E<gt> will find both
-directories I<and> files (and not, as one might expect, only directories).
-You can, however, use the C<GLOB_MARK> flag to distinguish (without a file
-test) directory names from file names.
-
-If the C<GLOB_MARK> flag is set, all directory paths will have a ':' appended.
-Since a directory like 'lib:' is I<not> a valid I<relative> path on Mac OS,
-both a leading and a trailing colon will be added, when the directory name in
-question doesn't contain any colons (e.g. 'lib' becomes ':lib:').
 
 =back
 

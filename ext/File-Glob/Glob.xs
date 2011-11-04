@@ -10,7 +10,6 @@
 
 typedef struct {
     int		x_GLOB_ERROR;
-    HV *	x_GLOB_ITER;
     HV *	x_GLOB_ENTRIES;
 } my_cxt_t;
 
@@ -62,46 +61,74 @@ doglob(pTHX_ const char *pattern, int flags)
     }
 }
 
-/* borrowed heavily from gsar's File::DosGlob, but translated into C */
 static void
-csh_glob(pTHX)
+iterate(pTHX_ bool(*globber)(pTHX_ AV *entries, SV *patsv))
 {
     dSP;
     dMY_CXT;
 
-    SV *cxixsv = POPs;
+    SV * const cxixsv = POPs;
     const char *cxixpv;
     STRLEN cxixlen;
-    STRLEN len;
-    const char *s = NULL;
-    SV *itersv;
-    SV *entriesv;
-    AV *entries = NULL;
-    U32 gimme = GIMME_V;
+    AV *entries;
+    U32 const gimme = GIMME_V;
     SV *patsv = POPs;
+    bool on_stack = FALSE;
 
     /* assume global context if not provided one */
     SvGETMAGIC(cxixsv);
     if (SvOK(cxixsv)) cxixpv = SvPV_nomg(cxixsv, cxixlen);
     else cxixpv = "_G_", cxixlen = 3;
 
-    if (!MY_CXT.x_GLOB_ITER) MY_CXT.x_GLOB_ITER = newHV();
-    itersv = *(hv_fetch(MY_CXT.x_GLOB_ITER, cxixpv, cxixlen, 1));
-    if (!SvOK(itersv)) sv_setiv(itersv,0);
-
     if (!MY_CXT.x_GLOB_ENTRIES) MY_CXT.x_GLOB_ENTRIES = newHV();
-    entriesv = *(hv_fetch(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, 1));
+    entries = (AV *)*(hv_fetch(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, 1));
 
     /* if we're just beginning, do it all first */
-    if (!SvIV(itersv)) {
+    if (SvTYPE(entries) != SVt_PVAV) {
+	PUTBACK;
+	on_stack = globber(aTHX_ entries, patsv);
+	SPAGAIN;
+    }
+
+    /* chuck it all out, quick or slow */
+    if (gimme == G_ARRAY) {
+	if (!on_stack) {
+	    Copy(AvARRAY(entries), SP+1, AvFILLp(entries)+1, SV *);
+	    SP += AvFILLp(entries)+1;
+	}
+	/* No G_DISCARD here!  It will free the stack items. */
+	hv_delete(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, 0);
+    }
+    else {
+	if (AvFILLp(entries) + 1) {
+	    mPUSHs(av_shift(entries));
+	}
+	else {
+	    /* return undef for EOL */
+	    hv_delete(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, G_DISCARD);
+	    PUSHs(&PL_sv_undef);
+	}
+    }
+    PUTBACK;
+}
+
+/* returns true if the items are on the stack already, but only in
+   list context */
+static bool
+csh_glob(pTHX_ AV *entries, SV *patsv)
+{
+	dSP;
 	const char *pat;
 	AV *patav = NULL;
 	const char *patend;
+	const char *s = NULL;
 	const char *piece = NULL;
 	SV *word = NULL;
 	int const flags =
 	    (int)SvIV(get_sv("File::Glob::DEFAULT_FLAGS", GV_ADD));
 	bool is_utf8;
+	STRLEN len;
+	U32 const gimme = GIMME_V;
 
 	/* glob without args defaults to $_ */
 	SvGETMAGIC(patsv);
@@ -114,10 +141,6 @@ csh_glob(pTHX)
 	patend = pat + len;
 
 	/* extract patterns */
-	/* XXX this is needed for compatibility with the csh
-	 * implementation in Perl.  Need to support a flag
-	 * to disable this behavior.
-	 */
 	s = pat-1;
 	while (++s < patend) {
 	    switch (*s) {
@@ -125,15 +148,22 @@ csh_glob(pTHX)
 	    case '"' :
 	      {
 		bool found = FALSE;
+		const char quote = *s;
 		if (!word) {
 		    word = newSVpvs("");
 		    if (is_utf8) SvUTF8_on(word);
 		}
 		if (piece) sv_catpvn(word, piece, s-piece);
 		piece = s+1;
-		while (++s <= patend)
-		    if (*s == '\\') s++;
-		    else if (*s == *(piece-1)) {
+		while (++s < patend)
+		    if (*s == '\\') {
+			s++;
+			/* If the backslash is here to escape a quote,
+			   obliterate it. */
+			if (s < patend && *s == quote)
+			    sv_catpvn(word, piece, s-piece-1), piece = s;
+		    }
+		    else if (*s == quote) {
 			sv_catpvn(word, piece, s-piece);
 			piece = NULL;
 			found = TRUE;
@@ -164,7 +194,20 @@ csh_glob(pTHX)
 		}
 		break;
 	      }
-	    case '\\': if (!piece) piece = s; s++; break;
+	    case '\\':
+		if (!piece) piece = s;
+		s++;
+		/* If the backslash is here to escape a quote,
+		   obliterate it. */
+		if (s < patend && (*s == '"' || *s == '\'')) {
+		    if (!word) {
+			word = newSVpvn(piece,s-piece-1);
+			if (is_utf8) SvUTF8_on(word);
+		    }
+		    else sv_catpvn(word, piece, s-piece-1);
+		    piece = s;
+		}
+		break;
 	    default:
 		if (isSPACE(*s)) {
 		    if (piece) {
@@ -186,8 +229,7 @@ csh_glob(pTHX)
 	}
       end_of_parsing:
 
-	assert(!SvROK(entriesv));
-	entries = (AV *)newSVrv(entriesv,NULL);
+	assert(SvTYPE(entries) != SVt_PVAV);
 	sv_upgrade((SV *)entries, SVt_PVAV);
 	
 	if (patav) {
@@ -225,39 +267,54 @@ csh_glob(pTHX)
 		dMARK;
 		dORIGMARK;
 		/* short-circuit here for a fairly common case */
-		if (!patav && gimme == G_ARRAY) goto return_list;
+		if (!patav && gimme == G_ARRAY) { PUTBACK; return TRUE; }
 		while (++MARK <= SP)
 		    av_push(entries, SvREFCNT_inc_simple_NN(*MARK));
 
 		SP = ORIGMARK;
 	    }
 	}
-    }
+	PUTBACK;
+	return FALSE;
+}
 
-    /* chuck it all out, quick or slow */
-    assert(SvROK(entriesv));
-    if (!entries) entries = (AV *)SvRV(entriesv);
-    if (gimme == G_ARRAY) {
-	Copy(AvARRAY(entries), SP+1, AvFILLp(entries)+1, SV *);
-	SP += AvFILLp(entries)+1;
-      return_list:
-	hv_delete(MY_CXT.x_GLOB_ITER, cxixpv, cxixlen, G_DISCARD);
-	/* No G_DISCARD here!  It will free the stack items. */
-	hv_delete(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, 0);
-    }
-    else {
-	if (AvFILLp(entries) + 1) {
-	    sv_setiv(itersv, AvFILLp(entries) + 1);
-	    mPUSHs(av_shift(entries));
-	}
-	else {
-	    /* return undef for EOL */
-	    hv_delete(MY_CXT.x_GLOB_ITER, cxixpv, cxixlen, G_DISCARD);
-	    hv_delete(MY_CXT.x_GLOB_ENTRIES, cxixpv, cxixlen, G_DISCARD);
-	    PUSHs(&PL_sv_undef);
-	}
-    }
+static void
+csh_glob_iter(pTHX)
+{
+    iterate(aTHX_ csh_glob);
+}
+
+/* wrapper around doglob that can be passed to the iterator */
+static bool
+doglob_iter_wrapper(pTHX_ AV *entries, SV *patsv)
+{
+    dSP;
+    const char *pattern;
+    int const flags =
+	    (int)SvIV(get_sv("File::Glob::DEFAULT_FLAGS", GV_ADD));
+
+    SvGETMAGIC(patsv);
+    if (
+	    !SvOK(patsv)
+	 && (patsv = DEFSV, SvGETMAGIC(patsv), !SvOK(patsv))
+    )
+	 pattern = "";
+    else pattern = SvPV_nomg_nolen(patsv);
+
+    PUSHMARK(SP);
     PUTBACK;
+    doglob(aTHX_ pattern, flags);
+    SPAGAIN;
+    {
+	dMARK;
+	dORIGMARK;
+	if (GIMME_V == G_ARRAY) { PUTBACK; return TRUE; }
+	sv_upgrade((SV *)entries, SVt_PVAV);
+	while (++MARK <= SP)
+	    av_push(entries, SvREFCNT_inc_simple_NN(*MARK));
+	SP = ORIGMARK;
+    }
+    return FALSE;
 }
 
 MODULE = File::Glob		PACKAGE = File::Glob
@@ -282,8 +339,6 @@ PREINIT:
     SV *tmp;
 PPCODE:
     {
-	dMY_CXT;
-
 	/* allow for optional flags argument */
 	if (items > 1) {
 	    flags = (int) SvIV(ST(1));
@@ -312,14 +367,27 @@ PPCODE:
 	if (!items) XPUSHs(&PL_sv_undef);
     }
     PUTBACK;
-    csh_glob(aTHX);
+    csh_glob_iter(aTHX);
+    SPAGAIN;
+
+void
+bsd_glob_override(...)
+PPCODE:
+    if (items >= 2) SP += 2;
+    else {
+	SP += items;
+	XPUSHs(&PL_sv_undef);
+	if (!items) XPUSHs(&PL_sv_undef);
+    }
+    PUTBACK;
+    iterate(aTHX_ doglob_iter_wrapper);
     SPAGAIN;
 
 BOOT:
 {
 #ifndef PERL_EXTERNAL_GLOB
     /* Don’t do this at home! The globhook interface is highly volatile. */
-    PL_globhook = csh_glob;
+    PL_globhook = csh_glob_iter;
 #endif
 }
 
@@ -328,7 +396,7 @@ BOOT:
     MY_CXT_INIT;
     {
 	dMY_CXT;
-	MY_CXT.x_GLOB_ITER = MY_CXT.x_GLOB_ENTRIES = NULL;
+	MY_CXT.x_GLOB_ENTRIES = NULL;
     }  
 }
 

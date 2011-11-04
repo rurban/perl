@@ -1046,6 +1046,7 @@ cpan/ExtUtils-MakeMaker/MANIFEST				ExtUtils::MakeMaker MANIFEST
 cpan/ExtUtils-MakeMaker/NOTES					Notes about MakeMaker internals
 cpan/ExtUtils-MakeMaker/PATCHING				Suggestions for patching MakeMaker
 cpan/ExtUtils-MakeMaker/README					MakeMaker README
+cpan/ExtUtils-MakeMaker/README.packaging			MakeMaker packaging README
 cpan/ExtUtils-MakeMaker/t/00compile.t				See if MakeMaker modules compile
 cpan/ExtUtils-MakeMaker/t/arch_check.t				Test MakeMaker's arch_check()
 cpan/ExtUtils-MakeMaker/t/backwards.t				Check MakeMaker's backwards compatibility
@@ -3424,6 +3425,7 @@ dist/Storable/t/overload.t		See if Storable works
 dist/Storable/t/recurse.t		See if Storable works
 dist/Storable/t/restrict.t		See if Storable works
 dist/Storable/t/retrieve.t		See if Storable works
+dist/Storable/t/robust.t		See if it survives mangled %INC
 dist/Storable/t/sig_die.t		See if Storable works
 dist/Storable/t/st-dump.pl		See if Storable works
 dist/Storable/t/store.t			See if Storable works
@@ -3692,6 +3694,7 @@ ext/ODBM_File/hints/cygwin.pl	Hint for ODBM_File for named architecture
 ext/ODBM_File/hints/dec_osf.pl	Hint for ODBM_File for named architecture
 ext/ODBM_File/hints/gnukfreebsd.pl	Hint for NDBM_File for named architecture
 ext/ODBM_File/hints/gnuknetbsd.pl	Hint for NDBM_File for named architecture
+ext/ODBM_File/hints/gnu.pl	Hint for ODBM_File for named architecture
 ext/ODBM_File/hints/hpux.pl	Hint for ODBM_File for named architecture
 ext/ODBM_File/hints/linux.pl	Hint for NDBM_File for named architecture
 ext/ODBM_File/hints/sco.pl	Hint for ODBM_File for named architecture

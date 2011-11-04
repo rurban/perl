@@ -483,7 +483,7 @@ use File::Glob qw(:case);
     'CPANPLUS::Dist::Build' =>
 	{
 	'MAINTAINER'	=> 'bingos',
-	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-Dist-Build-0.58.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-Dist-Build-0.60.tar.gz',
 	'FILES'		=> q[cpan/CPANPLUS-Dist-Build],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qw{ t/99_pod.t
@@ -734,7 +734,7 @@ use File::Glob qw(:case);
     'ExtUtils::MakeMaker' =>
 	{
 	'MAINTAINER'	=> 'mschwern',
-	'DISTRIBUTION'	=> 'MSCHWERN/ExtUtils-MakeMaker-6.63_01.tar.gz',
+	'DISTRIBUTION'	=> 'MSCHWERN/ExtUtils-MakeMaker-6.63_02.tar.gz',
 	'FILES'		=> q[cpan/ExtUtils-MakeMaker],
 	'EXCLUDED'	=> [ qr{^t/lib/Test/},
            qr{^(bundled|my)/},
@@ -978,7 +978,7 @@ use File::Glob qw(:case);
     'HTTP::Tiny' =>
 	{
 	'MAINTAINER'	=> 'dagolden',
-	'DISTRIBUTION'	=> 'DAGOLDEN/HTTP-Tiny-0.015.tar.gz',
+	'DISTRIBUTION'	=> 'DAGOLDEN/HTTP-Tiny-0.016.tar.gz',
 	'FILES'		=> q[cpan/HTTP-Tiny],
 	'EXCLUDED'	=> [
 				't/200_live.t',
