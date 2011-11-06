@@ -765,6 +765,7 @@ CORE::given ($x) {
         CORE::break;
     }
 }
+CORE::evalbytes '';
 ####
 # $#- $#+ $#{%} etc.
 my @x;
@@ -776,3 +777,6 @@ my @x;
 # ${#} interpolated (the first line magically disables the warning)
 () = *#;
 () = "${#}a";
+####
+# ()[...]
+my(@a) = ()[()];
