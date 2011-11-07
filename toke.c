@@ -669,9 +669,8 @@ from which code will be read to be parsed.  If both are non-null, the
 code in I<line> comes first and must consist of complete lines of input,
 and I<rsfp> supplies the remainder of the source.
 
-The I<flags> parameter is reserved for future use, and must always
-be zero, except for one flag that is currently reserved for perl's internal
-use.
+The I<flags> parameter is reserved for future use.  Currently it is only
+used by perl internally, so extensions should always pass zero.
 
 =cut
 */
@@ -684,7 +683,6 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, U32 flags)
 {
     dVAR;
     const char *s = NULL;
-    STRLEN len;
     yy_parser *parser, *oparser;
     if (flags && flags & ~LEX_START_FLAGS)
 	Perl_croak(aTHX_ "Lexing code internal error (%s)", "lex_start");
@@ -725,17 +723,15 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, U32 flags)
     *parser->lex_casestack = '\0';
 
     if (line) {
+	STRLEN len;
 	s = SvPV_const(line, len);
-    } else {
-	len = 0;
-    }
-
-    if (!len) {
-	parser->linestr = newSVpvs("\n;");
-    } else {
-	parser->linestr = newSVpvn_flags(s, len, SvUTF8(line));
+	parser->linestr = flags & LEX_START_COPIED
+			    ? SvREFCNT_inc_simple_NN(line)
+			    : newSVpvn_flags(s, len, SvUTF8(line));
 	if (s[len-1] != ';')
 	    sv_catpvs(parser->linestr, "\n;");
+    } else {
+	parser->linestr = newSVpvs("\n;");
     }
     parser->oldoldbufptr =
 	parser->oldbufptr =

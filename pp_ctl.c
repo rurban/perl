@@ -4125,15 +4125,17 @@ PP(pp_entereval)
     char *tmpbuf = tbuf;
     STRLEN len;
     CV* runcv;
-    U32 seq;
+    U32 seq, lex_flags = 0;
     HV *saved_hh = NULL;
     const bool bytes = PL_op->op_private & OPpEVAL_BYTES;
 
     if (PL_op->op_private & OPpEVAL_HAS_HH) {
 	saved_hh = MUTABLE_HV(SvREFCNT_inc(POPs));
     }
-    else if (PL_op->op_private & OPpEVAL_COPHH
-	  && PL_curcop->cop_hints & HINT_LOCALIZE_HH) {
+    else if (PL_hints & HINT_LOCALIZE_HH || (
+	        PL_op->op_private & OPpEVAL_COPHH
+	     && PL_curcop->cop_hints & HINT_LOCALIZE_HH
+	    )) {
 	saved_hh = cop_hints_2hv(PL_curcop, 0);
 	hv_magic(saved_hh, NULL, PERL_MAGIC_hints);
     }
@@ -4146,6 +4148,7 @@ PP(pp_entereval)
 	const char * const p = SvPV_const(sv, len);
 
 	sv = newSVpvn_flags(p, len, SVs_TEMP | SvUTF8(sv));
+	lex_flags |= LEX_START_COPIED;
 
 	if (bytes && SvUTF8(sv))
 	    SvPVbyte_force(sv, len);
@@ -4154,16 +4157,19 @@ PP(pp_entereval)
 	/* Don’t modify someone else’s scalar */
 	STRLEN len;
 	sv = newSVsv(sv);
+	(void)sv_2mortal(sv);
 	SvPVbyte_force(sv,len);
+	lex_flags |= LEX_START_COPIED;
     }
 
     TAINT_IF(SvTAINTED(sv));
     TAINT_PROPER("eval");
 
     ENTER_with_name("eval");
-    lex_start(sv, NULL, PL_op->op_private & OPpEVAL_UNICODE
+    lex_start(sv, NULL, lex_flags | (PL_op->op_private & OPpEVAL_UNICODE
 			   ? LEX_IGNORE_UTF8_HINTS
 			   : bytes ? LEX_EVALBYTES : LEX_START_SAME_FILTER
+			)
 	     );
     SAVETMPS;
 
