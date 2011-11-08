@@ -2696,6 +2696,7 @@ cpan/Unicode-Collate/Collate/Locale/eo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/es.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/es_trad.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/et.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/fa.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/fil.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/fi_phone.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/fi.pl			Unicode::Collate
@@ -2734,15 +2735,24 @@ cpan/Unicode-Collate/Collate/Locale.pm			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ro.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ru.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/se.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/si_dict.pl	Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/si.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sk.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sl.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sq.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/sr.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/sv.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/sv_refo.pl	Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/ta.pl	Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/te.pl	Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/th.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/tn.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/to.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/tr.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/uk.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/ur.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/vi.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/wae.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/wo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/yo.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/zh_big5.pl			Unicode::Collate
@@ -2792,6 +2802,7 @@ cpan/Unicode-Collate/t/loc_eo.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_es.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_estr.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_et.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_fa.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_fil.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_fiph.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_fi.t			Unicode::Collate
@@ -2831,18 +2842,27 @@ cpan/Unicode-Collate/t/loc_pl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_ro.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_ru.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_se.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_sidt.t	Unicode::Collate
+cpan/Unicode-Collate/t/loc_si.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_sk.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sq.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_srla.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_sr.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_svrf.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_sv.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sw.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_ta.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_test.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_te.t	Unicode::Collate
+cpan/Unicode-Collate/t/loc_th.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_tn.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_to.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_tr.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_uk.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_ur.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_vi.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_wae.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_wo.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_yo.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_zhb5.t			Unicode::Collate
@@ -3425,6 +3445,7 @@ dist/Storable/t/overload.t		See if Storable works
 dist/Storable/t/recurse.t		See if Storable works
 dist/Storable/t/restrict.t		See if Storable works
 dist/Storable/t/retrieve.t		See if Storable works
+dist/Storable/t/robust.t		See if it survives mangled %INC
 dist/Storable/t/sig_die.t		See if Storable works
 dist/Storable/t/st-dump.pl		See if Storable works
 dist/Storable/t/store.t			See if Storable works
@@ -3680,6 +3701,7 @@ ext/NDBM_File/hints/dec_osf.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/dynixptx.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/gnukfreebsd.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/gnuknetbsd.pl	Hint for NDBM_File for named architecture
+ext/NDBM_File/hints/gnu.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/linux.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/sco.pl	Hint for NDBM_File for named architecture
 ext/NDBM_File/hints/solaris.pl	Hint for NDBM_File for named architecture
@@ -5089,6 +5111,7 @@ t/op/dor.t			See if defined-or (//) works
 t/op/do.t			See if subroutines work
 t/op/each_array.t		See if array iterators work
 t/op/each.t			See if hash iterators work
+t/op/evalbytes.t		See if evalbytes operator works
 t/op/eval.t			See if eval operator works
 t/op/exec.t			See if exec, system and qx work
 t/op/exists_sub.t		See if exists(&sub) works
@@ -5331,6 +5354,7 @@ t/uni/case.pl			See if Unicode casing works
 t/uni/chomp.t			See if Unicode chomp works
 t/uni/chr.t			See if Unicode chr works
 t/uni/class.t			See if Unicode classes work (\p)
+t/uni/eval.t			See if Unicode hints don't affect eval()
 t/uni/fold.t			See if Unicode folding works
 t/uni/goto.t			See if Unicode goto &sub works
 t/uni/greek.t			See if Unicode in greek works
@@ -5420,7 +5444,6 @@ vos/Changes			Changes made to port Perl to the VOS operating system
 vos/compile_full_perl.cm	VOS command macro to build "full" Perl
 vos/configure_full_perl.sh	VOS shell script to configure "full" perl before building
 vos/make_full_perl.sh		VOS shell script to build and test "full" perl
-vos/syslog.h			syslog header for VOS
 vos/vos.c			VOS emulations for missing POSIX functions
 vos/vosish.h			VOS-specific header file
 warnings.h			The warning numbers

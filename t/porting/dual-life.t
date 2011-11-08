@@ -6,6 +6,7 @@ use strict;
 #
 # * Are all dual-life programs being generated in utils/?
 
+chdir 't';
 require './test.pl';
 
 plan('no_plan');
@@ -19,7 +20,7 @@ use File::Spec::Functions;
 my $not_installed = qr{^(?:
   \.\./cpan/Encode/bin/u(?:cm(?:2table|lint|sort)|nidump)
    |
-  \.\./cpan/Module-Build/MB-[\w\d]+/Simple/bin/foo(?:\.PL)?
+  \.\./cpan/Module-Build/MB-[\w\d]+/Simple/(?:test_install/)?bin/.*
 )\z}ix;
 
 my %dist_dir_exe;

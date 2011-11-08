@@ -1127,7 +1127,10 @@ static const struct body_details fake_rv =
 
 Upgrade an SV to a more complex form.  Generally adds a new body type to the
 SV, then copies across as much information as possible from the old body.
-You generally want to use the C<SvUPGRADE> macro wrapper. See also C<svtype>.
+It croaks if the SV is already in a more complex form than requested.  You
+generally want to use the C<SvUPGRADE> macro wrapper, which checks the type
+before calling C<sv_upgrade>, and hence does not croak.  See also
+C<svtype>.
 
 =cut
 */
@@ -1810,16 +1813,11 @@ Perl_looks_like_number(pTHX_ SV *const sv)
 STATIC bool
 S_glob_2number(pTHX_ GV * const gv)
 {
-    const U32 wasfake = SvFLAGS(gv) & SVf_FAKE;
     SV *const buffer = sv_newmortal();
 
     PERL_ARGS_ASSERT_GLOB_2NUMBER;
 
-    /* FAKE globs can get coerced, so need to turn this off temporarily if it
-       is on.  */
-    SvFAKE_off(gv);
     gv_efullname3(buffer, gv, "*");
-    SvFLAGS(gv) |= wasfake;
 
     /* We know that all GVs stringify to something that is not-a-number,
 	so no need to test that.  */
@@ -2946,27 +2944,16 @@ Perl_sv_2pv_flags(pTHX_ register SV *const sv, STRLEN *const lp, const I32 flags
     else {
 	if (isGV_with_GP(sv)) {
 	    GV *const gv = MUTABLE_GV(sv);
-	    const U32 wasfake = SvFLAGS(gv) & SVf_FAKE;
 	    SV *const buffer = sv_newmortal();
 
-	    /* FAKE globs can get coerced, so need to turn this off temporarily
-	       if it is on.  */
-	    SvFAKE_off(gv);
 	    gv_efullname3(buffer, gv, "*");
-	    SvFLAGS(gv) |= wasfake;
 
-	    if (SvPOK(buffer)) {
-		if (lp) {
+	    assert(SvPOK(buffer));
+	    if (lp) {
 		    *lp = SvCUR(buffer);
-		}
-                if ( SvUTF8(buffer) ) SvUTF8_on(sv);
-		return SvPVX(buffer);
 	    }
-	    else {
-		if (lp)
-		    *lp = 0;
-		return (char *)"";
-	    }
+            if ( SvUTF8(buffer) ) SvUTF8_on(sv);
+	    return SvPVX(buffer);
 	}
 
 	if (lp)
@@ -4375,15 +4362,7 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
     }
     else {
 	if (isGV_with_GP(sstr)) {
-	    /* This stringification rule for globs is spread in 3 places.
-	       This feels bad. FIXME.  */
-	    const U32 wasfake = sflags & SVf_FAKE;
-
-	    /* FAKE globs can get coerced, so need to turn this off
-	       temporarily if it is on.  */
-	    SvFAKE_off(sstr);
 	    gv_efullname3(dstr, MUTABLE_GV(sstr), "*");
-	    SvFLAGS(sstr) |= wasfake;
 	}
 	else
 	    (void)SvOK_off(dstr);
@@ -4617,7 +4596,7 @@ Perl_sv_sethek(pTHX_ register SV *const sv, const HEK *const hek)
             return;
 	}
         {
-	    sv_upgrade(sv, SVt_PV);
+	    SvUPGRADE(sv, SVt_PV);
 	    sv_usepvn_flags(sv, (char *)HEK_KEY(share_hek_hek(hek)), HEK_LEN(hek), SV_HAS_TRAILING_NUL);
 	    SvLEN_set(sv, 0);
 	    SvREADONLY_on(sv);
