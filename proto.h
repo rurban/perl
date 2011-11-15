@@ -6983,6 +6983,12 @@ STATIC bool	S_isa_lookup(pTHX_ HV *stash, const char * const name, STRLEN len, U
 
 #endif
 #if defined(PERL_IN_UTF8_C)
+PERL_CALLCONV UV	Perl__to_fold_latin1(pTHX_ const U8 c, U8 *p, STRLEN *lenp, const U8 flags)
+			__attribute__nonnull__(pTHX_2)
+			__attribute__nonnull__(pTHX_3);
+#define PERL_ARGS_ASSERT__TO_FOLD_LATIN1	\
+	assert(p); assert(lenp)
+
 STATIC STRLEN	S_is_utf8_char_slow(const U8 *s, const STRLEN len)
 			__attribute__warn_unused_result__
 			__attribute__nonnull__(1);
@@ -7002,6 +7008,17 @@ STATIC SV*	S_swash_get(pTHX_ SV* swash, UV start, UV span)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_SWASH_GET	\
 	assert(swash)
+
+STATIC U8	S_to_lower_latin1(pTHX_ const U8 c, U8 *p, STRLEN *lenp)
+			__attribute__warn_unused_result__;
+
+#endif
+#if defined(PERL_IN_UTF8_C) || defined(PERL_IN_PP_C)
+PERL_CALLCONV UV	Perl__to_upper_title_latin1(pTHX_ const U8 c, U8 *p, STRLEN *lenp, const char S_or_s)
+			__attribute__nonnull__(pTHX_2)
+			__attribute__nonnull__(pTHX_3);
+#define PERL_ARGS_ASSERT__TO_UPPER_TITLE_LATIN1	\
+	assert(p); assert(lenp)
 
 #endif
 #if defined(PERL_IN_UTIL_C)

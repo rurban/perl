@@ -1387,8 +1387,8 @@ is the recommended Unicode-aware way of saying
 	       scan += len;                                                   \
 	       len = 0;                                                       \
 	    } else {                                                          \
-		uvc = utf8n_to_uvuni( (const U8*)uc, UTF8_MAXLEN, &len, uniflags);\
-		uvc = to_uni_fold( uvc, foldbuf, &foldlen );                  \
+		len = UTF8SKIP(uc);\
+		uvc = to_utf8_fold( uc, foldbuf, &foldlen);                   \
 		foldlen -= UNISKIP( uvc );                                    \
 		scan = foldbuf + UNISKIP( uvc );                              \
 	    }                                                                 \
@@ -4523,7 +4523,7 @@ Perl_re_compile(pTHX_ SV * const pattern, U32 orig_pm_flags)
     struct regexp *r;
     register regexp_internal *ri;
     STRLEN plen;
-    char  *exp;
+    char* VOL exp;
     char* xend;
     regnode *scan;
     I32 flags;
@@ -10454,7 +10454,11 @@ parseit:
 		if (! PL_utf8_tofold) {
 		    U8 dummy[UTF8_MAXBYTES+1];
 		    STRLEN dummy_len;
-		    to_utf8_fold((U8*) "A", dummy, &dummy_len);
+
+		    /* This particular string is above \xff in both UTF-8 and
+		     * UTFEBCDIC */
+		    to_utf8_fold((U8*) "\xC8\x80", dummy, &dummy_len);
+		    assert(PL_utf8_tofold); /* Verify that worked */
 		}
 		PL_utf8_foldclosures = _swash_inversion_hash(PL_utf8_tofold);
 	    }
