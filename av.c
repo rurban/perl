@@ -81,9 +81,9 @@ Perl_av_extend(pTHX_ AV *av, I32 key)
 	return;
     }
     if (key > AvMAX(av)) {
-	SV** ary;
+	SV** ary = NULL;
 	I32 tmp;
-	I32 newmax;
+	I32 newmax = 0;
 
 	if (AvALLOC(av) != AvARRAY(av)) {
 	    ary = AvALLOC(av) + AvFILLp(av) + 1;
@@ -97,10 +97,11 @@ Perl_av_extend(pTHX_ AV *av, I32 key)
 	    }
 	    if (key > AvMAX(av) - 10) {
 		newmax = key + AvMAX(av);
-		goto resize;
 	    }
 	}
-	else {
+	/* newmax: fall through from above. was a goto, but SunOS CC complained.
+	   !ary: The former else branch from AvALLOC(av) != AvARRAY(av) */
+	if (newmax || !ary) {
 #ifdef PERL_MALLOC_WRAP
 	    static const char oom_array_extend[] =
 	      "Out of memory during array extend"; /* Duplicated in pp_hot.c */
@@ -126,14 +127,17 @@ Perl_av_extend(pTHX_ AV *av, I32 key)
 		   memory that might never be read. So, I feel, better to keep
 		   the current lazy system of only writing to it if our caller
 		   has a need for more space. NWC  */
-		newmax = Perl_safesysmalloc_size((void*)AvALLOC(av)) /
-		    sizeof(const SV *) - 1;
+		if (!newmax) {
+		    newmax = Perl_safesysmalloc_size((void*)AvALLOC(av)) /
+			sizeof(const SV *) - 1;
 
-		if (key <= newmax) 
-		    goto resized;
-#endif 
-		newmax = key + AvMAX(av) / 5;
-	      resize:
+		    if (key <= newmax) 
+			goto resized;
+		}
+#endif
+		if (!newmax)
+		    newmax = key + AvMAX(av) / 5;
+
 		MEM_WRAP_CHECK_1(newmax+1, SV*, oom_array_extend);
 #if defined(STRANGE_MALLOC) || defined(MYMALLOC)
 		Renew(AvALLOC(av),newmax+1, SV*);
