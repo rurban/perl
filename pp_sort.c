@@ -1718,9 +1718,9 @@ PP(pp_sort)
 			    : ( overloading ? S_amagic_ncmp : S_sv_ncmp ) )
 			: ( IN_LOCALE_RUNTIME
 			    ? ( overloading
-				? (SVCOMPARE_t)S_amagic_cmp_locale
-				: (SVCOMPARE_t)sv_cmp_locale_static)
-			    : ( overloading ? (SVCOMPARE_t)S_amagic_cmp : (SVCOMPARE_t)sv_cmp_static)),
+				? S_amagic_cmp_locale
+				: sv_cmp_locale_static)
+			    : ( overloading ? S_amagic_cmp : sv_cmp_static)),
 		    sort_flags);
 	}
 	if ((priv & OPpSORT_REVERSE) != 0) {
@@ -1881,7 +1881,7 @@ S_sv_ncmp(pTHX_ SV *const a, SV *const b)
     PERL_ARGS_ASSERT_SV_NCMP;
 
 #if defined(NAN_COMPARE_BROKEN) && defined(Perl_isnan)
-    if (Perl_isnan(right) || Perl_isnan(left)) {
+    if (Perl_isnan(nv1) || Perl_isnan(nv2)) {
 #else
     if (nv1 != nv1 || nv2 != nv2) {
 #endif

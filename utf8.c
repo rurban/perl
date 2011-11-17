@@ -1314,10 +1314,79 @@ Perl_is_uni_xdigit(pTHX_ UV c)
     return is_utf8_xdigit(tmpbuf);
 }
 
+UV
+Perl__to_upper_title_latin1(pTHX_ const U8 c, U8* p, STRLEN *lenp, const char S_or_s)
+{
+    /* We have the latin1-range values compiled into the core, so just use
+     * those, converting the result to utf8.  The only difference between upper
+     * and title case in this range is that LATIN_SMALL_LETTER_SHARP_S is
+     * either "SS" or "Ss".  Which one to use is passed into the routine in
+     * 'S_or_s' to avoid a test */
+
+    UV converted = toUPPER_LATIN1_MOD(c);
+
+    PERL_ARGS_ASSERT__TO_UPPER_TITLE_LATIN1;
+
+    assert(S_or_s == 'S' || S_or_s == 's');
+
+    if (UNI_IS_INVARIANT(converted)) { /* No difference between the two for
+					  characters in this range */
+	*p = (U8) converted;
+	*lenp = 1;
+	return converted;
+    }
+
+    /* toUPPER_LATIN1_MOD gives the correct results except for three outliers,
+     * which it maps to one of them, so as to only have to have one check for
+     * it in the main case */
+    if (UNLIKELY(converted == LATIN_SMALL_LETTER_Y_WITH_DIAERESIS)) {
+	switch (c) {
+	    case LATIN_SMALL_LETTER_Y_WITH_DIAERESIS:
+		converted = LATIN_CAPITAL_LETTER_Y_WITH_DIAERESIS;
+		break;
+	    case MICRO_SIGN:
+		converted = GREEK_CAPITAL_LETTER_MU;
+		break;
+	    case LATIN_SMALL_LETTER_SHARP_S:
+		*(p)++ = 'S';
+		*p = S_or_s;
+		*lenp = 2;
+		return 'S';
+	    default:
+		Perl_croak(aTHX_ "panic: to_upper_title_latin1 did not expect '%c' to map to '%c'", c, LATIN_SMALL_LETTER_Y_WITH_DIAERESIS);
+		/* NOTREACHED */
+	}
+    }
+
+    *(p)++ = UTF8_TWO_BYTE_HI(converted);
+    *p = UTF8_TWO_BYTE_LO(converted);
+    *lenp = 2;
+
+    return converted;
+}
+
+/* Call the function to convert a UTF-8 encoded character to the specified case.
+ * Note that there may be more than one character in the result.
+ * INP is a pointer to the first byte of the input character
+ * OUTP will be set to the first byte of the string of changed characters.  It
+ *	needs to have space for UTF8_MAXBYTES_CASE+1 bytes
+ * LENP will be set to the length in bytes of the string of changed characters
+ *
+ * The functions return the ordinal of the first character in the string of OUTP */
+#define CALL_UPPER_CASE(INP, OUTP, LENP) Perl_to_utf8_case(aTHX_ INP, OUTP, LENP, &PL_utf8_toupper, "ToUc", "utf8::ToSpecUpper")
+#define CALL_TITLE_CASE(INP, OUTP, LENP) Perl_to_utf8_case(aTHX_ INP, OUTP, LENP, &PL_utf8_totitle, "ToTc", "utf8::ToSpecTitle")
+#define CALL_LOWER_CASE(INP, OUTP, LENP) Perl_to_utf8_case(aTHX_ INP, OUTP, LENP, &PL_utf8_tolower, "ToLc", "utf8::ToSpecLower")
+
+/* This additionally has the input parameter SPECIALS, which if non-zero will
+ * cause this to use the SPECIALS hash for folding (meaning get full case
+ * folding); otherwise, when zero, this implies a simple case fold */
+#define CALL_FOLD_CASE(INP, OUTP, LENP, SPECIALS) Perl_to_utf8_case(aTHX_ INP, OUTP, LENP, &PL_utf8_tofold, "ToCf", (SPECIALS) ? "utf8::ToSpecFold" : NULL)
 
 UV
 Perl_to_uni_upper(pTHX_ UV c, U8* p, STRLEN *lenp)
 {
+    dVAR;
+
     /* Convert the Unicode character whose ordinal is c to its uppercase
      * version and store that in UTF-8 in p and its length in bytes in lenp.
      * Note that the p needs to be at least UTF8_MAXBYTES_CASE+1 bytes since
@@ -1328,42 +1397,99 @@ Perl_to_uni_upper(pTHX_ UV c, U8* p, STRLEN *lenp)
 
     PERL_ARGS_ASSERT_TO_UNI_UPPER;
 
+    if (c < 256) {
+	return _to_upper_title_latin1((U8) c, p, lenp, 'S');
+    }
+
     uvchr_to_utf8(p, c);
-    return to_utf8_upper(p, p, lenp);
+    return CALL_UPPER_CASE(p, p, lenp);
 }
 
 UV
 Perl_to_uni_title(pTHX_ UV c, U8* p, STRLEN *lenp)
 {
+    dVAR;
+
     PERL_ARGS_ASSERT_TO_UNI_TITLE;
 
+    if (c < 256) {
+	return _to_upper_title_latin1((U8) c, p, lenp, 's');
+    }
+
     uvchr_to_utf8(p, c);
-    return to_utf8_title(p, p, lenp);
+    return CALL_TITLE_CASE(p, p, lenp);
+}
+
+STATIC U8
+S_to_lower_latin1(pTHX_ const U8 c, U8* p, STRLEN *lenp)
+{
+    /* We have the latin1-range values compiled into the core, so just use
+     * those, converting the result to utf8.  Since the result is always just
+     * one character, we allow p to be NULL */
+
+    U8 converted = toLOWER_LATIN1(c);
+
+    if (p != NULL) {
+	if (UNI_IS_INVARIANT(converted)) {
+	    *p = converted;
+	    *lenp = 1;
+	}
+	else {
+	    *p = UTF8_TWO_BYTE_HI(converted);
+	    *(p+1) = UTF8_TWO_BYTE_LO(converted);
+	    *lenp = 2;
+	}
+    }
+    return converted;
 }
 
 UV
 Perl_to_uni_lower(pTHX_ UV c, U8* p, STRLEN *lenp)
 {
+    dVAR;
+
     PERL_ARGS_ASSERT_TO_UNI_LOWER;
 
-    if (c > 255) {
-	uvchr_to_utf8(p, c);
-	return to_utf8_lower(p, p, lenp);
+    if (c < 256) {
+	return to_lower_latin1((U8) c, p, lenp);
     }
 
-    /* We have the latin1-range values compiled into the core, so just use
-     * those, converting the result to utf8 */
-    c = toLOWER_LATIN1(c);
-    if (UNI_IS_INVARIANT(c)) {
-	*p = c;
+    uvchr_to_utf8(p, c);
+    return CALL_LOWER_CASE(p, p, lenp);
+}
+
+UV
+Perl__to_fold_latin1(pTHX_ const U8 c, U8* p, STRLEN *lenp, const U8 flags)
+{
+    UV converted;
+
+    PERL_ARGS_ASSERT__TO_FOLD_LATIN1;
+
+    if (c == MICRO_SIGN) {
+	converted = GREEK_SMALL_LETTER_MU;
+    }
+    else if (flags && c == LATIN_SMALL_LETTER_SHARP_S) {
+	*(p)++ = 's';
+	*p = 's';
+	*lenp = 2;
+	return 's';
+    }
+    else { /* In this range the fold of all other characters is their lower
+              case */
+	converted = toLOWER_LATIN1(c);
+    }
+
+    if (UNI_IS_INVARIANT(converted)) {
+	*p = (U8) converted;
 	*lenp = 1;
     }
     else {
-	*p = UTF8_TWO_BYTE_HI(c);
-	*(p+1) = UTF8_TWO_BYTE_LO(c);
+	*(p)++ = UTF8_TWO_BYTE_HI(converted);
+	*p = UTF8_TWO_BYTE_LO(converted);
 	*lenp = 2;
     }
-    return c;
+
+    return converted;
 }
 
 UV
@@ -1371,8 +1497,12 @@ Perl__to_uni_fold_flags(pTHX_ UV c, U8* p, STRLEN *lenp, U8 flags)
 {
     PERL_ARGS_ASSERT__TO_UNI_FOLD_FLAGS;
 
+    if (c < 256) {
+	return _to_fold_latin1((U8) c, p, lenp, flags);
+    }
+
     uvchr_to_utf8(p, c);
-    return _to_utf8_fold_flags(p, p, lenp, flags);
+    return CALL_FOLD_CASE(p, p, lenp, flags);
 }
 
 /* for now these all assume no locale info available for Unicode > 255 */
@@ -1992,8 +2122,15 @@ Perl_to_utf8_upper(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 
     PERL_ARGS_ASSERT_TO_UTF8_UPPER;
 
-    return Perl_to_utf8_case(aTHX_ p, ustrp, lenp,
-                             &PL_utf8_toupper, "ToUpper", "utf8::ToSpecUpper");
+    if (UTF8_IS_INVARIANT(*p)) {
+	return _to_upper_title_latin1(*p, ustrp, lenp, 'S');
+    }
+    else if UTF8_IS_DOWNGRADEABLE_START(*p) {
+	return _to_upper_title_latin1(TWO_BYTE_UTF8_TO_UNI(*p, *(p+1)),
+				      ustrp, lenp, 'S');
+    }
+
+    return CALL_UPPER_CASE(p, ustrp, lenp);
 }
 
 /*
@@ -2016,8 +2153,15 @@ Perl_to_utf8_title(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 
     PERL_ARGS_ASSERT_TO_UTF8_TITLE;
 
-    return Perl_to_utf8_case(aTHX_ p, ustrp, lenp,
-                             &PL_utf8_totitle, "ToTitle", "utf8::ToSpecTitle");
+    if (UTF8_IS_INVARIANT(*p)) {
+	return _to_upper_title_latin1(*p, ustrp, lenp, 's');
+    }
+    else if UTF8_IS_DOWNGRADEABLE_START(*p) {
+	return _to_upper_title_latin1(TWO_BYTE_UTF8_TO_UNI(*p, *(p+1)),
+				      ustrp, lenp, 's');
+    }
+
+    return CALL_TITLE_CASE(p, ustrp, lenp);
 }
 
 /*
@@ -2040,8 +2184,14 @@ Perl_to_utf8_lower(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 
     PERL_ARGS_ASSERT_TO_UTF8_LOWER;
 
-    return Perl_to_utf8_case(aTHX_ p, ustrp, lenp,
-                             &PL_utf8_tolower, "ToLower", "utf8::ToSpecLower");
+    if (UTF8_IS_INVARIANT(*p)) {
+	return to_lower_latin1(*p, ustrp, lenp);
+    }
+    else if UTF8_IS_DOWNGRADEABLE_START(*p) {
+	return to_lower_latin1(TWO_BYTE_UTF8_TO_UNI(*p, *(p+1)), ustrp, lenp);
+    }
+
+    return CALL_LOWER_CASE(p, ustrp, lenp);
 }
 
 /*
@@ -2064,19 +2214,23 @@ The first character of the foldcased version is returned
 UV
 Perl__to_utf8_fold_flags(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp, U8 flags)
 {
-    const char *specials = (flags) ? "utf8::ToSpecFold" : NULL;
-
     dVAR;
 
     PERL_ARGS_ASSERT__TO_UTF8_FOLD_FLAGS;
 
-    return Perl_to_utf8_case(aTHX_ p, ustrp, lenp,
-                             &PL_utf8_tofold, "ToFold", specials);
+    if (UTF8_IS_INVARIANT(*p)) {
+	return _to_fold_latin1(*p, ustrp, lenp, flags);
+    }
+    else if UTF8_IS_DOWNGRADEABLE_START(*p) {
+	return _to_fold_latin1(TWO_BYTE_UTF8_TO_UNI(*p, *(p+1)),
+		                                    ustrp, lenp, flags);
+    }
+
+    return CALL_FOLD_CASE(p, ustrp, lenp, flags);
 }
 
 /* Note:
- * A "swash" is a swatch hash.
- * A "swatch" is a bit vector generated by utf8.c:S_swash_get().
+ * Returns a "swash" which is a hash described in utf8.c:S_swash_fetch().
  * C<pkg> is a pointer to a package name for SWASHNEW, should be "utf8".
  * For other parameters, see utf8::SWASHNEW in lib/utf8_heavy.pl.
  */
@@ -2166,6 +2320,34 @@ Perl_swash_init(pTHX_ const char* pkg, const char* name, SV *listsv, I32 minbits
  * of the string C<ptr>. If C<do_utf8> is true, the string C<ptr> is
  * assumed to be in utf8. If C<do_utf8> is false, the string C<ptr> is
  * assumed to be in native 8-bit encoding. Caches the swatch in C<swash>.
+ *
+ * A "swash" is a hash which contains initially the keys/values set up by
+ * SWASHNEW.  The purpose is to be able to completely represent a Unicode
+ * property for all possible code points.  Things are stored in a compact form
+ * (see utf8_heavy.pl) so that calculation is required to find the actual
+ * property value for a given code point.  As code points are looked up, new
+ * key/value pairs are added to the hash, so that the calculation doesn't have
+ * to ever be re-done.  Further, each calculation is done, not just for the
+ * desired one, but for a whole block of code points adjacent to that one.
+ * For binary properties on ASCII machines, the block is usually for 64 code
+ * points, starting with a code point evenly divisible by 64.  Thus if the
+ * property value for code point 257 is requested, the code goes out and
+ * calculates the property values for all 64 code points between 256 and 319,
+ * and stores these as a single 64-bit long bit vector, called a "swatch",
+ * under the key for code point 256.  The key is the UTF-8 encoding for code
+ * point 256, minus the final byte.  Thus, if the length of the UTF-8 encoding
+ * for a code point is 13 bytes, the key will be 12 bytes long.  If the value
+ * for code point 258 is then requested, this code realizes that it would be
+ * stored under the key for 256, and would find that value and extract the
+ * relevant bit, offset from 256.
+ *
+ * Non-binary properties are stored in as many bits as necessary to represent
+ * their values (32 currently, though the code is more general than that), not
+ * as single bits, but the principal is the same: the value for each key is a
+ * vector that encompasses the property values for all code points whose UTF-8
+ * representations are represented by the key.  That is, for all code points
+ * whose UTF-8 representations are length N bytes, and the key is the first N-1
+ * bytes of that.
  */
 UV
 Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
@@ -2208,19 +2390,6 @@ Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
       /* If char is encoded then swatch is for the prefix */
 	needents = (1 << UTF_ACCUMULATION_SHIFT);
 	off      = NATIVE_TO_UTF(ptr[klen]) & UTF_CONTINUATION_MASK;
-	if (UTF8_IS_SUPER(ptr) && ckWARN_d(WARN_NON_UNICODE)) {
-	    const UV code_point = utf8n_to_uvuni(ptr, UTF8_MAXBYTES, 0, 0);
-
-	    /* This outputs warnings for binary properties only, assuming that
-	     * to_utf8_case() will output any for non-binary.  Also, surrogates
-	     * aren't checked for, as that would warn on things like
-	     * /\p{Gc=Cs}/ */
-	    SV** const bitssvp = hv_fetchs(hv, "BITS", FALSE);
-	    if (SvUV(*bitssvp) == 1) {
-		Perl_warner(aTHX_ packWARN(WARN_NON_UNICODE),
-		    "Code point 0x%04"UVXf" is not Unicode, all \\p{} matches fail; all \\P{} matches succeed", code_point);
-	    }
-	}
     }
 
     /*
@@ -2254,7 +2423,7 @@ Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
 					   0 : UTF8_ALLOW_ANY);
 	    swatch = swash_get(swash,
 		    /* On EBCDIC & ~(0xA0-1) isn't a useful thing to do */
-				(klen) ? (code_point & ~(needents - 1)) : 0,
+				(klen) ? (code_point & ~((UV)needents - 1)) : 0,
 				needents);
 
 	    if (IN_PERL_COMPILETIME)
@@ -2275,6 +2444,24 @@ Perl_swash_fetch(pTHX_ SV *swash, const U8 *ptr, bool do_utf8)
 	PL_last_swash_slen = slen;
 	if (klen)
 	    Copy(ptr, PL_last_swash_key, klen, U8);
+    }
+
+    if (UTF8_IS_SUPER(ptr) && ckWARN_d(WARN_NON_UNICODE)) {
+	SV** const bitssvp = hv_fetchs(hv, "BITS", FALSE);
+
+	/* This outputs warnings for binary properties only, assuming that
+	 * to_utf8_case() will output any for non-binary.  Also, surrogates
+	 * aren't checked for, as that would warn on things like /\p{Gc=Cs}/ */
+
+	if (SvUV(*bitssvp) == 1) {
+	    /* User-defined properties can silently match above-Unicode */
+	    SV** const user_defined_svp = hv_fetchs(hv, "USER_DEFINED", FALSE);
+	    if (! user_defined_svp || ! SvUV(*user_defined_svp)) {
+		const UV code_point = utf8n_to_uvuni(ptr, UTF8_MAXBYTES, 0, 0);
+		Perl_warner(aTHX_ packWARN(WARN_NON_UNICODE),
+		    "Code point 0x%04"UVXf" is not Unicode, all \\p{} matches fail; all \\P{} matches succeed", code_point);
+	    }
+	}
     }
 
     switch ((int)((slen << 3) / needents)) {
@@ -2425,13 +2612,19 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
     const STRLEN bits  = SvUV(*bitssvp);
     const STRLEN octets = bits >> 3; /* if bits == 1, then octets == 0 */
     const UV     none  = SvUV(*nonesvp);
-    const UV     end   = start + span;
+    UV           end   = start + span;
 
     PERL_ARGS_ASSERT_SWASH_GET;
 
     if (bits != 1 && bits != 8 && bits != 16 && bits != 32) {
 	Perl_croak(aTHX_ "panic: swash_get doesn't expect bits %"UVuf,
 						 (UV)bits);
+    }
+
+    /* If overflowed, use the max possible */
+    if (end < start) {
+	end = UV_MAX;
+	span = end - start;
     }
 
     /* create and initialize $swatch */
@@ -2463,7 +2656,8 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
     SvCUR_set(swatch, scur);
     s = (U8*)SvPVX(swatch);
 
-    /* read $swash->{LIST} */
+    /* read $swash->{LIST}.  XXX Note that this is a linear scan through a
+     * sorted list.  A binary search would be much more efficient */
     l = (U8*)SvPV(*listsvp, lcur);
     lend = l + lcur;
     while (l < lend) {
@@ -2490,6 +2684,10 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
 		STRLEN offset;
 		if (key >= end)
 		    goto go_out_list;
+		/* XXX If it should ever happen (very unlikely) that we would
+		 * want a non-binary result for the code point at UV_MAX,
+		 * special handling would need to be inserted here, as is done
+		 * below for the binary case */
 		/* offset must be non-negative (start <= min <= key < end) */
 		offset = octets * (key - start);
 		if (bits == 8)
@@ -2513,6 +2711,15 @@ S_swash_get(pTHX_ SV* swash, UV start, UV span)
 	    UV key;
 	    if (min < start)
 		min = start;
+
+            /* Special case when the upper-end is the highest possible code
+             * point representable on the platform.  Otherwise, the code below
+             * exits before setting this bit.  Done here to avoid testing for
+             * this extremely unlikely possibility in the loop */
+	    if (UNLIKELY(end == UV_MAX && max == UV_MAX)) {
+		const STRLEN offset = (STRLEN)(max - start);
+		s[offset >> 3] |= 1 << (offset & 7);
+	    }
 	    for (key = min; key <= max; key++) {
 		const STRLEN offset = (STRLEN)(key - start);
 		if (key >= end)
@@ -3171,9 +3378,9 @@ bool
 Perl_check_utf8_print(pTHX_ register const U8* s, const STRLEN len)
 {
     /* May change: warns if surrogates, non-character code points, or
-     * non-Unicode code points are in s which has length len.  Returns TRUE if
-     * none found; FALSE otherwise.  The only other validity check is to make
-     * sure that this won't exceed the string's length */
+     * non-Unicode code points are in s which has length len bytes.  Returns
+     * TRUE if none found; FALSE otherwise.  The only other validity check is
+     * to make sure that this won't exceed the string's length */
 
     const U8* const e = s + len;
     bool ok = TRUE;
@@ -3186,7 +3393,7 @@ Perl_check_utf8_print(pTHX_ register const U8* s, const STRLEN len)
 			   "%s in %s", unees, PL_op ? OP_DESC(PL_op) : "print");
 	    return FALSE;
 	}
-	if (*s >= UTF8_FIRST_PROBLEMATIC_CODE_POINT_FIRST_BYTE) {
+	if (UNLIKELY(*s >= UTF8_FIRST_PROBLEMATIC_CODE_POINT_FIRST_BYTE)) {
 	    STRLEN char_len;
 	    if (UTF8_IS_SUPER(s)) {
 		if (ckWARN_d(WARN_NON_UNICODE)) {
@@ -3389,8 +3596,6 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
     STRLEN n1 = 0, n2 = 0;              /* Number of bytes in current char */
     U8 foldbuf1[UTF8_MAXBYTES_CASE+1];
     U8 foldbuf2[UTF8_MAXBYTES_CASE+1];
-    U8 natbuf[2];               /* Holds native 8-bit char converted to utf8;
-                                   these always fit in 2 bytes */
 
     PERL_ARGS_ASSERT_FOLDEQ_UTF8_FLAGS;
 
@@ -3497,9 +3702,8 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
 		else if (u1) {
 		    to_utf8_fold(p1, foldbuf1, &n1);
 		}
-		else {  /* Not utf8, convert to it first and then get fold */
-		    uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p1)));
-		    to_utf8_fold(natbuf, foldbuf1, &n1);
+		else {  /* Not utf8, get utf8 fold */
+		    to_uni_fold(NATIVE_TO_UNI(*p1), foldbuf1, &n1);
 		}
 		f1 = foldbuf1;
 	    }
@@ -3546,8 +3750,7 @@ Perl_foldEQ_utf8_flags(pTHX_ const char *s1, char **pe1, register UV l1, bool u1
 		    to_utf8_fold(p2, foldbuf2, &n2);
 		}
 		else {
-		    uvuni_to_utf8(natbuf, (UV) NATIVE_TO_UNI(((UV)*p2)));
-		    to_utf8_fold(natbuf, foldbuf2, &n2);
+		    to_uni_fold(NATIVE_TO_UNI(*p2), foldbuf2, &n2);
 		}
 		f2 = foldbuf2;
 	    }

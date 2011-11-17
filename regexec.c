@@ -138,7 +138,7 @@
 /* Doesn't do an assert to verify that is correct */
 #define LOAD_UTF8_CHARCLASS_NO_CHECK(class) STMT_START { \
     if (!CAT2(PL_utf8_,class)) { \
-	bool throw_away __attribute__unused__; \
+	bool throw_away PERL_UNUSED_DECL; \
 	ENTER; save_re_context(); \
 	throw_away = CAT2(is_utf8_,class)((const U8*)" "); \
 	LEAVE; } } STMT_END
@@ -1200,8 +1200,8 @@ uvc, charid, foldlen, foldbuf, uniflags) STMT_START {                       \
 	    uscan += len;                                                   \
 	    len=0;                                                          \
 	} else {                                                            \
-	    uvc = utf8n_to_uvuni( (U8*)uc, UTF8_MAXLEN, &len, uniflags ); \
-	    uvc = to_uni_fold( uvc, foldbuf, &foldlen );                    \
+	    uvc = to_utf8_fold( (U8 *) uc, foldbuf, &foldlen );             \
+	    len = UTF8SKIP(uc); \
 	    foldlen -= UNISKIP( uvc );                                      \
 	    uscan = foldbuf + UNISKIP( uvc );                               \
 	}                                                                   \
@@ -1552,10 +1552,10 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	     * fact that the Latin 1 folds are already determined, and the
 	     * only multi-char fold in that range is the sharp-s folding to
 	     * 'ss'.  Thus, a pattern character can match as little as 1/3 of a
-	     * string character.  Adjust lnc accordingly, always matching at
-	     * least 1 */
+	     * string character.  Adjust lnc accordingly, rounding up, so that
+	     * if we need to match at least 4+1/3 chars, that really is 5. */
 	    expansion = (utf8_target) ? UTF8_MAX_FOLD_CHAR_EXPAND : 2;
-	    lnc = (lnc < expansion) ? 1 : lnc / expansion;
+	    lnc = (lnc + expansion - 1) / expansion;
 
 	    /* As in the non-UTF8 case, if we have to match 3 characters, and
 	     * only 2 are left, it's guaranteed to fail, so don't start a
@@ -1567,10 +1567,12 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 		e = s;			/* Due to minlen logic of intuit() */
 	    }
 
-	    /* XXX Note that we could recalculate e every so-often through the
-	     * loop to stop earlier, as the worst case expansion above will
-	     * rarely be met, and as we go along we would usually find that e
-	     * moves further to the left.  Unclear if worth the expense */
+	    /* XXX Note that we could recalculate e to stop the loop earlier,
+	     * as the worst case expansion above will rarely be met, and as we
+	     * go along we would usually find that e moves further to the left.
+	     * This would happen only after we reached the point in the loop
+	     * where if there were no expansion we should fail.  Unclear if
+	     * worth the expense */
 
 	    while (s <= e) {
 		char *my_strend= (char *)strend;
@@ -6006,7 +6008,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 
 	    /* Here, the string is utf8, and the pattern char is different
 	     * in utf8 than not, so can't compare them directly.  Outside the
-	     * loop, find find the two utf8 bytes that represent c, and then
+	     * loop, find the two utf8 bytes that represent c, and then
 	     * look for those in sequence in the utf8 string */
 	    U8 high = UTF8_TWO_BYTE_HI(c);
 	    U8 low = UTF8_TWO_BYTE_LO(c);

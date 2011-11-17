@@ -425,6 +425,8 @@ esac
 # makes Configure to look for the right one) because the symbol
 # scanning tricks of Configure will crash and burn horribly.
 case "$cc" in
+*g++-4.6) 
+       ;;
 *g++*) usenm=true
        libc=''
        ;;

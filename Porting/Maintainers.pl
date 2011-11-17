@@ -353,7 +353,7 @@ use File::Glob qw(:case);
     'CGI' =>
 	{
 	'MAINTAINER'	=> 'lstein',
-	'DISTRIBUTION'	=> 'MARKSTOS/CGI.pm-3.55.tar.gz',
+	'DISTRIBUTION'	=> 'MARKSTOS/CGI.pm-3.58.tar.gz',
 	'FILES'		=> q[cpan/CGI],
 	'EXCLUDED'	=> [ qr{^t/lib/Test},
 				qw( cgi-lib_porting.html
@@ -462,7 +462,7 @@ use File::Glob qw(:case);
     'CPANPLUS' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9111.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9112.tar.gz',
 	'FILES'		=> q[cpan/CPANPLUS],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qr{^t/dummy-.*\.hidden$},
@@ -597,7 +597,7 @@ use File::Glob qw(:case);
     'Digest::SHA' =>
 	{
 	'MAINTAINER'	=> 'mshelor',
-	'DISTRIBUTION'	=> 'MSHELOR/Digest-SHA-5.62.tar.gz',
+	'DISTRIBUTION'	=> 'MSHELOR/Digest-SHA-5.63.tar.gz',
 	'FILES' 	=> q[cpan/Digest-SHA],
 	'EXCLUDED'	=> [ qw{t/pod.t t/podcover.t examples/dups} ],
 	'UPSTREAM'	=> 'cpan',
