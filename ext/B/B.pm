@@ -9,7 +9,7 @@ package B;
 
 $B::VERSION = '1.33';
 
-require XSLoader;
+use XSLoader ();
 require Exporter;
 @B::ISA = qw(Exporter);
 
@@ -24,10 +24,10 @@ require Exporter;
 		   begin_av init_av check_av end_av regex_padav dowarn
 		   defstash curstash warnhook diehook inc_gv @optype
 		   @specialsv_name
-		 ), $] > 5.009 && 'unitcheck_av');
+		  );
+push @B::EXPORT_OK, qw(unitcheck_av) if $] > 5.009;
 sub OPf_KIDS ();
 use strict;
-
 @B::SV::ISA = 'B::OBJECT';
 @B::NULL::ISA = 'B::SV';
 @B::PV::ISA = 'B::SV';
@@ -322,7 +322,7 @@ sub walksymtable {
     }
 }
 
-XSLoader::load();
+XSLoader::load 'B';
 
 1;
 
