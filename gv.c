@@ -369,20 +369,12 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
 	CV *cv;
 	ENTER;
 	if (has_constant) {
-	    char *name0 = NULL;
-	    if (name[len])
-		/* newCONSTSUB doesn't take a len arg, so make sure we
-		 * give it a \0-terminated string */
-		name0 = savepvn(name,len);
-
 	    /* newCONSTSUB takes ownership of the reference from us.  */
-	    cv = newCONSTSUB_flags(stash, (name0 ? name0 : name), flags, has_constant);
+	    cv = newCONSTSUB_flags(stash, name, len, flags, has_constant);
 	    /* In case op.c:S_process_special_blocks stole it: */
 	    if (!GvCV(gv))
 		GvCV_set(gv, (CV *)SvREFCNT_inc_simple_NN(cv));
 	    assert(GvCV(gv) == cv); /* newCONSTSUB should have set this */
-	    if (name0)
-		Safefree(name0);
 	    /* If this reference was a copy of another, then the subroutine
 	       must have been "imported", by a Perl space assignment to a GV
 	       from a reference to CV.  */
@@ -1174,7 +1166,7 @@ Perl_gv_autoload_pvn(pTHX_ HV *stash, const char *name, STRLEN len, U32 flags)
          * via the SvPVX field in the CV, and the stash in CvSTASH.
          *
          * Due to an unfortunate accident of history, the SvPVX field
-         * serves two purposes.  It is also used for the subroutine’s pro-
+         * serves two purposes.  It is also used for the subroutine's pro-
          * type.  Since SvPVX has been documented as returning the sub name
          * for a long time, but not as returning the prototype, we have
          * to preserve the SvPVX AUTOLOAD behaviour and put the prototype

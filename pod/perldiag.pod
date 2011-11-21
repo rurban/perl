@@ -232,11 +232,11 @@ spots.  This is now heavily deprecated.
 
 =item assertion botched: %s
 
-(P) The malloc package that comes with Perl had an internal failure.
+(X) The malloc package that comes with Perl had an internal failure.
 
 =item Assertion failed: file "%s"
 
-(P) A general assertion failed.  The file in question must be examined.
+(X) A general assertion failed.  The file in question must be examined.
 
 =item Assignment to both a list and a scalar
 
@@ -1470,9 +1470,9 @@ See L<perlsub/"Constant Functions"> and L<constant>.
 
 =item Constant subroutine %s redefined
 
-(S) You redefined a subroutine which had previously been
-eligible for inlining.  See L<perlsub/"Constant Functions"> for
-commentary and workarounds.
+(W redefine)(S) You redefined a subroutine which had previously
+been eligible for inlining.  See L<perlsub/"Constant Functions">
+for commentary and workarounds.
 
 =item Constant subroutine %s undefined
 
@@ -2462,6 +2462,19 @@ effective uids or gids failed.
 (F) While unpacking, the string buffer was already used up when an unpack
 length/code combination tried to obtain more data. This results in
 an undefined value for the length. See L<perlfunc/pack>.
+
+=item length() used on %s
+
+(W syntax) You used length() on either an array or a hash when you
+probably wanted a count of the items.
+
+Array size can be obtained by doing:
+
+    scalar(@array);
+
+The number of items in a hash can be obtained by doing:
+
+    scalar(keys %hash);
 
 =item Lexing code attempted to stuff non-Latin-1 character into Latin-1 input
 
@@ -5146,6 +5159,11 @@ you can write it as C<push(@tied_array,())> to avoid this warning.
 
 (F) The "use" keyword is recognized and executed at compile time, and
 returns no useful value.  See L<perlmod>.
+
+=item Use of assignment to $[ is deprecated
+
+(D deprecated) The C<$[> variable (index of the first element in an array)
+is deprecated. See L<perlvar/"$[">.
 
 =item Use of bare << to mean <<"" is deprecated
 

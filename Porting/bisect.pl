@@ -1,6 +1,12 @@
 #!/usr/bin/perl -w
 use strict;
 
+=for comment
+
+Documentation for this is in bisect-runner.pl
+
+=cut
+
 my $start_time = time;
 
 # The default, auto_abbrev will treat -e as an abbreviation of --end
@@ -28,7 +34,7 @@ die "Can't find bisect runner $runner" unless -f $runner;
       if defined $dev1 && $dev0 == $dev1 && $ino0 == $ino1;
 }
 
-system $^X, $runner, '--check-args', @ARGV and exit 255;
+system $^X, $runner, '--check-args', '--check-shebang', @ARGV and exit 255;
 
 # We try these in this order for the start revision if none is specified.
 my @stable = qw(perl-5.002 perl-5.003 perl-5.004 perl-5.005 perl-5.6.0
@@ -130,6 +136,12 @@ END {
     printf "That took %d seconds\n", $end_time - $start_time
         if defined $start_time;
 }
+
+=for comment
+
+Documentation for this is in bisect-runner.pl
+
+=cut
 
 # Local variables:
 # cperl-indent-level: 4

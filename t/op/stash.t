@@ -28,9 +28,9 @@ fresh_perl_is(
 # Used to segfault, too
 SKIP: {
  skip_if_miniperl('requires XS');
-  fresh_perl_is(
+  fresh_perl_like(
     'sub foo::bar{}; $mro::{get_mro}=*foo::bar; undef %foo::; require mro',
-    '',
+     qr/^Subroutine mro::get_mro redefined at /,
     { switches => [ '-w' ] },
     q(Defining an XSUB over an existing sub with no stash under warnings),
   );
@@ -92,7 +92,7 @@ SKIP: {
     delete $one::{one};
     my $gv = b($sub)->GV;
 
-    isa_ok( $gv, "B::GV", "deleted stash entry leaves CV with valid GV");
+    object_ok( $gv, "B::GV", "deleted stash entry leaves CV with valid GV");
     is( b($sub)->CvFLAGS & $CVf_ANON, $CVf_ANON, "...and CVf_ANON set");
     is( eval { $gv->NAME }, "__ANON__", "...and an __ANON__ name");
     is( eval { $gv->STASH->NAME }, "one", "...but leaves stash intact");
@@ -104,7 +104,7 @@ SKIP: {
     %two:: = ();
     $gv = b($sub)->GV;
 
-    isa_ok( $gv, "B::GV", "cleared stash leaves CV with valid GV");
+    object_ok( $gv, "B::GV", "cleared stash leaves CV with valid GV");
     is( b($sub)->CvFLAGS & $CVf_ANON, $CVf_ANON, "...and CVf_ANON set");
     is( eval { $gv->NAME }, "__ANON__", "...and an __ANON__ name");
     is( eval { $gv->STASH->NAME }, "two", "...but leaves stash intact");
@@ -116,7 +116,7 @@ SKIP: {
     undef %three::;
     $gv = b($sub)->GV;
 
-    isa_ok( $gv, "B::GV", "undefed stash leaves CV with valid GV");
+    object_ok( $gv, "B::GV", "undefed stash leaves CV with valid GV");
     is( b($sub)->CvFLAGS & $CVf_ANON, $CVf_ANON, "...and CVf_ANON set");
     is( eval { $gv->NAME }, "__ANON__", "...and an __ANON__ name");
     is( eval { $gv->STASH->NAME }, "__ANON__", "...and an __ANON__ stash");

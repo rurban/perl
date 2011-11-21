@@ -1064,7 +1064,7 @@ sub can_ok ($@) {
 }
 
 
-# Call $class->new( @$args ); and run the result through isa_ok.
+# Call $class->new( @$args ); and run the result through object_ok.
 # See Test::More::new_ok
 sub new_ok {
     my($class, $args, $obj_name) = @_;
@@ -1078,7 +1078,7 @@ sub new_ok {
     my $error = $@;
 
     if($ok) {
-        isa_ok($obj, $class, $object_name);
+        object_ok($obj, $class, $object_name);
     }
     else {
         ok( 0, "new() died" );
@@ -1099,20 +1099,29 @@ sub isa_ok ($$;$) {
     if( !defined $object ) {
         $diag = "$obj_name isn't defined";
     }
-    elsif( !ref $object ) {
-        $diag = "$obj_name isn't a reference";
-    }
     else {
+        my $whatami = ref $object ? 'object' : 'class';
+
         # We can't use UNIVERSAL::isa because we want to honor isa() overrides
         local($@, $!);  # eval sometimes resets $!
         my $rslt = eval { $object->isa($class) };
-        if( $@ ) {
-            if( $@ =~ /^Can't call method "isa" on unblessed reference/ ) {
+        my $error = $@;  # in case something else blows away $@
+
+        if( $error ) {
+            if( $error =~ /^Can't call method "isa" on unblessed reference/ ) {
+                # It's an unblessed reference
+                $obj_name = 'The reference' unless defined $obj_name;
                 if( !UNIVERSAL::isa($object, $class) ) {
                     my $ref = ref $object;
                     $diag = "$obj_name isn't a '$class' it's a '$ref'";
                 }
-            } else {
+            }
+            elsif( $error =~ /Can't call method "isa" without a package/ ) {
+                # It's something that can't even be a class
+                $obj_name = 'The thing' unless defined $obj_name;
+                $diag = "$obj_name isn't a class or reference";
+            }
+            else {
                 die <<WHOA;
 WHOA! I tried to call ->isa on your object and got some weird error.
 This should never happen.  Please contact the author immediately.
@@ -1122,6 +1131,7 @@ WHOA
             }
         }
         elsif( !$rslt ) {
+            $obj_name = "The $whatami" unless defined $obj_name;
             my $ref = ref $object;
             $diag = "$obj_name isn't a '$class' it's a '$ref'";
         }
@@ -1129,6 +1139,34 @@ WHOA
 
     _ok( !$diag, _where(), $name );
 }
+
+
+sub class_ok {
+    my($class, $isa, $class_name) = @_;
+
+    # Written so as to count as one test
+    local $Level = $Level + 1;
+    if( ref $class ) {
+        ok( 0, "$class is a refrence, not a class name" );
+    }
+    else {
+        isa_ok($class, $isa, $class_name);
+    }
+}
+
+
+sub object_ok {
+    my($obj, $isa, $obj_name) = @_;
+
+    local $Level = $Level + 1;
+    if( !ref $obj ) {
+        ok( 0, "$obj is not a reference" );
+    }
+    else {
+        isa_ok($obj, $isa, $obj_name);
+    }
+}
+
 
 # Purposefully avoiding a closure.
 sub __capture {

@@ -19,35 +19,21 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 SVf_IOK SVf_NOK SVf_ROK SVf_POK SVpad_OUR SVf_FAKE SVs_RMG SVs_SMG
          CVf_METHOD CVf_LVALUE
 	 PMf_KEEP PMf_GLOBAL PMf_CONTINUE PMf_EVAL PMf_ONCE
-	 PMf_MULTILINE PMf_SINGLELINE PMf_FOLD PMf_EXTENDED),
-	 ($] < 5.008004 ? () : 'OPpSORT_INPLACE'),
-	 ($] < 5.008006 ? () : qw(OPpSORT_DESCEND OPpITER_REVERSED)),
-	 ($] < 5.008009 ? () : qw(OPpCONST_NOVER OPpPAD_STATE)),
-	 ($] < 5.009 ? 'PMf_SKIPWHITE' : qw(RXf_SKIPWHITE)),
-	 ($] < 5.011 ? 'CVf_LOCKED' : 'OPpREVERSE_INPLACE'),
-	 ($] < 5.013 ? () : 'PMf_NONDESTRUCT'),
-	 ($] < 5.015003 &&
-	     # This empirical feature test is required during the
-	     # transitional phase where blead still identifies itself
-	     # as 5.15.2 but has had $[ removed.  After blead has its
-	     # version number bumped to 5.15.3, this can be reduced to
-	     # just test $] < 5.015003.
-	     ($] < 5.015002 || do { require B; exists(&B::OPpCONST_ARYBASE) })
-	     ? qw(OPpCONST_ARYBASE) : ()),
-	 ($] < 5.015005 &&
-	     ($] < 5.015004 || do { require B; exists(&B::OPpEVAL_BYTES) })
-	     ? qw(OPpEVAL_BYTES) : ());
-$VERSION = "1.09";
+	 PMf_MULTILINE PMf_SINGLELINE PMf_FOLD PMf_EXTENDED);
+$VERSION = "1.10";
 use strict;
 use vars qw/$AUTOLOAD/;
 use warnings ();
 
 BEGIN {
+    # List version-specific constants here.
     # Easiest way to keep this code portable between version looks to
     # be to fake up a dummy constant that will never actually be true.
     foreach (qw(OPpSORT_INPLACE OPpSORT_DESCEND OPpITER_REVERSED OPpCONST_NOVER
-		OPpPAD_STATE RXf_SKIPWHITE CVf_LOCKED OPpREVERSE_INPLACE
+		OPpPAD_STATE PMf_SKIPWHITE RXf_SKIPWHITE
+		CVf_LOCKED OPpREVERSE_INPLACE
 		PMf_NONDESTRUCT OPpCONST_ARYBASE OPpEVAL_BYTES)) {
+	eval { import B $_ };
 	no strict 'refs';
 	*{$_} = sub () {0} unless *{$_}{CODE};
     }
@@ -2517,7 +2503,7 @@ sub indirop {
     my $self = shift;
     my($op, $cx, $name) = @_;
     my($expr, @exprs);
-    my $kid = $op->first->sibling;
+    my $firstkid = my $kid = $op->first->sibling;
     my $indir = "";
     if ($op->flags & OPf_STACKED) {
 	$indir = $kid;
@@ -2541,7 +2527,7 @@ sub indirop {
 	$indir = '{$b cmp $a} ';
     }
     for (; !null($kid); $kid = $kid->sibling) {
-	$expr = $self->deparse($kid, 6);
+	$expr = $self->deparse($kid, !$indir && $kid == $firstkid && $name eq "sort" && $firstkid->name eq "entersub" ? 16 : 6);
 	push @exprs, $expr;
     }
     my $name2;
@@ -2554,7 +2540,7 @@ sub indirop {
     }
 
     my $args = $indir . join(", ", @exprs);
-    if ($indir ne "" and $name eq "sort") {
+    if ($indir ne "" && $name eq "sort") {
 	# We don't want to say "sort(f 1, 2, 3)", since perl -w will
 	# give bareword warnings in that case. Therefore if context
 	# requires, we'll put parens around the outside "(sort f 1, 2,
@@ -2566,6 +2552,13 @@ sub indirop {
 	} else {
 	    return "$name2 $args";
 	}
+    } elsif (
+	!$indir && $name eq "sort"
+      && $op->first->sibling->name eq 'entersub'
+    ) {
+	# We cannot say sort foo(bar), as foo will be interpreted as a
+	# comparison routine.  We have to say sort(...) in that case.
+	return "$name2($args)";
     } else {
 	return $self->maybe_parens_func($name2, $args, $cx, 5);
     }

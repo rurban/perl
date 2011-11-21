@@ -2558,11 +2558,26 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
 		       || rtype == OP_TRANSR
 		       )
 		       ? (int)rtype : OP_MATCH];
-      const char * const sample = ((ltype == OP_RV2AV || ltype == OP_PADAV)
+      const bool isary = ltype == OP_RV2AV || ltype == OP_PADAV;
+      GV *gv;
+      SV * const name =
+       (ltype == OP_RV2AV || ltype == OP_RV2HV)
+        ?    cUNOPx(left)->op_first->op_type == OP_GV
+          && (gv = cGVOPx_gv(cUNOPx(left)->op_first))
+              ? varname(gv, isary ? '@' : '%', 0, NULL, 0, 1)
+              : NULL
+        : varname(NULL, isary ? '@' : '%', left->op_targ, NULL, 0, 1);
+      if (name)
+	Perl_warner(aTHX_ packWARN(WARN_MISC),
+             "Applying %s to %"SVf" will act on scalar(%"SVf")",
+             desc, name, name);
+      else {
+	const char * const sample = (isary
 	     ? "@array" : "%hash");
-      Perl_warner(aTHX_ packWARN(WARN_MISC),
+	Perl_warner(aTHX_ packWARN(WARN_MISC),
              "Applying %s to %s will act on scalar(%s)",
              desc, sample, sample);
+      }
     }
 
     if (rtype == OP_CONST &&
@@ -6458,7 +6473,8 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	= (block || attrs || (CvFLAGS(PL_compcv) & CVf_BUILTIN_ATTRS)
 	   || PL_madskills)
 	? GV_ADDMULTI : GV_ADDMULTI | GV_NOINIT;
-    const char * const name = o ? SvPV_nolen_const(cSVOPo->op_sv) : NULL;
+    STRLEN namlen = 0;
+    const char * const name = o ? SvPV_const(cSVOPo->op_sv, namlen) : NULL;
     bool has_name;
     bool name_is_utf8 = o ? (SvUTF8(cSVOPo->op_sv) ? 1 : 0) : 0;
 
@@ -6567,8 +6583,16 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 		&& block->op_type != OP_NULL
 #endif
 		) {
-		if (ckWARN(WARN_REDEFINE)
+		const char *hvname;
+		if (   (ckWARN(WARN_REDEFINE)
+			&& !(
+				CvGV(cv) && GvSTASH(CvGV(cv))
+			     && HvNAMELEN(GvSTASH(CvGV(cv))) == 7
+			     && (hvname = HvNAME(GvSTASH(CvGV(cv))),
+				 strEQ(hvname, "autouse"))
+		       ))
 		    || (CvCONST(cv)
+			&& ckWARN_d(WARN_REDEFINE)
 			&& (!const_sv || sv_cmp(cv_const_sv(cv), const_sv))))
 		{
 		    const line_t oldline = CopLINE(PL_curcop);
@@ -6604,7 +6628,10 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	}
 	else {
 	    GvCV_set(gv, NULL);
-	    cv = newCONSTSUB_flags(NULL, name, name_is_utf8 ? SVf_UTF8 : 0, const_sv);
+	    cv = newCONSTSUB_flags(
+		NULL, name, namlen, name_is_utf8 ? SVf_UTF8 : 0,
+		const_sv
+	    );
 	}
 	stash =
             (CvGV(cv) && GvSTASH(CvGV(cv)))
@@ -6811,13 +6838,13 @@ S_process_special_blocks(pTHX_ const char *const fullname, GV *const gv,
 	    ENTER;
 	    SAVECOPFILE(&PL_compiling);
 	    SAVECOPLINE(&PL_compiling);
+	    SAVEVPTR(PL_curcop);
 
 	    DEBUG_x( dump_sub(gv) );
 	    Perl_av_create_and_push(aTHX_ &PL_beginav, MUTABLE_SV(cv));
 	    GvCV_set(gv,0);		/* cv has been hijacked */
 	    call_list(oldscope, PL_beginav);
 
-	    PL_curcop = &PL_compiling;
 	    CopHINTS_set(&PL_compiling, PL_hints);
 	    LEAVE;
 	}
@@ -6873,7 +6900,7 @@ See L</newCONSTSUB_flags>.
 CV *
 Perl_newCONSTSUB(pTHX_ HV *stash, const char *name, SV *sv)
 {
-    return newCONSTSUB_flags(stash, name, 0, sv);
+    return newCONSTSUB_flags(stash, name, name ? strlen(name) : 0, 0, sv);
 }
 
 /*
@@ -6893,7 +6920,8 @@ compile time.)
 */
 
 CV *
-Perl_newCONSTSUB_flags(pTHX_ HV *stash, const char *name, U32 flags, SV *sv)
+Perl_newCONSTSUB_flags(pTHX_ HV *stash, const char *name, STRLEN len,
+                             U32 flags, SV *sv)
 {
     dVAR;
     CV* cv;
@@ -6911,6 +6939,8 @@ Perl_newCONSTSUB_flags(pTHX_ HV *stash, const char *name, U32 flags, SV *sv)
 	 * an op shared between threads. Use a non-shared COP for our
 	 * dirty work */
 	 SAVEVPTR(PL_curcop);
+	 SAVECOMPILEWARNINGS();
+	 PL_compiling.cop_warnings = DUP_WARNINGS(PL_curcop->cop_warnings);
 	 PL_curcop = &PL_compiling;
     }
     SAVECOPLINE(PL_curcop);
@@ -6930,7 +6960,7 @@ Perl_newCONSTSUB_flags(pTHX_ HV *stash, const char *name, U32 flags, SV *sv)
        and so doesn't get free()d.  (It's expected to be from the C pre-
        processor __FILE__ directive). But we need a dynamically allocated one,
        and we need it to get freed.  */
-    cv = newXS_flags(name, const_sv_xsub, file ? file : "", "",
+    cv = newXS_len_flags(name, len, const_sv_xsub, file ? file : "", "",
 		     XS_DYNAMIC_FILENAME | flags);
     CvXSUBANY(cv).any_ptr = sv;
     CvCONST_on(cv);
@@ -6949,12 +6979,27 @@ Perl_newXS_flags(pTHX_ const char *name, XSUBADDR_t subaddr,
 		 const char *const filename, const char *const proto,
 		 U32 flags)
 {
+    PERL_ARGS_ASSERT_NEWXS_FLAGS;
+    return newXS_len_flags(
+	name, name ? strlen(name) : 0, subaddr, filename, proto, flags
+    );
+}
+
+CV *
+Perl_newXS_len_flags(pTHX_ const char *name, STRLEN len,
+			   XSUBADDR_t subaddr, const char *const filename,
+			   const char *const proto, U32 flags)
+{
     CV *cv;
 
-    PERL_ARGS_ASSERT_NEWXS_FLAGS;
+    PERL_ARGS_ASSERT_NEWXS_LEN_FLAGS;
 
     {
-        GV * const gv = gv_fetchpv(name ? name :
+        GV * const gv = name
+			 ? gv_fetchpvn(
+				name,len,GV_ADDMULTI|flags,SVt_PVCV
+			   )
+			 : gv_fetchpv(
                             (PL_curstash ? "__ANON__" : "__ANON__::__ANON__"),
                             GV_ADDMULTI | flags, SVt_PVCV);
     
@@ -6970,6 +7015,7 @@ Perl_newXS_flags(pTHX_ const char *name, XSUBADDR_t subaddr,
             else if (CvROOT(cv) || CvXSUB(cv) || GvASSUMECV(gv)) {
                 /* already defined (or promised) */
                 if (ckWARN(WARN_REDEFINE)) {
+                    const line_t oldline = CopLINE(PL_curcop);
                     GV * const gvcv = CvGV(cv);
                     if (gvcv) {
                         HV * const stash = GvSTASH(gvcv);
@@ -6977,18 +7023,23 @@ Perl_newXS_flags(pTHX_ const char *name, XSUBADDR_t subaddr,
                             const char *redefined_name = HvNAME_get(stash);
                             if ( redefined_name &&
                                  strEQ(redefined_name,"autouse") ) {
-                                const line_t oldline = CopLINE(PL_curcop);
-                                if (PL_parser && PL_parser->copline != NOLINE)
-                                    CopLINE_set(PL_curcop, PL_parser->copline);
-                                Perl_warner(aTHX_ packWARN(WARN_REDEFINE),
-                                            CvCONST(cv) ? "Constant subroutine %s redefined"
-                                                        : "Subroutine %s redefined"
-                                            ,name);
-                                CopLINE_set(PL_curcop, oldline);
+                                goto nope;
                             }
                         }
                     }
+                    if (PL_parser && PL_parser->copline != NOLINE)
+                        CopLINE_set(PL_curcop, PL_parser->copline);
+                    Perl_warner(aTHX_ packWARN(WARN_REDEFINE),
+                                      CvCONST(cv)
+                                       ? "Constant subroutine %"SVf
+                                         " redefined"
+                                       : "Subroutine %"SVf" redefined",
+                                      newSVpvn_flags(
+                                         name,len,(flags&SVf_UTF8)|SVs_TEMP
+                                      ));
+                    CopLINE_set(PL_curcop, oldline);
                 }
+	      nope:
                 SvREFCNT_dec(cv);
                 cv = NULL;
             }
@@ -8573,10 +8624,14 @@ Perl_ck_require(pTHX_ OP *o)
     }
 
     if (gv && GvCVu(gv) && GvIMPORTED_CV(gv)) {
-	OP * const kid = cUNOPo->op_first;
-	OP * newop;
-
-	cUNOPo->op_first = 0;
+	OP *kid, *newop;
+	if (o->op_flags & OPf_KIDS) {
+	    kid = cUNOPo->op_first;
+	    cUNOPo->op_first = NULL;
+	}
+	else {
+	    kid = newDEFSVOP();
+	}
 #ifndef PERL_MAD
 	op_free(o);
 #endif
@@ -9662,6 +9717,57 @@ Perl_ck_each(pTHX_ OP *o)
     }
     /* if treating as a reference, defer additional checks to runtime */
     return o->op_type == ref_type ? o : ck_fun(o);
+}
+
+OP *
+Perl_ck_length(pTHX_ OP *o)
+{
+    PERL_ARGS_ASSERT_CK_LENGTH;
+
+    o = ck_fun(o);
+
+    if (ckWARN(WARN_SYNTAX)) {
+        const OP *kid = o->op_flags & OPf_KIDS ? cLISTOPo->op_first : NULL;
+
+        if (kid) {
+            SV *name = NULL;
+            const bool hash = kid->op_type == OP_PADHV
+                           || kid->op_type == OP_RV2HV;
+            switch (kid->op_type) {
+                case OP_PADHV:
+                case OP_PADAV:
+                    name = varname(
+                        NULL, hash ? '%' : '@', kid->op_targ, NULL, 0, 1
+                    );
+                    break;
+                case OP_RV2HV:
+                case OP_RV2AV:
+                    if (cUNOPx(kid)->op_first->op_type != OP_GV) break;
+                    {
+                        GV *gv = cGVOPx_gv(cUNOPx(kid)->op_first);
+                        if (!gv) break;
+                        name = varname(gv, hash?'%':'@', 0, NULL, 0, 1);
+                    }
+                    break;
+                default:
+                    return o;
+            }
+            if (name)
+                Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
+                    "length() used on %"SVf" (did you mean \"scalar(%s%"SVf
+                    ")\"?)",
+                    name, hash ? "keys " : "", name
+                );
+            else if (hash)
+                Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
+                    "length() used on %%hash (did you mean \"scalar(keys %%hash)\"?)");
+            else
+                Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
+                    "length() used on @array (did you mean \"scalar(@array)\"?)");
+        }
+    }
+
+    return o;
 }
 
 /* caller is supposed to assign the return to the 

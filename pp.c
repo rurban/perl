@@ -753,9 +753,11 @@ PP(pp_trans)
     }
     TARG = sv_newmortal();
     if(PL_op->op_type == OP_TRANSR) {
-	SV * const newsv = newSVsv(sv);
+	STRLEN len;
+	const char * const pv = SvPV(sv,len);
+	SV * const newsv = newSVpvn_flags(pv, len, SVs_TEMP|SvUTF8(sv));
 	do_trans(newsv);
-	mPUSHs(newsv);
+	PUSHs(newsv);
     }
     else PUSHi(do_trans(sv));
     RETURN;
@@ -5688,7 +5690,7 @@ PP(pp_coreargs)
     /* Reset the stack pointer.  Without this, we end up returning our own
        arguments in list context, in addition to the values we are supposed
        to return.  nextstate usually does this on sub entry, but we need
-       to run the next op with the caller’s hints, so we cannot have a
+       to run the next op with the caller's hints, so we cannot have a
        nextstate. */
     SP = PL_stack_base + cxstack[cxstack_ix].blk_oldsp;
 
