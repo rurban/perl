@@ -1137,7 +1137,7 @@
 #define my_stat_flags(a)	Perl_my_stat_flags(aTHX_ a)
 #define my_swabn		Perl_my_swabn
 #define my_unexec()		Perl_my_unexec(aTHX)
-#define newXS_len_flags(a,b,c,d,e,f)	Perl_newXS_len_flags(aTHX_ a,b,c,d,e,f)
+#define newXS_len_flags(a,b,c,d,e,f,g)	Perl_newXS_len_flags(aTHX_ a,b,c,d,e,f,g)
 #define nextargv(a)		Perl_nextargv(aTHX_ a)
 #define oopsAV(a)		Perl_oopsAV(aTHX_ a)
 #define oopsHV(a)		Perl_oopsHV(aTHX_ a)
@@ -1394,6 +1394,9 @@
 #define simplify_sort(a)	S_simplify_sort(aTHX_ a)
 #define too_few_arguments(a,b)	S_too_few_arguments(aTHX_ a,b)
 #define too_many_arguments(a,b)	S_too_many_arguments(aTHX_ a,b)
+#  endif
+#  if defined(PERL_IN_OP_C) || defined(PERL_IN_SV_C)
+#define report_redefined_cv(a,b,c)	Perl_report_redefined_cv(aTHX_ a,b,c)
 #  endif
 #  if defined(PERL_IN_PAD_C)
 #define pad_alloc_name(a,b,c,d)	S_pad_alloc_name(aTHX_ a,b,c,d)

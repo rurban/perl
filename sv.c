@@ -3808,47 +3808,26 @@ S_glob_assign_ref(pTHX_ SV *const dstr, SV *const sstr)
 	    CV* const cv = MUTABLE_CV(*location);
 	    if (cv) {
 		if (!GvCVGEN((const GV *)dstr) &&
-		    (CvROOT(cv) || CvXSUB(cv)))
+		    (CvROOT(cv) || CvXSUB(cv)) &&
+		    /* redundant check that avoids creating the extra SV
+		       most of the time: */
+		    (CvCONST(cv) || ckWARN(WARN_REDEFINE)))
 		    {
-			const char *hvname;
-			/* Redefining a sub - warning is mandatory if
-			   it was a const and its value changed. */
-			if (CvCONST(cv)	&& CvCONST((const CV *)sref)
-			    && cv_const_sv(cv)
-			    == cv_const_sv((const CV *)sref)) {
-			    NOOP;
-			    /* They are 2 constant subroutines generated from
-			       the same constant. This probably means that
-			       they are really the "same" proxy subroutine
-			       instantiated in 2 places. Most likely this is
-			       when a constant is exported twice.  Don't warn.
-			    */
-			}
-			else if ((ckWARN(WARN_REDEFINE)
-				  && !(
-				   CvGV(cv) && GvSTASH(CvGV(cv)) &&
-				   HvNAMELEN(GvSTASH(CvGV(cv))) == 7 &&
-				   (hvname = HvNAME(GvSTASH(CvGV(cv))),
-				    strEQ(hvname, "autouse"))
-				  )
-				 )
-				 || (CvCONST(cv)
-				     && (!CvCONST((const CV *)sref)
-					 || sv_cmp(cv_const_sv(cv),
-						   cv_const_sv((const CV *)
-							       sref))))) {
-			    Perl_warner(aTHX_ packWARN(WARN_REDEFINE),
-					(const char *)
-					(CvCONST(cv)
-					 ? "Constant subroutine %"HEKf
-					   "::%"HEKf" redefined"
-					 : "Subroutine %"HEKf"::%"HEKf
-					   " redefined"),
+			SV * const new_const_sv =
+			    CvCONST((const CV *)sref)
+				 ? cv_const_sv((const CV *)sref)
+				 : NULL;
+			report_redefined_cv(
+			   sv_2mortal(Perl_newSVpvf(aTHX_
+				"%"HEKf"::%"HEKf,
 				HEKfARG(
 				 HvNAME_HEK(GvSTASH((const GV *)dstr))
 				),
-				HEKfARG(GvENAME_HEK(MUTABLE_GV(dstr))));
-			}
+				HEKfARG(GvENAME_HEK(MUTABLE_GV(dstr)))
+			   )),
+			   cv,
+			   CvCONST((const CV *)sref) ? &new_const_sv : NULL
+			);
 		    }
 		if (!intro)
 		    cv_ckproto_len_flags(cv, (const GV *)dstr,
@@ -5732,7 +5711,8 @@ the Perl substr() function.  Handles get magic.
 
 =for apidoc sv_insert_flags
 
-Same as C<sv_insert>, but the extra C<flags> are passed the C<SvPV_force_flags> that applies to C<bigstr>.
+Same as C<sv_insert>, but the extra C<flags> are passed to the
+C<SvPV_force_flags> that applies to C<bigstr>.
 
 =cut
 */
@@ -6303,11 +6283,19 @@ S_curse(pTHX_ SV * const sv, const bool check_refcnt) {
 		/* A constant subroutine can have no side effects, so
 		   don't bother calling it.  */
 		&& !CvCONST(destructor)
-		/* Don't bother calling an empty destructor */
+		/* Don't bother calling an empty destructor or one that
+		   returns immediately. */
 		&& (CvISXSUB(destructor)
 		|| (CvSTART(destructor)
 		    && (CvSTART(destructor)->op_next->op_type
-					!= OP_LEAVESUB))))
+					!= OP_LEAVESUB)
+		    && (CvSTART(destructor)->op_next->op_type
+					!= OP_PUSHMARK
+			|| CvSTART(destructor)->op_next->op_next->op_type
+					!= OP_RETURN
+		       )
+		   ))
+	       )
 	    {
 		SV* const tmpref = newRV(sv);
 		SvREADONLY_on(tmpref); /* DESTROY() could be naughty */
@@ -8914,8 +8902,6 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 	if (SvROK(sv)) {
 	    if (SvAMAGIC(sv))
 		sv = amagic_deref_call(sv, to_cv_amg);
-	    /* At this point I'd like to do SPAGAIN, but really I need to
-	       force it upon my callers. Hmmm. This is a mess... */
 
 	    sv = SvRV(sv);
 	    if (SvTYPE(sv) == SVt_PVCV) {
@@ -10357,7 +10343,7 @@ Perl_sv_vcatpvfn(pTHX_ SV *const sv, const char *const pat, const STRLEN patlen,
 		 * back into v-string notation and then let the
 		 * vectorize happen normally
 		 */
-		if (sv_derived_from(vecsv, "version")) {
+		if (sv_derived_from(vecsv, "version") && SvROK(vecsv)) {
 		    char *version = savesvpv(vecsv);
 		    if ( hv_exists(MUTABLE_HV(SvRV(vecsv)), "alpha", 5 ) ) {
 			Perl_warner(aTHX_ packWARN(WARN_INTERNAL),
@@ -13916,9 +13902,11 @@ S_find_uninit_var(pTHX_ const OP *const obase, const SV *const uninit_sv,
 		    break;
 		sv = hash ? MUTABLE_SV(GvHV(gv)): MUTABLE_SV(GvAV(gv));
 	    }
-	    else /* @{expr}, %{expr} */
+	    else if (obase == PL_op) /* @{expr}, %{expr} */
 		return find_uninit_var(cUNOPx(obase)->op_first,
 						    uninit_sv, match);
+	    else /* @{expr}, %{expr} as a sub-expression */
+		return NULL;
 	}
 
 	/* attempt to find a match within the aggregate */
@@ -14278,12 +14266,6 @@ S_find_uninit_var(pTHX_ const OP *const obase, const SV *const uninit_sv,
 		if ( (type == OP_CONST && SvOK(cSVOPx_sv(kid)))
 		  || (type == OP_NULL  && ! (kid->op_flags & OPf_KIDS))
 		  || (type == OP_PUSHMARK)
-		  || (
-		      /* @$a and %$a, but not @a or %a */
-		        (type == OP_RV2AV || type == OP_RV2HV)
-		     && cUNOPx(kid)->op_first
-		     && cUNOPx(kid)->op_first->op_type != OP_GV
-		     )
 		)
 		continue;
 	    }

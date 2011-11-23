@@ -2781,7 +2781,7 @@ PERL_CALLCONV CV *	Perl_newXS_flags(pTHX_ const char *name, XSUBADDR_t subaddr, 
 #define PERL_ARGS_ASSERT_NEWXS_FLAGS	\
 	assert(subaddr); assert(filename)
 
-PERL_CALLCONV CV *	Perl_newXS_len_flags(pTHX_ const char *name, STRLEN len, XSUBADDR_t subaddr, const char *const filename, const char *const proto, U32 flags)
+PERL_CALLCONV CV *	Perl_newXS_len_flags(pTHX_ const char *name, STRLEN len, XSUBADDR_t subaddr, const char *const filename, const char *const proto, SV **const_svp, U32 flags)
 			__attribute__nonnull__(pTHX_3)
 			__attribute__nonnull__(pTHX_4);
 #define PERL_ARGS_ASSERT_NEWXS_LEN_FLAGS	\
@@ -5802,6 +5802,14 @@ STATIC void	S_forget_pmop(pTHX_ PMOP *const o, U32 flags)
 	assert(o)
 
 #  endif
+#endif
+#if defined(PERL_IN_OP_C) || defined(PERL_IN_SV_C)
+PERL_CALLCONV void	Perl_report_redefined_cv(pTHX_ const SV *name, const CV *old_cv, SV * const *new_const_svp)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT_REPORT_REDEFINED_CV	\
+	assert(name); assert(old_cv)
+
 #endif
 #if defined(PERL_IN_PAD_C)
 STATIC PADOFFSET	S_pad_alloc_name(pTHX_ SV *namesv, U32 flags, HV *typestash, HV *ourstash)
