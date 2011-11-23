@@ -209,7 +209,7 @@ use File::Glob qw(:case);
     'Archive::Tar' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.80.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.82.tar.gz',
 	'FILES'		=> q[cpan/Archive-Tar],
 	'EXCLUDED'	=> [ qw(Makefile.PL) ],
 	'UPSTREAM'	=> 'cpan',
@@ -377,7 +377,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Bzip2' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.042.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.043.tar.gz',
 	'FILES'		=> q[cpan/Compress-Raw-Bzip2],
 	'EXCLUDED'	=> [ qr{^t/Test/},
 			     qw( bzip2-src/bzip2-cpp.patch
@@ -389,7 +389,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Zlib' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.042.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.043.tar.gz',
 
 	'FILES'		=> q[cpan/Compress-Raw-Zlib],
 	'EXCLUDED'	=> [ qr{^t/Test/},
@@ -1034,7 +1034,7 @@ use File::Glob qw(:case);
     'IO-Compress' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.042.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.043.tar.gz',
 	'FILES'		=> q[cpan/IO-Compress],
 	'EXCLUDED'	=> [ qr{t/Test/} ],
 	'UPSTREAM'	=> 'cpan',
@@ -1259,7 +1259,7 @@ use File::Glob qw(:case);
     'Module::CoreList' =>
 	{
 	'MAINTAINER'	=> 'bingos',
-	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.57.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.58.tar.gz',
 	'FILES'		=> q[dist/Module-CoreList],
 	'UPSTREAM'	=> 'blead',
 	},

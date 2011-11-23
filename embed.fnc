@@ -877,7 +877,8 @@ Abm	|CV*	|newSUB		|I32 floor|NULLOK OP* o|NULLOK OP* proto \
 p	|CV *	|newXS_len_flags|NULLOK const char *name|STRLEN len \
 				|NN XSUBADDR_t subaddr\
 				|NN const char *const filename \
-				|NULLOK const char *const proto|U32 flags
+				|NULLOK const char *const proto \
+				|NULLOK SV **const_svp|U32 flags
 ApM	|CV *	|newXS_flags	|NULLOK const char *name|NN XSUBADDR_t subaddr\
 				|NN const char *const filename \
 				|NULLOK const char *const proto|U32 flags
@@ -1458,6 +1459,11 @@ p	|void	|report_evil_fh	|NULLOK const GV *gv
 p	|void	|report_wrongway_fh|NULLOK const GV *gv|const char have
 : Used in mg.c, pp.c, pp_hot.c, regcomp.c
 XEpd	|void	|report_uninit	|NULLOK const SV *uninit_sv
+#if defined(PERL_IN_OP_C) || defined(PERL_IN_SV_C)
+p	|void	|report_redefined_cv|NN const SV *name \
+				    |NN const CV *old_cv \
+				    |NULLOK SV * const *new_const_svp
+#endif
 Apd	|void	|warn_sv	|NN SV *baseex
 Afpd	|void	|warn		|NN const char* pat|...
 Apd	|void	|vwarn		|NN const char* pat|NULLOK va_list* args

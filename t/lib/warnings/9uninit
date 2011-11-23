@@ -2018,3 +2018,22 @@ my $moo = $Foo::BAR + 42;
 __END__
 EXPECT
 Use of uninitialized value in addition (+) at - line 3.
+########
+use warnings 'uninitialized';
+use constant {u=>undef, v=>undef};
+sub foo () {u}
+sub foo () {v}
+EXPECT
+########
+# [perl #72090]
+use warnings 'uninitialized';
+$a = @$a > 0;
+EXPECT
+Use of uninitialized value $a in array dereference at - line 3.
+Use of uninitialized value in numeric gt (>) at - line 3.
+########
+# [perl #103766]
+use warnings 'uninitialized';
+"@{[ $x ]}";
+EXPECT
+Use of uninitialized value in join or string at - line 3.
