@@ -5711,7 +5711,8 @@ the Perl substr() function.  Handles get magic.
 
 =for apidoc sv_insert_flags
 
-Same as C<sv_insert>, but the extra C<flags> are passed the C<SvPV_force_flags> that applies to C<bigstr>.
+Same as C<sv_insert>, but the extra C<flags> are passed to the
+C<SvPV_force_flags> that applies to C<bigstr>.
 
 =cut
 */
@@ -8901,8 +8902,6 @@ Perl_sv_2cv(pTHX_ SV *sv, HV **const st, GV **const gvp, const I32 lref)
 	if (SvROK(sv)) {
 	    if (SvAMAGIC(sv))
 		sv = amagic_deref_call(sv, to_cv_amg);
-	    /* At this point I'd like to do SPAGAIN, but really I need to
-	       force it upon my callers. Hmmm. This is a mess... */
 
 	    sv = SvRV(sv);
 	    if (SvTYPE(sv) == SVt_PVCV) {
@@ -10344,7 +10343,7 @@ Perl_sv_vcatpvfn(pTHX_ SV *const sv, const char *const pat, const STRLEN patlen,
 		 * back into v-string notation and then let the
 		 * vectorize happen normally
 		 */
-		if (sv_derived_from(vecsv, "version")) {
+		if (sv_derived_from(vecsv, "version") && SvROK(vecsv)) {
 		    char *version = savesvpv(vecsv);
 		    if ( hv_exists(MUTABLE_HV(SvRV(vecsv)), "alpha", 5 ) ) {
 			Perl_warner(aTHX_ packWARN(WARN_INTERNAL),

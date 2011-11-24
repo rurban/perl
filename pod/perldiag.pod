@@ -287,20 +287,20 @@ declared readonly from a restricted hash.
 
 =item Attempt to free non-arena SV: 0x%x
 
-(P internal) All SV objects are supposed to be allocated from arenas
+(S internal) All SV objects are supposed to be allocated from arenas
 that will be garbage collected on exit.  An SV was discovered to be
 outside any of those arenas.
 
-=item Attempt to free nonexistent shared string
+=item Attempt to free nonexistent shared string '%s'%s
 
-(P internal) Perl maintains a reference-counted internal table of
+(S internal) Perl maintains a reference-counted internal table of
 strings to optimize the storage and access of hash keys and other
 strings.  This indicates someone tried to decrement the reference count
 of a string that can no longer be found in the table.
 
 =item Attempt to free temp prematurely
 
-(W debugging) Mortalized values are supposed to be freed by the
+(S debugging) Mortalized values are supposed to be freed by the
 free_tmps() routine.  This indicates that something else is freeing the
 SV before the free_tmps() routine gets a chance, which means that the
 free_tmps() routine will be freeing an unreferenced scalar when it does
@@ -308,7 +308,7 @@ try to free it.
 
 =item Attempt to free unreferenced glob pointers
 
-(P internal) The reference counts got screwed up on symbol aliases.
+(S internal) The reference counts got screwed up on symbol aliases.
 
 =item Attempt to free unreferenced scalar
 
@@ -2419,13 +2419,13 @@ then all regular expressions behaved as if they were written using C</m>.)
 perls, has been removed as of 5.9.3 and is no longer supported. You
 should use the printf/sprintf functions instead.
 
-=item `%s' is not a code reference
+=item '%s' is not a code reference
 
 (W overload) The second (fourth, sixth, ...) argument of overload::constant
 needs to be a code reference. Either an anonymous subroutine, or a reference
 to a subroutine.
 
-=item `%s' is not an overloadable type
+=item '%s' is not an overloadable type
 
 (W overload) You tried to overload a constant type the overload package is
 unaware of.
@@ -3156,7 +3156,7 @@ machines that means the current directory!  See L<perlfunc/require>.
 
 =item NULL OP IN RUN
 
-(P debugging) Some internal routine called run() with a null opcode
+(S debugging) Some internal routine called run() with a null opcode
 pointer.
 
 =item Null picture in formline
@@ -3556,6 +3556,11 @@ data.
 
 (P) Something requested a negative number of bytes of realloc.
 
+=item panic: reference miscount on nsv in sv_replace() (%d != 1)
+
+(P) The internal sv_replace() function was handed a new SV with a
+reference count other than 1.
+
 =item panic: restartop
 
 (P) Some internal routine requested a goto (or something like it), and
@@ -3830,7 +3835,7 @@ C<m/$(?)\/> (for example: C<m/foo$(?)\s+bar/>).
 
 =item Possible unintended interpolation of %s in string
 
-(W ambiguous) You said something like `@foo' in a double-quoted string
+(W ambiguous) You said something like '@foo' in a double-quoted string
 but there was no array C<@foo> in scope at the time. If you wanted a
 literal @foo, then write it as \@foo; otherwise find out what happened
 to the array you apparently lost track of.
@@ -4005,11 +4010,6 @@ parens. In any case, a hash requires key/value B<pairs>.
 
 (W misc) You have attempted to weaken a reference that is already weak.
 Doing so has no effect.
-
-=item Reference miscount in sv_replace()
-
-(W internal) The internal sv_replace() function was handed a new SV with
-a reference count other than 1.
 
 =item Reference to invalid group 0
 
@@ -4482,7 +4482,7 @@ the only way to figure out what's triggering the error is to call
 C<perl -c> repeatedly, chopping away half the program each time to see
 if the error went away.  Sort of the cybernetic version of S<20 questions>.
 
-=item syntax error at line %d: `%s' unexpected
+=item syntax error at line %d: '%s' unexpected
 
 (A) You've accidentally run your script through the Bourne shell instead
 of Perl.  Check the #! line, or manually feed your script into Perl

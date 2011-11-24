@@ -59,11 +59,11 @@ my %defines =
     );
 
 unless(GetOptions(\%options,
-                  'target=s', 'jobs|j=i', 'expect-pass=i',
+                  'target=s', 'make=s', 'jobs|j=i', 'expect-pass=i',
                   'expect-fail' => sub { $options{'expect-pass'} = 0; },
                   'clean!', 'one-liner|e=s', 'match=s', 'force-manifest',
                   'force-regen', 'test-build', 'A=s@', 'l', 'w',
-                  'check-args', 'check-shebang!', 'usage|help|?',
+                  'check-args', 'check-shebang!', 'usage|help|?', 'validate',
                   'D=s@' => sub {
                       my (undef, $val) = @_;
                       if ($val =~ /\A([^=]+)=(.*)/s) {
@@ -80,6 +80,9 @@ unless(GetOptions(\%options,
 }
 
 my ($target, $j, $match) = @options{qw(target jobs match)};
+
+@ARGV = ('sh', '-c', 'cd t && ./perl TEST base/*.t')
+    if $options{validate} && !@ARGV;
 
 pod2usage(exitval => 255, verbose => 1) if $options{usage};
 pod2usage(exitval => 255, verbose => 1)
@@ -320,6 +323,15 @@ often very useful to be able to disable some XS extensions.
 
 =item *
 
+--make I<make-prog>
+
+The C<make> command to use. If this not set, F<make> is used. If this is
+set, it also adds a C<-Dmake=...> else some recursive make invocations
+in extensions may fail. Typically one would use this as C<--make gmake>
+to use F<gmake> in place of the system F<make>.
+
+=item *
+
 --jobs I<jobs>
 
 =item *
@@ -464,6 +476,14 @@ Display the usage information and exit.
 die "$0: Can't build $target" if defined $target && !grep {@targets} $target;
 
 $j = "-j$j" if $j =~ /\A\d+\z/;
+
+if (exists $options{make}) {
+    if (!exists $defines{make}) {
+        $defines{make} = $options{make};
+    }
+} else {
+    $options{make} = 'make';
+}
 
 # Sadly, however hard we try, I don't think that it will be possible to build
 # modules in ext/ on x86_64 Linux before commit e1666bf5602ae794 on 1999/12/29,
@@ -764,7 +784,7 @@ patch_C();
 patch_ext();
 
 # Parallel build for miniperl is safe
-system "make $j miniperl </dev/null";
+system "$options{make} $j miniperl </dev/null";
 
 my $expected = $target =~ /^test/ ? 't/perl'
     : $target eq 'Fcntl' ? "lib/auto/Fcntl/Fcntl.$Config{so}"
@@ -786,7 +806,7 @@ if ($target ne 'miniperl') {
         }
     }
 
-    system "make $j $real_target </dev/null";
+    system "$options{make} $j $real_target </dev/null";
 }
 
 my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
@@ -1424,7 +1444,7 @@ case "$osvers" in
 		cccdlflags="-DPIC -fPIC $cccdlflags"
 		lddlflags="--whole-archive -shared $lddlflags"
 	elif [ "`uname -m`" = "pmax" ]; then
-# NetBSD 1.3 and 1.3.1 on pmax shipped an `old' ld.so, which will not work.
+# NetBSD 1.3 and 1.3.1 on pmax shipped an 'old' ld.so, which will not work.
 		d_dlopen=$undef
 	elif [ -f /usr/libexec/ld.so ]; then
 		d_dlopen=$define
@@ -1809,6 +1829,21 @@ $2!;
                                    qr/^opcode\.h opnames\.h pp_proto\.h pp\.sym: opcode\.pl$/)) {
             revert_commit('9fec149bb652b6e9');
         }
+    }
+
+    if ($^O eq 'aix' && $major >= 11 && $major <= 15
+        && extract_from_file('makedef.pl', qr/^use Config/)) {
+        edit_file('Makefile.SH', sub {
+                      # The AIX part of commit e6807d8ab22b761c
+                      # It's safe to substitute lib/Config.pm for config.sh
+                      # as lib/Config.pm depends on config.sh
+                      # If the tree is post e6807d8ab22b761c, the substitution
+                      # won't match, which is harmless.
+                      my $code = shift;
+                      $code =~ s{^(perl\.exp:.* )config\.sh(\b.*)}
+                                {$1 . '$(CONFIGPM)' . $2}me;
+                      return $code;
+                  });
     }
 
     # There was a bug in makedepend.SH which was fixed in version 96a8704c.
