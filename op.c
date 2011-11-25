@@ -1114,6 +1114,7 @@ Perl_scalarvoid(pTHX_ OP *o)
     case OP_GGRGID:
     case OP_GETLOGIN:
     case OP_PROTOTYPE:
+    case OP_RUNCV:
       func_ops:
 	if (!(o->op_private & (OPpLVAL_INTRO|OPpOUR_INTRO)))
 	    /* Otherwise it's "Useless use of grep iterator" */
@@ -7511,6 +7512,7 @@ Perl_ck_eval(pTHX_ OP *o)
 	op_getmad(oldo,o,'O');
     }
     o->op_targ = (PADOFFSET)PL_hints;
+    if (o->op_private & OPpEVAL_BYTES) o->op_targ &= ~HINT_UTF8;
     if ((PL_hints & HINT_LOCALIZE_HH) != 0
      && !(o->op_private & OPpEVAL_COPHH) && GvHV(PL_hintgv)) {
 	/* Store a copy of %^H that pp_entereval can pick up. */

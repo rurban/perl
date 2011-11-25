@@ -184,8 +184,10 @@ If your F<db.h> is old enough you can override this with C<-Unoextensions>.
 
 Earliest revision to test, as a I<commit-ish> (a tag, commit or anything
 else C<git> understands as a revision). If not specified, F<bisect.pl> will
-search stable perl releases from 5.002 to 5.14.0 until it finds one where
-the test case passes.
+search stable perl releases until it finds one where the test case passes.
+The default is to search from 5.002 to 5.14.0. If F<bisect.pl> detects that
+the checkout is on a case insensitive file system, it will search from
+5.005 to 5.14.0
 
 =item *
 
@@ -425,7 +427,8 @@ Passing this to F<bisect.pl> will likely cause the bisect to fail badly.
 --validate
 
 Test that all stable revisions can be built. By default, attempts to build
-I<blead>, I<v5.14.0> .. I<perl-5.002>. Stops at the first failure, without
+I<blead>, I<v5.14.0> .. I<perl-5.002> (or I<perl5.005> on a case insensitive
+file system). Stops at the first failure, without
 cleaning the checkout. Use I<--start> to specify the earliest revision to
 test, I<--end> to specify the most recent. Useful for validating a new
 OS/CPU/compiler combination. For example
@@ -530,29 +533,173 @@ sub edit_file {
     close_or_die($fh);
 }
 
-sub apply_patch {
-    my $patch = shift;
+# AIX supplies a pre-historic patch program, which certainly predates Linux
+# and is probably older than NT. It can't cope with unified diffs. Meanwhile,
+# it's hard enough to get git diff to output context diffs, let alone git show,
+# and nearly all the patches embedded here are unified. So it seems that the
+# path of least resistance is to convert unified diffs to context diffs:
 
-    my ($file) = $patch =~ qr!^--- a/(\S+)\n\+\+\+ b/\1!sm;
+sub process_hunk {
+    my ($from_out, $to_out, $has_from, $has_to, $delete, $add) = @_;
+    ++$$has_from if $delete;
+    ++$$has_to if $add;
+
+    if ($delete && $add) {
+        $$from_out .= "! $_\n" foreach @$delete;
+        $$to_out .= "! $_\n" foreach @$add;
+    } elsif ($delete) {
+        $$from_out .= "- $_\n" foreach @$delete;
+    } elsif ($add) {
+         $$to_out .= "+ $_\n" foreach @$add;
+    }
+}
+
+# This isn't quite general purpose, as it can't cope with
+# '\ No newline at end of file'
+sub ud2cd {
+    my $diff_in = shift;
+    my $diff_out = '';
+
+    # Stuff before the diff
+    while ($diff_in =~ s/\A(?!\*\*\* )(?!--- )([^\n]*\n?)//ms && length $1) {
+        $diff_out .= $1;
+    }
+
+    if (!length $diff_in) {
+        die "That didn't seem to be a diff";
+    }
+
+    if ($diff_in =~ /\A\*\*\* /ms) {
+        warn "Seems to be a context diff already\n";
+        return $diff_out . $diff_in;
+    }
+
+    # Loop for files
+ FILE: while (1) {
+        if ($diff_in =~ s/\A((?:diff |index )[^\n]+\n)//ms) {
+            $diff_out .= $1;
+            next;
+        }
+        if ($diff_in !~ /\A--- /ms) {
+            # Stuff after the diff;
+            return $diff_out . $diff_in;
+        }
+        $diff_in =~ s/\A([^\n]+\n?)//ms;
+        my $line = $1;
+        die "Can't parse '$line'" unless $line =~ s/\A--- /*** /ms;
+        $diff_out .= $line;
+        $diff_in =~ s/\A([^\n]+\n?)//ms;
+        $line = $1;
+        die "Can't parse '$line'" unless $line =~ s/\A\+\+\+ /--- /ms;
+        $diff_out .= $line;
+
+        # Loop for hunks
+        while (1) {
+            next FILE
+                unless $diff_in =~ s/\A\@\@ (-([0-9]+),([0-9]+) \+([0-9]+),([0-9]+)) \@\@[^\n]*\n?//;
+            my ($hunk, $from_start, $from_count, $to_start, $to_count)
+                = ($1, $2, $3, $4, $5);
+            my $from_end = $from_start + $from_count - 1;
+            my $to_end = $to_start + $to_count - 1;
+            my ($from_out, $to_out, $has_from, $has_to, $add, $delete);
+            while (length $diff_in && ($from_count || $to_count)) {
+                die "Confused in $hunk" unless $diff_in =~ s/\A([^\n]*)\n//ms;
+                my $line = $1;
+                $line = ' ' unless length $line;
+                if ($line =~ /^ .*/) {
+                    process_hunk(\$from_out, \$to_out, \$has_from, \$has_to,
+                                 $delete, $add);
+                    undef $delete;
+                    undef $add;
+                    $from_out .= " $line\n";
+                    $to_out .= " $line\n";
+                    --$from_count;
+                    --$to_count;
+                } elsif ($line =~ /^-(.*)/) {
+                    push @$delete, $1;
+                    --$from_count;
+                } elsif ($line =~ /^\+(.*)/) {
+                    push @$add, $1;
+                    --$to_count;
+                } else {
+                    die "Can't parse '$line' as part of hunk $hunk";
+                }
+            }
+            process_hunk(\$from_out, \$to_out, \$has_from, \$has_to,
+                         $delete, $add);
+            die "No lines in hunk $hunk"
+                unless length $from_out || length $to_out;
+            die "No changes in hunk $hunk"
+                unless $has_from || $has_to;
+            $diff_out .= "***************\n";
+            $diff_out .= "*** $from_start,$from_end ****\n";
+            $diff_out .= $from_out if $has_from;
+            $diff_out .= "--- $to_start,$to_end ----\n";
+            $diff_out .= $to_out if $has_to;
+        }
+    }
+}
+
+{
+    my $use_context;
+
+    sub placate_patch_prog {
+        my $patch = shift;
+
+        if (!defined $use_context) {
+            my $version = `patch -v 2>&1`;
+            die "Can't run `patch -v`, \$?=$?, bailing out"
+                unless defined $version;
+            if ($version =~ /Free Software Foundation/) {
+                $use_context = 0;
+            } elsif ($version =~ /Header: patch\.c,v.*\blwall\b/) {
+                # The system patch is older than Linux, and probably older than
+                # Windows NT.
+                $use_context = 1;
+            } else {
+                # Don't know.
+                $use_context = 0;
+            }
+        }
+
+        return $use_context ? ud2cd($patch) : $patch;
+    }
+}
+
+sub apply_patch {
+    my ($patch, $what, $files) = @_;
+    $what = 'patch' unless defined $what;
+    unless (defined $files) {
+        $patch =~ m!^--- a/(\S+)\n\+\+\+ b/\1!sm;
+        $files = " $1";
+    }
+    my $patch_to_use = placate_patch_prog($patch);
     open my $fh, '|-', 'patch', '-p1' or die "Can't run patch: $!";
-    print $fh $patch;
+    print $fh $patch_to_use;
     return if close $fh;
     print STDERR "Patch is <<'EOPATCH'\n${patch}EOPATCH\n";
-    die "Can't patch $file: $?, $!";
+    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n";
+    die "Can't $what$files: $?, $!";
 }
 
 sub apply_commit {
     my ($commit, @files) = @_;
-    return unless system "git show $commit @files | patch -p1";
-    die "Can't apply commit $commit to @files" if @files;
-    die "Can't apply commit $commit";
+    my $patch = `git show $commit @files`;
+    if (!defined $patch) {
+        die "Can't get commit $commit for @files: $?" if @files;
+        die "Can't get commit $commit: $?";
+    }
+    apply_patch($patch, "patch $commit", @files ? " for @files" : '');
 }
 
 sub revert_commit {
     my ($commit, @files) = @_;
-    return unless system "git show -R $commit @files | patch -p1";
-    die "Can't apply revert $commit from @files" if @files;
-    die "Can't apply revert $commit";
+    my $patch = `git show -R $commit @files`;
+    if (!defined $patch) {
+        die "Can't get revert commit $commit for @files: $?" if @files;
+        die "Can't get revert commit $commit: $?";
+    }
+    apply_patch($patch, "revert $commit", @files ? " for @files" : '');
 }
 
 sub checkout_file {
@@ -667,6 +814,15 @@ if (!defined $target) {
 
 skip('no Configure - is this the //depot/perlext/Compiler branch?')
     unless -f 'Configure';
+
+my $case_insensitive;
+{
+    my ($dev_C, $ino_C) = stat 'Configure';
+    die "Could not stat Configure: $!" unless defined $dev_C;
+    my ($dev_c, $ino_c) = stat 'configure';
+    ++$case_insensitive
+        if defined $dev_c && $dev_C == $dev_c && $ino_C == $ino_c;
+}
 
 # This changes to PERL_VERSION in 4d8076ea25903dcb in 1999
 my $major
@@ -1265,6 +1421,19 @@ index 4b55fa6..60c3c64 100755
 EOPATCH
     }
 
+    if ($major < 8 && $^O eq 'aix') {
+        edit_file('Configure', sub {
+                      my $code = shift;
+                      # Replicate commit a8c676c69574838b
+                      # Whitespace allowed at the ends of /lib/syscalls.exp lines
+                      # and half of commit c6912327ae30e6de
+                      # AIX syscalls.exp scan: the syscall might be marked 32, 3264, or 64
+                      $code =~ s{(\bsed\b.*\bsyscall)(?:\[0-9\]\*)?(\$.*/lib/syscalls\.exp)}
+                                {$1 . "[0-9]*[ \t]*" . $2}e;
+                      return $code;
+                  });
+    }
+
     if ($major < 8 && !extract_from_file('Configure',
                                          qr/^\t\tif test ! -t 0; then$/)) {
         # Before dfe9444ca7881e71, Configure would refuse to run if stdin was
@@ -1423,6 +1592,15 @@ sub patch_hints {
                       # to 5.002, lets just turn it off.
                       $code =~ s/^useshrplib='true'/useshrplib='false'/m
                           if $faking_it;
+
+                      # Part of commit d235852b65d51c44
+                      # Don't do this on a case sensitive HFS+ partition, as it
+                      # breaks the build for 5.003 and earlier.
+                      if ($case_insensitive
+                          && $code !~ /^firstmakefile=GNUmakefile/) {
+                          $code .= "\nfirstmakefile=GNUmakefile;\n";
+                      }
+
                       return $code;
                   });
         }
@@ -2244,6 +2422,28 @@ EOPATCH
                   });
     }
 
+    if ($major < 5 && $^O eq 'aix'
+        && !extract_from_file('pp_sys.c',
+                              qr/defined\(HOST_NOT_FOUND\) && !defined\(h_errno\)/)) {
+        # part of commit dc45a647708b6c54
+        # Andy Dougherty's configuration patches (Config_63-01 up to 04).
+        apply_patch(<<'EOPATCH')
+diff --git a/pp_sys.c b/pp_sys.c
+index c2fcb6f..efa39fb 100644
+--- a/pp_sys.c
++++ b/pp_sys.c
+@@ -54,7 +54,7 @@ extern "C" int syscall(unsigned long,...);
+ #endif
+ #endif
+ 
+-#ifdef HOST_NOT_FOUND
++#if defined(HOST_NOT_FOUND) && !defined(h_errno)
+ extern int h_errno;
+ #endif
+ 
+EOPATCH
+    }
+
     if ($major < 6 && $^O eq 'netbsd'
         && !extract_from_file('unixish.h',
                               qr/defined\(NSIG\).*defined\(__NetBSD__\)/)) {
@@ -2355,6 +2555,16 @@ sub patch_ext {
         # to run, don't override this with "../../lib" since that may not have
         # been populated yet in a parallel build.
         apply_commit('6695a346c41138df');
+    }
+
+    if (-f 'ext/Hash/Util/Makefile.PL'
+        && extract_from_file('ext/Hash/Util/Makefile.PL',
+                             qr/\bDIR\b.*'FieldHash'/)) {
+        # ext/Hash/Util/Makefile.PL should not recurse to FieldHash's Makefile.PL
+        # *nix, VMS and Win32 all know how to (and have to) call the latter directly.
+        # As is, targets in ext/Hash/Util/FieldHash get called twice, which may result
+        # in race conditions, and certainly messes up make clean; make distclean;
+        apply_commit('550428fe486b1888');
     }
 
     if ($major < 8 && $^O eq 'darwin' && !-f 'ext/DynaLoader/dl_dyld.xs') {
