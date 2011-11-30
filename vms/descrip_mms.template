@@ -1034,6 +1034,7 @@ clean : tidy cleantest
 	- If F$Search("[.vms.ext...]*.C").nes."" Then Delete/NoConfirm/Log [.vms.ext...]*.C;*
 	- If F$Search("[.vms.ext...]*$(O)").nes."" Then Delete/NoConfirm/Log [.vms.ext...]*$(O);*
 	- If F$Search("[.pod]*.com").nes."" Then Delete/NoConfirm/Log [.pod]*.com;*
+	- If F$Search("[.pod]roffitall").nes."" Then Delete/NoConfirm/Log [.pod]roffitall;*
 	- If F$Search("$(PERLDELTA_CURRENT)").nes."" Then Delete/NoConfirm/Log $(PERLDELTA_CURRENT);*
 	- If F$Search("[.pod]perlapi.pod").nes."" Then Delete/NoConfirm/Log [.pod]perlapi.pod;*
 	- If F$Search("[.pod]perlintern.pod").nes."" Then Delete/NoConfirm/Log [.pod]perlintern.pod;*
@@ -1041,7 +1042,6 @@ clean : tidy cleantest
 	- If F$Search("[.pod]perltoc.pod").nes."" Then Delete/NoConfirm/Log [.pod]perltoc.pod;*
 	- If F$Search("[.pod]perluniprops.pod").nes."" Then Delete/NoConfirm/Log [.pod]perluniprops.pod;*
 	- @extra_pods CLEAN
-	- If F$Search("unpushed.h").nes."" Then Delete/NoConfirm/Log unpushed.h;*
 	- If F$Search("[.lib]Config_git.pl").nes."" Then Delete/NoConfirm/Log [.lib]Config_git.pl;*
 	- If F$Search("git_version.h").nes."" Then Delete/NoConfirm/Log git_version.h;*
 

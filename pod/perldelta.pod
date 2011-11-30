@@ -103,6 +103,14 @@ return the MD5SUM of files in the archive.
 
 =item *
 
+L<AutoLoader> has been upgraded from version 5.71 to version 5.72.
+
+=item *
+
+L<B::Debug> has been upgraded from version 1.16 to version 1.17.
+
+=item *
+
 L<Compress::Raw::Zlib> has been upgraded from version 2.042 to version 2.043.
 
 =item *
@@ -112,6 +120,29 @@ L<Compress::Raw::Bzip2> has been upgraded from version 2.042 to version 2.043.
 =item *
 
 L<IO::Compress::Base> has been upgraded from version 2.042 to version 2.043.
+
+=item *
+
+L<Module::Loaded> has been uprgaded from version 0.06 to version 0.08.
+
+=item *
+
+L<Pod::LaTeX> has been upgraded from version 0.59 to version 0.60.
+
+Added another LaTeX escape: --- => -{}-{}-
+
+Pod::LaTeX doesn't handle -- in PODs specially, passing it directly to
+LaTeX, which then proceeds to replace it with a single -. This patch
+replaces ----- with -{}-{}-{}-{}-
+
+=item *
+
+L<Unicode::Collate> has been upgraded from version 0.85 to version 0.87.
+
+Tailored compatibility ideographs as well as unified ideographs for
+the locales: ja, ko, zh__big5han, zh__gb2312han, zh__pinyin, zh__stroke.
+
+Now Locale/*.pl files are searched in @INC.
 
 =back
 
@@ -239,7 +270,9 @@ L</Platform Support> section, instead.
 
 =item *
 
-XXX
+F<pod/roffitall> is now build by F<pod/buildtoc>, instead of being shipped
+with the distribution. Its list of manpages is now generated (and therefore
+current). See also RT #103202 for an unresolved related issue.
 
 =back
 

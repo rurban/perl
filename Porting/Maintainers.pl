@@ -262,7 +262,7 @@ use File::Glob qw(:case);
     'AutoLoader' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/AutoLoader-5.71.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/AutoLoader-5.72.tar.gz',
 	'FILES'		=> q[cpan/AutoLoader],
 	'EXCLUDED'	=> [ qw( t/00pod.t ) ],
 	'UPSTREAM'	=> 'cpan',
@@ -296,7 +296,7 @@ use File::Glob qw(:case);
     'B::Debug' =>
 	{
 	'MAINTAINER'	=> 'rurban',
-	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.16.tar.gz',
+	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.17.tar.gz',
 	'FILES'		=> q[cpan/B-Debug],
 	'EXCLUDED'	=> [ qw( t/pod.t ) ],
 	'UPSTREAM'	=> 'cpan',
@@ -1283,7 +1283,7 @@ use File::Glob qw(:case);
     'Module::Loaded' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.06.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.08.tar.gz',
 	'FILES'		=> q[cpan/Module-Loaded],
 	'UPSTREAM'	=> 'cpan',
 	},
@@ -1534,7 +1534,7 @@ use File::Glob qw(:case);
     'Pod::LaTeX' =>
 	{
 	'MAINTAINER'	=> 'tjenness',
-	'DISTRIBUTION'	=> 'TJENNESS/Pod-LaTeX-0.59.tar.gz',
+	'DISTRIBUTION'	=> 'TJENNESS/Pod-LaTeX-0.60.tar.gz',
 	'FILES'		=> q[cpan/Pod-LaTeX],
 	'EXCLUDED'	=> [ qw( t/require.t ) ],
 	'UPSTREAM'	=> undef,
@@ -1970,7 +1970,7 @@ use File::Glob qw(:case);
     'Unicode::Collate' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.85.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.87.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Collate],
 	'EXCLUDED'	=> [ qr{N$},
                    qr{^data/},

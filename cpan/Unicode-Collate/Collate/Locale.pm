@@ -4,11 +4,8 @@ use strict;
 use Carp;
 use base qw(Unicode::Collate);
 
-our $VERSION = '0.85';
+our $VERSION = '0.87';
 
-use File::Spec;
-
-(my $ModPath = $INC{'Unicode/Collate/Locale.pm'}) =~ s/\.pm$//;
 my $PL_EXT  = '.pl';
 
 my %LocaleFile = map { ($_, $_) } qw(
@@ -81,12 +78,20 @@ sub getlocale {
     return shift->{accepted_locale};
 }
 
+sub locale_version {
+    return shift->{locale_version};
+}
+
 sub _fetchpl {
     my $accepted = shift;
     my $f = $LocaleFile{$accepted};
     return if !$f;
     $f .= $PL_EXT;
-    my $path = File::Spec->catfile($ModPath, $f);
+
+    # allow to search @INC
+#   use File::Spec;
+#   my $path = File::Spec->catfile('Unicode', 'Collate', 'Locale', $f);
+    my $path = "Unicode/Collate/Locale/$f";
     my $h = do $path;
     croak "Unicode/Collate/Locale/$f can't be found" if !$h;
     return $h;
@@ -302,6 +307,15 @@ If linguistic tailoring is not provided for a language code you passed
 (intensionally for some languages, or due to the incomplete implementation),
 this method returns a string C<'default'> meaning no special tailoring.
 
+=item C<$Collator-E<gt>locale_version>
+
+(Since Unicode::Collate::Locale 0.87)
+Returns the version number (perhaps C</\d\.\d\d/>) of the locale, as that
+of F<Locale/*.pl>.
+
+B<Note:> F<Locale/*.pl> that a collator uses should be identified by
+a combination of return values from C<getlocale> and C<locale_version>.
+
 =back
 
 =head2 A list of tailorable locales
@@ -388,8 +402,8 @@ this method returns a string C<'default'> meaning no special tailoring.
       zh                Chinese
       zh__big5han       Chinese (ideographs: big5 order)
       zh__gb2312han     Chinese (ideographs: GB-2312 order)
-      zh__pinyin        Chinese (ideographs: pinyin order)
-      zh__stroke        Chinese (ideographs: stroke order)
+      zh__pinyin        Chinese (ideographs: pinyin order) [3]
+      zh__stroke        Chinese (ideographs: stroke order) [3]
     --------------------------------------------------------------
 
 Locales according to the default UCA rules include
@@ -419,6 +433,9 @@ and then C<katakana_before_hiragana> has no effect.
 [2] ko: Plenty of ideographs are sorted by their reading. Such
 an ideograph is primary (level 1) equal to, and secondary (level 2)
 greater than, the corresponding hangul syllable.
+
+[3] zh__pinyin and zh__stroke: implemented alt='short', where
+a smaller number of ideographs are tailored.
 
 =head1 INSTALL
 
