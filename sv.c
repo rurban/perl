@@ -3645,7 +3645,7 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
 	    }
 	    SvUPGRADE(dstr, SVt_PVGV);
 	    (void)SvOK_off(dstr);
-	    /* We have to turn this on here (even though we turn it off
+	    /* We have to turn this on here, even though we turn it off
 	       below, as GvSTASH will fail an assertion otherwise. */
 	    isGV_with_GP_on(dstr);
 	}
@@ -4907,7 +4907,7 @@ Perl_sv_chop(pTHX_ register SV *const sv, register const char *const ptr)
 	    Move(pvx,SvPVX(sv),len,char);
 	    *SvEND(sv) = '\0';
 	}
-	SvFLAGS(sv) |= SVf_OOK;
+	SvOOK_on(sv);
 	old_delta = 0;
     } else {
 	SvOOK_offset(sv, old_delta);
@@ -5299,9 +5299,8 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
 #endif
     if (SvREADONLY(sv)) {
 	if (
-	    /* its okay to attach magic to shared strings; the subsequent
-	     * upgrade to PVMG will unshare the string */
-	    !(SvFAKE(sv) && SvTYPE(sv) < SVt_PVMG)
+	    /* its okay to attach magic to shared strings */
+	    (!SvFAKE(sv) || isGV_with_GP(sv))
 
 	    && IN_PERL_RUNTIME
 	    && !PERL_MAGIC_TYPE_READONLY_ACCEPTABLE(how)
@@ -12034,8 +12033,7 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
 			const struct xpvhv_aux * const saux = HvAUX(sstr);
 			struct xpvhv_aux * const daux = HvAUX(dstr);
 			/* This flag isn't copied.  */
-			/* SvOOK_on(hv) attacks the IV flags.  */
-			SvFLAGS(dstr) |= SVf_OOK;
+			SvOOK_on(dstr);
 
 			if (saux->xhv_name_count) {
 			    HEK ** const sname = saux->xhv_name_u.xhvnameu_names;

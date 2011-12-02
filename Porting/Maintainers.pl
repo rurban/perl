@@ -65,6 +65,7 @@ use File::Glob qw(:case);
     'p5p'	=> 'perl5-porters <perl5-porters@perl.org>',
     'perlfaq'	=> 'perlfaq-workers <perlfaq-workers@perl.org>',
     'petdance'	=> 'Andy Lester <andy@petdance.com>',
+    'pevans'    => 'Paul Evans <leonerd@leonerd.org.uk>',
     'pjf'	=> 'Paul Fenwick <pjf@cpan.org>',
     'pmqs'	=> 'Paul Marquess <pmqs@cpan.org>',
     'pvhp'	=> 'Peter Prymmer <pvhp@best.com>',
@@ -1105,7 +1106,7 @@ use File::Glob qw(:case);
     'Locale-Codes' =>
 	{
 	'MAINTAINER'	=> 'sbeck',
-	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.18.tar.gz',
+	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.20.tar.gz',
 	'FILES'		=> q[cpan/Locale-Codes],
 	'EXCLUDED'	=> [ qw{t/pod_coverage.t t/pod.t}, qr{^t/runtests}, qr{^t/runtests\.bat},
 			     qr{^internal/}, qr{^examples/} ],
@@ -1663,9 +1664,10 @@ use File::Glob qw(:case);
 
     'Socket' =>
 	{
-	'MAINTAINER'	=> 'p5p',
-	'FILES'		=> q[ext/Socket],
-	'UPSTREAM'	=> 'blead',
+	'MAINTAINER'	=> 'pevans',
+	'DISTRIBUTION'  => 'PEVANS/Socket-1.95.tar.gz',
+	'FILES'		=> q[cpan/Socket],
+	'UPSTREAM'	=> 'cpan',
 	},
 
     'Storable' =>
