@@ -1,4 +1,4 @@
-# This file is the data file for t/porting/podcheck.t.
+# This file is the data file for porting/podcheck.t.
 # There are three types of lines.
 # Comment lines are white-space only or begin with a '#', like this one.  Any
 #   changes you make to the comment lines will be lost when the file is
@@ -26,7 +26,9 @@ Class::ISA
 Class::PseudoHash
 Classic::Perl
 Clone
+Crypt::Random
 curl(1)
+Data::Entropy
 Data::Float
 Data::Types
 DateTime
@@ -163,7 +165,7 @@ dist/module-corelist/lib/module/corelist.pm	Verbatim line length including inden
 dist/net-ping/lib/net/ping.pm	Verbatim line length including indents exceeds 79 by	2
 dist/safe/safe.pm	Verbatim line length including indents exceeds 79 by	1
 dist/safe/safe.pm	empty section in previous paragraph	1
-dist/selfloader/lib/selfloader.pm	Verbatim line length including indents exceeds 79 by	14
+dist/selfloader/lib/selfloader.pm	Verbatim line length including indents exceeds 79 by	13
 dist/storable/storable.pm	Verbatim line length including indents exceeds 79 by	4
 dist/term-readline/lib/term/readline.pm	Verbatim line length including indents exceeds 79 by	1
 dist/thread-queue/lib/thread/queue.pm	Verbatim line length including indents exceeds 79 by	4
@@ -178,6 +180,10 @@ ext/hash-util-fieldhash/lib/hash/util/fieldhash.pm	Verbatim line length includin
 ext/i18n-langinfo/langinfo.pm	Verbatim line length including indents exceeds 79 by	1
 ext/opcode/opcode.pm	Verbatim line length including indents exceeds 79 by	10
 ext/pod-html/bin/pod2html	Pod NAME already used	1
+ext/pod-html/testdir/perlpodspec-copy.pod	Verbatim line length including indents exceeds 79 by	8
+ext/pod-html/testdir/perlvar-copy.pod	? Should you be using L<...> instead of	3
+ext/pod-html/testdir/perlvar-copy.pod	Apparent broken link	2
+ext/pod-html/testdir/perlvar-copy.pod	Verbatim line length including indents exceeds 79 by	6
 ext/posix/lib/posix.pod	Verbatim line length including indents exceeds 79 by	29
 ext/re/re.pm	Verbatim line length including indents exceeds 79 by	6
 ext/vms-dclsym/dclsym.pm	? Should you be using L<...> instead of	1

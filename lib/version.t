@@ -328,6 +328,11 @@ sub BaseTests {
     $new_version = $CLASS->$method("1.1.999");
     ok ( $version > $new_version, '$version > $new_version' );
     
+    diag "test with version class names" unless $ENV{PERL_CORE};
+    $version = $CLASS->$method("v1.2.3");
+    eval { () = $version < $CLASS };
+    like $@, qr/^Invalid version format/, "error with $version < $CLASS";
+    
     # that which is not expressly permitted is forbidden
     diag "forbidden operations" unless $ENV{PERL_CORE};
     ok ( !eval { ++$version }, "noop ++" );
@@ -738,6 +743,19 @@ SKIP: {
 	ok $CLASS->$method("v1.2.3") < $CLASS->$method("v1.2.3.1"), 'Compare 3 and 4 digit v-strings, quoted leading v';
     }
 }
+
+eval { version->new("version") };
+pass('no crash with version->new("version")');
+{
+    package _102586;
+    sub TIESCALAR { bless [] }
+    sub FETCH { "version" }
+    sub STORE { }
+    tie my $v, __PACKAGE__;
+    $v = version->new(1);
+    eval { version->new($v) };
+}
+pass('no crash with version->new($tied) where $tied returns "version"');
 
 1;
 

@@ -53,17 +53,17 @@ my %defines =
     (
      usedevel => '',
      optimize => '-g',
-     cc => 'ccache cc',
+     cc => (`ccache --version`, $?) ? 'cc' : 'ccache cc',
      ld => 'cc',
      ($linux64 ? (libpth => \@paths) : ()),
     );
 
 unless(GetOptions(\%options,
-                  'target=s', 'jobs|j=i', 'expect-pass=i',
+                  'target=s', 'make=s', 'jobs|j=i', 'expect-pass=i',
                   'expect-fail' => sub { $options{'expect-pass'} = 0; },
                   'clean!', 'one-liner|e=s', 'match=s', 'force-manifest',
-                  'force-regen', 'test-build', 'check-args', 'A=s@', 'l', 'w',
-                  'usage|help|?',
+                  'force-regen', 'test-build', 'A=s@', 'l', 'w',
+                  'check-args', 'check-shebang!', 'usage|help|?', 'validate',
                   'D=s@' => sub {
                       my (undef, $val) = @_;
                       if ($val =~ /\A([^=]+)=(.*)/s) {
@@ -81,11 +81,16 @@ unless(GetOptions(\%options,
 
 my ($target, $j, $match) = @options{qw(target jobs match)};
 
+@ARGV = ('sh', '-c', 'cd t && ./perl TEST base/*.t')
+    if $options{validate} && !@ARGV;
+
 pod2usage(exitval => 255, verbose => 1) if $options{usage};
 pod2usage(exitval => 255, verbose => 1)
     unless @ARGV || $match || $options{'test-build'} || defined $options{'one-liner'};
 pod2usage(exitval => 255, verbose => 1)
     if !$options{'one-liner'} && ($options{l} || $options{w});
+
+check_shebang($ARGV[0]) if $options{'check-shebang'} && @ARGV;
 
 exit 0 if $options{'check-args'};
 
@@ -179,8 +184,10 @@ If your F<db.h> is old enough you can override this with C<-Unoextensions>.
 
 Earliest revision to test, as a I<commit-ish> (a tag, commit or anything
 else C<git> understands as a revision). If not specified, F<bisect.pl> will
-search stable perl releases from 5.002 to 5.14.0 until it finds one where
-the test case passes.
+search stable perl releases until it finds one where the test case passes.
+The default is to search from 5.002 to 5.14.0. If F<bisect.pl> detects that
+the checkout is on a case insensitive file system, it will search from
+5.005 to 5.14.0
 
 =item *
 
@@ -318,6 +325,15 @@ often very useful to be able to disable some XS extensions.
 
 =item *
 
+--make I<make-prog>
+
+The C<make> command to use. If this not set, F<make> is used. If this is
+set, it also adds a C<-Dmake=...> else some recursive make invocations
+in extensions may fail. Typically one would use this as C<--make gmake>
+to use F<gmake> in place of the system F<make>.
+
+=item *
+
 --jobs I<jobs>
 
 =item *
@@ -411,7 +427,8 @@ Passing this to F<bisect.pl> will likely cause the bisect to fail badly.
 --validate
 
 Test that all stable revisions can be built. By default, attempts to build
-I<blead>, I<v5.14.0> .. I<perl-5.002>. Stops at the first failure, without
+I<blead>, I<v5.14.0> .. I<perl-5.002> (or I<perl5.005> on a case insensitive
+file system). Stops at the first failure, without
 cleaning the checkout. Use I<--start> to specify the earliest revision to
 test, I<--end> to specify the most recent. Useful for validating a new
 OS/CPU/compiler combination. For example
@@ -426,6 +443,20 @@ F<t/base/*.t>
 --check-args
 
 Validate the options and arguments, and exit silently if they are valid.
+
+=item *
+
+--check-shebang
+
+Validate that the test case isn't an executable file with a
+C<#!/usr/bin/perl> line (or similar). As F<bisect-runner.pl> does B<not>
+prepend C<./perl> to the test case, a I<#!> line specifying an external
+F<perl> binary will cause the test case to always run with I<that> F<perl>,
+not the F<perl> built by the bisect runner. Likely this is not what you
+wanted. If your test case is actually a wrapper script to run other
+commands, you should run it with an explicit interpreter, to be clear. For
+example, instead of C<../perl/Porting/bisect.pl ~/test/testcase.pl> you'd
+run C<../perl/Porting/bisect.pl /usr/bin/perl ~/test/testcase.pl>
 
 =item *
 
@@ -448,6 +479,14 @@ Display the usage information and exit.
 die "$0: Can't build $target" if defined $target && !grep {@targets} $target;
 
 $j = "-j$j" if $j =~ /\A\d+\z/;
+
+if (exists $options{make}) {
+    if (!exists $defines{make}) {
+        $defines{make} = $options{make};
+    }
+} else {
+    $options{make} = 'make';
+}
 
 # Sadly, however hard we try, I don't think that it will be possible to build
 # modules in ext/ on x86_64 Linux before commit e1666bf5602ae794 on 1999/12/29,
@@ -494,29 +533,173 @@ sub edit_file {
     close_or_die($fh);
 }
 
-sub apply_patch {
-    my $patch = shift;
+# AIX supplies a pre-historic patch program, which certainly predates Linux
+# and is probably older than NT. It can't cope with unified diffs. Meanwhile,
+# it's hard enough to get git diff to output context diffs, let alone git show,
+# and nearly all the patches embedded here are unified. So it seems that the
+# path of least resistance is to convert unified diffs to context diffs:
 
-    my ($file) = $patch =~ qr!^--- a/(\S+)\n\+\+\+ b/\1!sm;
+sub process_hunk {
+    my ($from_out, $to_out, $has_from, $has_to, $delete, $add) = @_;
+    ++$$has_from if $delete;
+    ++$$has_to if $add;
+
+    if ($delete && $add) {
+        $$from_out .= "! $_\n" foreach @$delete;
+        $$to_out .= "! $_\n" foreach @$add;
+    } elsif ($delete) {
+        $$from_out .= "- $_\n" foreach @$delete;
+    } elsif ($add) {
+         $$to_out .= "+ $_\n" foreach @$add;
+    }
+}
+
+# This isn't quite general purpose, as it can't cope with
+# '\ No newline at end of file'
+sub ud2cd {
+    my $diff_in = shift;
+    my $diff_out = '';
+
+    # Stuff before the diff
+    while ($diff_in =~ s/\A(?!\*\*\* )(?!--- )([^\n]*\n?)//ms && length $1) {
+        $diff_out .= $1;
+    }
+
+    if (!length $diff_in) {
+        die "That didn't seem to be a diff";
+    }
+
+    if ($diff_in =~ /\A\*\*\* /ms) {
+        warn "Seems to be a context diff already\n";
+        return $diff_out . $diff_in;
+    }
+
+    # Loop for files
+ FILE: while (1) {
+        if ($diff_in =~ s/\A((?:diff |index )[^\n]+\n)//ms) {
+            $diff_out .= $1;
+            next;
+        }
+        if ($diff_in !~ /\A--- /ms) {
+            # Stuff after the diff;
+            return $diff_out . $diff_in;
+        }
+        $diff_in =~ s/\A([^\n]+\n?)//ms;
+        my $line = $1;
+        die "Can't parse '$line'" unless $line =~ s/\A--- /*** /ms;
+        $diff_out .= $line;
+        $diff_in =~ s/\A([^\n]+\n?)//ms;
+        $line = $1;
+        die "Can't parse '$line'" unless $line =~ s/\A\+\+\+ /--- /ms;
+        $diff_out .= $line;
+
+        # Loop for hunks
+        while (1) {
+            next FILE
+                unless $diff_in =~ s/\A\@\@ (-([0-9]+),([0-9]+) \+([0-9]+),([0-9]+)) \@\@[^\n]*\n?//;
+            my ($hunk, $from_start, $from_count, $to_start, $to_count)
+                = ($1, $2, $3, $4, $5);
+            my $from_end = $from_start + $from_count - 1;
+            my $to_end = $to_start + $to_count - 1;
+            my ($from_out, $to_out, $has_from, $has_to, $add, $delete);
+            while (length $diff_in && ($from_count || $to_count)) {
+                die "Confused in $hunk" unless $diff_in =~ s/\A([^\n]*)\n//ms;
+                my $line = $1;
+                $line = ' ' unless length $line;
+                if ($line =~ /^ .*/) {
+                    process_hunk(\$from_out, \$to_out, \$has_from, \$has_to,
+                                 $delete, $add);
+                    undef $delete;
+                    undef $add;
+                    $from_out .= " $line\n";
+                    $to_out .= " $line\n";
+                    --$from_count;
+                    --$to_count;
+                } elsif ($line =~ /^-(.*)/) {
+                    push @$delete, $1;
+                    --$from_count;
+                } elsif ($line =~ /^\+(.*)/) {
+                    push @$add, $1;
+                    --$to_count;
+                } else {
+                    die "Can't parse '$line' as part of hunk $hunk";
+                }
+            }
+            process_hunk(\$from_out, \$to_out, \$has_from, \$has_to,
+                         $delete, $add);
+            die "No lines in hunk $hunk"
+                unless length $from_out || length $to_out;
+            die "No changes in hunk $hunk"
+                unless $has_from || $has_to;
+            $diff_out .= "***************\n";
+            $diff_out .= "*** $from_start,$from_end ****\n";
+            $diff_out .= $from_out if $has_from;
+            $diff_out .= "--- $to_start,$to_end ----\n";
+            $diff_out .= $to_out if $has_to;
+        }
+    }
+}
+
+{
+    my $use_context;
+
+    sub placate_patch_prog {
+        my $patch = shift;
+
+        if (!defined $use_context) {
+            my $version = `patch -v 2>&1`;
+            die "Can't run `patch -v`, \$?=$?, bailing out"
+                unless defined $version;
+            if ($version =~ /Free Software Foundation/) {
+                $use_context = 0;
+            } elsif ($version =~ /Header: patch\.c,v.*\blwall\b/) {
+                # The system patch is older than Linux, and probably older than
+                # Windows NT.
+                $use_context = 1;
+            } else {
+                # Don't know.
+                $use_context = 0;
+            }
+        }
+
+        return $use_context ? ud2cd($patch) : $patch;
+    }
+}
+
+sub apply_patch {
+    my ($patch, $what, $files) = @_;
+    $what = 'patch' unless defined $what;
+    unless (defined $files) {
+        $patch =~ m!^--- a/(\S+)\n\+\+\+ b/\1!sm;
+        $files = " $1";
+    }
+    my $patch_to_use = placate_patch_prog($patch);
     open my $fh, '|-', 'patch', '-p1' or die "Can't run patch: $!";
-    print $fh $patch;
+    print $fh $patch_to_use;
     return if close $fh;
     print STDERR "Patch is <<'EOPATCH'\n${patch}EOPATCH\n";
-    die "Can't patch $file: $?, $!";
+    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n";
+    die "Can't $what$files: $?, $!";
 }
 
 sub apply_commit {
     my ($commit, @files) = @_;
-    return unless system "git show $commit @files | patch -p1";
-    die "Can't apply commit $commit to @files" if @files;
-    die "Can't apply commit $commit";
+    my $patch = `git show $commit @files`;
+    if (!defined $patch) {
+        die "Can't get commit $commit for @files: $?" if @files;
+        die "Can't get commit $commit: $?";
+    }
+    apply_patch($patch, "patch $commit", @files ? " for @files" : '');
 }
 
 sub revert_commit {
     my ($commit, @files) = @_;
-    return unless system "git show -R $commit @files | patch -p1";
-    die "Can't apply revert $commit from @files" if @files;
-    die "Can't apply revert $commit";
+    my $patch = `git show -R $commit @files`;
+    if (!defined $patch) {
+        die "Can't get revert commit $commit for @files: $?" if @files;
+        die "Can't get revert commit $commit: $?";
+    }
+    apply_patch($patch, "revert $commit", @files ? " for @files" : '');
 }
 
 sub checkout_file {
@@ -524,6 +707,36 @@ sub checkout_file {
     $commit ||= 'blead';
     system "git show $commit:$file > $file </dev/null"
         and die "Could not extract $file at revision $commit";
+}
+
+sub check_shebang {
+    my $file = shift;
+    return unless -e $file;
+    if (!-x $file) {
+        die "$file is not executable.
+system($file, ...) is always going to fail.
+
+Bailing out";
+    }
+    my $fh = open_or_die($file);
+    my $line = <$fh>;
+    return unless $line =~ m{\A#!(/\S+/perl\S*)\s};
+    die "$file will always be run by $1
+It won't be tested by the ./perl we build.
+If you intended to run it with that perl binary, please change your
+test case to
+
+    $1 @ARGV
+
+If you intended to test it with the ./perl we build, please change your
+test case to
+
+    ./perl -Ilib @ARGV
+
+[You may also need to add -- before ./perl to prevent that -Ilib as being
+parsed as an argument to bisect.pl]
+
+Bailing out";
 }
 
 sub clean {
@@ -601,6 +814,15 @@ if (!defined $target) {
 
 skip('no Configure - is this the //depot/perlext/Compiler branch?')
     unless -f 'Configure';
+
+my $case_insensitive;
+{
+    my ($dev_C, $ino_C) = stat 'Configure';
+    die "Could not stat Configure: $!" unless defined $dev_C;
+    my ($dev_c, $ino_c) = stat 'configure';
+    ++$case_insensitive
+        if defined $dev_c && $dev_C == $dev_c && $ino_C == $ino_c;
+}
 
 # This changes to PERL_VERSION in 4d8076ea25903dcb in 1999
 my $major
@@ -718,7 +940,7 @@ patch_C();
 patch_ext();
 
 # Parallel build for miniperl is safe
-system "make $j miniperl </dev/null";
+system "$options{make} $j miniperl </dev/null";
 
 my $expected = $target =~ /^test/ ? 't/perl'
     : $target eq 'Fcntl' ? "lib/auto/Fcntl/Fcntl.$Config{so}"
@@ -740,7 +962,7 @@ if ($target ne 'miniperl') {
         }
     }
 
-    system "make $j $real_target </dev/null";
+    system "$options{make} $j $real_target </dev/null";
 }
 
 my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
@@ -1199,6 +1421,19 @@ index 4b55fa6..60c3c64 100755
 EOPATCH
     }
 
+    if ($major < 8 && $^O eq 'aix') {
+        edit_file('Configure', sub {
+                      my $code = shift;
+                      # Replicate commit a8c676c69574838b
+                      # Whitespace allowed at the ends of /lib/syscalls.exp lines
+                      # and half of commit c6912327ae30e6de
+                      # AIX syscalls.exp scan: the syscall might be marked 32, 3264, or 64
+                      $code =~ s{(\bsed\b.*\bsyscall)(?:\[0-9\]\*)?(\$.*/lib/syscalls\.exp)}
+                                {$1 . "[0-9]*[ \t]*" . $2}e;
+                      return $code;
+                  });
+    }
+
     if ($major < 8 && !extract_from_file('Configure',
                                          qr/^\t\tif test ! -t 0; then$/)) {
         # Before dfe9444ca7881e71, Configure would refuse to run if stdin was
@@ -1357,6 +1592,15 @@ sub patch_hints {
                       # to 5.002, lets just turn it off.
                       $code =~ s/^useshrplib='true'/useshrplib='false'/m
                           if $faking_it;
+
+                      # Part of commit d235852b65d51c44
+                      # Don't do this on a case sensitive HFS+ partition, as it
+                      # breaks the build for 5.003 and earlier.
+                      if ($case_insensitive
+                          && $code !~ /^firstmakefile=GNUmakefile/) {
+                          $code .= "\nfirstmakefile=GNUmakefile;\n";
+                      }
+
                       return $code;
                   });
         }
@@ -1378,7 +1622,7 @@ case "$osvers" in
 		cccdlflags="-DPIC -fPIC $cccdlflags"
 		lddlflags="--whole-archive -shared $lddlflags"
 	elif [ "`uname -m`" = "pmax" ]; then
-# NetBSD 1.3 and 1.3.1 on pmax shipped an `old' ld.so, which will not work.
+# NetBSD 1.3 and 1.3.1 on pmax shipped an 'old' ld.so, which will not work.
 		d_dlopen=$undef
 	elif [ -f /usr/libexec/ld.so ]; then
 		d_dlopen=$define
@@ -1588,6 +1832,145 @@ index f61d0db..6097954 100644
  
 EOPATCH
         }
+
+        if ($major == 11) {
+            if (extract_from_file('patchlevel.h',
+                                  qr/^#include "unpushed\.h"/)) {
+                # I had thought it easier to detect when building one of the 52
+                # commits with the original method of incorporating the git
+                # revision and drop parallel make flags. Commits shown by
+                # git log 46807d8e809cc127^..dcff826f70bf3f64^ ^d4fb0a1f15d1a1c4
+                # However, it's not actually possible to make miniperl for that
+                # configuration as-is, because the file .patchnum is only made
+                # as a side effect of target 'all'
+                # I also don't think that it's "safe" to simply run
+                # make_patchnum.sh before the build. We need the proper
+                # dependency rules in the Makefile to *stop* it being run again
+                # at the wrong time.
+                # This range is important because contains the commit that
+                # merges Schwern's y2038 work.
+                apply_patch(<<'EOPATCH');
+diff --git a/Makefile.SH b/Makefile.SH
+index 9ad8b6f..106e721 100644
+--- a/Makefile.SH
++++ b/Makefile.SH
+@@ -540,9 +544,14 @@ sperl.i: perl.c $(h)
+ 
+ .PHONY: all translators utilities make_patchnum
+ 
+-make_patchnum:
++make_patchnum: lib/Config_git.pl
++
++lib/Config_git.pl: make_patchnum.sh
+ 	sh $(shellflags) make_patchnum.sh
+ 
++# .patchnum, unpushed.h and lib/Config_git.pl are built by make_patchnum.sh
++unpushed.h .patchnum: lib/Config_git.pl
++
+ # make sure that we recompile perl.c if .patchnum changes
+ perl$(OBJ_EXT): .patchnum unpushed.h
+ 
+EOPATCH
+            } elsif (-f '.gitignore'
+                     && extract_from_file('.gitignore', qr/^\.patchnum$/)) {
+                # 8565263ab8a47cda to 46807d8e809cc127^ inclusive.
+                edit_file('Makefile.SH', sub {
+                              my $code = shift;
+                              $code =~ s/^make_patchnum:\n/make_patchnum: .patchnum
+
+.sha1: .patchnum
+
+.patchnum: make_patchnum.sh
+/m;
+                              return $code;
+                          });
+            } elsif (-f 'lib/.gitignore'
+                     && extract_from_file('lib/.gitignore',
+                                          qr!^/Config_git.pl!)
+                     && !extract_from_file('Makefile.SH',
+                                        qr/^uudmap\.h.*:bitcount.h$/)) {
+                # Between commits and dcff826f70bf3f64 and 0f13ebd5d71f8177^
+                edit_file('Makefile.SH', sub {
+                              my $code = shift;
+                              # Bug introduced by 344af494c35a9f0f
+                              # fixed in 0f13ebd5d71f8177
+                              $code =~ s{^(pod/perlapi\.pod) (pod/perlintern\.pod): }
+                                        {$1: $2\n\n$2: }m;
+                              # Bug introduced by efa50c51e3301a2c
+                              # fixed in 0f13ebd5d71f8177
+                              $code =~ s{^(uudmap\.h) (bitcount\.h): }
+                                        {$1: $2\n\n$2: }m;
+
+                              # The rats nest of getting git_version.h correct
+
+                              if ($code =~ s{git_version\.h: stock_git_version\.h
+\tcp stock_git_version\.h git_version\.h}
+                                            {}m) {
+                                  # before 486cd780047ff224
+
+                                  # We probably can't build between
+                                  # 953f6acfa20ec275^ and 8565263ab8a47cda
+                                  # inclusive, but all commits in that range
+                                  # relate to getting make_patchnum.sh working,
+                                  # so it is extremely unlikely to be an
+                                  # interesting bisect target. They will skip.
+
+                                  # No, don't spawn a submake if
+                                  # make_patchnum.sh or make_patchnum.pl fails
+                                  $code =~ s{\|\| \$\(MAKE\) miniperl.*}
+                                            {}m;
+                                  $code =~ s{^\t(sh.*make_patchnum\.sh.*)}
+                                            {\t-$1}m;
+
+                                  # Use an external perl to run make_patchnum.pl
+                                  # because miniperl still depends on
+                                  # git_version.h
+                                  $code =~ s{^\t.*make_patchnum\.pl}
+                                            {\t-$^X make_patchnum.pl}m;
+
+
+                                  # "Truth in advertising" - running
+                                  # make_patchnum generates 2 files.
+                                  $code =~ s{^make_patchnum:.*}{
+make_patchnum: lib/Config_git.pl
+
+git_version.h: lib/Config_git.pl
+
+perlmini\$(OBJ_EXT): git_version.h
+
+lib/Config_git.pl:}m;
+                              }
+                              # Right, now we've corrected Makefile.SH to
+                              # correctly describe how lib/Config_git.pl and
+                              # git_version.h are made, we need to fix the rest
+
+                              # This emulates commit 2b63e250843b907e
+                              # This might duplicate the rule stating that
+                              # git_version.h depends on lib/Config_git.pl
+                              # This is harmless.
+                              $code =~ s{^(?:lib/Config_git\.pl )?git_version\.h: (.* make_patchnum\.pl.*)}
+                                        {git_version.h: lib/Config_git.pl
+
+lib/Config_git.pl: $1}m;
+
+                              # This emulates commits 0f13ebd5d71f8177 and
+                              # and a04d4598adc57886. It ensures that
+                              # lib/Config_git.pl is built before configpm,
+                              # and that configpm is run exactly once.
+                              $code =~ s{^(\$\(.*?\) )?(\$\(CONFIGPOD\))(: .*? configpm Porting/Glossary)( lib/Config_git\.pl)?}{
+                                  # If present, other files depend on $(CONFIGPOD)
+                                  ($1 ? "$1: $2\n\n" : '')
+                                      # Then the rule we found
+                                      . $2 . $3
+                                          # Add dependency if not there
+                                          . ($4 ? $4 : ' lib/Config_git.pl')
+                              }me;
+
+                              return $code;
+                          });
+            }
+        }
+
         if ($major < 14) {
             # Commits dc0655f797469c47 and d11a62fe01f2ecb2
             edit_file('Makefile.SH', sub {
@@ -1624,6 +2007,21 @@ $2!;
                                    qr/^opcode\.h opnames\.h pp_proto\.h pp\.sym: opcode\.pl$/)) {
             revert_commit('9fec149bb652b6e9');
         }
+    }
+
+    if ($^O eq 'aix' && $major >= 11 && $major <= 15
+        && extract_from_file('makedef.pl', qr/^use Config/)) {
+        edit_file('Makefile.SH', sub {
+                      # The AIX part of commit e6807d8ab22b761c
+                      # It's safe to substitute lib/Config.pm for config.sh
+                      # as lib/Config.pm depends on config.sh
+                      # If the tree is post e6807d8ab22b761c, the substitution
+                      # won't match, which is harmless.
+                      my $code = shift;
+                      $code =~ s{^(perl\.exp:.* )config\.sh(\b.*)}
+                                {$1 . '$(CONFIGPM)' . $2}me;
+                      return $code;
+                  });
     }
 
     # There was a bug in makedepend.SH which was fixed in version 96a8704c.
@@ -1901,9 +2299,13 @@ EOPATCH
         apply_commit('e1c148c28bf3335b', 'av.c');
     }
 
-    if ($major == 4 && !extract_from_file('perl.c', qr/delimcpy.*,$/)) {
-        # bug introduced in 2a92aaa05aa1acbf, fixed in 8490252049bf42d3
-        apply_patch(<<'EOPATCH');
+    if ($major == 4) {
+        my $rest = extract_from_file('perl.c', qr/delimcpy(.*)/);
+        if (defined $rest and $rest !~ /,$/) {
+            # delimcpy added in fc36a67e8855d031, perl.c refactored to use it.
+            # bug introduced in 2a92aaa05aa1acbf, fixed in 8490252049bf42d3
+            # code then moved to util.c in commit 491527d0220de34e
+            apply_patch(<<'EOPATCH');
 diff --git a/perl.c b/perl.c
 index 4eb69e3..54bbb00 100644
 --- a/perl.c
@@ -1918,6 +2320,7 @@ index 4eb69e3..54bbb00 100644
  			 &len);
  #endif	/* ! (atarist || DOSISH) */
 EOPATCH
+        }
     }
 
     if ($major == 4 && $^O eq 'linux') {
@@ -2017,6 +2420,28 @@ EOPATCH
                       $code =~ s/^    struct netent \*getnetbyaddr\([^)]+\);$//m;
                       return $code;
                   });
+    }
+
+    if ($major < 5 && $^O eq 'aix'
+        && !extract_from_file('pp_sys.c',
+                              qr/defined\(HOST_NOT_FOUND\) && !defined\(h_errno\)/)) {
+        # part of commit dc45a647708b6c54
+        # Andy Dougherty's configuration patches (Config_63-01 up to 04).
+        apply_patch(<<'EOPATCH')
+diff --git a/pp_sys.c b/pp_sys.c
+index c2fcb6f..efa39fb 100644
+--- a/pp_sys.c
++++ b/pp_sys.c
+@@ -54,7 +54,7 @@ extern "C" int syscall(unsigned long,...);
+ #endif
+ #endif
+ 
+-#ifdef HOST_NOT_FOUND
++#if defined(HOST_NOT_FOUND) && !defined(h_errno)
+ extern int h_errno;
+ #endif
+ 
+EOPATCH
     }
 
     if ($major < 6 && $^O eq 'netbsd'
@@ -2130,6 +2555,16 @@ sub patch_ext {
         # to run, don't override this with "../../lib" since that may not have
         # been populated yet in a parallel build.
         apply_commit('6695a346c41138df');
+    }
+
+    if (-f 'ext/Hash/Util/Makefile.PL'
+        && extract_from_file('ext/Hash/Util/Makefile.PL',
+                             qr/\bDIR\b.*'FieldHash'/)) {
+        # ext/Hash/Util/Makefile.PL should not recurse to FieldHash's Makefile.PL
+        # *nix, VMS and Win32 all know how to (and have to) call the latter directly.
+        # As is, targets in ext/Hash/Util/FieldHash get called twice, which may result
+        # in race conditions, and certainly messes up make clean; make distclean;
+        apply_commit('550428fe486b1888');
     }
 
     if ($major < 8 && $^O eq 'darwin' && !-f 'ext/DynaLoader/dl_dyld.xs') {

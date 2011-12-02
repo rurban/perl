@@ -19,35 +19,21 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
 	 SVf_IOK SVf_NOK SVf_ROK SVf_POK SVpad_OUR SVf_FAKE SVs_RMG SVs_SMG
          CVf_METHOD CVf_LVALUE
 	 PMf_KEEP PMf_GLOBAL PMf_CONTINUE PMf_EVAL PMf_ONCE
-	 PMf_MULTILINE PMf_SINGLELINE PMf_FOLD PMf_EXTENDED),
-	 ($] < 5.008004 ? () : 'OPpSORT_INPLACE'),
-	 ($] < 5.008006 ? () : qw(OPpSORT_DESCEND OPpITER_REVERSED)),
-	 ($] < 5.008009 ? () : qw(OPpCONST_NOVER OPpPAD_STATE)),
-	 ($] < 5.009 ? 'PMf_SKIPWHITE' : qw(RXf_SKIPWHITE)),
-	 ($] < 5.011 ? 'CVf_LOCKED' : 'OPpREVERSE_INPLACE'),
-	 ($] < 5.013 ? () : 'PMf_NONDESTRUCT'),
-	 ($] < 5.015003 &&
-	     # This empirical feature test is required during the
-	     # transitional phase where blead still identifies itself
-	     # as 5.15.2 but has had $[ removed.  After blead has its
-	     # version number bumped to 5.15.3, this can be reduced to
-	     # just test $] < 5.015003.
-	     ($] < 5.015002 || do { require B; exists(&B::OPpCONST_ARYBASE) })
-	     ? qw(OPpCONST_ARYBASE) : ()),
-	 ($] < 5.015005 &&
-	     ($] < 5.015004 || do { require B; exists(&B::OPpEVAL_BYTES) })
-	     ? qw(OPpEVAL_BYTES) : ());
-$VERSION = "1.09";
+	 PMf_MULTILINE PMf_SINGLELINE PMf_FOLD PMf_EXTENDED);
+$VERSION = "1.10";
 use strict;
 use vars qw/$AUTOLOAD/;
 use warnings ();
 
 BEGIN {
+    # List version-specific constants here.
     # Easiest way to keep this code portable between version looks to
     # be to fake up a dummy constant that will never actually be true.
     foreach (qw(OPpSORT_INPLACE OPpSORT_DESCEND OPpITER_REVERSED OPpCONST_NOVER
-		OPpPAD_STATE RXf_SKIPWHITE CVf_LOCKED OPpREVERSE_INPLACE
+		OPpPAD_STATE PMf_SKIPWHITE RXf_SKIPWHITE
+		CVf_LOCKED OPpREVERSE_INPLACE OPpSUBSTR_REPL_FIRST
 		PMf_NONDESTRUCT OPpCONST_ARYBASE OPpEVAL_BYTES)) {
+	eval { import B $_ };
 	no strict 'refs';
 	*{$_} = sub () {0} unless *{$_}{CODE};
     }
@@ -58,10 +44,10 @@ BEGIN {
 # - fixed reference constants (\"str")
 # - handle empty programs gracefully
 # - handle infinite loops (for (;;) {}, while (1) {})
-# - differentiate between `for my $x ...' and `my $x; for $x ...'
+# - differentiate between 'for my $x ...' and 'my $x; for $x ...'
 # - various minor cleanups
 # - moved globals into an object
-# - added `-u', like B::C
+# - added '-u', like B::C
 # - package declarations using cop_stash
 # - subs, formats and code sorted by cop_seq
 # Changes between 0.51 and 0.52:
@@ -69,10 +55,10 @@ BEGIN {
 # - added documentation
 # Changes between 0.52 and 0.53:
 # - many changes adding precedence contexts and associativity
-# - added `-p' and `-s' output style options
+# - added '-p' and '-s' output style options
 # - various other minor fixes
 # Changes between 0.53 and 0.54:
-# - added support for new `for (1..100)' optimization,
+# - added support for new 'for (1..100)' optimization,
 #   thanks to Gisle Aas
 # Changes between 0.54 and 0.55:
 # - added support for new qr// construct
@@ -81,16 +67,16 @@ BEGIN {
 # - tested on base/*.t, cmd/*.t, comp/*.t, io/*.t
 # - fixed $# on non-lexicals broken in last big rewrite
 # - added temporary fix for change in opcode of OP_STRINGIFY
-# - fixed problem in 0.54's for() patch in `for (@ary)'
+# - fixed problem in 0.54's for() patch in 'for (@ary)'
 # - fixed precedence in conditional of ?:
-# - tweaked list paren elimination in `my($x) = @_'
+# - tweaked list paren elimination in 'my($x) = @_'
 # - made continue-block detection trickier wrt. null ops
 # - fixed various prototype problems in pp_entersub
 # - added support for sub prototypes that never get GVs
 # - added unquoting for special filehandle first arg in truncate
-# - print doubled rv2gv (a bug) as `*{*GV}' instead of illegal `**GV'
+# - print doubled rv2gv (a bug) as '*{*GV}' instead of illegal '**GV'
 # - added semicolons at the ends of blocks
-# - added -l `#line' declaration option -- fixes cmd/subval.t 27,28
+# - added -l '#line' declaration option -- fixes cmd/subval.t 27,28
 # Changes between 0.56 and 0.561:
 # - fixed multiply-declared my var in pp_truncate (thanks to Sarathy)
 # - used new B.pm symbolic constants (done by Nick Ing-Simmons)
@@ -103,7 +89,7 @@ BEGIN {
 # Changes after 0.57:
 # - added parens in \&foo (patch by Albert Dvornik)
 # Changes between 0.57 and 0.58:
-# - fixed `0' statements that weren't being printed
+# - fixed '0' statements that weren't being printed
 # - added methods for use from other programs
 #   (based on patches from James Duncan and Hugo van der Sanden)
 # - added -si and -sT to control indenting (also based on a patch from Hugo)
@@ -115,7 +101,7 @@ BEGIN {
 # Changes between 0.58 and 0.59
 # - added support for Chip's OP_METHOD_NAMED
 # - added support for Ilya's OPpTARGET_MY optimization
-# - elided arrows before `()' subscripts when possible
+# - elided arrows before '()' subscripts when possible
 # Changes between 0.59 and 0.60
 # - support for method attributes was added
 # - some warnings fixed
@@ -165,7 +151,7 @@ BEGIN {
 # - configurable syntax highlighting: ANSI color, HTML, TeX, etc.
 # - more style options: brace style, hex vs. octal, quotes, ...
 # - print big ints as hex/octal instead of decimal (heuristic?)
-# - handle `my $x if 0'?
+# - handle 'my $x if 0'?
 # - version using op_next instead of op_first/sibling?
 # - avoid string copies (pass arrays, one big join?)
 # - here-docs?
@@ -263,7 +249,7 @@ BEGIN {
 # parens: -p
 # linenums: -l
 # unquote: -q
-# cuddle: ` ' or `\n', depending on -sC
+# cuddle: ' ' or '\n', depending on -sC
 # indent_size: -si
 # use_tabs: -sT
 # ex_const: -sv
@@ -277,7 +263,7 @@ BEGIN {
 # they're inside an expression or at statement level, etc.  (see
 # chart below). When ops with children call deparse on them, they pass
 # along their precedence. Fractional values are used to implement
-# associativity (`($x + $y) + $z' => `$x + $y + $y') and related
+# associativity ('($x + $y) + $z' => '$x + $y + $y') and related
 # parentheses hacks. The major disadvantage of this scheme is that
 # it doesn't know about right sides and left sides, so say if you
 # assign a listop to a variable, it can't tell it's allowed to leave
@@ -317,7 +303,7 @@ BEGIN {
 # \cS - steal parens (see maybe_parens_unop)
 # \n - newline and indent
 # \t - increase indent
-# \b - decrease indent (`outdent')
+# \b - decrease indent ('outdent')
 # \f - flush left (no indent)
 # \cK - kill following semicolon, if any
 
@@ -964,7 +950,7 @@ sub is_state {
     return $name eq "nextstate" || $name eq "dbstate" || $name eq "setstate";
 }
 
-sub is_miniwhile { # check for one-line loop (`foo() while $y--')
+sub is_miniwhile { # check for one-line loop ('foo() while $y--')
     my $op = shift;
     return (!null($op) and null($op->sibling)
 	    and $op->name eq "null" and class($op) eq "UNOP"
@@ -1024,7 +1010,7 @@ sub maybe_parens {
     }
 }
 
-# same as above, but get around the `if it looks like a function' rule
+# same as above, but get around the 'if it looks like a function' rule
 sub maybe_parens_unop {
     my $self = shift;
     my($name, $kid, $cx) = @_;
@@ -1045,7 +1031,7 @@ sub maybe_parens_unop {
 	    return $name . substr($kid, 1);
 	} elsif (substr($kid, 0, 1) eq "(") {
 	    # avoid looks-like-a-function trap with extra parens
-	    # (`+' can lead to ambiguities)
+	    # ('+' can lead to ambiguities)
 	    return "$name(" . $kid  . ")";
 	} else {
 	    return "$name $kid";
@@ -1561,6 +1547,7 @@ my %feature_keywords = (
     default => 'switch',
     break   => 'switch',
     evalbytes=>'evalbytes',
+    __SUB__ => '__SUB__',
 );
 
 sub keyword {
@@ -2024,7 +2011,7 @@ sub ftst {
     my $self = shift;
     my($op, $cx, $name) = @_;
     if (class($op) eq "UNOP") {
-	# Genuine `-X' filetests are exempt from the LLAFR, but not
+	# Genuine '-X' filetests are exempt from the LLAFR, but not
 	# l?stat(); for the sake of clarity, give'em all parens
 	return $self->maybe_parens_unop($name, $op->first, $cx);
     } elsif (class($op) =~ /^(SV|PAD)OP$/) {
@@ -2074,7 +2061,7 @@ sub assoc_class {
     my $op = shift;
     my $name = $op->name;
     if ($name eq "concat" and $op->first->name eq "concat") {
-	# avoid spurious `=' -- see comment in pp_concat
+	# avoid spurious '=' -- see comment in pp_concat
 	return "concat";
     }
     if ($name eq "null" and class($op) eq "UNOP"
@@ -2091,7 +2078,7 @@ sub assoc_class {
     return $name . ($op->flags & OPf_STACKED ? "=" : "");
 }
 
-# Left associative operators, like `+', for which
+# Left associative operators, like '+', for which
 # $a + $b + $c is equivalent to ($a + $b) + $c
 
 BEGIN {
@@ -2122,7 +2109,7 @@ sub deparse_binop_left {
     }
 }
 
-# Right associative operators, like `=', for which
+# Right associative operators, like '=', for which
 # $a = $b = $c is equivalent to $a = ($b = $c)
 
 BEGIN {
@@ -2229,9 +2216,9 @@ sub pp_smartmatch {
     }
 }
 
-# `.' is special because concats-of-concats are optimized to save copying
+# '.' is special because concats-of-concats are optimized to save copying
 # by making all but the first concat stacked. The effect is as if the
-# programmer had written `($a . $b) .= $c', except legal.
+# programmer had written '($a . $b) .= $c', except legal.
 sub pp_concat { maybe_targmy(@_, \&real_concat) }
 sub real_concat {
     my $self = shift;
@@ -2249,7 +2236,7 @@ sub real_concat {
     return $self->maybe_parens("$left .$eq $right", $cx, $prec);
 }
 
-# `x' is weird when the left arg is a list
+# 'x' is weird when the left arg is a list
 sub pp_repeat {
     my $self = shift;
     my($op, $cx) = @_;
@@ -2347,10 +2334,10 @@ sub pp_dorassign { logassignop(@_, "//=") }
 
 sub listop {
     my $self = shift;
-    my($op, $cx, $name) = @_;
+    my($op, $cx, $name, $kid) = @_;
     my(@exprs);
     my $parens = ($cx >= 5) || $self->{'parens'};
-    my $kid = $op->first->sibling;
+    $kid ||= $op->first->sibling;
     return $self->keyword($name) if null $kid;
     my $first;
     $name = "socketpair" if $name eq "sockpair";
@@ -2390,7 +2377,16 @@ sub listop {
 
 sub pp_bless { listop(@_, "bless") }
 sub pp_atan2 { maybe_targmy(@_, \&listop, "atan2") }
-sub pp_substr { maybe_local(@_, listop(@_, "substr")) }
+sub pp_substr {
+    my ($self,$op,$cx) = @_;
+    if ($op->private & OPpSUBSTR_REPL_FIRST) {
+	return
+	   listop($self, $op, 7, "substr", $op->first->sibling->sibling)
+	 . " = "
+	 . $self->deparse($op->first->sibling, 7);
+    }
+    maybe_local(@_, listop(@_, "substr"))
+}
 sub pp_vec { maybe_local(@_, listop(@_, "vec")) }
 sub pp_index { maybe_targmy(@_, \&listop, "index") }
 sub pp_rindex { maybe_targmy(@_, \&listop, "rindex") }
@@ -2517,7 +2513,7 @@ sub indirop {
     my $self = shift;
     my($op, $cx, $name) = @_;
     my($expr, @exprs);
-    my $kid = $op->first->sibling;
+    my $firstkid = my $kid = $op->first->sibling;
     my $indir = "";
     if ($op->flags & OPf_STACKED) {
 	$indir = $kid;
@@ -2541,7 +2537,7 @@ sub indirop {
 	$indir = '{$b cmp $a} ';
     }
     for (; !null($kid); $kid = $kid->sibling) {
-	$expr = $self->deparse($kid, 6);
+	$expr = $self->deparse($kid, !$indir && $kid == $firstkid && $name eq "sort" && $firstkid->name eq "entersub" ? 16 : 6);
 	push @exprs, $expr;
     }
     my $name2;
@@ -2554,7 +2550,7 @@ sub indirop {
     }
 
     my $args = $indir . join(", ", @exprs);
-    if ($indir ne "" and $name eq "sort") {
+    if ($indir ne "" && $name eq "sort") {
 	# We don't want to say "sort(f 1, 2, 3)", since perl -w will
 	# give bareword warnings in that case. Therefore if context
 	# requires, we'll put parens around the outside "(sort f 1, 2,
@@ -2566,6 +2562,13 @@ sub indirop {
 	} else {
 	    return "$name2 $args";
 	}
+    } elsif (
+	!$indir && $name eq "sort"
+      && $op->first->sibling->name eq 'entersub'
+    ) {
+	# We cannot say sort foo(bar), as foo will be interpreted as a
+	# comparison routine.  We have to say sort(...) in that case.
+	return "$name2($args)";
     } else {
 	return $self->maybe_parens_func($name2, $args, $cx, 5);
     }
@@ -3260,7 +3263,7 @@ sub _method {
 	# doesn't get flattened by the append_elem that adds the method,
 	# making a (object, arg1, arg2, ...) list where the object
 	# usually is. This can be distinguished from
-	# `($obj, $arg1, $arg2)->meth()' (which is legal if $arg2 is an
+	# '($obj, $arg1, $arg2)->meth()' (which is legal if $arg2 is an
 	# object) because in the later the list is in scalar context
 	# as the left side of -> always is, while in the former
 	# the list is in list context as method arguments always are.
@@ -3393,7 +3396,7 @@ sub check_proto {
 	    }
        }
     }
-    return "&" if $proto and !$doneok; # too few args and no `;'
+    return "&" if $proto and !$doneok; # too few args and no ';'
     return "&" if @args;               # too many args
     return ("", join ", ", @reals);
 }
@@ -3815,6 +3818,18 @@ sub const {
 	    }
 	    return "{" . join(", ", @elts) . "}";
 	} elsif (class($ref) eq "CV") {
+	    BEGIN {
+# Commented out until after 5.15.6
+#		if ($] > 5.0150051) {
+		    require overloading;
+		    unimport overloading;
+#		}
+	    }
+	    # Remove the 1|| after 5.15.6
+	    if ((1||$] > 5.0150051) && $self->{curcv} &&
+		 $self->{curcv}->object_2svref == $ref->object_2svref) {
+		return $self->keyword("__SUB__");
+	    }
 	    return "sub " . $self->deparse_sub($ref);
 	}
 	if ($ref->FLAGS & SVs_SMG) {
@@ -3868,7 +3883,7 @@ sub pp_const {
     if ($op->private & OPpCONST_ARYBASE) {
         return '$[';
     }
-#    if ($op->private & OPpCONST_BARE) { # trouble with `=>' autoquoting
+#    if ($op->private & OPpCONST_BARE) { # trouble with '=>' autoquoting
 #	return $self->const_sv($op)->PV;
 #    }
     my $sv = $self->const_sv($op);
@@ -3945,7 +3960,7 @@ sub double_delim {
 	if (($succeed, $to) = balanced_delim($to) and $succeed) {
 	    return "$from$to";
 	} else {
-	    for $delim ('/', '"', '#') { # note no `'' -- s''' is special
+	    for $delim ('/', '"', '#') { # note no "'" -- s''' is special
 		return "$from$delim$to$delim" if index($to, $delim) == -1;
 	    }
 	    $to =~ s[/][\\/]g;
@@ -4367,6 +4382,8 @@ sub matchop {
 sub pp_match { matchop(@_, "m", "/") }
 sub pp_pushre { matchop(@_, "m", "/") }
 sub pp_qr { matchop(@_, "qr", "") }
+
+sub pp_runcv { unop(@_, "__SUB__"); }
 
 sub pp_split {
     my $self = shift;

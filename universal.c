@@ -154,7 +154,7 @@ Perl_sv_derived_from_pvn(pTHX_ SV *sv, const char *const name, const STRLEN len,
 
     SvGETMAGIC(sv);
 
-    if (SvROK(sv)) { /* hugdo: */
+    if (SvROK(sv)) {
 	const char *type;
         sv = SvRV(sv);
         type = sv_reftype(sv,0);
@@ -449,10 +449,10 @@ XS(XS_UNIVERSAL_VERSION)
 	     }
 	}
 
-	if ( !sv_derived_from(sv, "version"))
+	if ( !sv_derived_from(sv, "version") || !SvROK(sv))
 	    upg_version(sv, FALSE);
 
-	if ( !sv_derived_from(req, "version")) {
+	if ( !sv_derived_from(req, "version") || !SvROK(req)) {
 	    /* req may very well be R/O, so create a new object */
 	    req = sv_2mortal( new_version(req) );
 	}
@@ -615,7 +615,7 @@ XS(XS_version_vcmp)
 	       SV * robj = ST(1);
 	       const IV	 swap = (IV)SvIV(ST(2));
 
-	       if ( ! sv_derived_from(robj, "version") )
+	       if ( ! sv_derived_from(robj, "version") || !SvROK(robj) )
 	       {
 		    robj = new_version(SvOK(robj) ? robj : newSVpvs_flags("0", SVs_TEMP));
 		    sv_2mortal(robj);

@@ -65,6 +65,7 @@ use File::Glob qw(:case);
     'p5p'	=> 'perl5-porters <perl5-porters@perl.org>',
     'perlfaq'	=> 'perlfaq-workers <perlfaq-workers@perl.org>',
     'petdance'	=> 'Andy Lester <andy@petdance.com>',
+    'pevans'    => 'Paul Evans <leonerd@leonerd.org.uk>',
     'pjf'	=> 'Paul Fenwick <pjf@cpan.org>',
     'pmqs'	=> 'Paul Marquess <pmqs@cpan.org>',
     'pvhp'	=> 'Peter Prymmer <pvhp@best.com>',
@@ -209,7 +210,7 @@ use File::Glob qw(:case);
     'Archive::Tar' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.80.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Archive-Tar-1.82.tar.gz',
 	'FILES'		=> q[cpan/Archive-Tar],
 	'EXCLUDED'	=> [ qw(Makefile.PL) ],
 	'UPSTREAM'	=> 'cpan',
@@ -262,7 +263,7 @@ use File::Glob qw(:case);
     'AutoLoader' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/AutoLoader-5.71.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/AutoLoader-5.72.tar.gz',
 	'FILES'		=> q[cpan/AutoLoader],
 	'EXCLUDED'	=> [ qw( t/00pod.t ) ],
 	'UPSTREAM'	=> 'cpan',
@@ -296,7 +297,7 @@ use File::Glob qw(:case);
     'B::Debug' =>
 	{
 	'MAINTAINER'	=> 'rurban',
-	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.16.tar.gz',
+	'DISTRIBUTION'	=> 'RURBAN/B-Debug-1.17.tar.gz',
 	'FILES'		=> q[cpan/B-Debug],
 	'EXCLUDED'	=> [ qw( t/pod.t ) ],
 	'UPSTREAM'	=> 'cpan',
@@ -377,7 +378,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Bzip2' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.040.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.043.tar.gz',
 	'FILES'		=> q[cpan/Compress-Raw-Bzip2],
 	'EXCLUDED'	=> [ qr{^t/Test/},
 			     qw( bzip2-src/bzip2-cpp.patch
@@ -389,7 +390,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Zlib' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.040.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.043.tar.gz',
 
 	'FILES'		=> q[cpan/Compress-Raw-Zlib],
 	'EXCLUDED'	=> [ qr{^t/Test/},
@@ -1034,7 +1035,7 @@ use File::Glob qw(:case);
     'IO-Compress' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.040.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.043.tar.gz',
 	'FILES'		=> q[cpan/IO-Compress],
 	'EXCLUDED'	=> [ qr{t/Test/} ],
 	'UPSTREAM'	=> 'cpan',
@@ -1105,7 +1106,7 @@ use File::Glob qw(:case);
     'Locale-Codes' =>
 	{
 	'MAINTAINER'	=> 'sbeck',
-	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.18.tar.gz',
+	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.20.tar.gz',
 	'FILES'		=> q[cpan/Locale-Codes],
 	'EXCLUDED'	=> [ qw{t/pod_coverage.t t/pod.t}, qr{^t/runtests}, qr{^t/runtests\.bat},
 			     qr{^internal/}, qr{^examples/} ],
@@ -1259,7 +1260,7 @@ use File::Glob qw(:case);
     'Module::CoreList' =>
 	{
 	'MAINTAINER'	=> 'bingos',
-	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.57.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-CoreList-2.58.tar.gz',
 	'FILES'		=> q[dist/Module-CoreList],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1283,7 +1284,7 @@ use File::Glob qw(:case);
     'Module::Loaded' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.06.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.08.tar.gz',
 	'FILES'		=> q[cpan/Module-Loaded],
 	'UPSTREAM'	=> 'cpan',
 	},
@@ -1534,7 +1535,7 @@ use File::Glob qw(:case);
     'Pod::LaTeX' =>
 	{
 	'MAINTAINER'	=> 'tjenness',
-	'DISTRIBUTION'	=> 'TJENNESS/Pod-LaTeX-0.59.tar.gz',
+	'DISTRIBUTION'	=> 'TJENNESS/Pod-LaTeX-0.60.tar.gz',
 	'FILES'		=> q[cpan/Pod-LaTeX],
 	'EXCLUDED'	=> [ qw( t/require.t ) ],
 	'UPSTREAM'	=> undef,
@@ -1663,9 +1664,10 @@ use File::Glob qw(:case);
 
     'Socket' =>
 	{
-	'MAINTAINER'	=> 'p5p',
-	'FILES'		=> q[ext/Socket],
-	'UPSTREAM'	=> 'blead',
+	'MAINTAINER'	=> 'pevans',
+	'DISTRIBUTION'  => 'PEVANS/Socket-1.95.tar.gz',
+	'FILES'		=> q[cpan/Socket],
+	'UPSTREAM'	=> 'cpan',
 	},
 
     'Storable' =>
@@ -1707,7 +1709,7 @@ use File::Glob qw(:case);
     'Term::ANSIColor' =>
 	{
 	'MAINTAINER'	=> 'rra',
-	'DISTRIBUTION'	=> 'RRA/ANSIColor-3.01.tar.gz',
+	'DISTRIBUTION'	=> 'RRA/Term-ANSIColor-3.01.tar.gz',
 	'FILES'		=> q[cpan/Term-ANSIColor],
 	'EXCLUDED'	=> [ qr{^tests/}, qw(t/pod-spelling.t t/pod.t) ],
 	'UPSTREAM'	=> 'cpan',
@@ -1970,7 +1972,7 @@ use File::Glob qw(:case);
     'Unicode::Collate' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.84.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.87.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Collate],
 	'EXCLUDED'	=> [ qr{N$},
                    qr{^data/},

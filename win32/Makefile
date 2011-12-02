@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.15.4
+#INST_VER	= \5.15.5
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -1074,14 +1074,14 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5155delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5156delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
 	$(PERLEXE) $(ICWD) ..\pod\perlmodlib.pl -q
 
 ..\pod\perltoc.pod: $(PERLEXE) Extensions Extensions_nonxs
-	$(PERLEXE) -f ..\pod\buildtoc --build-toc -q
+	$(PERLEXE) -f ..\pod\buildtoc -q
 
 # Note that the pod cleanup in this next section is parsed (and regenerated
 # by pod/buildtoc so please check that script before making changes here
@@ -1166,8 +1166,8 @@ distclean: realclean
 	-if exist $(LIBDIR)\Unicode\Collate rmdir /s /q $(LIBDIR)\Unicode\Collate
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
-	-cd $(PODDIR) && del /f *.html *.bat \
-	    perl5155delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	-cd $(PODDIR) && del /f *.html *.bat roffitall \
+	    perl5156delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \

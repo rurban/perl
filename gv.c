@@ -316,7 +316,9 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
     dVAR;
     const U32 old_type = SvTYPE(gv);
     const bool doproto = old_type > SVt_NULL;
-    char * const proto = (doproto && SvPOK(gv)) ? SvPVX(gv) : NULL;
+    char * const proto = (doproto && SvPOK(gv))
+	? (SvIsCOW(gv) && (sv_force_normal((SV *)gv), 0), SvPVX(gv))
+	: NULL;
     const STRLEN protolen = proto ? SvCUR(gv) : 0;
     const U32 proto_utf8  = proto ? SvUTF8(gv) : 0;
     SV *const has_constant = doproto && SvROK(gv) ? SvRV(gv) : NULL;
@@ -369,20 +371,12 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
 	CV *cv;
 	ENTER;
 	if (has_constant) {
-	    char *name0 = NULL;
-	    if (name[len])
-		/* newCONSTSUB doesn't take a len arg, so make sure we
-		 * give it a \0-terminated string */
-		name0 = savepvn(name,len);
-
 	    /* newCONSTSUB takes ownership of the reference from us.  */
-	    cv = newCONSTSUB_flags(stash, (name0 ? name0 : name), flags, has_constant);
+	    cv = newCONSTSUB_flags(stash, name, len, flags, has_constant);
 	    /* In case op.c:S_process_special_blocks stole it: */
 	    if (!GvCV(gv))
 		GvCV_set(gv, (CV *)SvREFCNT_inc_simple_NN(cv));
 	    assert(GvCV(gv) == cv); /* newCONSTSUB should have set this */
-	    if (name0)
-		Safefree(name0);
 	    /* If this reference was a copy of another, then the subroutine
 	       must have been "imported", by a Perl space assignment to a GV
 	       from a reference to CV.  */
@@ -1174,7 +1168,7 @@ Perl_gv_autoload_pvn(pTHX_ HV *stash, const char *name, STRLEN len, U32 flags)
          * via the SvPVX field in the CV, and the stash in CvSTASH.
          *
          * Due to an unfortunate accident of history, the SvPVX field
-         * serves two purposes.  It is also used for the subroutine’s pro-
+         * serves two purposes.  It is also used for the subroutine's pro-
          * type.  Since SvPVX has been documented as returning the sub name
          * for a long time, but not as returning the prototype, we have
          * to preserve the SvPVX AUTOLOAD behaviour and put the prototype
@@ -1245,7 +1239,7 @@ Perl_gv_autoload_pvn(pTHX_ HV *stash, const char *name, STRLEN len, U32 flags)
        tainting if $FOO::AUTOLOAD was previously tainted, but is not now.  */
     sv_catpvn_flags(
 	varsv, name, len,
-	SV_GMAGIC|SV_SMAGIC|(is_utf8 ? SV_CATUTF8 : SV_CATBYTES)
+	SV_SMAGIC|(is_utf8 ? SV_CATUTF8 : SV_CATBYTES)
     );
     if (is_utf8)
         SvUTF8_on(varsv);
@@ -1273,7 +1267,7 @@ S_require_tie_mod(pTHX_ GV *gv, const char *varpv, SV* namesv, const char *methp
 
     PERL_ARGS_ASSERT_REQUIRE_TIE_MOD;
 
-    if (!stash || !(gv_fetchmethod(stash, methpv))) {
+    if (!stash || !(gv_fetchmethod_autoload(stash, methpv, FALSE))) {
 	SV *module = newSVsv(namesv);
 	char varname = *varpv; /* varpv might be clobbered by load_module,
 				  so save it. For the moment it's always

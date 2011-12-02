@@ -4,17 +4,14 @@ use strict;
 use Carp;
 use base qw(Unicode::Collate);
 
-our $VERSION = '0.84';
+our $VERSION = '0.87';
 
-use File::Spec;
-
-(my $ModPath = $INC{'Unicode/Collate/Locale.pm'}) =~ s/\.pm$//;
 my $PL_EXT  = '.pl';
 
 my %LocaleFile = map { ($_, $_) } qw(
-   af ar as az be bg ca cs cy da eo es et fa fi fil fo fr
+   af ar as az be bg bn ca cs cy da eo es et fa fi fil fo fr
    gu ha haw hi hr hu hy ig is ja kk kl kn ko kok ln lt lv
-   mk ml mr mt nb nn nso om or pa pl ro ru se si sk sl sq
+   mk ml mr mt nb nn nso om or pa pl ro ru sa se si sk sl sq
    sr sv ta te th tn to tr uk ur vi wae wo yo zh
 );
    $LocaleFile{'default'} = '';
@@ -57,11 +54,20 @@ sub _locale {
 	my $reg = @code && length $code[0] <  4 ? uc      shift @code : '';
 	my $var = @code                         ?         shift @code : '';
 
-	for my $loc (
-	    "${lan}_${scr}_${reg}_$var", "${lan}_${scr}_$var",
-	    "${lan}_${reg}_$var",        "${lan}__$var",
-	    "${lan}_${scr}_${reg}",      "${lan}_${scr}",
-	    "${lan}_${reg}",		   $lan) {
+	my @list;
+	push @list, (
+	    "${lan}_${scr}_${reg}_$var",
+	    "${lan}_${scr}__$var", # empty $scr should not be ${lan}__$var.
+	    "${lan}_${reg}_$var",  # empty $reg may be ${lan}__$var.
+	    "${lan}__$var",
+	) if $var ne '';
+	push @list, (
+	    "${lan}_${scr}_${reg}",
+	    "${lan}_${scr}",
+	    "${lan}_${reg}",
+	     ${lan},
+	);
+	for my $loc (@list) {
 	    $LocaleFile{$loc} and return $loc;
 	}
     }
@@ -72,12 +78,20 @@ sub getlocale {
     return shift->{accepted_locale};
 }
 
+sub locale_version {
+    return shift->{locale_version};
+}
+
 sub _fetchpl {
     my $accepted = shift;
     my $f = $LocaleFile{$accepted};
     return if !$f;
     $f .= $PL_EXT;
-    my $path = File::Spec->catfile($ModPath, $f);
+
+    # allow to search @INC
+#   use File::Spec;
+#   my $path = File::Spec->catfile('Unicode', 'Collate', 'Locale', $f);
+    my $path = "Unicode/Collate/Locale/$f";
     my $h = do $path;
     croak "Unicode/Collate/Locale/$f can't be found" if !$h;
     return $h;
@@ -115,6 +129,7 @@ as		2.0 = 1.8.1
 az		2.0 = 1.8.1 (type="standard")
 be		2.0
 bg		2.0
+bn		2.0.1 (type="standard")
 bs		2.0 (alias source="hr")
 ca		2.0 = 1.8.1 (alt="proposed" type="standard")
 cs		2.0 = 1.8.1 (type="standard")
@@ -123,7 +138,7 @@ da		2.0 = 1.8.1 (type="standard") [modify aA to pass CLDR tests]
 de__phonebook	2.0 (type="phonebook")
 eo		2.0 = 1.8.1
 es		2.0 (type="standard")
-es__traditional 2.0 = 1.8.1 (type="traditional")
+es__traditional	2.0 = 1.8.1 (type="traditional")
 et		2.0 = 1.8.1
 fa		2.0 = 1.8.1
 fi		2.0 = 1.8.1 (type="standard" alt="proposed")
@@ -162,6 +177,7 @@ pa		2.0 = 1.8.1
 pl		2.0 = 1.8.1
 ro		2.0 (type="standard")
 ru		2.0
+sa		1.8.1 (type="standard" alt="proposed") [currently in /seed]
 se		2.0 = 1.8.1 (type="standard")
 si		2.0 (type="standard")
 si__dictionary	2.0 (type="dictionary")
@@ -182,16 +198,14 @@ uk		2.0
 ur		2.0
 vi		2.0 = 1.8.1
 wae		2.0
-wo		1.8.1
+wo		1.8.1 [currently in /seed]
 yo		2.0 = 1.8.1
 zh		2.0 = 1.8.1 (type="standard")
 zh__big5han	2.0 = 1.8.1 (type="big5han")
 zh__gb2312han	2.0 = 1.8.1 (type="gb2312han")
-zh__pinyin	2.0 (type='pinyin' alt='short') [*]
-zh__stroke	2.0 = 1.9.1 (type='stroke' alt='short') [*]
+zh__pinyin	2.0 (type='pinyin' alt='short')
+zh__stroke	2.0 = 1.9.1 (type='stroke' alt='short')
 ----------------------------------------------------------------------------
- [*] tailored latin letters and unified ideographs only.
-     omitted the tailoring for some characters with tertiary diff.
 
 =head1 NAME
 
@@ -236,10 +250,10 @@ C<$locale_name> may be suffixed with a Unicode script code (four-letter),
 a Unicode region code, a Unicode language variant code. These codes are
 case-insensitive, and separated with C<'_'> or C<'-'>.
 E.g. C<en_US> for English in USA,
-C<az_Cyrl> for Azerbaijani in Cyrillic script,
+C<az_Cyrl> for Azerbaijani in the Cyrillic script,
 C<es_ES_traditional> for Spanish in Spain (Traditional).
 
-If C<$localename> is not defined,
+If C<$locale_name> is not available,
 fallback is selected in the following order:
 
     1. language with a variant code
@@ -250,7 +264,7 @@ fallback is selected in the following order:
 
 Tailoring tags provided by C<Unicode::Collate> are allowed as long as
 they are not used for C<locale> support.  Esp. the C<table> tag
-is always untailorable since it is reserved for DUCET.
+is always untailorable, since it is reserved for DUCET.
 
 E.g. a collator for French, which ignores diacritics and case difference
 (i.e. level 1), with reversed case ordering and no normalization.
@@ -293,6 +307,15 @@ If linguistic tailoring is not provided for a language code you passed
 (intensionally for some languages, or due to the incomplete implementation),
 this method returns a string C<'default'> meaning no special tailoring.
 
+=item C<$Collator-E<gt>locale_version>
+
+(Since Unicode::Collate::Locale 0.87)
+Returns the version number (perhaps C</\d\.\d\d/>) of the locale, as that
+of F<Locale/*.pl>.
+
+B<Note:> F<Locale/*.pl> that a collator uses should be identified by
+a combination of return values from C<getlocale> and C<locale_version>.
+
 =back
 
 =head2 A list of tailorable locales
@@ -305,6 +328,7 @@ this method returns a string C<'default'> meaning no special tailoring.
       az                Azerbaijani (Azeri)
       be                Belarusian
       bg                Bulgarian
+      bn                Bengali
       bs                Bosnian
       ca                Catalan
       cs                Czech
@@ -352,6 +376,7 @@ this method returns a string C<'default'> meaning no special tailoring.
       pl                Polish
       ro                Romanian
       ru                Russian
+      sa                Sanskrit
       se                Northern Sami
       si                Sinhala
       si__dictionary    Sinhala (U+0DA5 = U+0DA2,0DCA,0DA4)
@@ -377,8 +402,8 @@ this method returns a string C<'default'> meaning no special tailoring.
       zh                Chinese
       zh__big5han       Chinese (ideographs: big5 order)
       zh__gb2312han     Chinese (ideographs: GB-2312 order)
-      zh__pinyin        Chinese (ideographs: pinyin order)
-      zh__stroke        Chinese (ideographs: stroke order)
+      zh__pinyin        Chinese (ideographs: pinyin order) [3]
+      zh__stroke        Chinese (ideographs: stroke order) [3]
     --------------------------------------------------------------
 
 Locales according to the default UCA rules include
@@ -408,6 +433,9 @@ and then C<katakana_before_hiragana> has no effect.
 [2] ko: Plenty of ideographs are sorted by their reading. Such
 an ideograph is primary (level 1) equal to, and secondary (level 2)
 greater than, the corresponding hangul syllable.
+
+[3] zh__pinyin and zh__stroke: implemented alt='short', where
+a smaller number of ideographs are tailored.
 
 =head1 INSTALL
 

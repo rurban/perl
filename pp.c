@@ -147,8 +147,6 @@ static const char S_no_symref_sv[] =
 
    When noinit is true, the absence of a gv will cause a retval of undef.
    This is unrelated to the cv-to-gv assignment case.
-
-   Make sure to use SPAGAIN after calling this.
 */
 
 static SV *
@@ -253,7 +251,6 @@ PP(pp_rv2gv)
           ((PL_op->op_flags & OPf_SPECIAL) && !(PL_op->op_flags & OPf_MOD))
              || PL_op->op_type == OP_READLINE
          );
-    SPAGAIN;
     if (PL_op->op_private & OPpLVAL_INTRO)
 	save_gp(MUTABLE_GV(sv), !(PL_op->op_flags & OPf_SPECIAL));
     SETs(sv);
@@ -315,7 +312,6 @@ PP(pp_rv2sv)
     if (SvROK(sv)) {
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, to_sv_amg);
-	    SPAGAIN;
 	}
 
 	sv = SvRV(sv);
@@ -753,9 +749,11 @@ PP(pp_trans)
     }
     TARG = sv_newmortal();
     if(PL_op->op_type == OP_TRANSR) {
-	SV * const newsv = newSVsv(sv);
+	STRLEN len;
+	const char * const pv = SvPV(sv,len);
+	SV * const newsv = newSVpvn_flags(pv, len, SVs_TEMP|SvUTF8(sv));
 	do_trans(newsv);
-	mPUSHs(newsv);
+	PUSHs(newsv);
     }
     else PUSHi(do_trans(sv));
     RETURN;
@@ -799,7 +797,7 @@ S_do_chomp(pTHX_ SV *retval, SV *sv, bool chomping)
             /* SV is copy-on-write */
 	    sv_force_normal_flags(sv, 0);
         }
-        if (SvREADONLY(sv))
+        else
             Perl_croak_no_modify(aTHX);
     }
 
@@ -884,7 +882,7 @@ S_do_chomp(pTHX_ SV *retval, SV *sv, bool chomping)
 		    SvIVX(retval) += rs_charlen;
 		}
 	    }
-	    s = SvPV_force_nolen(sv);
+	    s = SvPV_force_nomg_nolen(sv);
 	    SvCUR_set(sv, len);
 	    *SvEND(sv) = '\0';
 	    SvNIOK_off(sv);
@@ -2970,7 +2968,7 @@ PP(pp_substr)
     SV *   len_sv;
     IV     len_iv = 0;
     int    len_is_uv = 1;
-    const I32 lvalue = PL_op->op_flags & OPf_MOD || LVRET;
+    I32 lvalue = PL_op->op_flags & OPf_MOD || LVRET;
     const bool rvalue = (GIMME_V != G_VOID);
     const char *tmps;
     SV *repl_sv = NULL;
@@ -2982,11 +2980,7 @@ PP(pp_substr)
 
     if (num_args > 2) {
 	if (num_args > 3) {
-	  if((repl_sv = POPs)) {
-	    repl = SvPV_const(repl_sv, repl_len);
-	    repl_is_utf8 = DO_UTF8(repl_sv) && repl_len;
-	  }
-	  else num_args--;
+	  if(!(repl_sv = POPs)) num_args--;
 	}
 	if ((len_sv = POPs)) {
 	    len_iv    = SvIV(len_sv);
@@ -2998,16 +2992,29 @@ PP(pp_substr)
     pos1_iv    = SvIV(pos_sv);
     pos1_is_uv = SvIOK_UV(pos_sv);
     sv = POPs;
+    if (PL_op->op_private & OPpSUBSTR_REPL_FIRST) {
+	assert(!repl_sv);
+	repl_sv = POPs;
+    }
     PUTBACK;
     if (repl_sv) {
+	repl = SvPV_const(repl_sv, repl_len);
+	repl_is_utf8 = DO_UTF8(repl_sv) && repl_len;
 	if (repl_is_utf8) {
 	    if (!DO_UTF8(sv))
 		sv_utf8_upgrade(sv);
 	}
 	else if (DO_UTF8(sv))
 	    repl_need_utf8_upgrade = TRUE;
+	lvalue = 0;
     }
-    tmps = SvPV_const(sv, curlen);
+    if (lvalue) {
+	tmps = NULL; /* unused */
+	SvGETMAGIC(sv);
+	if (SvOK(sv)) (void)SvPV_nomg_const(sv, curlen);
+	else curlen = 0;
+    }
+    else tmps = SvPV_const(sv, curlen);
     if (DO_UTF8(sv)) {
         utf8_curlen = sv_len_utf8(sv);
 	if (utf8_curlen == curlen)
@@ -3071,23 +3078,8 @@ PP(pp_substr)
 	STRLEN byte_pos = utf8_curlen
 	    ? sv_pos_u2b_flags(sv, pos, &byte_len, SV_CONST_RETURN) : pos;
 
-	if (lvalue && !repl) {
+	if (lvalue) {
 	    SV * ret;
-
-	    if (!SvGMAGICAL(sv)) {
-		if (SvROK(sv)) {
-		    SvPV_force_nolen(sv);
-		    Perl_ck_warner(aTHX_ packWARN(WARN_SUBSTR),
-				   "Attempt to use reference as lvalue in substr");
-		}
-		if (isGV_with_GP(sv))
-		    SvPV_force_nolen(sv);
-		else if (SvOK(sv))	/* is it defined ? */
-		    (void)SvPOK_only_UTF8(sv);
-		else
-		    sv_setpvs(sv, ""); /* avoid lexical reincarnation */
-	    }
-
 	    ret = sv_2mortal(newSV_type(SVt_PVLV));  /* Not TARG RT#67838 */
 	    sv_magic(ret, NULL, PERL_MAGIC_substr, NULL, 0);
 	    LvTYPE(ret) = 'x';
@@ -3122,6 +3114,10 @@ PP(pp_substr)
 		repl = SvPV_const(repl_sv_copy, repl_len);
 		repl_is_utf8 = DO_UTF8(repl_sv_copy) && repl_len;
 	    }
+	    if (SvROK(sv))
+		Perl_ck_warner(aTHX_ packWARN(WARN_SUBSTR),
+			    "Attempt to use reference as lvalue in substr"
+		);
 	    if (!SvOK(sv))
 		sv_setpvs(sv, "");
 	    sv_insert_flags(sv, byte_pos, byte_len, repl, repl_len, 0);
@@ -5688,7 +5684,7 @@ PP(pp_coreargs)
     /* Reset the stack pointer.  Without this, we end up returning our own
        arguments in list context, in addition to the values we are supposed
        to return.  nextstate usually does this on sub entry, but we need
-       to run the next op with the caller’s hints, so we cannot have a
+       to run the next op with the caller's hints, so we cannot have a
        nextstate. */
     SP = PL_stack_base + cxstack[cxstack_ix].blk_oldsp;
 
@@ -5791,6 +5787,25 @@ PP(pp_coreargs)
 
     RETURN;
 }
+
+PP(pp_runcv)
+{
+    dSP;
+    CV *cv;
+    if (PL_op->op_private & OPpOFFBYONE) {
+	PERL_SI * const oldsi = PL_curstackinfo;
+	I32 const oldcxix = oldsi->si_cxix;
+	if (oldcxix) oldsi->si_cxix--;
+	else PL_curstackinfo = oldsi->si_prev;
+	cv = find_runcv(NULL);
+	PL_curstackinfo = oldsi;
+	oldsi->si_cxix = oldcxix;
+    }
+    else cv = find_runcv(NULL);
+    XPUSHs(CvUNIQUE(cv) ? &PL_sv_undef : sv_2mortal(newRV((SV *)cv)));
+    RETURN;
+}
+
 
 /*
  * Local variables:

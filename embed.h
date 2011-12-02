@@ -326,7 +326,7 @@
 #define newBINOP(a,b,c,d)	Perl_newBINOP(aTHX_ a,b,c,d)
 #define newCONDOP(a,b,c,d)	Perl_newCONDOP(aTHX_ a,b,c,d)
 #define newCONSTSUB(a,b,c)	Perl_newCONSTSUB(aTHX_ a,b,c)
-#define newCONSTSUB_flags(a,b,c,d)	Perl_newCONSTSUB_flags(aTHX_ a,b,c,d)
+#define newCONSTSUB_flags(a,b,c,d,e)	Perl_newCONSTSUB_flags(aTHX_ a,b,c,d,e)
 #define newCVREF(a,b)		Perl_newCVREF(aTHX_ a,b)
 #define newFOROP(a,b,c,d,e)	Perl_newFOROP(aTHX_ a,b,c,d,e)
 #define newGIVENOP(a,b,c)	Perl_newGIVENOP(aTHX_ a,b,c)
@@ -1005,6 +1005,7 @@
 #define ck_grep(a)		Perl_ck_grep(aTHX_ a)
 #define ck_index(a)		Perl_ck_index(aTHX_ a)
 #define ck_join(a)		Perl_ck_join(aTHX_ a)
+#define ck_length(a)		Perl_ck_length(aTHX_ a)
 #define ck_lfun(a)		Perl_ck_lfun(aTHX_ a)
 #define ck_listiob(a)		Perl_ck_listiob(aTHX_ a)
 #define ck_match(a)		Perl_ck_match(aTHX_ a)
@@ -1136,6 +1137,7 @@
 #define my_stat_flags(a)	Perl_my_stat_flags(aTHX_ a)
 #define my_swabn		Perl_my_swabn
 #define my_unexec()		Perl_my_unexec(aTHX)
+#define newXS_len_flags(a,b,c,d,e,f,g)	Perl_newXS_len_flags(aTHX_ a,b,c,d,e,f,g)
 #define nextargv(a)		Perl_nextargv(aTHX_ a)
 #define oopsAV(a)		Perl_oopsAV(aTHX_ a)
 #define oopsHV(a)		Perl_oopsHV(aTHX_ a)
@@ -1393,6 +1395,9 @@
 #define too_few_arguments(a,b)	S_too_few_arguments(aTHX_ a,b)
 #define too_many_arguments(a,b)	S_too_many_arguments(aTHX_ a,b)
 #  endif
+#  if defined(PERL_IN_OP_C) || defined(PERL_IN_SV_C)
+#define report_redefined_cv(a,b,c)	Perl_report_redefined_cv(aTHX_ a,b,c)
+#  endif
 #  if defined(PERL_IN_PAD_C)
 #define pad_alloc_name(a,b,c,d)	S_pad_alloc_name(aTHX_ a,b,c,d)
 #define pad_check_dup(a,b,c)	S_pad_check_dup(aTHX_ a,b,c)
@@ -1428,7 +1433,7 @@
 #define destroy_matcher(a)	S_destroy_matcher(aTHX_ a)
 #define do_smartmatch(a,b,c)	S_do_smartmatch(aTHX_ a,b,c)
 #define docatch(a)		S_docatch(aTHX_ a)
-#define doeval(a,b,c,d)		S_doeval(aTHX_ a,b,c,d)
+#define doeval(a,b,c,d,e)	S_doeval(aTHX_ a,b,c,d,e)
 #define dofindlabel(a,b,c,d)	S_dofindlabel(aTHX_ a,b,c,d)
 #define doparseform(a)		S_doparseform(aTHX_ a)
 #define dopoptoeval(a)		S_dopoptoeval(aTHX_ a)
@@ -1506,11 +1511,10 @@
 #define sv_pos_u2b_cached(a,b,c,d,e,f,g)	S_sv_pos_u2b_cached(aTHX_ a,b,c,d,e,f,g)
 #define sv_pos_u2b_forwards	S_sv_pos_u2b_forwards
 #define sv_pos_u2b_midway	S_sv_pos_u2b_midway
-#define sv_unglob(a)		S_sv_unglob(aTHX_ a)
+#define sv_unglob(a,b)		S_sv_unglob(aTHX_ a,b)
 #define uiv_2buf		S_uiv_2buf
 #define utf8_mg_len_cache_update(a,b,c)	S_utf8_mg_len_cache_update(aTHX_ a,b,c)
 #define utf8_mg_pos_cache_update(a,b,c,d,e)	S_utf8_mg_pos_cache_update(aTHX_ a,b,c,d,e)
-#define varname(a,b,c,d,e,f)	S_varname(aTHX_ a,b,c,d,e,f)
 #define visit(a,b,c)		S_visit(aTHX_ a,b,c)
 #    if defined(PERL_OLD_COPY_ON_WRITE)
 #define sv_release_COW(a,b,c)	S_sv_release_COW(aTHX_ a,b,c)
@@ -1520,6 +1524,9 @@
 #define sv_dup_inc_multiple(a,b,c,d)	S_sv_dup_inc_multiple(aTHX_ a,b,c,d)
 #define unreferenced_to_tmp_stack(a)	S_unreferenced_to_tmp_stack(aTHX_ a)
 #    endif
+#  endif
+#  if defined(PERL_IN_SV_C) || defined (PERL_IN_OP_C)
+#define varname(a,b,c,d,e,f)	Perl_varname(aTHX_ a,b,c,d,e,f)
 #  endif
 #  if defined(PERL_IN_TOKE_C)
 #define ao(a)			S_ao(aTHX_ a)

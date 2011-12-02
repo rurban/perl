@@ -12,7 +12,7 @@ BEGIN {
 
 use warnings;
 
-plan( tests => 238 );
+plan( tests => 239 );
 
 # type coercion on assignment
 $foo = 'foo';
@@ -917,6 +917,28 @@ package HTTP::MobileAttribute::Plugin::Locator {
     ::ok Internals::SvREFCNT(${__PACKAGE__."::"}{LOCATOR_GPS}),
        "stash elem for slot is not freed prematurely";
 }
+
+# Check that constants promoted to CVs point to the right GVs when the name
+# contains a null.
+package lrcg {
+  use constant x => 3;
+  # These two lines abuse the optimisation that copies the scalar ref from
+  # one stash element to another, to get a constant with a null in its name
+  *{"yz\0a"} = \&{"x"};
+  my $ref = \&{"yz\0a"};
+  ::ok !exists $lrcg::{yz},
+    'constants w/nulls in their names point 2 the right GVs when promoted';
+}
+
+# Look away, please.
+# This violates perl's internal structures by fiddling with stashes in a
+# way that should never happen, but perl should not start trying to free
+# unallocated memory as a result.  There is no ok() or is() because the
+# panic that used to occur only occurred during global destruction, and
+# only with PERL_DESTRUCT_LEVEL=2.  (The panic itself was sufficient for
+# the harness to consider this test script to have failed.)
+$::{aoeuaoeuaoeaoeu} = __PACKAGE__; # cow
+() = *{"aoeuaoeuaoeaoeu"};
 
 __END__
 Perl

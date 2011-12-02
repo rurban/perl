@@ -7,7 +7,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 287);
+    plan (tests => 298);
 }
 
 use strict;
@@ -121,6 +121,12 @@ $dummy  = atan2 $var, 1 ; check_count 'atan2';
 # Readline/glob
 tie my $var0, "main", \*DATA;
 $dummy  = <$var0>       ; check_count '<readline>';
+$var    = \1;
+$var   .= <DATA>        ; check_count '$tiedref .= <rcatline>';
+$var    = "tied";
+$var   .= <DATA>        ; check_count '$tiedstr .= <rcatline>';
+$var    = *foo;
+$var   .= <DATA>        ; check_count '$tiedglob .= <rcatline>';
 $dummy  = <${var}>      ; check_count '<glob>';
 
 # File operators
@@ -143,6 +149,8 @@ $dummy  =  $var =~ m/ / ; check_count 'm//';
 $dummy  =  $var =~ s/ //; check_count 's///';
 $dummy  =  $var ~~    1 ; check_count '~~';
 $dummy  =  $var =~ y/ //; check_count 'y///';
+           $var = \1;
+$dummy  =  $var =~y/ /-/; check_count '$ref =~ y///';
            /$var/       ; check_count 'm/pattern/';
            /$var foo/   ; check_count 'm/$tied foo/';
           s/$var//      ; check_count 's/pattern//';
@@ -210,15 +218,30 @@ $var8->bolgy            ; check_count '->method';
 
 # Functions that operate on filenames or filehandles
 for ([chdir=>''],[chmod=>'0,'],[chown=>'0,0,'],[utime=>'0,0,'],
-     [truncate=>'',',0'],[stat=>''],[lstat=>'']) {
+     [truncate=>'',',0'],[stat=>''],[lstat=>''],[open=>'my $fh,"<&",'],
+     ['()=sort'=>'',' 1,2,3']) {
     my($op,$args,$postargs) = @$_; $postargs //= '';
     # This line makes $var8 hold a glob:
     $var8 = *dummy; $dummy = $var8; $count = 0;
     eval "$op $args \$var8 $postargs";
     check_count "$op $args\$tied_glob$postargs";
     $var8 = *dummy; $dummy = $var8; $count = 0;
-    eval "$op $args \\\$var8 $postargs";
+    my $ref = \$var8;
+    eval "$op $args \$ref $postargs";
     check_count "$op $args\\\$tied_glob$postargs";
+}
+
+{
+    no warnings;
+    $var = *foo;
+    $dummy  =  select $var, undef, undef, 0
+                            ; check_count 'select $tied_glob, ...';
+    $var = \1;
+    $dummy  =  select $var, undef, undef, 0
+                            ; check_count 'select $tied_ref, ...';
+    $var = undef;
+    $dummy  =  select $var, undef, undef, 0
+                            ; check_count 'select $tied_undef, ...';
 }
 
 ###############################################

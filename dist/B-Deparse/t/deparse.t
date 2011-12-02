@@ -766,6 +766,7 @@ CORE::given ($x) {
     }
 }
 CORE::evalbytes '';
+() = CORE::__SUB__;
 ####
 # $#- $#+ $#{%} etc.
 my @x;
@@ -780,3 +781,15 @@ my @x;
 ####
 # ()[...]
 my(@a) = ()[()];
+####
+# sort(foo(bar))
+# sort(foo(bar)) is interpreted as sort &foo(bar)
+# sort foo(bar) is interpreted as sort foo bar
+# parentheses are not optional in this case
+print sort(foo('bar'));
+>>>>
+print sort(foo('bar'));
+####
+# substr assignment
+substr(my $a, 0, 0) = (foo(), bar());
+$a++;

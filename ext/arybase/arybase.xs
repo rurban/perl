@@ -137,6 +137,7 @@ STATIC bool ab_op_is_dollar_bracket(pTHX_ OP *o) {
  return o->op_type == OP_RV2SV && (o->op_flags & OPf_KIDS)
   && (c = cUNOPx(o)->op_first)
   && c->op_type == OP_GV
+  && GvSTASH(cGVOPx_gv(c)) == PL_defstash
   && strEQ(GvNAME(cGVOPx_gv(c)), "[");
 }
 
@@ -150,7 +151,7 @@ STATIC void ab_neuter_dollar_bracket(pTHX_ OP *o) {
   */
  oldc = cUNOPx(o)->op_first;
  newc = newGVOP(OP_GV, 0,
-   gv_fetchpvs("arybase::[", GV_ADDMULTI, SVt_PVGV));
+   gv_fetchpvs("arybase::leftbrack", GV_ADDMULTI, SVt_PVGV));
  cUNOPx(o)->op_first = newc;
  op_free(oldc);
 }
@@ -161,6 +162,9 @@ STATIC void ab_process_assignment(pTHX_ OP *left, OP *right) {
  if (ab_op_is_dollar_bracket(left) && right->op_type == OP_CONST) {
   set_arybase_to(SvIV(cSVOPx_sv(right)));
   ab_neuter_dollar_bracket(left);
+  Perl_ck_warner_d(aTHX_
+   packWARN(WARN_DEPRECATED), "Use of assignment to $[ is deprecated"
+  );
  }
 }
 
@@ -339,6 +343,10 @@ static OP *ab_ck_base(pTHX_ OP *o)
  case OP_RINDEX   : old_ck = ab_old_ck_rindex   ; break;
  case OP_INDEX    : old_ck = ab_old_ck_index    ; break;
  case OP_POS      : old_ck = ab_old_ck_pos      ; break;
+ default:
+  DIE(aTHX_
+     "panic: invalid op type for arybase.xs:ab_ck_base: %d",
+      PL_op->op_type);
  }
  o = (*old_ck)(aTHX_ o);
  /* We need two switch blocks, as the type may have changed. */

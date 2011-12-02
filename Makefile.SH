@@ -479,7 +479,7 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5155delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5156delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -723,7 +723,7 @@ PERLEXPORT		= perl.exp
 	;;
 	esac
 	$spitshell >>$Makefile <<'!NO!SUBS!'
-perl.exp: $(MINIPERLEXP) makedef.pl config.sh $(SYM) $(SYMH)
+perl.exp: $(MINIPERLEXP) makedef.pl $(CONFIGPM) $(SYM) $(SYMH)
 	./$(MINIPERLEXP) makedef.pl PLATFORM=aix CC_FLAGS="$(OPTIMIZE)" | sort -u | sort -f > perl.exp
 
 !NO!SUBS!
@@ -732,7 +732,7 @@ os2)
 	$spitshell >>$Makefile <<'!NO!SUBS!'
 MINIPERLEXP		= miniperl
 
-perl5.def: $(MINIPERLEXP) makedef.pl config.sh $(SYM) $(SYMH) miniperl.map
+perl5.def: $(MINIPERLEXP) makedef.pl $(CONFIGPM) $(SYM) $(SYMH) miniperl.map
 	./$(MINIPERLEXP) makedef.pl PLATFORM=os2 -DPERL_DLL=$(PERL_DLL) CC_FLAGS="$(OPTIMIZE)" > perl5.def
 
 !NO!SUBS!
@@ -1045,7 +1045,7 @@ uni.data: $(MINIPERL_EXE) $(CONFIGPM) lib/unicore/mktables $(nonxs_ext)
 # But also this ensures that all extensions are built before we try to scan
 # them, which picks up Devel::PPPort's documentation.
 pod/perltoc.pod: $(perltoc_pod_prereqs)  $(PERL_EXE) $(ext) pod/buildtoc
-	$(RUN_PERL) -f -Ilib pod/buildtoc --build-toc -q
+	$(RUN_PERL) -f -Ilib pod/buildtoc -q
 
 pod/perlapi.pod: pod/perlintern.pod
 
@@ -1055,8 +1055,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5155delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5155delta.pod
+pod/perl5156delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5156delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1251,7 +1251,7 @@ _mopup:
 	-rmdir .depending
 	-@test -f extra.pods && rm -f `cat extra.pods`
 	-@test -f vms/README_vms.pod && rm -f vms/README_vms.pod
-	-rm -f perl.exp ext.libs $(generated_pods) uni.data opmini.o perlmini.o
+	-rm -f perl.exp ext.libs $(generated_pods) uni.data opmini.o perlmini.o pod/roffitall
 	-rm -f perl.export perl.dll perl.libexp perl.map perl.def
 	-rm -f perl.loadmap miniperl.loadmap perl.prelmap miniperl.prelmap
 	-rm -f perl.third lib*.so.perl.third perl.3log t/perl.third t/perl.3log

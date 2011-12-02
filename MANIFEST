@@ -1532,23 +1532,33 @@ cpan/Locale-Codes/lib/Locale/Codes/Constants.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes/Country_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Country.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Country.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Country_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Currency_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangExt_Retired.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam_Codes.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam.pod	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Language_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangVar_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes.pod		Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes/Script_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Script.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Script.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Script_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Country.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Country.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Currency.pm	Locale::Codes
@@ -1565,6 +1575,7 @@ cpan/Locale-Codes/t/code2country_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2country.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2currency.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2langext.t	Locale::Codes tests
+cpan/Locale-Codes/t/code2langfam.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2language.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2langvar.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2script.t		Locale::Codes tests
@@ -1577,6 +1588,7 @@ cpan/Locale-Codes/t/country.t			Locale::Codes tests
 cpan/Locale-Codes/t/currency2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/currency2code.t		Locale::Codes tests
 cpan/Locale-Codes/t/langext2code.t	Locale::Codes tests
+cpan/Locale-Codes/t/langfam2code.t	Locale::Codes tests
 cpan/Locale-Codes/t/language2code.t		Locale::Codes tests
 cpan/Locale-Codes/t/language_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/language.t			Locale::Codes tests
@@ -2169,6 +2181,14 @@ cpan/Pod-Simple/t/xhtml05.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml10.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml15.t				Pod::Simple test file
 cpan/Pod-Simple/t/x_nixer.t				Pod::Simple test file
+cpan/Socket/Makefile.PL			Socket extension makefile writer
+cpan/Socket/Socket.pm			Socket extension Perl module
+cpan/Socket/Socket.xs			Socket extension external subroutines
+cpan/Socket/t/getaddrinfo.t		See if Socket::getaddrinfo works
+cpan/Socket/t/getnameinfo.t		See if Socket::getnameinfo works
+cpan/Socket/t/ipv6_mreq.t		See if (un)pack_ipv6_mreq work
+cpan/Socket/t/socketpair.t		See if socketpair works
+cpan/Socket/t/Socket.t			See if Socket works
 cpan/Sys-Syslog/Changes			Changelog for Sys::Syslog
 cpan/Sys-Syslog/fallback/const-c.inc	Sys::Syslog constants fallback file
 cpan/Sys-Syslog/fallback/const-xs.inc	Sys::Syslog constants fallback file
@@ -2687,6 +2707,7 @@ cpan/Unicode-Collate/Collate/Locale/as.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/az.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/be.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/bg.pl	Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/bn.pl		Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ca.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/cs.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/cy.pl			Unicode::Collate
@@ -2734,6 +2755,7 @@ cpan/Unicode-Collate/Collate/Locale/pl.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale.pm			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ro.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/ru.pl			Unicode::Collate
+cpan/Unicode-Collate/Collate/Locale/sa.pl		Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/se.pl			Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/si_dict.pl	Unicode::Collate
 cpan/Unicode-Collate/Collate/Locale/si.pl	Unicode::Collate
@@ -2790,8 +2812,11 @@ cpan/Unicode-Collate/t/loc_as.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_az.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_be.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_bg.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_bn.t		Unicode::Collate
 cpan/Unicode-Collate/t/loc_bs.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_ca.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_cjkc.t		Unicode::Collate
+cpan/Unicode-Collate/t/loc_cjk.t		Unicode::Collate
 cpan/Unicode-Collate/t/loc_cs.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_cyrl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_cy.t			Unicode::Collate
@@ -2841,6 +2866,7 @@ cpan/Unicode-Collate/t/loc_pa.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_pl.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_ro.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_ru.t			Unicode::Collate
+cpan/Unicode-Collate/t/loc_sa.t		Unicode::Collate
 cpan/Unicode-Collate/t/loc_se.t			Unicode::Collate
 cpan/Unicode-Collate/t/loc_sidt.t	Unicode::Collate
 cpan/Unicode-Collate/t/loc_si.t	Unicode::Collate
@@ -2978,6 +3004,7 @@ dist/Attribute-Handlers/t/linerep.t			See if Attribute::Handlers works
 dist/Attribute-Handlers/t/multi.t			See if Attribute::Handlers works
 dist/autouse/lib/autouse.pm		Load and call a function only when it's used
 dist/autouse/t/autouse.t		See if autouse works
+dist/autouse/t/lib/MyTestModule2.pm	Test module for autouse
 dist/autouse/t/lib/MyTestModule.pm	Test module for autouse
 dist/base/Changes		base.pm changelog
 dist/base/lib/base.pm		Establish IS-A relationship at compile time
@@ -3748,6 +3775,24 @@ ext/PerlIO-via/via.pm		PerlIO layer for layers in perl
 ext/PerlIO-via/via.xs		PerlIO layer for layers in perl
 ext/Pod-Html/bin/pod2html	Translator to turn pod into HTML
 ext/Pod-Html/lib/Pod/Html.pm	Convert POD data to HTML
+ext/Pod-Html/t/crossref.pod
+ext/Pod-Html/t/crossref.t
+ext/Pod-Html/testdir/perlpodspec-copy.pod
+ext/Pod-Html/testdir/perlvar-copy.pod
+ext/Pod-Html/t/feature2.pod
+ext/Pod-Html/t/feature2.t
+ext/Pod-Html/t/feature.pod
+ext/Pod-Html/t/feature.t
+ext/Pod-Html/t/htmldir1.pod
+ext/Pod-Html/t/htmldir1.t
+ext/Pod-Html/t/htmldir2.pod
+ext/Pod-Html/t/htmldir2.t
+ext/Pod-Html/t/htmldir3.pod
+ext/Pod-Html/t/htmldir3.t
+ext/Pod-Html/t/htmldir4.pod
+ext/Pod-Html/t/htmldir4.t
+ext/Pod-Html/t/htmldir5.pod
+ext/Pod-Html/t/htmldir5.t
 ext/Pod-Html/t/htmlescp.pod	pod2html escape test input data
 ext/Pod-Html/t/htmlescp.t	pod2html escape test
 ext/Pod-Html/t/htmllink.pod	pod2html link test input data
@@ -3755,6 +3800,10 @@ ext/Pod-Html/t/htmllink.t	pod2html link test
 ext/Pod-Html/t/htmlview.pod	pod2html render test input data
 ext/Pod-Html/t/htmlview.t	pod2html render test
 ext/Pod-Html/t/pod2html-lib.pl	pod2html testing library
+ext/Pod-Html/t/poderr.pod
+ext/Pod-Html/t/poderr.t
+ext/Pod-Html/t/podnoerr.pod
+ext/Pod-Html/t/podnoerr.t
 ext/POSIX/hints/bsdos.pl	Hint for POSIX for named architecture
 ext/POSIX/hints/dynixptx.pl	Hint for POSIX for named architecture
 ext/POSIX/hints/freebsd.pl	Hint for POSIX for named architecture
@@ -3830,14 +3879,6 @@ ext/SDBM_File/sdbm/tune.h	SDBM kit
 ext/SDBM_File/sdbm/util.c	SDBM kit
 ext/SDBM_File/t/sdbm.t		See if SDBM_File works
 ext/SDBM_File/typemap		SDBM extension interface types
-ext/Socket/Makefile.PL		Socket extension makefile writer
-ext/Socket/Socket.pm		Socket extension Perl module
-ext/Socket/Socket.xs		Socket extension external subroutines
-ext/Socket/t/getaddrinfo.t	See if Socket::getaddrinfo works
-ext/Socket/t/getnameinfo.t	See if Socket::getnameinfo works
-ext/Socket/t/ipv6_mreq.t	See if (un)pack_ipv6_mreq work
-ext/Socket/t/socketpair.t	See if socketpair works
-ext/Socket/t/Socket.t		See if Socket works
 ext/Sys-Hostname/Hostname.pm	Sys::Hostname extension Perl module
 ext/Sys-Hostname/Hostname.xs	Sys::Hostname extension external subroutines
 ext/Sys-Hostname/t/Hostname.t	See if Sys::Hostname works
@@ -3880,6 +3921,7 @@ ext/XS-APItest/t/Block.pm	Helper for ./blockhooks.t
 ext/XS-APItest/t/call_checker.t	test call checker plugin API
 ext/XS-APItest/t/caller.t	XS::APItest: tests for caller_cx
 ext/XS-APItest/t/call.t		XS::APItest extension
+ext/XS-APItest/t/check_warnings.t	test scope of "Too late for CHECK"
 ext/XS-APItest/t/cleanup.t	test stack behaviour on unwinding
 ext/XS-APItest/t/clone-with-stack.t	test clone with CLONEf_COPY_STACKS works
 ext/XS-APItest/t/cophh.t	test COPHH API
@@ -4203,6 +4245,7 @@ lib/perl5db/t/filename-line-breakpoint		Tests for the Perl debugger
 lib/perl5db/t/lvalue-bug	Tests for the Perl debugger
 lib/perl5db/t/MyModule.pm	Tests for the Perl debugger
 lib/perl5db/t/proxy-constants	Tests for the Perl debugger
+lib/perl5db/t/rt-104168		Tests for the Perl debugger
 lib/perl5db/t/rt-61222		Tests for the Perl debugger
 lib/perl5db/t/rt-66110		Tests for the Perl debugger
 lib/perl5db/t/symbol-table-bug	Tests for the Perl debugger
@@ -4541,6 +4584,7 @@ pod/perl5151delta.pod		Perl changes in version 5.15.1
 pod/perl5152delta.pod		Perl changes in version 5.15.2
 pod/perl5153delta.pod		Perl changes in version 5.15.3
 pod/perl5154delta.pod		Perl changes in version 5.15.4
+pod/perl5155delta.pod		Perl changes in version 5.15.5
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl581delta.pod		Perl changes in version 5.8.1
@@ -4641,7 +4685,6 @@ pod/perlunitut.pod		Perl Unicode tutorial
 pod/perlutil.pod		utilities packaged with the Perl distribution
 pod/perlvar.pod			Perl predefined variables
 pod/perlvms.pod			Perl notes for VMS
-pod/roffitall			troff the whole man page set
 pod/rofftoc			Generate a table of contents in troff format
 pod/splitman			Splits perlfunc into multiple man pages
 pod/splitpod			Splits perlfunc into multiple pod pages
@@ -4691,9 +4734,12 @@ Porting/makerel			Release making utility
 Porting/make_snapshot.pl	Make a tgz snapshot of our tree with a .patch file in it
 Porting/manicheck		Check against MANIFEST
 Porting/manisort		Sort the MANIFEST
+Porting/new-perldelta.pl	Generate a new perldelta
 Porting/newtests-perldelta.pl	Generate Perldelta stub for newly added tests
 Porting/perldelta_template.pod	Template for creating new perldelta.pod files
 Porting/perlhist_calculate.pl		Perform calculations to update perlhist
+Porting/pod_lib.pl		Code for handling pod.lst
+Porting/pod_rules.pl		generate lists of pod files for Makefiles
 Porting/podtidy			Reformat pod using Pod::Tidy
 Porting/pumpkin.pod		Guidelines and hints for Perl maintainers
 Porting/README.y2038		Perl notes for the 2038 fix
@@ -5099,6 +5145,7 @@ t/op/coreamp.t			Test &foo() calls for CORE subs
 t/op/coresubs.t			Generics tests for CORE subs
 t/op/cproto.t			Check builtin prototypes
 t/op/crypt.t			See if crypt works
+t/op/current_sub.t		__SUB__ tests
 t/op/dbm.t			See if dbmopen/dbmclose work
 t/op/defins.t			See if auto-insert of defined() works
 t/op/delete.t			See if delete works
@@ -5217,6 +5264,8 @@ t/op/stat.t			See if stat works
 t/op/study.t			See if study works
 t/op/studytied.t		See if study works with tied scalars
 t/op/sub_lval.t			See if lvalue subroutines work
+t/op/substr.t			See if substr works
+t/op/substr_thr.t		See if substr works in another thread
 t/op/sub.t			See if subroutines work
 t/op/svleak.t			See if stuff leaks SVs
 t/op/switch.t			See if switches (given/when) work
@@ -5254,7 +5303,6 @@ t/perl.supp			Perl valgrind suppressions
 t/porting/args_assert.t		Check that all PERL_ARGS_ASSERT* macros are used
 t/porting/authors.t		Check that all authors have been acknowledged
 t/porting/bincompat.t		Check that {non_,}bincompat_options are ordered
-t/porting/buildtoc.t		Check that various pod lists are consistent
 t/porting/checkcase.t		Check whether we are case-insensitive-fs-friendly
 t/porting/checkcfgvar.t		Check that all config.sh-like files are good
 t/porting/cmp_version.t		Test whether all changed module files have their VERSION bumped
@@ -5268,6 +5316,7 @@ t/porting/known_pod_issues.dat	Data file for porting/podcheck.t
 t/porting/maintainers.t		Test that Porting/Maintainers.pl is up to date
 t/porting/manifest.t		Test that this MANIFEST file is well formed
 t/porting/podcheck.t		Test the POD of shipped modules is well formed
+t/porting/pod_rules.t		Check that various pod lists are consistent
 t/porting/regen.t		Check that regen.pl doesn't need running
 t/porting/test_bootstrap.t	Test that the instructions for test bootstrapping aren't accidentally overlooked.
 t/README			Instructions for regression tests
@@ -5314,8 +5363,6 @@ t/re/reg_posixcc.t		See if posix character classes behave consistently
 t/re/re_tests			Regular expressions for regexp.t
 t/re/rxcode.t			See if /(?{ code })/ works
 t/re/subst_amp.t		See if $&-related substitution works
-t/re/substr.t			See if substr works
-t/re/substr_thr.t		See if substr works in another thread
 t/re/subst.t			See if substitution works
 t/re/substT.t			See if substitution works with -T
 t/re/subst_wamp.t		See if substitution works with $& present
@@ -5345,6 +5392,7 @@ t/run/switchx.aux		Data for switchx.t
 t/run/switchx.t			Test the -x switch
 t/TEST				The regression tester
 t/test.pl			Simple testing library
+t/test_pl/can_isa_ok.t		Tests for the simple testing library
 t/thread_it.pl			Run regression tests in a new thread
 t/uni/attrs.t			See if Unicode attributes work
 t/uni/bless.t			See if Unicode bless works
@@ -5484,7 +5532,6 @@ win32/list_static_libs.pl	prints libraries for static linking
 win32/Makefile			Win32 makefile for NMAKE (Visual C++ build)
 win32/Makefile.ce		WinCE port
 win32/makefile.mk		Win32 makefile for DMAKE (BC++, VC++ builds)
-win32/mdelete.bat		multifile delete
 win32/perlexe.ico		perlexe.ico image file
 win32/perlexe.manifest		Assembly manifest file
 win32/perlexe.rc		associated perl binary with icon

@@ -1,6 +1,12 @@
 #!/usr/bin/perl -w
 use strict;
 
+=for comment
+
+Documentation for this is in bisect-runner.pl
+
+=cut
+
 my $start_time = time;
 
 # The default, auto_abbrev will treat -e as an abbreviation of --end
@@ -11,9 +17,7 @@ my ($start, $end, $validate);
 unshift @ARGV, '--help' unless GetOptions('start=s' => \$start,
                                           'end=s' => \$end,
                                           validate => \$validate);
-
-@ARGV = ('--', 'sh', '-c', 'cd t && ./perl TEST base/*.t')
-    if $validate && !@ARGV;
+unshift @ARGV, '--validate' if $validate;
 
 my $runner = $0;
 $runner =~ s/bisect\.pl/bisect-runner.pl/;
@@ -28,11 +32,21 @@ die "Can't find bisect runner $runner" unless -f $runner;
       if defined $dev1 && $dev0 == $dev1 && $ino0 == $ino1;
 }
 
-system $^X, $runner, '--check-args', @ARGV and exit 255;
+system $^X, $runner, '--check-args', '--check-shebang', @ARGV and exit 255;
 
 # We try these in this order for the start revision if none is specified.
-my @stable = qw(perl-5.002 perl-5.003 perl-5.004 perl-5.005 perl-5.6.0
-                perl-5.8.0 v5.10.0 v5.12.0 v5.14.0);
+my @stable = qw(perl-5.005 perl-5.6.0 perl-5.8.0 v5.10.0 v5.12.0 v5.14.0);
+
+{
+    my ($dev_C, $ino_C) = stat 'Configure';
+    my ($dev_c, $ino_c) = stat 'configure';
+    if (defined $dev_C && defined $dev_c
+        && $dev_C == $dev_c && $ino_C == $ino_c) {
+        print "You seem to to be on a case insensitive file system.\n\n";
+    } else {
+        unshift @stable, qw(perl-5.002 perl-5.003 perl-5.004)
+    }
+}
 
 $end = 'blead' unless defined $end;
 
@@ -130,6 +144,12 @@ END {
     printf "That took %d seconds\n", $end_time - $start_time
         if defined $start_time;
 }
+
+=for comment
+
+Documentation for this is in bisect-runner.pl
+
+=cut
 
 # Local variables:
 # cperl-indent-level: 4

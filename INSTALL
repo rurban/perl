@@ -530,7 +530,7 @@ The directories set up by Configure fall into three broad categories.
 
 =item Directories for the perl distribution
 
-By default, Configure will use the following directories for 5.15.4.
+By default, Configure will use the following directories for 5.15.5.
 $version is the full perl version number, including subversion, e.g.
 5.12.3, and $archname is a string like sun4-sunos,
 determined by Configure.  The full definitions of all Configure
@@ -841,7 +841,7 @@ must contain a space separated list of directories under the site_perl
 directory, and has to include architecture-dependent directories separately,
 eg.
 
-       sh Configure -Dinc_version_list="5.15.4/x86_64-linux 5.14.0" ...
+       sh Configure -Dinc_version_list="5.15.5/x86_64-linux 5.14.0" ...
 
 When using the newer perl, you can add these paths again in the
 PERL5LIB environment variable or with perl's -I runtime option.
@@ -1430,7 +1430,7 @@ See also the L<"vsprintf"> item below.
 If you get error messages such as the following (the exact line
 numbers and function name may vary in different versions of perl):
 
-    util.c: In function `Perl_form':
+    util.c: In function 'Perl_form':
     util.c:1107: number of arguments doesn't match prototype
     proto.h:125: prototype declaration
 
@@ -2031,7 +2031,7 @@ pages, however.  You may need to be root to run B<make install>.  If you
 are not root, you must still have permission to install into the directories
 in question and you should ignore any messages about chown not working.
 
-If "make install" just says "`install' is up to date" or something
+If "make install" just says "'install' is up to date" or something
 similar, you may be on a case-insensitive filesystems such as Mac's HFS+,
 and you should say "make install-all".  (This confusion is brought to you
 by the Perl distribution having a file called INSTALL.)
@@ -2373,9 +2373,9 @@ won't interfere with another version.  (The defaults guarantee this for
 libraries after 5.6.0, but not for executables. TODO?)  One convenient
 way to do this is by using a separate prefix for each version, such as
 
-	sh Configure -Dprefix=/opt/perl5.15.4
+	sh Configure -Dprefix=/opt/perl5.15.5
 
-and adding /opt/perl5.15.4/bin to the shell PATH variable.  Such users
+and adding /opt/perl5.15.5/bin to the shell PATH variable.  Such users
 may also wish to add a symbolic link /usr/local/bin/perl so that
 scripts can still start with #!/usr/local/bin/perl.
 
@@ -2388,13 +2388,13 @@ seriously consider using a separate directory, since development
 subversions may not have all the compatibility wrinkles ironed out
 yet.
 
-=head2 Upgrading from 5.15.3 or earlier
+=head2 Upgrading from 5.15.4 or earlier
 
-B<Perl 5.15.4 is binary incompatible with Perl 5.15.3 and any earlier
+B<Perl 5.15.5 is binary incompatible with Perl 5.15.4 and any earlier
 Perl release.>  Perl modules having binary parts
 (meaning that a C compiler is used) will have to be recompiled to be
-used with 5.15.4.  If you find you do need to rebuild an extension with
-5.15.4, you may safely do so without disturbing the older
+used with 5.15.5.  If you find you do need to rebuild an extension with
+5.15.5, you may safely do so without disturbing the older
 installations.  (See L<"Coexistence with earlier versions of perl 5">
 above.)
 

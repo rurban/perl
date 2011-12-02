@@ -285,6 +285,10 @@ static const char* const lex_state_names[] = {
 	}
 #define UNI(f)    UNI2(f,XTERM)
 #define UNIDOR(f) UNI2(f,XTERMORDORDOR)
+#define UNIPROTO(f,optional) { \
+	if (optional) PL_last_uni = PL_oldbufptr; \
+	OPERATOR(f); \
+	}
 
 #define UNIBRACK(f) { \
 	pl_yylval.ival = f; \
@@ -715,8 +719,12 @@ Perl_lex_start(pTHX_ SV *line, PerlIO *rsfp, U32 flags)
     parser->rsfp = rsfp;
     parser->rsfp_filters =
       !(flags & LEX_START_SAME_FILTER) || !oparser
-        ? newAV()
-        : MUTABLE_AV(SvREFCNT_inc(oparser->rsfp_filters));
+        ? NULL
+        : MUTABLE_AV(SvREFCNT_inc(
+            oparser->rsfp_filters
+             ? oparser->rsfp_filters
+             : (oparser->rsfp_filters = newAV())
+          ));
 
     Newx(parser->lex_brackstack, 120, char);
     Newx(parser->lex_casestack, 12, char);
@@ -6843,10 +6851,13 @@ Perl_yylex(pTHX)
 		    {
 			STRLEN protolen = CvPROTOLEN(cv);
 			const char *proto = CvPROTO(cv);
+			bool optional;
 			if (!protolen)
 			    TERM(FUNC0SUB);
-			while (*proto == ';')
+			if ((optional = *proto == ';'))
+			  do
 			    proto++;
+			  while (*proto == ';');
 			if (
 			    (
 			        (
@@ -6859,12 +6870,13 @@ Perl_yylex(pTHX)
 			     *proto == '\\' && proto[1] && proto[2] == '\0'
 			    )
 			)
-			    OPERATOR(UNIOPSUB);
+			    UNIPROTO(UNIOPSUB,optional);
 			if (*proto == '\\' && proto[1] == '[') {
 			    const char *p = proto + 2;
 			    while(*p && *p != ']')
 				++p;
-			    if(*p == ']' && !p[1]) OPERATOR(UNIOPSUB);
+			    if(*p == ']' && !p[1])
+				UNIPROTO(UNIOPSUB,optional);
 			}
 			if (*proto == '&' && *s == '{') {
 			    if (PL_curstash)
@@ -7114,6 +7126,9 @@ Perl_yylex(pTHX)
 	    }
 	    goto fake_eof;
 	}
+
+	case KEY___SUB__:
+	    FUN0OP(newPVOP(OP_RUNCV,0,NULL));
 
 	case KEY_AUTOLOAD:
 	case KEY_DESTROY:

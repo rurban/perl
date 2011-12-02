@@ -355,9 +355,9 @@ PP(pp_glob)
     dVAR;
     OP *result;
     dSP;
-    /* make a copy of the pattern, to ensure that magic is called once
-     * and only once */
-    TOPm1s = sv_2mortal(newSVsv(TOPm1s));
+    /* make a copy of the pattern if it is gmagical, to ensure that magic
+     * is called once and only once */
+    if (SvGMAGICAL(TOPm1s)) TOPm1s = sv_2mortal(newSVsv(TOPm1s));
 
     tryAMAGICunTARGET(iter_amg, -1, (PL_op->op_flags & OPf_SPECIAL));
 
@@ -973,10 +973,7 @@ PP(pp_tied)
 	RETPUSHUNDEF;
 
     if ((mg = SvTIED_mg(sv, how))) {
-	SV *osv = SvTIED_obj(sv, mg);
-	if (osv == mg->mg_obj)
-	    osv = sv_mortalcopy(osv);
-	PUSHs(osv);
+	PUSHs(SvTIED_obj(sv, mg));
 	RETURN;
     }
     RETPUSHUNDEF;
@@ -1066,6 +1063,7 @@ PP(pp_sselect)
     SP -= 4;
     for (i = 1; i <= 3; i++) {
 	SV * const sv = SP[i];
+	SvGETMAGIC(sv);
 	if (!SvOK(sv))
 	    continue;
 	if (SvREADONLY(sv)) {
@@ -1075,8 +1073,10 @@ PP(pp_sselect)
 		Perl_croak_no_modify(aTHX);
 	}
 	if (!SvPOK(sv)) {
-	    Perl_ck_warner(aTHX_ packWARN(WARN_MISC), "Non-string passed as bitmask");
-	    SvPV_force_nolen(sv);	/* force string conversion */
+	    if (!SvPOKp(sv))
+		Perl_ck_warner(aTHX_ packWARN(WARN_MISC),
+				    "Non-string passed as bitmask");
+	    SvPV_force_nomg_nolen(sv);	/* force string conversion */
 	}
 	j = SvCUR(sv);
 	if (maxlen < j)

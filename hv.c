@@ -1897,8 +1897,7 @@ S_hv_auxinit(HV *hv) {
 	      + sizeof(struct xpvhv_aux), char);
     }
     HvARRAY(hv) = (HE**) array;
-    /* SvOOK_on(hv) attacks the IV flags.  */
-    SvFLAGS(hv) |= SVf_OOK;
+    SvOOK_on(hv);
     iter = HvAUX(hv);
 
     iter->xhv_riter = -1; 	/* HvRITER(hv) = -1 */
@@ -2645,7 +2644,7 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
 
     if (!entry)
 	Perl_ck_warner_d(aTHX_ packWARN(WARN_INTERNAL),
-			 "Attempt to free non-existent shared string '%s'%s"
+			 "Attempt to free nonexistent shared string '%s'%s"
 			 pTHX__FORMAT,
 			 hek ? HEK_KEY(hek) : str,
 			 ((k_flags & HVhek_UTF8) ? " (utf8)" : "") pTHX__VALUE);
@@ -2735,7 +2734,7 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, register U32 hash, int flags)
 	/* We don't actually store a HE from the arena and a regular HEK.
 	   Instead we allocate one chunk of memory big enough for both,
 	   and put the HEK straight after the HE. This way we can find the
-	   HEK directly from the HE.
+	   HE directly from the HEK.
 	*/
 
 	Newx(k, STRUCT_OFFSET(struct shared_he,

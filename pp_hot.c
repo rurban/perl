@@ -771,7 +771,6 @@ PP(pp_rv2av)
     if (SvROK(sv)) {
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, is_pp_rv2av ? to_av_amg : to_hv_amg);
-	    SPAGAIN;
 	}
 	sv = SvRV(sv);
 	if (SvTYPE(sv) != type)
@@ -1615,12 +1614,12 @@ Perl_do_readline(pTHX)
 	    mg_get(sv);
 	if (SvROK(sv)) {
 	    if (type == OP_RCATLINE)
-		SvPV_force_nolen(sv);
+		SvPV_force_nomg_nolen(sv);
 	    else
 		sv_unref(sv);
 	}
 	else if (isGV_with_GP(sv)) {
-	    SvPV_force_nolen(sv);
+	    SvPV_force_nomg_nolen(sv);
 	}
 	SvUPGRADE(sv, SVt_PV);
 	tmplen = SvLEN(sv);	/* remember if already alloced */
@@ -1633,7 +1632,7 @@ Perl_do_readline(pTHX)
 	offset = 0;
 	if (type == OP_RCATLINE && SvOK(sv)) {
 	    if (!SvPOK(sv)) {
-		SvPV_force_nolen(sv);
+		SvPV_force_nomg_nolen(sv);
 	    }
 	    offset = SvCUR(sv);
 	}
@@ -2549,8 +2548,6 @@ PP(pp_entersub)
     switch (SvTYPE(sv)) {
 	/* This is overwhelming the most common case:  */
     case SVt_PVGV:
-	if (!isGV_with_GP(sv))
-	    DIE(aTHX_ "Not a CODE reference");
       we_have_a_glob:
 	if (!(cv = GvCVu((const GV *)sv))) {
 	    HV *stash;
