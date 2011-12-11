@@ -316,7 +316,9 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
     dVAR;
     const U32 old_type = SvTYPE(gv);
     const bool doproto = old_type > SVt_NULL;
-    char * const proto = (doproto && SvPOK(gv)) ? SvPVX(gv) : NULL;
+    char * const proto = (doproto && SvPOK(gv))
+	? (SvIsCOW(gv) && (sv_force_normal((SV *)gv), 0), SvPVX(gv))
+	: NULL;
     const STRLEN protolen = proto ? SvCUR(gv) : 0;
     const U32 proto_utf8  = proto ? SvUTF8(gv) : 0;
     SV *const has_constant = doproto && SvROK(gv) ? SvRV(gv) : NULL;
@@ -1265,7 +1267,7 @@ S_require_tie_mod(pTHX_ GV *gv, const char *varpv, SV* namesv, const char *methp
 
     PERL_ARGS_ASSERT_REQUIRE_TIE_MOD;
 
-    if (!stash || !(gv_fetchmethod(stash, methpv))) {
+    if (!stash || !(gv_fetchmethod_autoload(stash, methpv, FALSE))) {
 	SV *module = newSVsv(namesv);
 	char varname = *varpv; /* varpv might be clobbered by load_module,
 				  so save it. For the moment it's always
@@ -2878,9 +2880,9 @@ Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
     /*	off is method, method+assignshift, or a result of opcode substitution.
      *	In the latter case assignshift==0, so only notfound case is important.
      */
-  if (( (method + assignshift == off)
+  if ( (lr == -1) && ( ( (method + assignshift == off)
 	&& (assign || (method == inc_amg) || (method == dec_amg)))
-      || force_cpy)
+      || force_cpy) )
   {
       /* newSVsv does not behave as advertised, so we copy missing
        * information by hand */

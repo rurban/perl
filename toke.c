@@ -7128,7 +7128,7 @@ Perl_yylex(pTHX)
 	}
 
 	case KEY___SUB__:
-	    FUN0(OP_RUNCV);
+	    FUN0OP(newPVOP(OP_RUNCV,0,NULL));
 
 	case KEY_AUTOLOAD:
 	case KEY_DESTROY:
@@ -7672,6 +7672,7 @@ Perl_yylex(pTHX)
 		if ( *t && strchr("|&*+-=!?:.", *t) && ckWARN_d(WARN_PRECEDENCE)
 		    /* [perl #16184] */
 		    && !(t[0] == '=' && t[1] == '>')
+		    && !keyword(s, d-s, 0)
 		) {
 		    int parms_len = (int)(d-s);
 		    Perl_warner(aTHX_ packWARN(WARN_PRECEDENCE),

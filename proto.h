@@ -5601,6 +5601,14 @@ STATIC void	S_save_magic(pTHX_ I32 mgs_ix, SV *sv)
 
 STATIC void	S_unwind_handler_stack(pTHX_ const void *p);
 #endif
+#if defined(PERL_IN_MG_C) || defined(PERL_IN_PP_C)
+PERL_CALLCONV bool	Perl_translate_substr_offsets(pTHX_ STRLEN curlen, IV pos1_iv, bool pos1_is_uv, IV len_iv, bool len_is_uv, STRLEN *posp, STRLEN *lenp)
+			__attribute__nonnull__(pTHX_6)
+			__attribute__nonnull__(pTHX_7);
+#define PERL_ARGS_ASSERT_TRANSLATE_SUBSTR_OFFSETS	\
+	assert(posp); assert(lenp)
+
+#endif
 #if defined(PERL_IN_MRO_C)
 STATIC void	S_mro_clean_isarev(pTHX_ HV * const isa, const char * const name, const STRLEN len, HV * const exceptions, U32 flags)
 			__attribute__nonnull__(pTHX_1)
@@ -5860,6 +5868,14 @@ STATIC void	S_init_postdump_symbols(pTHX_ int argc, char **argv, char **env)
 	assert(argv)
 
 STATIC void	S_init_predump_symbols(pTHX);
+STATIC SV*	S_mayberelocate(pTHX_ const char *const dir, STRLEN len, U32 flags)
+			__attribute__nonnull__(pTHX_1);
+#define PERL_ARGS_ASSERT_MAYBERELOCATE	\
+	assert(dir)
+
+STATIC void	S_minus_v(pTHX)
+			__attribute__noreturn__;
+
 STATIC void	S_my_exit_jump(pTHX)
 			__attribute__noreturn__;
 
@@ -5875,10 +5891,8 @@ STATIC void*	S_parse_body(pTHX_ char **env, XSINIT_t xsinit);
 STATIC void	S_run_body(pTHX_ I32 oldscope)
 			__attribute__noreturn__;
 
-STATIC void	S_usage(pTHX_ const char *name)
-			__attribute__nonnull__(pTHX_1);
-#define PERL_ARGS_ASSERT_USAGE	\
-	assert(name)
+STATIC void	S_usage(pTHX)
+			__attribute__noreturn__;
 
 #endif
 #if defined(PERL_IN_PP_C)

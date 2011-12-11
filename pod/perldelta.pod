@@ -1,5 +1,10 @@
 =encoding utf8
 
+=for comment
+This has been completed up to e08f19f5d07, except for
+e032854 khw     [perl #32080] is_utf8_string() reads too far
+b0f2e9e nwclark Fix two bugs related to pod files outside of pod/ (important enough?)
+
 =head1 NAME
 
 [ this is a template for a new perldelta file. Any text flagged as
@@ -28,6 +33,24 @@ here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
 
+=head2 C<__SUB__>
+
+The new C<__SUB__> token, available under the "current_sub" feature (see
+L<feature>) or C<use v5.15>, returns a reference to the current subroutine,
+making it easier to write recursive closures.
+
+=head2 New option for the debugger's B<t> command
+
+The B<t> command in the debugger, which toggles tracing mode, now accepts a
+numerical argument that determines how many levels of subroutine calls to
+trace.
+
+=head2 Return value of C<tied>
+
+The value returned by C<tied> on a tied variable is now the actual scalar
+that holds the object to which the variable is tied.  This allows ties to
+be weakened with C<Scalar::Util::weaken(tied $tied_variable)>.
+
 =head1 Security
 
 XXX Any security-related notices go here.  In particular, any security
@@ -44,6 +67,82 @@ XXX For a release on a stable branch, this section aspires to be:
     If any exist, they are bugs and reports are welcome.
 
 [ List each incompatible change as a =head2 entry ]
+
+=head2 C<substr> lvalue revamp
+
+When C<substr> is called in lvalue or potential lvalue context with two or
+three arguments, a special lvalue scalar is returned that modifies the
+original string (the first argument) when assigned to.
+
+Previously, the offsets (the second and third arguments) passed to
+C<substr> would be converted immediately to match the string, negative
+offsets being translated to positive and offsets beyond the end of the
+string being truncated.
+
+Now, the offsets are recorded without modification in the special lvalue
+scalar that is returned, and the original string is not even looked at by
+C<substr> itself, but only when the returned lvalue is read or modified.
+
+These changes result in several incompatible changes and bug fixes:
+
+=over
+
+=item *
+
+If the original string changes length after the call to C<substr> but
+before assignment to its return value, negative offsets will remember
+their position from the end of the string, affecting code like this:
+
+    my $string = "string";
+    my $lvalue = \substr $string, -4, 2;
+    print $lvalue, "\n"; # prints "ri"
+    $string = "bailing twine";
+    print $lvalue, "\n"; # prints "wi"; used to print "il"
+
+The same thing happens with an omitted third argument.  The returned lvalue
+will always extend to the end of the string, even if the string becomes
+longer.
+
+=item *
+
+Tied (and otherwise magical) variables are no longer exempt from the
+"Attempt ot use reference as lvalue in substr" warning.
+
+=item *
+
+That warning now occurs when the returned lvalue is assigned to, not when
+C<substr> itself is called.  This only makes a difference if the return
+value of C<substr> is referenced and assigned to later.
+
+=item *
+
+The order in which "uninitialized" warnings occur for arguments to
+C<substr> has changed.
+
+=item *
+
+Passing a substring of a read-only value or a typeglob to a function (potential lvalue context) no longer causes an immediate "Can't coerce" or "Modification of a read-only value" error.  That error only occurs if and
+when the value passed is assigned to.
+
+The same thing happens with the "substr outside of string" error.  If the
+lvalue is only read, not written to, it is now just a warning, as with
+rvalue C<substr>.
+
+=item *
+
+C<substr> assignments no longer call FETCH twice if the first argument is a
+tied variable, but just once.
+
+=back
+
+It was impossible to fix all the bugs without an incompatible change, and
+the behaviour of negative offsets was never specified, so the change was
+deemed acceptable.
+
+=head2 XS API tweak
+
+The C<newCONSTSUB_flags> C-level function, added in 5.15.4, now has a
+C<len> parameter.
 
 =head1 Deprecations
 
@@ -64,7 +163,29 @@ may well be none in a stable release.
 
 =item *
 
-XXX
+Perl 5.12.0 sped up the destruction of objects whose classes define empty
+C<DESTROY> methods (to prevent autoloading), simply by not calling such
+empty methods.  This release takes this optimisation a step further, by not
+calling any C<DESTROY> method that begins with an C<return> statement.
+This can be useful for destructors that are only used for debugging:
+
+    use constant DEBUG => 1;
+    sub DESTROY { return unless DEBUG; ... }
+
+Constant-folding will reduce the first statement to C<return;> if DEBUG is
+set to 0, triggering this optimisation.
+
+=item *
+
+Assign to a variable that holds a typeglob or copy-on-write scalar is now
+much faster.  Previously the typeglob would be stringified or the
+copy-on-write scalar would be copied before being clobbered.
+
+=item *
+
+Assignment to a substring in void context is now more than twice its
+previous speed.  Instead of creating and returning a special lvalue scalar
+that is then assigned to, C<substr> modifies the original string itself.
 
 =back
 
@@ -111,15 +232,58 @@ L<B::Debug> has been upgraded from version 1.16 to version 1.17.
 
 =item *
 
-L<Compress::Raw::Zlib> has been upgraded from version 2.042 to version 2.043.
+L<B::Deparse> has been upgraded from version 1.09 to 1.10.
+
+C<sort(foo(bar))> is now deparsed correctly. (C<sort foo(bar)>, how it used
+to deparse, makes foo the sort routine, rather than a regular function
+call.)
 
 =item *
 
-L<Compress::Raw::Bzip2> has been upgraded from version 2.042 to version 2.043.
+L<Compress::Raw::Zlib> has been upgraded from version 2.042 to version 2.045.
 
 =item *
 
-L<IO::Compress::Base> has been upgraded from version 2.042 to version 2.043.
+L<Compress::Raw::Bzip2> has been upgraded from version 2.042 to version 2.045.
+
+=item *
+
+L<CPANPLUS> has been upgraded from version 0.9112 to version 0.9113.
+
+=item *
+
+L<Data::Dumper> has been upgraded from version 2.134 to 2.135.
+
+The XS implementation has been updated to account for the Unicode symbol
+changes in Perl 5.15.4.  It also knows how to output typeglobs with nulls
+in their names.
+
+=item *
+
+L<ExtUtils::ParseXS> has been upgraded from version 3.05 to version 3.07.
+
+=item *
+
+L<IO::Compress::Base> has been upgraded from version 2.042 to version 2.045.
+
+Added zipdetails utility.
+
+=item *
+
+L<Locale::Codes> has been upgraded from version 3.18 to version 3.20.
+
+The code2XXX, XXX2code, all_XXX_codes, and all_XXX_names functions now support retired codes.
+All codesets may be specified by a constant or by their name now. Previously,
+they were specified only by a constant.
+The alias_code function exists for backward compatibility. It has been replaced by rename_country_code.
+The alias_code function will be removed sometime after September, 2013.
+All work is now done in the central module (Locale::Codes). Previously, some was still done in the
+wrapper modules (Locale::Codes::*) but that is gone now.
+Added Language Family codes (langfam) as defined in ISO 639-5.
+
+=item *
+
+L<Module::Loaded> has been uprgaded from version 0.06 to version 0.08.
 
 =item *
 
@@ -133,10 +297,28 @@ replaces ----- with -{}-{}-{}-{}-
 
 =item *
 
-L<Unicode::Collate> has been upgraded from version 0.85 to version 0.86.
+L<POSIX> has been upgraded from version 1.26 to 1.27.
+
+It no longer produces a "Constant subroutine TCSANOW redefined" warning on
+Windows.
+
+XXX When did it start producing that warning?  Was it post-5.15.5?  Even if
+it was not, adding a note will help whoever compiles perl5160delta.
+
+=item *
+
+L<Unicode::Collate> has been upgraded from version 0.85 to version 0.87.
 
 Tailored compatibility ideographs as well as unified ideographs for
 the locales: ja, ko, zh__big5han, zh__gb2312han, zh__pinyin, zh__stroke.
+
+Now Locale/*.pl files are searched in @INC.
+
+=item *
+
+L<UNIVERSAL> has been upgraded from version 1.10 to 1.11.
+
+Documentation change clarifies return values from UNIVERSAL::VERSION.
 
 =back
 
@@ -228,7 +410,20 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-XXX Describe change here
+Redefinition warnings for constant subroutines used to be mandatory, even
+occurring under C<no warnings>.  Now they respect the L<warnings> pragma.
+
+=item *
+
+The "Attempt to free non-existent shared string" has had the spelling of
+"non-existent" corrected to "nonexistent".  It was already listed with the
+correct spelling in L<perldiag>.
+
+=item *
+
+The 'Use of "foo" without parentheses is ambiguous' warning has been
+extended to apply also to user-defined subroutines with a (;$) prototype,
+and not just to built-in functions.
 
 =back
 
@@ -241,13 +436,14 @@ here. Most of these are built within the directories F<utils> and F<x2p>.
 entries for each change
 Use L<XXX> with program names to get proper documentation linking. ]
 
-=head3 L<XXX>
+=head3 L<zipdetails>
 
 =over 4
 
 =item *
 
-XXX
+L<zipdetails> displays information about the internal record structure of the zip file.
+It is not concerned with displaying any details of the compressed data stored in the zip file.
 
 =back
 
@@ -264,7 +460,16 @@ L</Platform Support> section, instead.
 
 =item *
 
-XXX
+F<pod/roffitall> is now build by F<pod/buildtoc>, instead of being shipped
+with the distribution. Its list of manpages is now generated (and therefore
+current). See also RT #103202 for an unresolved related issue.
+
+=item *
+
+Perl 5.15.5 had a bug in its installation script, which did not install
+F<unicore/Name.pm>.  This has been corrected [perl #104226].
+
+XXX Is that Perl version correct?  Is the file path correct?
 
 =back
 
@@ -282,7 +487,10 @@ that they represent may be covered elsewhere.
 
 =item *
 
-XXX
+The F<substr.t> and F<substr_thr.t> scripts for testing C<substr> have been
+moved under F<t/op/>, where they were originally.  They had been moved
+under F<t/re/> along with the substitution tests when that directory was
+created.
 
 =back
 
@@ -363,7 +571,120 @@ L</Modules and Pragmata>.
 
 =item *
 
-XXX
+A constant subroutine assigned to a glob whose name contains a null will no
+longer cause extra globs to pop into existence when the constant is
+referenced under its new name.
+
+=item *
+
+C<sort> was not treating C<sub {}> and C<sub {()}> as equivalent when such
+a sub was provided as the comparison routine.  It used to croak on
+C<sub {()}>.
+
+=item *
+
+Subroutines from the C<autouse> namespace are once more exempt from
+redefinition warnings.  This used to work in 5.005, but was broken in 5.6
+for most subroutines.  For subs created via XS that redefine subroutines
+from the C<autouse> package, this stopped working in 5.10.
+
+=item *
+
+New XSUBs now produce redefinition warnings if they overwrite existing
+subs, as they did in 5.8.x.  (The C<autouse> logic was reversed in 5.10-14.
+Only subroutines from the C<autouse> namespace would warn when clobbered.)
+
+=item *
+
+Redefinition warnings triggered by the creation of XSUBs now respect
+Unicode glob names, instead of using the internal representation.  This was
+missed in 5.15.4, partly because this warning was so hard to trigger.  (See
+the previous item.)
+
+=item *
+
+C<newCONSTSUB> used to use compile-time warning hints, instead of run-time
+hints.  The following code should never produce a redefinition warning, but
+it used to, if C<newCONSTSUB> redefine and existing subroutine:
+
+    use warnings;
+    BEGIN {
+	no warnings;
+	some_XS_function_that_calls_new_CONSTSUB();
+    }
+
+=item *
+
+Redefinition warnings for constant subroutines are on by default (what are
+known as severe warnings in L<perldiag>).  This was only the case when it
+was a glob assignment or declaration of a Perl subroutine that caused the
+warning.  If the creation of XSUBs triggered the warning, it was not a
+default warning.  This has been corrected.
+
+=item *
+
+The internal check to see whether a redefinition warning should occur used
+to emit "uninitialized" warnings in cases like this:
+
+    use warnings "uninitialized";
+    use constant {u=>undef,v=>undef};
+    sub foo(){u} sub foo(){v}
+
+=item *
+
+A bug fix in Perl 5.14 introduced a new bug, causing "uninitialized"
+warnings to report the wrong variable if the operator in question has
+two operands and one is C<%{...}> or C<@{...}>.  This has been fixed
+[perl #103766].
+
+=item *
+
+C<< version->new("version") >> and C<printf "%vd", "version"> no longer
+crash [perl #102586].
+
+=item *
+
+C<$tied =~ y/a/b/>, C<chop $tied> and C<chomp $tied> now call FETCH just
+once when $tied holds a reference.
+
+=item *
+
+Four-argument C<select> now always calls FETCH on tied arguments.  It used
+to skip the call if the tied argument happened to hold C<undef> or a
+typeglob.
+
+=item *
+
+Four-argument C<select> no longer produces its "Non-string passed as
+bitmask" warning on tied or tainted variables that are strings.
+
+=item *
+
+C<sysread> now always calls FETCH on the buffer passed to it if it is tied.
+It used to skip the call if the tied variable happened to hold a typeglob.
+
+=item *
+
+C<< $tied .= <> >> now calls FETCH once on C<$tied>.  It used to call it
+multiple times if the last value assigned to or returned from the tied
+variable was anything other than a string or typeglob.
+
+=item *
+
+The C<evalbytes> keyword added in 5.15.5 was respecting C<use utf8>
+declarations from the outer scope, when it should have been ignoring them.
+
+=item *
+
+C<goto &func> no longers crashes, but produces an error message, when the
+unwinding of the current subroutine's scope fires a destructor that
+undefines the subroutine being "goneto" [perl #99850].
+
+=item *
+
+Arithmetic assignment (C<$left += $right>) involving overloaded objects that
+rely on the 'nomethod' override no longer segfault when the left operand is not
+overloaded.
 
 =back
 

@@ -3645,8 +3645,8 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
 	    }
 	    SvUPGRADE(dstr, SVt_PVGV);
 	    (void)SvOK_off(dstr);
-	    /* FIXME - why are we doing this, then turning it off and on again
-	       below?  */
+	    /* We have to turn this on here, even though we turn it off
+	       below, as GvSTASH will fail an assertion otherwise. */
 	    isGV_with_GP_on(dstr);
 	}
 	GvSTASH(dstr) = GvSTASH(sstr);
@@ -3711,7 +3711,7 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
     }
 
     gp_free(MUTABLE_GV(dstr));
-    isGV_with_GP_off(dstr);
+    isGV_with_GP_off(dstr); /* SvOK_off does not like globs. */
     (void)SvOK_off(dstr);
     isGV_with_GP_on(dstr);
     GvINTRO_off(dstr);		/* one-shot flag */
@@ -4583,8 +4583,10 @@ Perl_sv_sethek(pTHX_ register SV *const sv, const HEK *const hek)
             return;
 	}
         {
+	    SV_CHECK_THINKFIRST_COW_DROP(sv);
 	    SvUPGRADE(sv, SVt_PV);
-	    sv_usepvn_flags(sv, (char *)HEK_KEY(share_hek_hek(hek)), HEK_LEN(hek), SV_HAS_TRAILING_NUL);
+	    SvPV_set(sv,(char *)HEK_KEY(share_hek_hek(hek)));
+	    SvCUR_set(sv, HEK_LEN(hek));
 	    SvLEN_set(sv, 0);
 	    SvREADONLY_on(sv);
 	    SvFAKE_on(sv);
@@ -4604,7 +4606,9 @@ Perl_sv_sethek(pTHX_ register SV *const sv, const HEK *const hek)
 Tells an SV to use C<ptr> to find its string value.  Normally the
 string is stored inside the SV but sv_usepvn allows the SV to use an
 outside string.  The C<ptr> should point to memory that was allocated
-by C<malloc>.  The string length, C<len>, must be supplied.  By default
+by C<malloc>.  It must be the start of a mallocked block
+of memory, and not a pointer to the middle of it.  The
+string length, C<len>, must be supplied.  By default
 this function will realloc (i.e. move) the memory pointed to by C<ptr>,
 so that pointer should not be freed or used by the programmer after
 giving it to sv_usepvn, and neither should any pointers from "behind"
@@ -4907,7 +4911,7 @@ Perl_sv_chop(pTHX_ register SV *const sv, register const char *const ptr)
 	    Move(pvx,SvPVX(sv),len,char);
 	    *SvEND(sv) = '\0';
 	}
-	SvFLAGS(sv) |= SVf_OOK;
+	SvOOK_on(sv);
 	old_delta = 0;
     } else {
 	SvOOK_offset(sv, old_delta);
@@ -5299,9 +5303,8 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
 #endif
     if (SvREADONLY(sv)) {
 	if (
-	    /* its okay to attach magic to shared strings; the subsequent
-	     * upgrade to PVMG will unshare the string */
-	    !(SvFAKE(sv) && SvTYPE(sv) < SVt_PVMG)
+	    /* its okay to attach magic to shared strings */
+	    (!SvFAKE(sv) || isGV_with_GP(sv))
 
 	    && IN_PERL_RUNTIME
 	    && !PERL_MAGIC_TYPE_READONLY_ACCEPTABLE(how)
@@ -8441,7 +8444,7 @@ Creates a new SV with its SvPVX_const pointing to a shared string in the string
 table.  If the string does not already exist in the table, it is
 created first.  Turns on READONLY and FAKE.  If the C<hash> parameter
 is non-zero, that value is used; otherwise the hash is computed.
-The string's hash can be later be retrieved from the SV
+The string's hash can later be retrieved from the SV
 with the C<SvSHARED_HASH()> macro.  The idea here is
 that as the string table is used for shared hash keys these strings will have
 SvPVX_const == HeKEY and hash lookup will avoid string compare.
@@ -10351,7 +10354,7 @@ Perl_sv_vcatpvfn(pTHX_ SV *const sv, const char *const pat, const STRLEN patlen,
 		 * back into v-string notation and then let the
 		 * vectorize happen normally
 		 */
-		if (sv_derived_from(vecsv, "version") && SvROK(vecsv)) {
+		if (sv_isobject(vecsv) && sv_derived_from(vecsv, "version")) {
 		    char *version = savesvpv(vecsv);
 		    if ( hv_exists(MUTABLE_HV(SvRV(vecsv)), "alpha", 5 ) ) {
 			Perl_warner(aTHX_ packWARN(WARN_INTERNAL),
@@ -12034,8 +12037,7 @@ S_sv_dup_common(pTHX_ const SV *const sstr, CLONE_PARAMS *const param)
 			const struct xpvhv_aux * const saux = HvAUX(sstr);
 			struct xpvhv_aux * const daux = HvAUX(dstr);
 			/* This flag isn't copied.  */
-			/* SvOOK_on(hv) attacks the IV flags.  */
-			SvFLAGS(dstr) |= SVf_OOK;
+			SvOOK_on(dstr);
 
 			if (saux->xhv_name_count) {
 			    HEK ** const sname = saux->xhv_name_u.xhvnameu_names;
@@ -14265,8 +14267,13 @@ S_find_uninit_var(pTHX_ const OP *const obase, const SV *const uninit_sv,
 	if (!o)
 	    break;
 
-	/* if all except one arg are constant, or have no side-effects,
-	 * or are optimized away, then it's unambiguous */
+	/* This loop checks all the kid ops, skipping any that cannot pos-
+	 * sibly be responsible for the uninitialized value; i.e., defined
+	 * constants and ops that return nothing.  If there is only one op
+	 * left that is not skipped, then we *know* it is responsible for
+	 * the uninitialized value.  If there is more than one op left, we
+	 * have to look for an exact match in the while() loop below.
+	 */
 	o2 = NULL;
 	for (kid=o; kid; kid = kid->op_sibling) {
 	    if (kid) {

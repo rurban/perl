@@ -228,7 +228,6 @@ cpan/Compress-Raw-Bzip2/fallback/constants.h
 cpan/Compress-Raw-Bzip2/fallback/constants.xs
 cpan/Compress-Raw-Bzip2/lib/Compress/Raw/Bzip2.pm
 cpan/Compress-Raw-Bzip2/Makefile.PL
-cpan/Compress-Raw-Bzip2/pod/FAQ.pod
 cpan/Compress-Raw-Bzip2/private/MakeUtil.pm
 cpan/Compress-Raw-Bzip2/README
 cpan/Compress-Raw-Bzip2/t/000prereq.t
@@ -245,7 +244,6 @@ cpan/Compress-Raw-Zlib/fallback/constants.h	Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/fallback/constants.xs	Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/lib/Compress/Raw/Zlib.pm	Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/Makefile.PL		Compress::Raw::Zlib
-cpan/Compress-Raw-Zlib/pod/FAQ.pod		Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/private/MakeUtil.pm	Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/README			Compress::Raw::Zlib
 cpan/Compress-Raw-Zlib/t/01version.t		Compress::Raw::Zlib
@@ -1219,6 +1217,7 @@ cpan/HTTP-Tiny/t/cases/redirect-07.txt
 cpan/HTTP-Tiny/t/cases/redirect-08.txt
 cpan/HTTP-Tiny/t/cases/redirect-09.txt
 cpan/HTTP-Tiny/t/Util.pm
+cpan/IO-Compress/bin/zipdetails				IO::Compress
 cpan/IO-Compress/Changes				IO::Compress
 cpan/IO-Compress/examples/compress-zlib/filtdef		IO::Compress
 cpan/IO-Compress/examples/compress-zlib/filtinf		IO::Compress
@@ -1242,6 +1241,7 @@ cpan/IO-Compress/lib/IO/Compress/Base/Common.pm		IO::Compress
 cpan/IO-Compress/lib/IO/Compress/Base.pm		IO::Compress
 cpan/IO-Compress/lib/IO/Compress/Bzip2.pm		IO::Compress
 cpan/IO-Compress/lib/IO/Compress/Deflate.pm		IO::Compress
+cpan/IO-Compress/lib/IO/Compress/FAQ.pod		IO::Compress
 cpan/IO-Compress/lib/IO/Compress/Gzip/Constants.pm	IO::Compress
 cpan/IO-Compress/lib/IO/Compress/Gzip.pm		IO::Compress
 cpan/IO-Compress/lib/IO/Compress/RawDeflate.pm		IO::Compress
@@ -1261,7 +1261,6 @@ cpan/IO-Compress/lib/IO/Uncompress/Inflate.pm		IO::Compress
 cpan/IO-Compress/lib/IO/Uncompress/RawInflate.pm	IO::Compress
 cpan/IO-Compress/lib/IO/Uncompress/Unzip.pm		IO::Compress
 cpan/IO-Compress/Makefile.PL				IO::Compress
-cpan/IO-Compress/pod/FAQ.pod				IO::Compress
 cpan/IO-Compress/private/MakeUtil.pm			IO::Compress
 cpan/IO-Compress/README					IO::Compress
 cpan/IO-Compress/t/000prereq.t				IO::Compress
@@ -1532,23 +1531,33 @@ cpan/Locale-Codes/lib/Locale/Codes/Constants.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes/Country_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Country.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Country.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Country_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Currency.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Currency_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangExt.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangExt_Retired.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam_Codes.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam.pm	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam.pod	Locale::Codes
+cpan/Locale-Codes/lib/Locale/Codes/LangFam_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Language.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Language_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/LangVar.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/LangVar_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes.pod		Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Codes/Script_Codes.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Script.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Codes/Script.pod	Locale::Codes documentation
+cpan/Locale-Codes/lib/Locale/Codes/Script_Retired.pm	Locale::Codes
 cpan/Locale-Codes/lib/Locale/Country.pm		Locale::Codes
 cpan/Locale-Codes/lib/Locale/Country.pod	Locale::Codes documentation
 cpan/Locale-Codes/lib/Locale/Currency.pm	Locale::Codes
@@ -1565,6 +1574,7 @@ cpan/Locale-Codes/t/code2country_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2country.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2currency.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2langext.t	Locale::Codes tests
+cpan/Locale-Codes/t/code2langfam.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2language.t		Locale::Codes tests
 cpan/Locale-Codes/t/code2langvar.t	Locale::Codes tests
 cpan/Locale-Codes/t/code2script.t		Locale::Codes tests
@@ -1577,6 +1587,7 @@ cpan/Locale-Codes/t/country.t			Locale::Codes tests
 cpan/Locale-Codes/t/currency2code_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/currency2code.t		Locale::Codes tests
 cpan/Locale-Codes/t/langext2code.t	Locale::Codes tests
+cpan/Locale-Codes/t/langfam2code.t	Locale::Codes tests
 cpan/Locale-Codes/t/language2code.t		Locale::Codes tests
 cpan/Locale-Codes/t/language_old.t	Locale::Codes tests
 cpan/Locale-Codes/t/language.t			Locale::Codes tests
@@ -2169,6 +2180,14 @@ cpan/Pod-Simple/t/xhtml05.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml10.t				Pod::Simple test file
 cpan/Pod-Simple/t/xhtml15.t				Pod::Simple test file
 cpan/Pod-Simple/t/x_nixer.t				Pod::Simple test file
+cpan/Socket/Makefile.PL			Socket extension makefile writer
+cpan/Socket/Socket.pm			Socket extension Perl module
+cpan/Socket/Socket.xs			Socket extension external subroutines
+cpan/Socket/t/getaddrinfo.t		See if Socket::getaddrinfo works
+cpan/Socket/t/getnameinfo.t		See if Socket::getnameinfo works
+cpan/Socket/t/ipv6_mreq.t		See if (un)pack_ipv6_mreq work
+cpan/Socket/t/socketpair.t		See if socketpair works
+cpan/Socket/t/Socket.t			See if Socket works
 cpan/Sys-Syslog/Changes			Changelog for Sys::Syslog
 cpan/Sys-Syslog/fallback/const-c.inc	Sys::Syslog constants fallback file
 cpan/Sys-Syslog/fallback/const-xs.inc	Sys::Syslog constants fallback file
@@ -3403,6 +3422,7 @@ dist/Safe/t/safe1.t		See if Safe works
 dist/Safe/t/safe2.t		See if Safe works
 dist/Safe/t/safe3.t		See if Safe works
 dist/Safe/t/safeload.t		Tests that some modules can be loaded by Safe
+dist/Safe/t/safenamedcap.t	Tests that Tie::Hash::NamedCapture can be loaded
 dist/Safe/t/safeops.t		Tests that all ops can be trapped by Safe
 dist/Safe/t/safesort.t		Tests Safe with sort
 dist/Safe/t/safeuniversal.t	Tests Safe with functions from universal.c
@@ -3860,14 +3880,6 @@ ext/SDBM_File/sdbm/tune.h	SDBM kit
 ext/SDBM_File/sdbm/util.c	SDBM kit
 ext/SDBM_File/t/sdbm.t		See if SDBM_File works
 ext/SDBM_File/typemap		SDBM extension interface types
-ext/Socket/Makefile.PL		Socket extension makefile writer
-ext/Socket/Socket.pm		Socket extension Perl module
-ext/Socket/Socket.xs		Socket extension external subroutines
-ext/Socket/t/getaddrinfo.t	See if Socket::getaddrinfo works
-ext/Socket/t/getnameinfo.t	See if Socket::getnameinfo works
-ext/Socket/t/ipv6_mreq.t	See if (un)pack_ipv6_mreq work
-ext/Socket/t/socketpair.t	See if socketpair works
-ext/Socket/t/Socket.t		See if Socket works
 ext/Sys-Hostname/Hostname.pm	Sys::Hostname extension Perl module
 ext/Sys-Hostname/Hostname.xs	Sys::Hostname extension external subroutines
 ext/Sys-Hostname/t/Hostname.t	See if Sys::Hostname works
@@ -4674,7 +4686,6 @@ pod/perlunitut.pod		Perl Unicode tutorial
 pod/perlutil.pod		utilities packaged with the Perl distribution
 pod/perlvar.pod			Perl predefined variables
 pod/perlvms.pod			Perl notes for VMS
-pod/roffitall			troff the whole man page set
 pod/rofftoc			Generate a table of contents in troff format
 pod/splitman			Splits perlfunc into multiple man pages
 pod/splitpod			Splits perlfunc into multiple pod pages
@@ -4963,6 +4974,8 @@ t/lib/Cname.pm			Test charnames in regexes (op/pat.t)
 t/lib/common.pl			Helper for lib/{warnings,feature}.t
 t/lib/commonsense.t		See if configuration meets basic needs
 t/lib/compmod.pl		Helper for 1_compile.t
+t/lib/croak/mg			Test croak calls from mg.c
+t/lib/croak/op			Test croak calls from op.c
 t/lib/croak.t			Test calls to Perl_croak() in the C source.
 t/lib/cygwin.t			Builtin cygwin function tests
 t/lib/dbmt_common.pl		Common functionality for ?DBM_File tests
@@ -4984,6 +4997,7 @@ t/lib/mypragma.pm		An example user pragma
 t/lib/mypragma.t		Test the example user pragma
 t/lib/no_load.t			Test that some modules don't load others
 t/lib/overload_fallback.t	Test that using overload 2x in a scope doesn't clobber fallback
+t/lib/overload_nomethod.t	Test that nomethod works as expected
 t/lib/proxy_constant_subs.t	Test that Proxy Constant Subs behave correctly
 t/lib/Sans_mypragma.pm		Test module for t/lib/mypragma.t
 t/lib/strict/refs		Tests of "use strict 'refs'" for strict.t
@@ -5460,6 +5474,7 @@ utils/ptar.PL			The ptar utility
 utils/shasum.PL			filter for computing SHA digests (analogous to md5sum)
 utils/splain.PL			Stand-alone version of diagnostics.pm
 utils/xsubpp.PL			External subroutine preprocessor
+utils/zipdetails.PL			display the internal structure of zip files
 uts/sprintf_wrap.c		sprintf wrapper for UTS
 uts/strtol_wrap.c		strtol wrapper for UTS
 vmesa/Makefile			VM/ESA Makefile

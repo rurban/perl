@@ -1391,6 +1391,12 @@ Apd	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
 Apd	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
 Ampd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
 AMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags
+#if defined(PERL_IN_MG_C) || defined(PERL_IN_PP_C)
+p	|bool	|translate_substr_offsets|STRLEN curlen|IV pos1_iv \
+					 |bool pos1_is_uv|IV len_iv \
+					 |bool len_is_uv|NN STRLEN *posp \
+					 |NN STRLEN *lenp
+#endif
 #if defined(UNLINK_ALL_VERSIONS)
 Ap	|I32	|unlnk		|NN const char* f
 #endif
@@ -1743,6 +1749,8 @@ s	|void	|find_beginning	|NN SV* linestr_sv|NN PerlIO *rsfp
 s	|void	|forbid_setid	|const char flag|const bool suidscript
 s	|void	|incpush	|NN const char *const dir|STRLEN len \
 				|U32 flags
+s	|SV*	|mayberelocate	|NN const char *const dir|STRLEN len \
+				|U32 flags
 s	|void	|incpush_use_sep|NN const char *p|STRLEN len|U32 flags
 s	|void	|init_interp
 s	|void	|init_ids
@@ -1754,10 +1762,11 @@ rs	|void	|my_exit_jump
 s	|void	|nuke_stacks
 s	|int	|open_script	|NN const char *scriptname|bool dosearch \
 				|NN bool *suidscript|NN PerlIO **rsfpp
-s	|void	|usage		|NN const char *name
+sr	|void	|usage
 #ifndef SETUID_SCRIPTS_ARE_SECURE_NOW
 so	|void	|validate_suid	|NN PerlIO *rsfp
 #endif
+sr	|void	|minus_v
 
 s	|void*	|parse_body	|NULLOK char **env|XSINIT_t xsinit
 rs	|void	|run_body	|I32 oldscope

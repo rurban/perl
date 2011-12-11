@@ -1897,8 +1897,7 @@ S_hv_auxinit(HV *hv) {
 	      + sizeof(struct xpvhv_aux), char);
     }
     HvARRAY(hv) = (HE**) array;
-    /* SvOOK_on(hv) attacks the IV flags.  */
-    SvFLAGS(hv) |= SVf_OOK;
+    SvOOK_on(hv);
     iter = HvAUX(hv);
 
     iter->xhv_riter = -1; 	/* HvRITER(hv) = -1 */
@@ -2735,7 +2734,7 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, register U32 hash, int flags)
 	/* We don't actually store a HE from the arena and a regular HEK.
 	   Instead we allocate one chunk of memory big enough for both,
 	   and put the HEK straight after the HE. This way we can find the
-	   HEK directly from the HE.
+	   HE directly from the HEK.
 	*/
 
 	Newx(k, STRUCT_OFFSET(struct shared_he,

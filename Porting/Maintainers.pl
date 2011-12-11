@@ -65,6 +65,7 @@ use File::Glob qw(:case);
     'p5p'	=> 'perl5-porters <perl5-porters@perl.org>',
     'perlfaq'	=> 'perlfaq-workers <perlfaq-workers@perl.org>',
     'petdance'	=> 'Andy Lester <andy@petdance.com>',
+    'pevans'    => 'Paul Evans <leonerd@leonerd.org.uk>',
     'pjf'	=> 'Paul Fenwick <pjf@cpan.org>',
     'pmqs'	=> 'Paul Marquess <pmqs@cpan.org>',
     'pvhp'	=> 'Peter Prymmer <pvhp@best.com>',
@@ -377,7 +378,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Bzip2' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.043.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Bzip2-2.045.tar.gz',
 	'FILES'		=> q[cpan/Compress-Raw-Bzip2],
 	'EXCLUDED'	=> [ qr{^t/Test/},
 			     qw( bzip2-src/bzip2-cpp.patch
@@ -389,7 +390,7 @@ use File::Glob qw(:case);
     'Compress::Raw::Zlib' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.043.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/Compress-Raw-Zlib-2.045.tar.gz',
 
 	'FILES'		=> q[cpan/Compress-Raw-Zlib],
 	'EXCLUDED'	=> [ qr{^t/Test/},
@@ -462,7 +463,7 @@ use File::Glob qw(:case);
     'CPANPLUS' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9112.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/CPANPLUS-0.9113.tar.gz',
 	'FILES'		=> q[cpan/CPANPLUS],
 	'EXCLUDED'	=> [ qr{^inc/},
 			     qr{^t/dummy-.*\.hidden$},
@@ -756,7 +757,7 @@ use File::Glob qw(:case);
     'ExtUtils::ParseXS' =>
 	{
 	'MAINTAINER'	=> 'smueller',
-	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.05.tar.gz',
+	'DISTRIBUTION'	=> 'SMUELLER/ExtUtils-ParseXS-3.07.tar.gz',
 	'FILES'		=> q[dist/ExtUtils-ParseXS],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1034,7 +1035,7 @@ use File::Glob qw(:case);
     'IO-Compress' =>
 	{
 	'MAINTAINER'	=> 'pmqs',
-	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.043.tar.gz',
+	'DISTRIBUTION'	=> 'PMQS/IO-Compress-2.045.tar.gz',
 	'FILES'		=> q[cpan/IO-Compress],
 	'EXCLUDED'	=> [ qr{t/Test/} ],
 	'UPSTREAM'	=> 'cpan',
@@ -1105,7 +1106,7 @@ use File::Glob qw(:case);
     'Locale-Codes' =>
 	{
 	'MAINTAINER'	=> 'sbeck',
-	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.18.tar.gz',
+	'DISTRIBUTION'	=> 'SBECK/Locale-Codes-3.20.tar.gz',
 	'FILES'		=> q[cpan/Locale-Codes],
 	'EXCLUDED'	=> [ qw{t/pod_coverage.t t/pod.t}, qr{^t/runtests}, qr{^t/runtests\.bat},
 			     qr{^internal/}, qr{^examples/} ],
@@ -1283,7 +1284,7 @@ use File::Glob qw(:case);
     'Module::Loaded' =>
 	{
 	'MAINTAINER'	=> 'kane',
-	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.06.tar.gz',
+	'DISTRIBUTION'	=> 'BINGOS/Module-Loaded-0.08.tar.gz',
 	'FILES'		=> q[cpan/Module-Loaded],
 	'UPSTREAM'	=> 'cpan',
 	},
@@ -1612,7 +1613,7 @@ use File::Glob qw(:case);
     'Safe' =>
 	{
 	'MAINTAINER'	=> 'rgarcia',
-	'DISTRIBUTION'	=> 'RGARCIA/Safe-2.29.tar.gz',
+	'DISTRIBUTION'	=> 'RGARCIA/Safe-2.30.tar.gz',
 	'FILES'		=> q[dist/Safe],
 	'UPSTREAM'	=> 'blead',
 	},
@@ -1663,9 +1664,10 @@ use File::Glob qw(:case);
 
     'Socket' =>
 	{
-	'MAINTAINER'	=> 'p5p',
-	'FILES'		=> q[ext/Socket],
-	'UPSTREAM'	=> 'blead',
+	'MAINTAINER'	=> 'pevans',
+	'DISTRIBUTION'  => 'PEVANS/Socket-1.95.tar.gz',
+	'FILES'		=> q[cpan/Socket],
+	'UPSTREAM'	=> 'cpan',
 	},
 
     'Storable' =>
@@ -1970,7 +1972,7 @@ use File::Glob qw(:case);
     'Unicode::Collate' =>
 	{
 	'MAINTAINER'	=> 'sadahiro',
-	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.86.tar.gz',
+	'DISTRIBUTION'	=> 'SADAHIRO/Unicode-Collate-0.87.tar.gz',
 	'FILES'		=> q[cpan/Unicode-Collate],
 	'EXCLUDED'	=> [ qr{N$},
                    qr{^data/},

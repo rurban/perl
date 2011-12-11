@@ -1669,11 +1669,10 @@ determined.
 
 If there is a syntax error or runtime error, or a C<die> statement is
 executed, C<eval> returns C<undef> in scalar context
-or an empty list--or, for syntax errors, a list containing a single
-undefined value--in list context, and C<$@> is set to the error
-message.  The discrepancy in the return values in list context is
-considered a bug by some, and will probably be fixed in a future
-release.  If there was no error, C<$@> is set to the empty string.  A
+or an empty list in list context, and C<$@> is set to the error
+message.  (Prior to 5.16, a bug caused C<undef> to be returned
+in list context for syntax errors, but not for runtime errors.)
+If there was no error, C<$@> is set to the empty string.  A
 control flow operator like C<last> or C<goto> can bypass the setting of
 C<$@>.  Beware that using C<eval> neither silences Perl from printing
 warnings to STDERR, nor does it stuff the text of warning messages into C<$@>.
@@ -4876,8 +4875,8 @@ B<C<rand()> is not cryptographically secure.  You should not rely
 on it in security-sensitive situations.>  As of this writing, a
 number of third-party CPAN modules offer random number generators
 intended by their authors to be cryptographically secure,
-including: L<Math::Random::Secure>, L<Math::Random::MT::Perl>, and
-L<Math::TrulyRandom>.
+including: L<Data::Entropy>, L<Crypt::Random>, L<Math::Random::Secure>,
+and L<Math::TrulyRandom>.
 
 =item read FILEHANDLE,SCALAR,LENGTH,OFFSET
 X<read> X<file, read>
@@ -6627,10 +6626,7 @@ C<srand()> at all.
 But there are a few situations in recent Perls where programs are likely to
 want to call C<srand>.  One is for generating predictable results generally for
 testing or debugging.  There, you use C<srand($seed)>, with the same C<$seed>
-each time.  Another other case is where you need a cryptographically-strong
-starting point rather than the generally acceptable default, which is based on
-time of day, process ID, and memory allocation, or the F</dev/urandom> device
-if available.  And still another case is that you may want to call C<srand()>
+each time.  Another case is that you may want to call C<srand()>
 after a C<fork()> to avoid child processes sharing the same seed value as the
 parent (and consequently each other).
 
@@ -6649,16 +6645,6 @@ current C<time>.  This isn't a particularly good seed, so many old
 programs supply their own seed value (often C<time ^ $$> or C<time ^
 ($$ + ($$ << 15))>), but that isn't necessary any more.
 
-For cryptographic purposes, however, you need something much more random 
-than the default seed.  Checksumming the compressed output of one or more
-rapidly changing operating system status programs is the usual method.  For
-example:
-
-    srand (time ^ $$ ^ unpack "%L*", `ps axww | gzip -f`);
-
-If you're particularly concerned with this, search the CPAN for
-random number generator modules instead of rolling out your own.
-
 Frequently called programs (like CGI scripts) that simply use
 
     time ^ $$
@@ -6673,6 +6659,13 @@ A typical use of the returned seed is for a test program which has too many
 combinations to test comprehensively in the time available to it each run.  It
 can test a random subset each time, and should there be a failure, log the seed
 used for that run so that it can later be used to reproduce the same results.
+
+B<C<rand()> is not cryptographically secure.  You should not rely
+on it in security-sensitive situations.>  As of this writing, a
+number of third-party CPAN modules offer random number generators
+intended by their authors to be cryptographically secure,
+including: L<Data::Entropy>, L<Crypt::Random>, L<Math::Random::Secure>,
+and L<Math::TrulyRandom>.
 
 =item stat FILEHANDLE
 X<stat> X<file, status> X<ctime>
@@ -6977,7 +6970,18 @@ of the original string is being modified; for example:
         $_ = 'pq';  print $x,"\n";    # prints 5pq9
     }
 
-Prior to Perl version 5.9.1, the result of using an lvalue multiple times was
+With negative offsets, it remembers its position from the end of the string
+when the target string is modified:
+
+    $x = '1234';
+    for (substr($x, -3, 2)) {
+        $_ = 'a';   print $x,"\n";    # prints 1a4, as above
+        $x = 'abcdefg';
+        print $_,"\n";                # prints f
+    }
+
+Prior to Perl version 5.10, the result of using an lvalue multiple times was
+unspecified.  Prior to 5.16, the result with negative offsets was
 unspecified.
 
 =item symlink OLDFILE,NEWFILE
@@ -7705,12 +7709,16 @@ This is often useful if you need to check the current Perl version before
 C<use>ing library modules that won't work with older versions of Perl.
 (We try not to do this more than we have to.)
 
-Also, if the specified Perl version is greater than or equal to 5.9.5,
-C<use VERSION> will also load the C<feature> pragma and enable all
-features available in the requested version.  See L<feature>.
+C<use VERSION> also loads the C<feature> pragma and enables all features
+available in the requested version, disabling any features not in
+the current version's feature bundle.  See L<feature>.  (Whether
+it actually loads the F<feature.pm> module is subject to
+change.  In some cases it is skipped for efficiency reasons.)
 Similarly, if the specified Perl version is greater than or equal to
 5.11.0, strictures are enabled lexically as with C<use strict> (except
-that the F<strict.pm> file is not actually loaded).
+that the F<strict.pm> file is not actually loaded).  Any explicit use of
+C<use strict> or C<no strict> overrides C<use VERSION>, even if it comes
+before it.
 
 The C<BEGIN> forces the C<require> and C<import> to happen at compile time.  The
 C<require> makes sure the module is loaded into memory if it hasn't been

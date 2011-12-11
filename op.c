@@ -4505,6 +4505,7 @@ Perl_newPVOP(pTHX_ I32 type, I32 flags, char *pv)
     PVOP *pvop;
 
     assert((PL_opargs[type] & OA_CLASS_MASK) == OA_PVOP_OR_SVOP
+	|| type == OP_RUNCV
 	|| (PL_opargs[type] & OA_CLASS_MASK) == OA_LOOPEXOP);
 
     NewOp(1101, pvop, 1, PVOP);
@@ -4668,6 +4669,20 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	    newSTATEOP(0, NULL, imop) ));
 
     if (use_version) {
+	HV * const hinthv = GvHV(PL_hintgv);
+	const bool hhoff = !hinthv || !(PL_hints & HINT_LOCALIZE_HH);
+
+	/* Turn features off */
+	if (hhoff)
+	    /* avoid loading feature.pm */
+	    PL_hints &= ~HINT_UNI_8_BIT;
+	else {
+	    ENTER_with_name("load_feature");
+	    Perl_load_module(aTHX_
+		PERL_LOADMOD_DENY, newSVpvs("feature"), NULL, NULL
+	    );
+	}
+
 	/* If we request a version >= 5.9.5, load feature.pm with the
 	 * feature bundle that corresponds to the required version. */
 	use_version = sv_2mortal(new_version(use_version));
@@ -4675,15 +4690,30 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
 	    SV *const importsv = vnormal(use_version);
+	    if (hhoff) ENTER_with_name("load_feature");
 	    *SvPVX_mutable(importsv) = ':';
-	    ENTER_with_name("load_feature");
 	    Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
 	    LEAVE_with_name("load_feature");
 	}
+	else if (!hhoff) LEAVE_with_name("load_feature");
 	/* If a version >= 5.11.0 is requested, strictures are on by default! */
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
-	    PL_hints |= (HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
+	    if (hhoff || !hv_exists(hinthv, "strict/refs", 11))
+		PL_hints |= HINT_STRICT_REFS;
+	    if (hhoff || !hv_exists(hinthv, "strict/subs", 11))
+		PL_hints |= HINT_STRICT_SUBS;
+	    if (hhoff || !hv_exists(hinthv, "strict/vars", 11))
+		PL_hints |= HINT_STRICT_VARS;
+	}
+	/* otherwise they are off */
+	else {
+	    if (hhoff || !hv_exists(hinthv, "strict/refs", 11))
+		PL_hints &= ~HINT_STRICT_REFS;
+	    if (hhoff || !hv_exists(hinthv, "strict/subs", 11))
+		PL_hints &= ~HINT_STRICT_SUBS;
+	    if (hhoff || !hv_exists(hinthv, "strict/vars", 11))
+		PL_hints &= ~HINT_STRICT_VARS;
 	}
     }
 
@@ -9439,7 +9469,9 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
 		    (void)too_many_arguments(aop, GvNAME(namegv));
 		op_free(aop);
 	    }
-	    return newOP(opnum,0);
+	    return opnum == OP_RUNCV
+		? newPVOP(OP_RUNCV,0,NULL)
+		: newOP(opnum,0);
 	default:
 	    return convert(opnum,0,aop);
 	}
@@ -10280,6 +10312,42 @@ Perl_rpeep(pTHX_ register OP *o)
 	case OP_MATCH:
 	    if (!(cPMOP->op_pmflags & PMf_ONCE)) {
 		assert (!cPMOP->op_pmstashstartu.op_pmreplstart);
+	    }
+	    break;
+
+	case OP_RUNCV:
+	    if (!(o->op_private & OPpOFFBYONE) && !CvCLONE(PL_compcv)) {
+		SV *sv;
+		if (CvUNIQUE(PL_compcv)) sv = &PL_sv_undef;
+		else {
+		    sv = newRV((SV *)PL_compcv);
+		    sv_rvweaken(sv);
+		    SvREADONLY_on(sv);
+		}
+		o->op_type = OP_CONST;
+		o->op_ppaddr = PL_ppaddr[OP_CONST];
+		o->op_flags |= OPf_SPECIAL;
+		cSVOPo->op_sv = sv;
+	    }
+	    break;
+
+	case OP_SASSIGN:
+	    if (OP_GIMME(o,0) == G_VOID) {
+		OP *right = cBINOP->op_first;
+		if (right) {
+		    OP *left = right->op_sibling;
+		    if (left->op_type == OP_SUBSTR
+			 && (left->op_private & 7) < 4) {
+			op_null(o);
+			cBINOP->op_first = left;
+			right->op_sibling =
+			    cBINOPx(left)->op_first->op_sibling;
+			cBINOPx(left)->op_first->op_sibling = right;
+			left->op_private |= OPpSUBSTR_REPL_FIRST;
+			left->op_flags =
+			    (o->op_flags & ~OPf_WANT) | OPf_WANT_VOID;
+		    }
+		}
 	    }
 	    break;
 

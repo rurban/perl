@@ -19,7 +19,7 @@ require Exporter;
                );
 %EXPORT_TAGS = ('ALL' => \@EXPORT_OK);
 
-$VERSION = "0.37";
+$VERSION = "0.38";
 
 sub uniq { my %seen; return grep(!($seen{$_}++), @_); } # a util function
 
@@ -862,7 +862,7 @@ C<http://www.perl.com/CPAN/modules/by-module/Locale/>
 
 * ISO 639-2, "Codes for the representation of names of languages",
 including two-letter and three-letter codes,
-C<http://www.loc.gov/standards/iso639-2/langcodes.html>
+C<http://www.loc.gov/standards/iso639-2/php/code_list.php>
 
 * The IANA list of registered languages (hopefully up-to-date),
 C<http://www.iana.org/assignments/language-tags>

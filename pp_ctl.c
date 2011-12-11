@@ -328,11 +328,9 @@ PP(pp_substcont)
 		targ = dstr;
 	    }
 	    else {
-#ifdef PERL_OLD_COPY_ON_WRITE
 		if (SvIsCOW(targ)) {
 		    sv_force_normal_flags(targ, SV_COW_DROP_PV);
 		} else
-#endif
 		{
 		    SvPV_free(targ);
 		}
@@ -2879,6 +2877,19 @@ PP(pp_goto)
 	    oldsave = PL_scopestack[PL_scopestack_ix - 1];
 	    LEAVE_SCOPE(oldsave);
 
+	    /* A destructor called during LEAVE_SCOPE could have undefined
+	     * our precious cv.  See bug #99850. */
+	    if (!CvROOT(cv) && !CvXSUB(cv)) {
+		const GV * const gv = CvGV(cv);
+		if (gv) {
+		    SV * const tmpstr = sv_newmortal();
+		    gv_efullname3(tmpstr, gv, NULL);
+		    DIE(aTHX_ "Goto undefined subroutine &%"SVf"",
+			       SVfARG(tmpstr));
+		}
+		DIE(aTHX_ "Goto undefined subroutine");
+	    }
+
 	    /* Now do some callish stuff. */
 	    SAVETMPS;
 	    SAVEFREESV(cv); /* later, undo the 'avoid premature free' hack */
@@ -3577,8 +3588,6 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 
     yystatus = (!in_require && CATCH_GET) ? S_try_yyparse(aTHX_ GRAMPROG) : yyparse(GRAMPROG);
 
-    if (!startop && yystatus != 3) LEAVE_with_name("evalcomp");
-
     if (yystatus || PL_parser->error_count || !PL_eval_root) {
 	SV **newsp;			/* Used by POPBLOCK. */
 	PERL_CONTEXT *cx;
@@ -3604,6 +3613,7 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 		POPEVAL(cx);
 		namesv = cx->blk_eval.old_namesv;
 	    }
+	    /* POPBLOCK renders LEAVE_with_name("evalcomp") unnecessary. */
 	    LEAVE_with_name("eval"); /* pp_entereval knows about this LEAVE.  */
 	}
 
@@ -3639,10 +3649,11 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 	        sv_setpvs(ERRSV, "Compilation error");
 	    }
 	}
-	PUSHs(&PL_sv_undef);
+	if (gimme != G_ARRAY) PUSHs(&PL_sv_undef);
 	PUTBACK;
 	return FALSE;
     }
+    else if (!startop) LEAVE_with_name("evalcomp");
     CopLINE_set(&PL_compiling, 0);
     if (startop) {
 	*startop = PL_eval_root;

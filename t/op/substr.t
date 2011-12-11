@@ -7,7 +7,6 @@ BEGIN {
     @INC = '../lib';
 }
 use warnings ;
-no warnings 'deprecated';
 
 $a = 'abcdefxyz';
 $SIG{__WARN__} = sub {
@@ -24,7 +23,7 @@ $SIG{__WARN__} = sub {
 
 BEGIN { require './test.pl'; }
 
-plan(358);
+plan(381);
 
 run_tests() unless caller;
 
@@ -43,6 +42,8 @@ eval{substr($a,999,999) = "" ; };# P R Q S
 like ($@, $FATAL_MSG);
 is(substr($a,0,-6), 'abc');  # P=Q R S
 is(substr($a,-3,1), 'x');    # P Q R S
+sub{$b = shift}->(substr($a,999,999));
+is ($w--, 1, 'boundless lvalue substr only warns on fetch');
 
 substr($a,3,3) = 'XYZ';
 is($a, 'abcXYZxyz' );
@@ -636,6 +637,51 @@ is($x, "\x{100}\x{200}\xFFb");
 	is($_, 'YYYY'); 
 	is($x, 'aYYYYef');
     }
+    $x = "abcdef";
+    for (substr($x,1)) {
+	is($_, 'bcdef');
+	$_ = 'XX';
+	is($_, 'XX');
+	is($x, 'aXX');
+	$x .= "frompswiggle";
+	is $_, "XXfrompswiggle";
+    }
+    $x = "abcdef";
+    for (substr($x,1,-1)) {
+	is($_, 'bcde');
+	$_ = 'XX';
+	is($_, 'XX');
+	is($x, 'aXXf');
+	$x .= "frompswiggle";
+	is $_, "XXffrompswiggl";
+    }
+    $x = "abcdef";
+    for (substr($x,-5,3)) {
+	is($_, 'bcd');
+	$_ = 'XX';   # now $_ is substr($x, -4, 2)
+	is($_, 'XX');
+	is($x, 'aXXef');
+	$x .= "frompswiggle";
+	is $_, "gg";
+    }
+    $x = "abcdef";
+    for (substr($x,-5)) {
+	is($_, 'bcdef');
+	$_ = 'XX';  # now substr($x, -2)
+	is($_, 'XX');
+	is($x, 'aXX');
+	$x .= "frompswiggle";
+	is $_, "le";
+    }
+    $x = "abcdef";
+    for (substr($x,-5,-1)) {
+	is($_, 'bcde');
+	$_ = 'XX';  # now substr($x, -3, -1)
+	is($_, 'XX');
+	is($x, 'aXXf');
+	$x .= "frompswiggle";
+	is $_, "gl";
+    }
 }
 
 # [perl #24200] string corruption with lvalue sub
@@ -761,4 +807,13 @@ ok eval {
     $t = "The World!";
     substr $t, 0, 9, *ザ::ワルド;
     is($t, "*ザ::ワルド!", "substr works on a UTF-8 glob + stash");
+}
+
+{
+    my $x = *foo;
+    my $y = \substr *foo, 0, 0;
+    is ref \$x, 'GLOB', '\substr does not coerce its glob arg just yet';
+    $x = \"foo";
+    $y = \substr *foo, 0, 0;
+    is ref \$x, 'REF', '\substr does not coerce its ref arg just yet';
 }
