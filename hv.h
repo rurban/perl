@@ -620,6 +620,30 @@ Creates a new HV.  The reference count is set to 1.
 #define newHV()	MUTABLE_HV(newSV_type(SVt_PVHV))
 
 /*
+=for apidoc newPH
+
+Creates a new perfect hash. The reference count is set to 1.
+A perfect hash has the HvPERFECT(hv) flag set.
+
+=cut
+*/
+
+#define newPH()        MUTABLE_HV(newSV_type(SVt_PVHV))
+
+#define HvPERFECT(hv)          (SvFLAGS(hv) & SVphv_PERFECT)
+
+/* for study %hash:
+ * XXX This needs to copy the old xpvhv keys and values.
+ */
+#define HvPERFECT_on(hv)       ( \
+       SvFLAGS(hv) |= SVphv_PERFECT; \
+       )
+#define HvPERFECT_off(hv)      ( \
+       SvFLAGS(hv) &= ~SVphv_PERFECT; \
+       )
+
+
+/*
  * Local variables:
  * c-indentation-style: bsd
  * c-basic-offset: 4
