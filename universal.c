@@ -406,7 +406,6 @@ XS(XS_UNIVERSAL_VERSION)
     GV **gvp;
     GV *gv;
     SV *sv;
-    SV *ret;
     const char *undef;
     PERL_UNUSED_ARG(cv);
 
@@ -423,12 +422,16 @@ XS(XS_UNIVERSAL_VERSION)
     gvp = pkg ? (GV**)hv_fetchs(pkg, "VERSION", FALSE) : NULL;
 
     if (gvp && isGV(gv = *gvp) && (sv = GvSV(gv)) && SvOK(sv)) {
-        ret = sv_newmortal();
-        sv_setsv(ret, sv);
+        SV * const nsv = sv_newmortal();
+        sv_setsv(nsv, sv);
+        sv = nsv;
+	if ( !sv_isobject(sv) || !sv_derived_from(sv, "version"))
+	    upg_version(sv, FALSE);
+
         undef = NULL;
     }
     else {
-        sv = ret = &PL_sv_undef;
+        sv = &PL_sv_undef;
         undef = "(undef)";
     }
 
@@ -449,10 +452,7 @@ XS(XS_UNIVERSAL_VERSION)
 	     }
 	}
 
-	if ( !sv_derived_from(sv, "version") || !SvROK(sv))
-	    upg_version(sv, FALSE);
-
-	if ( !sv_derived_from(req, "version") || !SvROK(req)) {
+	if ( !sv_isobject(req) || !sv_derived_from(req, "version")) {
 	    /* req may very well be R/O, so create a new object */
 	    req = sv_2mortal( new_version(req) );
 	}
@@ -475,7 +475,11 @@ XS(XS_UNIVERSAL_VERSION)
 
     }
 
-    ST(0) = ret;
+    if ( SvOK(sv) && sv_derived_from(sv, "version") ) {
+	ST(0) = sv_2mortal(vstringify(sv));
+    } else {
+	ST(0) = sv;
+    }
 
     XSRETURN(1);
 }
@@ -534,7 +538,7 @@ XS(XS_version_stringify)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -557,7 +561,7 @@ XS(XS_version_numify)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -580,7 +584,7 @@ XS(XS_version_normal)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -603,7 +607,7 @@ XS(XS_version_vcmp)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -615,7 +619,7 @@ XS(XS_version_vcmp)
 	       SV * robj = ST(1);
 	       const IV	 swap = (IV)SvIV(ST(2));
 
-	       if ( ! sv_derived_from(robj, "version") || !SvROK(robj) )
+	       if ( !sv_isobject(robj) || !sv_derived_from(robj, "version") )
 	       {
 		    robj = new_version(SvOK(robj) ? robj : newSVpvs_flags("0", SVs_TEMP));
 		    sv_2mortal(robj);
@@ -646,7 +650,7 @@ XS(XS_version_boolean)
     if (items < 1)
 	croak_xs_usage(cv, "lobj, ...");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = SvRV(ST(0));
 	SV * const rs = newSViv( vcmp(lobj,new_version(newSVpvs("0"))) );
 	mPUSHs(rs);
@@ -663,7 +667,7 @@ XS(XS_version_noop)
     dXSARGS;
     if (items < 1)
 	croak_xs_usage(cv, "lobj, ...");
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0)))
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version"))
 	Perl_croak(aTHX_ "operation not supported with version object");
     else
 	Perl_croak(aTHX_ "lobj is not of type version");
@@ -679,7 +683,7 @@ XS(XS_version_is_alpha)
     if (items != 1)
 	croak_xs_usage(cv, "lobj");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = ST(0);
 	if ( hv_exists(MUTABLE_HV(SvRV(lobj)), "alpha", 5 ) )
 	    XSRETURN_YES;
@@ -741,7 +745,7 @@ XS(XS_version_is_qv)
     if (items != 1)
 	croak_xs_usage(cv, "lobj");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = ST(0);
 	if ( hv_exists(MUTABLE_HV(SvRV(lobj)), "qv", 2 ) )
 	    XSRETURN_YES;

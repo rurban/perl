@@ -399,6 +399,13 @@ my $f = sub {
 # bug #43010
 &::::;
 ####
+# [perl #77172]
+package rt77172;
+sub foo {} foo & & & foo;
+>>>>
+package rt77172;
+foo(&{&} & foo());
+####
 # variables as method names
 my $bar;
 'Foo'->$bar('orz');
@@ -409,6 +416,17 @@ my $bar;
 ####
 # constants as method names without ()
 'Foo'->bar;
+####
+# [perl #47359] "indirect" method call notation
+our @bar;
+foo{@bar}+1,->foo;
+(foo{@bar}+1),foo();
+foo{@bar}1 xor foo();
+>>>>
+our @bar;
+(foo { @bar } 1)->foo;
+(foo { @bar } 1), foo();
+foo { @bar } 1 xor foo();
 ####
 # SKIP ?$] < 5.010 && "say not implemented on this Perl version"
 # say
@@ -714,11 +732,16 @@ pop @_;
 #[perl #20444]
 "foo" =~ (1 ? /foo/ : /bar/);
 "foo" =~ (1 ? y/foo// : /bar/);
+"foo" =~ (1 ? y/foo//r : /bar/);
 "foo" =~ (1 ? s/foo// : /bar/);
 >>>>
 'foo' =~ ($_ =~ /foo/);
 'foo' =~ ($_ =~ tr/fo//);
+'foo' =~ ($_ =~ tr/fo//r);
 'foo' =~ ($_ =~ s/foo//);
+####
+# The fix for [perl #20444] broke this.
+'foo' =~ do { () };
 ####
 # Test @threadsv_names under 5005threads
 foreach $' (1, 2) {
@@ -793,3 +816,80 @@ print sort(foo('bar'));
 # substr assignment
 substr(my $a, 0, 0) = (foo(), bar());
 $a++;
+####
+# hint hash
+BEGIN { $^H{'foo'} = undef; }
+{
+ BEGIN { $^H{'bar'} = undef; }
+ {
+  BEGIN { $^H{'baz'} = undef; }
+  {
+   print $_;
+  }
+  print $_;
+ }
+ print $_;
+}
+BEGIN { $^H{q[']} = '('; }
+print $_;
+####
+# hint hash changes that serialise the same way with sort %hh
+BEGIN { $^H{'a'} = 'b'; }
+{
+ BEGIN { $^H{'b'} = 'a'; delete $^H{'a'}; }
+ print $_;
+}
+print $_;
+####
+# [perl #47361] do({}) and do +{} (variants of do-file)
+do({});
+do +{};
+sub foo::do {}
+package foo;
+CORE::do({});
+CORE::do +{};
+>>>>
+do({});
+do({});
+package foo;
+CORE::do({});
+CORE::do({});
+####
+# [perl #77096] functions that do not follow the llafr
+() = (return 1) + time;
+() = (return ($1 + $2) * $3) + time;
+() = (return ($a xor $b)) + time;
+() = (do 'file') + time;
+() = (do ($1 + $2) * $3) + time;
+() = (do ($1 xor $2)) + time;
+() = (goto 1) + 3;
+() = (require 'foo') + 3;
+() = (require foo) + 3;
+() = (CORE::dump 1) + 3;
+() = (last 1) + 3;
+() = (next 1) + 3;
+() = (redo 1) + 3;
+() = (-R $_) + 3;
+() = (-W $_) + 3;
+() = (-X $_) + 3;
+() = (-r $_) + 3;
+() = (-w $_) + 3;
+() = (-x $_) + 3;
+####
+# [perl #97476] not() *does* follow the llafr
+$_ = ($a xor not +($1 || 2) ** 2);
+####
+# Precedence conundrums with argument-less function calls
+() = (eof) + 1;
+() = (return) + 1;
+() = (return, 1);
+() = warn;
+() = warn() + 1;
+() = setpgrp() + 1;
+####
+# [perl #63558] open local(*FH)
+open local *FH;
+pipe local *FH, local *FH;
+####
+# [perl #74740] -(f()) vs -f()
+$_ = -(f());

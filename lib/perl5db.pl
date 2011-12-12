@@ -519,7 +519,7 @@ BEGIN {
 }
 
 # Debugger for Perl 5.00x; perl5db.pl patch level:
-$VERSION = '1.34';
+$VERSION = '1.35';
 
 $header = "perl5db.pl version $VERSION";
 
@@ -1098,6 +1098,9 @@ $trace = $signal = $single = 0;    # Uninitialized warning suppression
 # value when the 'r' command is used to return from a subroutine.
 $inhibit_exit = $option{PrintRet} = 1;
 
+# Default to 1 so the prompt will display the first line.
+$trace_to_depth = 1;
+
 =head1 OPTION PROCESSING
 
 The debugger's options are actually spread out over the debugger itself and 
@@ -1567,9 +1570,19 @@ if ( exists $ENV{PERLDB_RESTART} ) {
 
     # restore breakpoints/actions
     my @had_breakpoints = get_list("PERLDB_VISITED");
-    for ( 0 .. $#had_breakpoints ) {
-        my %pf = get_list("PERLDB_FILE_$_");
-        $postponed_file{ $had_breakpoints[$_] } = \%pf if %pf;
+    for my $file_idx ( 0 .. $#had_breakpoints ) {
+        my $filename = $had_breakpoints[$file_idx];
+        my %pf = get_list("PERLDB_FILE_$file_idx");
+        $postponed_file{ $filename } = \%pf if %pf;
+        my @lines = sort {$a <=> $b} keys(%pf);
+        my @enabled_statuses = get_list("PERLDB_FILE_ENABLED_$file_idx");
+        for my $line_idx (0 .. $#lines) {
+            _set_breakpoint_enabled_status(
+                $filename,
+                $lines[$line_idx],
+                ($enabled_statuses[$line_idx] ? 1 : ''),
+            );
+        }
     }
 
     # restore options
@@ -1943,7 +1956,10 @@ sub DB {
         elsif ($stop) {
             $evalarg = "\$DB::signal |= 1 if do {$stop}";
             &eval;
-            $dbline{$line} =~ s/;9($|\0)/$1/;
+            # If the breakpoint is temporary, then delete its enabled status.
+            if ($dbline{$line} =~ s/;9($|\0)/$1/) {
+                _cancel_breakpoint_temp_enabled_status($filename, $line);
+            }
         }
     } ## end if ($dbline{$line} && ...
 
@@ -2799,6 +2815,7 @@ in this and all call levels above this one.
 
                         # Yes. Set up the one-time-break sigil.
                         $dbline{$i} =~ s/($|\0)/;9$1/;  # add one-time-only b.p.
+                        _enable_breakpoint_temp_enabled_status($filename, $i);
                     } ## end if ($i)
 
                     # Turn off stack tracing from here up.
@@ -3989,10 +4006,33 @@ sub _set_breakpoint_enabled_status {
     return;
 }
 
+sub _enable_breakpoint_temp_enabled_status {
+    my ($filename, $line) = @_;
+
+    _get_breakpoint_data_ref($filename, $line)->{'temp_enabled'} = 1;
+
+    return;
+}
+
+sub _cancel_breakpoint_temp_enabled_status {
+    my ($filename, $line) = @_;
+
+    my $ref = _get_breakpoint_data_ref($filename, $line);
+    
+    delete ($ref->{'temp_enabled'});
+
+    if (! %$ref) {
+        _delete_breakpoint_data_ref($filename, $line);
+    }
+
+    return;
+}
+
 sub _is_breakpoint_enabled {
     my ($filename, $line) = @_;
 
-    return _get_breakpoint_data_ref($filename, $line)->{'enabled'};
+    my $data_ref = _get_breakpoint_data_ref($filename, $line);
+    return ($data_ref->{'enabled'} || $data_ref->{'temp_enabled'});
 }
 
 =head2 C<cmd_wrapper()> (API)
@@ -9144,6 +9184,13 @@ variable via C<DB::set_list>.
 
         # Save the list of all the breakpoints for this file.
         set_list( "PERLDB_FILE_$_", %dbline, @add );
+
+        # Serialize the extra data %breakpoints_data hash.
+        # That's a bug fix.
+        set_list( "PERLDB_FILE_ENABLED_$_", 
+            map { _is_breakpoint_enabled($file, $_) ? 1 : 0 }
+            sort { $a <=> $b } keys(%dbline)
+        )
     } ## end for (0 .. $#had_breakpoints)
 
     # The breakpoint was inside an eval. This is a little

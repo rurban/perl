@@ -1346,6 +1346,9 @@
 #define save_magic(a,b)		S_save_magic(aTHX_ a,b)
 #define unwind_handler_stack(a)	S_unwind_handler_stack(aTHX_ a)
 #  endif
+#  if defined(PERL_IN_MG_C) || defined(PERL_IN_PP_C)
+#define translate_substr_offsets(a,b,c,d,e,f,g)	Perl_translate_substr_offsets(aTHX_ a,b,c,d,e,f,g)
+#  endif
 #  if defined(PERL_IN_MRO_C)
 #define mro_clean_isarev(a,b,c,d,e)	S_mro_clean_isarev(aTHX_ a,b,c,d,e)
 #define mro_gather_and_rename(a,b,c,d,e)	S_mro_gather_and_rename(aTHX_ a,b,c,d,e)
@@ -1415,12 +1418,14 @@
 #define init_perllib()		S_init_perllib(aTHX)
 #define init_postdump_symbols(a,b,c)	S_init_postdump_symbols(aTHX_ a,b,c)
 #define init_predump_symbols()	S_init_predump_symbols(aTHX)
+#define mayberelocate(a,b,c)	S_mayberelocate(aTHX_ a,b,c)
+#define minus_v()		S_minus_v(aTHX)
 #define my_exit_jump()		S_my_exit_jump(aTHX)
 #define nuke_stacks()		S_nuke_stacks(aTHX)
 #define open_script(a,b,c,d)	S_open_script(aTHX_ a,b,c,d)
 #define parse_body(a,b)		S_parse_body(aTHX_ a,b)
 #define run_body(a)		S_run_body(aTHX_ a)
-#define usage(a)		S_usage(aTHX_ a)
+#define usage()			S_usage(aTHX)
 #  endif
 #  if defined(PERL_IN_PP_C)
 #define do_chomp(a,b,c)		S_do_chomp(aTHX_ a,b,c)

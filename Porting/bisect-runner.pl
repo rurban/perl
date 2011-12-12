@@ -917,6 +917,8 @@ if ($target =~ /config\.s?h/) {
     report_and_exit(!-f $target, 'could build', 'could not build', $target)
         if $options{'test-build'};
 
+    skip("could not build $target") unless -f $target;
+
     my $ret = system @ARGV;
     report_and_exit($ret, 'zero exit from', 'non-zero exit from', "@ARGV");
 } elsif (!-f 'config.sh') {
@@ -2442,6 +2444,129 @@ index c2fcb6f..efa39fb 100644
  #endif
  
 EOPATCH
+    }
+
+    if ($major == 5
+        && `git rev-parse HEAD` eq "22c35a8c2392967a5ba6b5370695be464bd7012c\n") {
+        # Commit 22c35a8c2392967a is significant,
+        # "phase 1 of somewhat major rearrangement of PERL_OBJECT stuff"
+        # but doesn't build due to 2 simple errors. blead in this broken state
+        # was merged to the cfgperl branch, and then these were immediately
+        # corrected there. cfgperl (with the fixes) was merged back to blead.
+        # The resultant rather twisty maze of commits looks like this:
+
+=for comment
+
+* | |   commit 137225782c183172f360c827424b9b9f8adbef0e
+|\ \ \  Merge: 22c35a8 2a8ee23
+| |/ /  Author: Gurusamy Sarathy <gsar@cpan.org>
+| | |   Date:   Fri Oct 30 17:38:36 1998 +0000
+| | |
+| | |       integrate cfgperl tweaks into mainline
+| | |
+| | |       p4raw-id: //depot/perl@2144
+| | |
+| * | commit 2a8ee23279873759693fa83eca279355db2b665c
+| | | Author: Jarkko Hietaniemi <jhi@iki.fi>
+| | | Date:   Fri Oct 30 13:27:39 1998 +0000
+| | |
+| | |     There can be multiple yacc/bison errors.
+| | |
+| | |     p4raw-id: //depot/cfgperl@2143
+| | |
+| * | commit 93fb2ac393172fc3e2c14edb20b718309198abbc
+| | | Author: Jarkko Hietaniemi <jhi@iki.fi>
+| | | Date:   Fri Oct 30 13:18:43 1998 +0000
+| | |
+| | |     README.posix-bc update.
+| | |
+| | |     p4raw-id: //depot/cfgperl@2142
+| | |
+| * | commit 4ec43091e8e6657cb260b5e563df30aaa154effe
+| | | Author: Jarkko Hietaniemi <jhi@iki.fi>
+| | | Date:   Fri Oct 30 09:12:59 1998 +0000
+| | |
+| | |     #2133 fallout.
+| | |
+| | |     p4raw-id: //depot/cfgperl@2141
+| | |
+| * |   commit 134ca994cfefe0f613d43505a885e4fc2100b05c
+| |\ \  Merge: 7093112 22c35a8
+| |/ /  Author: Jarkko Hietaniemi <jhi@iki.fi>
+|/| |   Date:   Fri Oct 30 08:43:18 1998 +0000
+| | |
+| | |       Integrate from mainperl.
+| | |
+| | |       p4raw-id: //depot/cfgperl@2140
+| | |
+* | | commit 22c35a8c2392967a5ba6b5370695be464bd7012c
+| | | Author: Gurusamy Sarathy <gsar@cpan.org>
+| | | Date:   Fri Oct 30 02:51:39 1998 +0000
+| | |
+| | |     phase 1 of somewhat major rearrangement of PERL_OBJECT stuff
+| | |     (objpp.h is gone, embed.pl now does some of that); objXSUB.h
+| | |     should soon be automated also; the global variables that
+| | |     escaped the PL_foo conversion are now reined in; renamed
+| | |     MAGIC in regcomp.h to REG_MAGIC to avoid collision with the
+| | |     type of same name; duplicated lists of pp_things in various
+| | |     places is now gone; result has only been tested on win32
+| | |
+| | |     p4raw-id: //depot/perl@2133
+
+=cut
+
+        # and completely confuses git bisect (and at least me), causing it to
+        # the bisect run to confidently return the wrong answer, an unrelated
+        # commit on the cfgperl branch.
+
+        apply_commit('4ec43091e8e6657c');
+    }
+
+    if ($major == 5
+        && extract_from_file('pp_sys.c', qr/PERL_EFF_ACCESS_R_OK/)
+        && !extract_from_file('pp_sys.c', qr/XXX Configure test needed for eaccess/)) {
+        # Between 5ff3f7a4e03a6b10 and c955f1177b2e311d^
+        # This is the meat of commit c955f1177b2e311d (without the other
+        # indenting changes that would cause a conflict).
+        # Without this 538 revisions won't build on (at least) Linux
+        apply_patch(<<'EOPATCH');
+diff --git a/pp_sys.c b/pp_sys.c
+index d60c8dc..867dee4 100644
+--- a/pp_sys.c
++++ b/pp_sys.c
+@@ -198,9 +198,18 @@ static char zero_but_true[ZBTLEN + 1] = "0 but true";
+ #   if defined(I_SYS_SECURITY)
+ #       include <sys/security.h>
+ #   endif
+-#   define PERL_EFF_ACCESS_R_OK(p) (eaccess((p), R_OK, ACC_SELF))
+-#   define PERL_EFF_ACCESS_W_OK(p) (eaccess((p), W_OK, ACC_SELF))
+-#   define PERL_EFF_ACCESS_X_OK(p) (eaccess((p), X_OK, ACC_SELF))
++    /* XXX Configure test needed for eaccess */
++#   ifdef ACC_SELF
++        /* HP SecureWare */
++#       define PERL_EFF_ACCESS_R_OK(p) (eaccess((p), R_OK, ACC_SELF))
++#       define PERL_EFF_ACCESS_W_OK(p) (eaccess((p), W_OK, ACC_SELF))
++#       define PERL_EFF_ACCESS_X_OK(p) (eaccess((p), X_OK, ACC_SELF))
++#   else
++        /* SCO */
++#       define PERL_EFF_ACCESS_R_OK(p) (eaccess((p), R_OK))
++#       define PERL_EFF_ACCESS_W_OK(p) (eaccess((p), W_OK))
++#       define PERL_EFF_ACCESS_X_OK(p) (eaccess((p), X_OK))
++#   endif
+ #endif
+ 
+ #if !defined(PERL_EFF_ACCESS_R_OK) && defined(HAS_ACCESSX) && defined(ACC_SELF)
+EOPATCH
+    }
+
+    if ($major == 5
+        && extract_from_file('mg.c', qr/If we're still on top of the stack, pop us off/)
+        && !extract_from_file('mg.c', qr/PL_savestack_ix -= popval/)) {
+        # Fix up commit 455ece5e082708b1:
+        # SSNEW() API for allocating memory on the savestack
+        # Message-Id: <tqemtae338.fsf@puma.genscan.com>
+        # Subject: [PATCH 5.005_51] (was: why SAVEDESTRUCTOR()...)
+        apply_commit('3c8a44569607336e', 'mg.c');
     }
 
     if ($major < 6 && $^O eq 'netbsd'

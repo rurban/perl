@@ -1688,9 +1688,6 @@ S_Internals_V(pTHX_ CV *cv)
 #  ifdef DEBUGGING
 			     " DEBUGGING"
 #  endif
-#  ifdef HOMEGROWN_POSIX_SIGNALS
-			     " HOMEGROWN_POSIX_SIGNALS"
-#  endif
 #  ifdef NO_MATHOMS
 			     " NO_MATHOMS"
 #  endif
@@ -1938,15 +1935,12 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 		argc--,argv++;
 		goto switch_end;
 	    }
-	    /* catch use of gnu style long options */
-	    if (strEQ(s, "version")) {
-		s = (char *)"v";
-		goto reswitch;
-	    }
-	    if (strEQ(s, "help")) {
-		s = (char *)"h";
-		goto reswitch;
-	    }
+	    /* catch use of gnu style long options.
+	       Both of these exit immediately.  */
+	    if (strEQ(s, "version"))
+		minus_v();
+	    if (strEQ(s, "help"))
+		usage();
 	    s--;
 	    /* FALL THROUGH */
 	default:
@@ -2013,10 +2007,19 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
     }
     }
 
+    /* Set $^X early so that it can be used for relocatable paths in @INC  */
+    /* and for SITELIB_EXP in USE_SITECUSTOMIZE                            */
+    assert (!PL_tainted);
+    TAINT;
+    S_set_caret_X(aTHX);
+    TAINT_NOT;
+
 #if defined(USE_SITECUSTOMIZE)
     if (!minus_f) {
 	/* The games with local $! are to avoid setting errno if there is no
-	   sitecustomize script.  */
+	   sitecustomize script.  "q%c...%c", 0, ..., 0 becomes "q\0...\0",
+	   ie a q() operator with a NUL byte as a the delimiter. This avoids
+	   problems with pathnames containing (say) '  */
 #  ifdef PERL_IS_MINIPERL
 	AV *const inc = GvAV(PL_incgv);
 	SV **const inc0 = inc ? av_fetch(inc, 0, FALSE) : NULL;
@@ -2024,14 +2027,24 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 	if (inc0) {
 	    (void)Perl_av_create_and_unshift_one(aTHX_ &PL_preambleav,
 						 Perl_newSVpvf(aTHX_
-							       "BEGIN { do {local $!; -f '%"SVf"/buildcustomize.pl'} && do '%"SVf"/buildcustomize.pl' }", *inc0, *inc0));
+							       "BEGIN { do {local $!; -f q%c%"SVf"/buildcustomize.pl%c} && do q%c%"SVf"/buildcustomize.pl%c }",
+							       0, *inc0, 0,
+							       0, *inc0, 0));
 	}
 #  else
 	/* SITELIB_EXP is a function call on Win32.  */
-	const char *const sitelib = SITELIB_EXP;
+	const char *const raw_sitelib = SITELIB_EXP;
+	/* process .../.. if PERL_RELOCATABLE_INC is defined */
+	SV *sitelib_sv = mayberelocate(raw_sitelib, strlen(raw_sitelib),
+				       INCPUSH_CAN_RELOCATE);
+	const char *const sitelib = SvPVX(sitelib_sv);
 	(void)Perl_av_create_and_unshift_one(aTHX_ &PL_preambleav,
 					     Perl_newSVpvf(aTHX_
-							   "BEGIN { do {local $!; -f '%s/sitecustomize.pl'} && do '%s/sitecustomize.pl' }", sitelib, sitelib));
+							   "BEGIN { do {local $!; -f q%c%s/sitecustomize.pl%c} && do q%c%s/sitecustomize.pl%c }",
+							   0, sitelib, 0,
+							   0, sitelib, 0));
+	assert (SvREFCNT(sitelib_sv) == 1);
+	SvREFCNT_dec(sitelib_sv);
 #  endif
     }
 #endif
@@ -2050,11 +2063,7 @@ S_parse_body(pTHX_ char **env, XSINIT_t xsinit)
 	scriptname = "-";
     }
 
-    /* Set $^X early so that it can be used for relocatable paths in @INC  */
     assert (!PL_tainted);
-    TAINT;
-    S_set_caret_X(aTHX);
-    TAINT_NOT;
     init_perllib();
 
     {
@@ -2897,7 +2906,7 @@ Perl_require_pv(pTHX_ const char *pv)
 }
 
 STATIC void
-S_usage(pTHX_ const char *name)		/* XXX move this out into a module ? */
+S_usage(pTHX)		/* XXX move this out into a module ? */
 {
     /* This message really ought to be max 23 lines.
      * Removed -h because the user already knows that option. Others? */
@@ -2940,13 +2949,12 @@ NULL
     const char * const *p = usage_msg;
     PerlIO *out = PerlIO_stdout();
 
-    PERL_ARGS_ASSERT_USAGE;
-
     PerlIO_printf(out,
 		  "\nUsage: %s [switches] [--] [programfile] [arguments]\n",
-		  name);
+		  PL_origargv[0]);
     while (*p)
 	PerlIO_puts(out, *p++);
+    my_exit(0);
 }
 
 /* convert a string of -D options (or digits) into an int.
@@ -3153,8 +3161,7 @@ Perl_moreswitches(pTHX_ const char *s)
 	return s;
     }	
     case 'h':
-	usage(PL_origargv[0]);
-	my_exit(0);
+	usage();
     case 'i':
 	Safefree(PL_inplace);
 #if defined(__CYGWIN__) /* do backup extension automagically */
@@ -3307,6 +3314,56 @@ Perl_moreswitches(pTHX_ const char *s)
 	s++;
 	return s;
     case 'v':
+	minus_v();
+    case 'w':
+	if (! (PL_dowarn & G_WARN_ALL_MASK)) {
+	    PL_dowarn |= G_WARN_ON;
+	}
+	s++;
+	return s;
+    case 'W':
+	PL_dowarn = G_WARN_ALL_ON|G_WARN_ON;
+        if (!specialWARN(PL_compiling.cop_warnings))
+            PerlMemShared_free(PL_compiling.cop_warnings);
+	PL_compiling.cop_warnings = pWARN_ALL ;
+	s++;
+	return s;
+    case 'X':
+	PL_dowarn = G_WARN_ALL_OFF;
+        if (!specialWARN(PL_compiling.cop_warnings))
+            PerlMemShared_free(PL_compiling.cop_warnings);
+	PL_compiling.cop_warnings = pWARN_NONE ;
+	s++;
+	return s;
+    case '*':
+    case ' ':
+        while( *s == ' ' )
+          ++s;
+	if (s[0] == '-')	/* Additional switches on #! line. */
+	    return s+1;
+	break;
+    case '-':
+    case 0:
+#if defined(WIN32) || !defined(PERL_STRICT_CR)
+    case '\r':
+#endif
+    case '\n':
+    case '\t':
+	break;
+#ifdef ALTERNATE_SHEBANG
+    case 'S':			/* OS/2 needs -S on "extproc" line. */
+	break;
+#endif
+    default:
+	Perl_croak(aTHX_ "Can't emulate -%.1s on #! line",s);
+    }
+    return NULL;
+}
+
+
+STATIC void
+S_minus_v(pTHX)
+{
 	if (!sv_derived_from(PL_patchlevel, "version"))
 	    upg_version(PL_patchlevel, TRUE);
 #if !defined(DGUX)
@@ -3424,49 +3481,6 @@ Complete documentation for Perl, including FAQ lists, should be found on\n\
 this system using \"man perl\" or \"perldoc perl\".  If you have access to the\n\
 Internet, point your browser at http://www.perl.org/, the Perl Home Page.\n\n");
 	my_exit(0);
-    case 'w':
-	if (! (PL_dowarn & G_WARN_ALL_MASK)) {
-	    PL_dowarn |= G_WARN_ON;
-	}
-	s++;
-	return s;
-    case 'W':
-	PL_dowarn = G_WARN_ALL_ON|G_WARN_ON;
-        if (!specialWARN(PL_compiling.cop_warnings))
-            PerlMemShared_free(PL_compiling.cop_warnings);
-	PL_compiling.cop_warnings = pWARN_ALL ;
-	s++;
-	return s;
-    case 'X':
-	PL_dowarn = G_WARN_ALL_OFF;
-        if (!specialWARN(PL_compiling.cop_warnings))
-            PerlMemShared_free(PL_compiling.cop_warnings);
-	PL_compiling.cop_warnings = pWARN_NONE ;
-	s++;
-	return s;
-    case '*':
-    case ' ':
-        while( *s == ' ' )
-          ++s;
-	if (s[0] == '-')	/* Additional switches on #! line. */
-	    return s+1;
-	break;
-    case '-':
-    case 0:
-#if defined(WIN32) || !defined(PERL_STRICT_CR)
-    case '\r':
-#endif
-    case '\n':
-    case '\t':
-	break;
-#ifdef ALTERNATE_SHEBANG
-    case 'S':			/* OS/2 needs -S on "extproc" line. */
-	break;
-#endif
-    default:
-	Perl_croak(aTHX_ "Can't emulate -%.1s on #! line",s);
-    }
-    return NULL;
 }
 
 /* compliments of Tom Christiansen */
@@ -4415,44 +4429,14 @@ S_incpush_if_exists(pTHX_ AV *const av, SV *dir, SV *const stem)
 }
 #endif
 
-STATIC void
-S_incpush(pTHX_ const char *const dir, STRLEN len, U32 flags)
+STATIC SV *
+S_mayberelocate(pTHX_ const char *const dir, STRLEN len, U32 flags)
 {
-    dVAR;
-#ifndef PERL_IS_MINIPERL
-    const U8 using_sub_dirs
-	= (U8)flags & (INCPUSH_ADD_VERSIONED_SUB_DIRS
-		       |INCPUSH_ADD_ARCHONLY_SUB_DIRS|INCPUSH_ADD_OLD_VERS);
-    const U8 add_versioned_sub_dirs
-	= (U8)flags & INCPUSH_ADD_VERSIONED_SUB_DIRS;
-    const U8 add_archonly_sub_dirs
-	= (U8)flags & INCPUSH_ADD_ARCHONLY_SUB_DIRS;
-#ifdef PERL_INC_VERSION_LIST
-    const U8 addoldvers  = (U8)flags & INCPUSH_ADD_OLD_VERS;
-#endif
-#endif
     const U8 canrelocate = (U8)flags & INCPUSH_CAN_RELOCATE;
-    const U8 unshift     = (U8)flags & INCPUSH_UNSHIFT;
-    const U8 push_basedir = (flags & INCPUSH_NOT_BASEDIR) ? 0 : 1;
-    AV *const inc = GvAVn(PL_incgv);
+    SV *libdir;
 
-    PERL_ARGS_ASSERT_INCPUSH;
+    PERL_ARGS_ASSERT_MAYBERELOCATE;
     assert(len > 0);
-
-    /* Could remove this vestigial extra block, if we don't mind a lot of
-       re-indenting diff noise.  */
-    {
-	SV *libdir;
-	/* Change 20189146be79a0596543441fa369c6bf7f85103f, to fix RT#6665,
-	   arranged to unshift #! line -I onto the front of @INC. However,
-	   -I can add version and architecture specific libraries, and they
-	   need to go first. The old code assumed that it was always
-	   pushing. Hence to make it work, need to push the architecture
-	   (etc) libraries onto a temporary array, then "unshift" that onto
-	   the front of @INC.  */
-#ifndef PERL_IS_MINIPERL
-	AV *const av = (using_sub_dirs) ? (unshift ? newAV() : inc) : NULL;
-#endif
 
 	if (len) {
 	    /* I am not convinced that this is valid when PERLLIB_MANGLE is
@@ -4466,8 +4450,8 @@ S_incpush(pTHX_ const char *const dir, STRLEN len, U32 flags)
 	}
 
 #ifdef VMS
+    {
 	char *unix;
-	STRLEN len;
 
 	if ((unix = tounixspec_ts(SvPV(libdir,len),NULL)) != NULL) {
 	    len = strlen(unix);
@@ -4477,7 +4461,8 @@ S_incpush(pTHX_ const char *const dir, STRLEN len, U32 flags)
 	else
 	    PerlIO_printf(Perl_error_log,
 		          "Failed to unixify @INC element \"%s\"\n",
-			  SvPV(libdir,len));
+			  SvPV_nolen_const(libdir));
+    }
 #endif
 
 	/* Do the if() outside the #ifdef to avoid warnings about an unused
@@ -4579,19 +4564,57 @@ S_incpush(pTHX_ const char *const dir, STRLEN len, U32 flags)
 	    }
 #endif
 	}
+    return libdir;
+}
+
+STATIC void
+S_incpush(pTHX_ const char *const dir, STRLEN len, U32 flags)
+{
+    dVAR;
 #ifndef PERL_IS_MINIPERL
+    const U8 using_sub_dirs
+	= (U8)flags & (INCPUSH_ADD_VERSIONED_SUB_DIRS
+		       |INCPUSH_ADD_ARCHONLY_SUB_DIRS|INCPUSH_ADD_OLD_VERS);
+    const U8 add_versioned_sub_dirs
+	= (U8)flags & INCPUSH_ADD_VERSIONED_SUB_DIRS;
+    const U8 add_archonly_sub_dirs
+	= (U8)flags & INCPUSH_ADD_ARCHONLY_SUB_DIRS;
+#ifdef PERL_INC_VERSION_LIST
+    const U8 addoldvers  = (U8)flags & INCPUSH_ADD_OLD_VERS;
+#endif
+#endif
+    const U8 unshift     = (U8)flags & INCPUSH_UNSHIFT;
+    const U8 push_basedir = (flags & INCPUSH_NOT_BASEDIR) ? 0 : 1;
+    AV *const inc = GvAVn(PL_incgv);
+
+    PERL_ARGS_ASSERT_INCPUSH;
+    assert(len > 0);
+
+    /* Could remove this vestigial extra block, if we don't mind a lot of
+       re-indenting diff noise.  */
+    {
+	SV *const libdir = mayberelocate(dir, len, flags);
+	/* Change 20189146be79a0596543441fa369c6bf7f85103f, to fix RT#6665,
+	   arranged to unshift #! line -I onto the front of @INC. However,
+	   -I can add version and architecture specific libraries, and they
+	   need to go first. The old code assumed that it was always
+	   pushing. Hence to make it work, need to push the architecture
+	   (etc) libraries onto a temporary array, then "unshift" that onto
+	   the front of @INC.  */
+#ifndef PERL_IS_MINIPERL
+	AV *const av = (using_sub_dirs) ? (unshift ? newAV() : inc) : NULL;
+
 	/*
 	 * BEFORE pushing libdir onto @INC we may first push version- and
 	 * archname-specific sub-directories.
 	 */
 	if (using_sub_dirs) {
-	    SV *subdir;
+	    SV *subdir = newSVsv(libdir);
 #ifdef PERL_INC_VERSION_LIST
 	    /* Configure terminates PERL_INC_VERSION_LIST with a NULL */
 	    const char * const incverlist[] = { PERL_INC_VERSION_LIST };
 	    const char * const *incver;
 #endif
-	    subdir = newSVsv(libdir);
 
 	    if (add_versioned_sub_dirs) {
 		/* .../version/archname if -d .../version/archname */

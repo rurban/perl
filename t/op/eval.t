@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan(tests => 120);
+plan(tests => 125);
 
 eval 'pass();';
 
@@ -24,6 +24,11 @@ like($@, qr/line 2/);
 
 print eval '$foo = /';	# this tests for a call through fatal()
 like($@, qr/Search/);
+
+is scalar(eval '++'), undef, 'eval syntax error in scalar context';
+is scalar(eval 'die'), undef, 'eval run-time error in scalar context';
+is +()=eval '++', 0, 'eval syntax error in list context';
+is +()=eval 'die', 0, 'eval run-time error in list context';
 
 is(eval '"ok 7\n";', "ok 7\n");
 
@@ -586,3 +591,8 @@ EOP
     BEGIN { eval 'require re; import re "/x"' }
     ok "ab" =~ /a b/, 'eval does not localise %^H at run time';
 }
+
+# The fix for perl #70151 caused an assertion failure that broke
+# SNMP::Trapinfo, when toke.c finds no syntax errors but perly.y fails.
+eval(q|""!=!~//|);
+pass("phew! dodged the assertion after a parsing (not lexing) error");

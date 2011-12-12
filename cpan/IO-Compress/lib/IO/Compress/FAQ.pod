@@ -1,11 +1,13 @@
 
 =head1 NAME
 
-IO::Compress::FAQ -- Frequently Asked Questions about IO::Compress
+IO::Conmpress::FAQ -- Frequently Asked Questions about IO::Compress
 
 =head1 DESCRIPTION
 
 Common questions answered.
+
+=head1 GENERAL 
 
 =head2 Compatibility with Unix compress/uncompress.
 
@@ -83,48 +85,6 @@ write a C<.tar.Z> file
     $tar->write($fh);
     $fh->close ;
 
-=head2 Accessing Zip Files
-
-This module provides support for reading/writing zip files using the
-C<IO::Compress::Zip> and C<IO::Uncompress::Unzip> modules.
-
-The primary focus of the C<IO::Compress::Zip> and C<IO::Uncompress::Unzip>
-modules is to provide an C<IO::File> compatible streaming read/write
-interface to zip files/buffers. They are not fully flegged archivers. If
-you are looking for an archiver check out the C<Archive::Zip> module. You
-can find it on CPAN at 
-
-    http://www.cpan.org/modules/by-module/Archive/Archive-Zip-*.tar.gz    
-
-=head2 Compressed files and Net::FTP
-
-The C<Net::FTP> module provides two low-level methods called C<stor> and
-C<retr> that both return filehandles. These filehandles can used with the
-C<IO::Compress/Uncompress> modules to compress or uncompress files read
-from or written to an FTP Server on the fly, without having to create a
-temporary file.
-
-Firstly, here is code that uses C<retr> to uncompressed a file as it is
-read from the FTP Server.
-
-    use Net::FTP;
-    use IO::Uncompress::Gunzip qw(:all);
-
-    my $ftp = new Net::FTP ...
-
-    my $retr_fh = $ftp->retr($compressed_filename);
-    gunzip $retr_fh => $outFilename, AutoClose => 1
-        or die "Cannot uncompress '$compressed_file': $GunzipError\n";
-
-and this to compress a file as it is written to the FTP Server 
-
-    use Net::FTP;
-    use IO::Compress::Gzip qw(:all);
-
-    my $stor_fh = $ftp->stor($filename);
-    gzip "filename" => $stor_fh, AutoClose => 1
-        or die "Cannot compress '$filename': $GzipError\n";
-
 =head2 How do I recompress using a different compression?
 
 This is easier that you might expect if you realise that all the
@@ -153,6 +113,98 @@ example, gzip can optionally store the original filename and Zip stores a
 lot of information about the original file. If the original compressed file
 contains any of this extra information, it will not be transferred to the
 new compressed file usign the technique above.
+
+=head1 ZIP
+
+=head2 What Compression Types do IO::Compress::Zip & IO::Uncompress::Unzip support?
+
+The following compression formats are supported by C<IO::Compress::Zip> and
+C<IO::Uncompress::Unzip>
+
+=over 5
+
+=item * Store (method 0)
+
+No compression at all.
+
+=item * Deflate (method 8)
+
+This is the default compression used when creating a zip file with
+C<IO::Compress::Zip>.
+
+=item * Bzip2 (method 12)
+
+Only supported if the C<IO-Compress-Bzip2> module is installed.
+
+=item * Lzma (method 14)
+
+Only supported if the C<IO-Compress-Lzma> module is installed.
+
+=back
+
+=head2 Can I Read/Write Zip files larger the 4 Gig?
+
+Yes, both the C<IO-Compress-Zip> and C<IO-Uncompress-Unzip>  modules
+support the zip feature called I<Zip64>. That allows them to read/write
+files/buffers larger than 4Gig. 
+
+If you are creating a Zip file using the one-shot interface, and any of the
+input files is greater than 4Gig, a zip64 complaint zip file will be
+created. 
+
+    zip "really-large-file" => "my.zip";
+
+Similarly with the one-shot interface, if the input is a buffer larger than
+4 Gig, a zip64 complaint zip file will be created. 
+
+    zip \$really_large_buffer => "my.zip";
+
+The one-shot interface allows you to force the creation of a zip64 zip file
+by including the C<Zip64> option.
+
+    zip $filehandle => "my.zip", Zip64 => 1;
+
+If you want to create a zip64 zip file with the OO interface you must
+specify the C<Zip64> option.
+
+    my $zip = new IO::Compress::Zip "whatever", Zip64 => 1;
+	
+When uncompressing with C<IO-Uncompress-Unzip>, it will automatically
+detect if the zip file is zip64.
+
+If you intend to manipulate the Zip64 zip files created with
+C<IO-Compress-Zip> using an external zip/unzip, make sure that it supports
+Zip64.  
+
+In particular, if you are using Info-Zip you need to have zip version 3.x
+or better to update a Zip64 archive and unzip version 6.x to read a zip64
+archive. 
+
+=head2 Zip Resources
+
+The primary reference for zip files is the "appnote" document available at
+L<http://www.pkware.com/documents/casestudies/APPNOTE.TXT>
+
+An alternatively is the Info-Zip appnote. This is available from
+L<ftp://ftp.info-zip.org/pub/infozip/doc/>
+
+=head1 GZIP
+
+=head2 Gzip Resources
+
+The primary reference for gzip files is RFC 1952
+L<http://www.faqs.org/rfcs/rfc1952.html>
+
+The primary site for gzip is F<http://www.gzip.org>.
+
+=head1 ZLIB
+
+=head2 Zlib Resources
+
+The primary site for the I<zlib> compression library is
+F<http://www.zlib.org>.
+
+=head1 HTTP & NETWORK
 
 =head2 Apache::GZip Revisited
 
@@ -315,6 +367,37 @@ Note the use of the C<Minimal> option in the code above. When using gzip
 for Content-Encoding you should I<always> use this option. In the example
 above it will prevent the filename being included in the gzip header and
 make the size of the gzip data stream a slight bit smaller.
+
+=head2 Compressed files and Net::FTP
+
+The C<Net::FTP> module provides two low-level methods called C<stor> and
+C<retr> that both return filehandles. These filehandles can used with the
+C<IO::Compress/Uncompress> modules to compress or uncompress files read
+from or written to an FTP Server on the fly, without having to create a
+temporary file.
+
+Firstly, here is code that uses C<retr> to uncompressed a file as it is
+read from the FTP Server.
+
+    use Net::FTP;
+    use IO::Uncompress::Gunzip qw(:all);
+
+    my $ftp = new Net::FTP ...
+
+    my $retr_fh = $ftp->retr($compressed_filename);
+    gunzip $retr_fh => $outFilename, AutoClose => 1
+        or die "Cannot uncompress '$compressed_file': $GunzipError\n";
+
+and this to compress a file as it is written to the FTP Server 
+
+    use Net::FTP;
+    use IO::Compress::Gzip qw(:all);
+
+    my $stor_fh = $ftp->stor($filename);
+    gzip "filename" => $stor_fh, AutoClose => 1
+        or die "Cannot compress '$filename': $GzipError\n";
+
+=head1 MISC
 
 =head2 Using C<InputLength> to uncompress data embedded in a larger file/buffer.
 
@@ -491,7 +574,7 @@ file.
 
 L<Compress::Zlib>, L<IO::Compress::Gzip>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Compress::RawDeflate>, L<IO::Uncompress::RawInflate>, L<IO::Compress::Bzip2>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
 
-L<Compress::Zlib::FAQ|Compress::Zlib::FAQ>
+L<IO::Compress::FAQ|IO::Compress::FAQ>
 
 L<File::GlobMapper|File::GlobMapper>, L<Archive::Zip|Archive::Zip>,
 L<Archive::Tar|Archive::Tar>,
