@@ -9,7 +9,7 @@ require 5.006;
 our $Debug = 0;
 our $ExportLevel = 0;
 our $Verbose ||= 0;
-our $VERSION = '5.65';
+our $VERSION = '5.66';
 our (%Cache);
 
 sub as_heavy {
@@ -44,7 +44,6 @@ sub import {
   my $export_cache = ($Cache{$pkg} ||= {});
   my $args = @_ or @_ = @$exports;
 
-  local $_;
   if ($args and not %$export_cache) {
     s/^&//, $export_cache->{$_} = 1
       foreach (@$exports, @{"$pkg\::EXPORT_OK"});

@@ -21,6 +21,7 @@ our $hint_uni8bit = 0x00000800;
 # NB. the latest bundle must be loaded by the -E switch (see toke.c)
 
 our %feature_bundle = (
+    "default" => [],
     "5.10" => [qw(say state switch)],
     "5.11" => [qw(say state switch unicode_strings)],
     "5.15" => [qw(say state switch unicode_strings unicode_eval
@@ -190,9 +191,11 @@ This feature is available starting with Perl 5.16.
 
 It's possible to load a whole slew of features in one go, using
 a I<feature bundle>. The name of a feature bundle is prefixed with
-a colon, to distinguish it from an actual feature. At present, the
-only feature bundles correspond to Perl releases, e.g. C<use feature
-":5.10"> which is equivalent to C<use feature qw(switch say state)>.
+a colon, to distinguish it from an actual feature. At present, most
+feature bundles correspond to Perl releases, e.g. C<use feature
+":5.10"> which is equivalent to C<use feature qw(switch say state)>. The
+only bundle that does not follow this convention is ":default", which is
+currently empty.
 
 By convention, the feature bundle for any given Perl release includes
 the features of previous releases, down to and including 5.10, the
@@ -228,6 +231,7 @@ the C<use VERSION> construct, and when the version is higher than or equal to
 
 will do an implicit
 
+    no feature;
     use feature ':5.10';
 
 and so on. Note how the trailing sub-version is automatically stripped from the
@@ -238,6 +242,9 @@ But to avoid portability warnings (see L<perlfunc/use>), you may prefer:
     use 5.010;
 
 with the same effect.
+
+For versions below 5.010, the ":default" feature bundle is automatically
+loaded, but it is currently empty and has no effect.
 
 =back
 

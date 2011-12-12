@@ -4669,6 +4669,20 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	    newSTATEOP(0, NULL, imop) ));
 
     if (use_version) {
+	HV * const hinthv = GvHV(PL_hintgv);
+	const bool hhoff = !hinthv || !(PL_hints & HINT_LOCALIZE_HH);
+
+	/* Turn features off */
+	if (hhoff)
+	    /* avoid loading feature.pm */
+	    PL_hints &= ~HINT_UNI_8_BIT;
+	else {
+	    ENTER_with_name("load_feature");
+	    Perl_load_module(aTHX_
+		PERL_LOADMOD_DENY, newSVpvs("feature"), NULL, NULL
+	    );
+	}
+
 	/* If we request a version >= 5.9.5, load feature.pm with the
 	 * feature bundle that corresponds to the required version. */
 	use_version = sv_2mortal(new_version(use_version));
@@ -4676,15 +4690,30 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
 	    SV *const importsv = vnormal(use_version);
+	    if (hhoff) ENTER_with_name("load_feature");
 	    *SvPVX_mutable(importsv) = ':';
-	    ENTER_with_name("load_feature");
 	    Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
 	    LEAVE_with_name("load_feature");
 	}
+	else if (!hhoff) LEAVE_with_name("load_feature");
 	/* If a version >= 5.11.0 is requested, strictures are on by default! */
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
-	    PL_hints |= (HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS);
+	    if (hhoff || !hv_exists(hinthv, "strict/refs", 11))
+		PL_hints |= HINT_STRICT_REFS;
+	    if (hhoff || !hv_exists(hinthv, "strict/subs", 11))
+		PL_hints |= HINT_STRICT_SUBS;
+	    if (hhoff || !hv_exists(hinthv, "strict/vars", 11))
+		PL_hints |= HINT_STRICT_VARS;
+	}
+	/* otherwise they are off */
+	else {
+	    if (hhoff || !hv_exists(hinthv, "strict/refs", 11))
+		PL_hints &= ~HINT_STRICT_REFS;
+	    if (hhoff || !hv_exists(hinthv, "strict/subs", 11))
+		PL_hints &= ~HINT_STRICT_SUBS;
+	    if (hhoff || !hv_exists(hinthv, "strict/vars", 11))
+		PL_hints &= ~HINT_STRICT_VARS;
 	}
     }
 
@@ -10315,6 +10344,8 @@ Perl_rpeep(pTHX_ register OP *o)
 			    cBINOPx(left)->op_first->op_sibling;
 			cBINOPx(left)->op_first->op_sibling = right;
 			left->op_private |= OPpSUBSTR_REPL_FIRST;
+			left->op_flags =
+			    (o->op_flags & ~OPf_WANT) | OPf_WANT_VOID;
 		    }
 		}
 	    }
