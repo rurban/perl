@@ -1,0 +1,22 @@
+PLAN for 5.18:
+
+types/sv
+  int,double,string detection with flags and impl (FAKE, BARE)
+
+types/av
+  typed array values
+
+types/hv
+  typed hash values
+
+types/ro
+  constants via flags, see Const::Fast
+
+types/my
+  3 new CHECK_.. attribute hooks for my
+
+types/ck
+  use types checks (in C)
+
+types/ph
+  perfect hashes

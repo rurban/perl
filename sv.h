@@ -107,6 +107,7 @@ typedef struct hek HEK;
 	char*   svu_pv;		/* pointer to malloced string */	\
 	IV      svu_iv;			\
 	UV      svu_uv;			\
+	NV      svu_nv;			\
 	SV*     svu_rv;		/* pointer to another SV */		\
 	SV**    svu_array;		\
 	HE**	svu_hash;		\
@@ -220,7 +221,11 @@ perform the upgrade if necessary.  See C<svtype>.
 =cut
 */
 
+#if DEBUGGING
+#define SvANY(sv)	({SV_TYPED(sv) ? assert(!SV_TYPED(sv)) : (sv)->sv_any})
+#else
 #define SvANY(sv)	(sv)->sv_any
+#endif
 #define SvFLAGS(sv)	(sv)->sv_flags
 #define SvREFCNT(sv)	(sv)->sv_refcnt
 
@@ -334,7 +339,9 @@ perform the upgrade if necessary.  See C<svtype>.
 				       4: On a pad name SV, that slot in the
 					  frame AV is a REFCNT'ed reference
 					  to a lexical from "outside". */
-#define SVphv_REHASH	SVf_FAKE    /* 5: On a PVHV, hash values are being
+				       5: On a typed pad name SV/AV/HV with SVf_READONLY,
+					  marks a strict bare type without xpv*. */
+#define SVphv_REHASH	SVf_FAKE    /* 6: On a PVHV, hash values are being
 					  recalculated */
 #define SVf_OOK		0x02000000  /* has valid offset value. For a PVHV this
 				       means that a hv_aux struct is present
@@ -349,6 +356,16 @@ perform the upgrade if necessary.  See C<svtype>.
 
 
 #define SVf_THINKFIRST	(SVf_READONLY|SVf_ROK|SVf_FAKE)
+
+/* pad is a strict bare typed lexical: int, double or string.
+   As SV it has no sv_any pointer, _SV_HEAD_UNION contains the value.
+   IV in sv_u.svu_iv
+   NV in sv_u.svu_nv
+*/
+#define SV_TYPED	(SVpad_TYPED|SVf_READONLY|SVf_FAKE|~SVf_AMAGIC)
+#define SV_TYPED_int	(SV_TYPED && SVf_IOK)
+#define SV_TYPED_double	(SV_TYPED && SVf_NOK)
+#define SV_TYPED_string	(SV_TYPED && SVf_POK)
 
 #define SVf_OK		(SVf_IOK|SVf_NOK|SVf_POK|SVf_ROK| \
 			 SVp_IOK|SVp_NOK|SVp_POK|SVpgv_GP)
