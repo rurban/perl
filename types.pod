@@ -1,0 +1,26 @@
+PLAN for 5.18:
+
+typed/sv
+  strict int,double,string detection with flags and impl (FAKE+TYPED)
+  sv.h, sv.c, toke.c
+
+typed/av
+  typed array values
+
+typed/hv
+  typed hash values
+
+typed/ro
+  my const Type $sv; or my Type $sv:const
+  (attribute quirks #1)
+  => SVf_READONLY, see Const::Fast and Scalar::Contract::constant
+
+typed/my
+  3 new CHECK_.. attribute hooks for my
+  (attribute quirks #2)
+
+typed/ck
+  use types checks (in C)
+
+typed/ph
+  perfect hashes

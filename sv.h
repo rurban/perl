@@ -107,6 +107,7 @@ typedef struct hek HEK;
 	char*   svu_pv;		/* pointer to malloced string */	\
 	IV      svu_iv;			\
 	UV      svu_uv;			\
+	NV      svu_nv;			\
 	SV*     svu_rv;		/* pointer to another SV */		\
 	SV**    svu_array;		\
 	HE**	svu_hash;		\
@@ -309,7 +310,10 @@ perform the upgrade if necessary.  See C<svtype>.
 				       subroutine in another package. Set the
 				       CvIMPORTED_CV_ON() if it needs to be
 				       expanded to a real GV */
-/*                      0x00010000  *** FREE SLOT */
+#define SVf_TYPED	0x00010000  /* strictly typed lexical, one of int,
+				       double, string: SVf_IOK, SVf_NOK,
+				       or SVf_POK. SVf_FAKE is set with
+				       int and double. */
 #define SVs_PADTMP	0x00020000  /* in use as tmp; only if ! SVs_PADMY */
 #define SVs_PADSTALE	0x00020000  /* lexical has gone out of scope;
 					only valid for SVs_PADMY */
@@ -333,9 +337,11 @@ perform the upgrade if necessary.  See C<svtype>.
 					  [CvEVAL(cv), CvSPECIAL(cv)]
 				       4: On a pad name SV, that slot in the
 					  frame AV is a REFCNT'ed reference
-					  to a lexical from "outside". */
-#define SVphv_REHASH	SVf_FAKE    /* 5: On a PVHV, hash values are being
-					  recalculated */
+					  to a lexical from "outside".
+				       5: On a typed pad with SVf_TYPED, marks
+					  a strict bare type without sv_any. */
+#define SVphv_REHASH	(SVf_FAKE&~SVf_TYPED) /* 6: On an untyped PVHV, hash
+					  values are being recalculated */
 #define SVf_OOK		0x02000000  /* has valid offset value. For a PVHV this
 				       means that a hv_aux struct is present
 				       after the main array */
@@ -1047,6 +1053,22 @@ the scalar's value cannot change unless written to.
 #  define SvPAD_TYPED_on(sv)	(SvFLAGS(sv) |= SVpad_NAME|SVpad_TYPED)
 #  define SvPAD_OUR_on(sv)	(SvFLAGS(sv) |= SVpad_NAME|SVpad_OUR)
 #  define SvPAD_STATE_on(sv)	(SvFLAGS(sv) |= SVpad_NAME|SVpad_STATE)
+#endif
+
+/* pad is a strict bare typed lexical: int, double or string.
+   As SV it has no sv_any pointer, _SV_HEAD_UNION contains the value.
+   IV in sv_u.svu_iv. NV in sv_u.svu_nv
+*/
+#define SvTYPED_int(sv)		(SvFLAGS(sv) & (SVf_TYPED|SVf_FAKE|SVf_IOK))
+#define SvTYPED_double(sv)	(SvFLAGS(sv) & (SVf_TYPED|SVf_FAKE|SVf_NOK))
+#define SvTYPED_number(sv)	(SvFLAGS(sv) & (SVf_TYPED|SVf_FAKE|SVf_IOK|SVf_NOK))
+#define SvTYPED_string(sv)	(SvFLAGS(sv) & (SVf_TYPED|SVf_POK))
+#ifdef DEBUGGING
+# define SvTYPED_strict(sv) ((SvFLAGS(sv) & (SVf_TYPED|SVf_AMAGIC))	\
+			     ? assert(SvFLAGS(sv) & ~SVf_AMAGIC)	\
+			     : (SvFLAGS(sv) & SVf_TYPED))
+#else
+# define SvTYPED_strict(sv) (SvFLAGS(sv) & SVf_TYPED)
 #endif
 
 #define SvOURSTASH(sv)	\

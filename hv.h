@@ -403,6 +403,7 @@ C<SV*>.
 #define HVhek_WASUTF8	0x02 /* Key is bytes here, but was supplied as utf8. */
 #define HVhek_REHASH	0x04 /* This key is in an hv using a custom HASH . */
 #define HVhek_UNSHARED	0x08 /* This key isn't a shared hash key. */
+#define HVhek_TAINT	0x80 /* This key is tainted. */
 #define HVhek_FREEKEY	0x100 /* Internal flag to say key is malloc()ed.  */
 #define HVhek_PLACEHOLD	0x200 /* Internal flag to create placeholder.
                                * (may change, but Storable is a core module) */
@@ -430,6 +431,9 @@ C<SV*>.
 #define HEK_WASUTF8_off(hek)	(HEK_FLAGS(hek) &= ~HVhek_WASUTF8)
 #define HEK_REHASH(hek)		(HEK_FLAGS(hek) & HVhek_REHASH)
 #define HEK_REHASH_on(hek)	(HEK_FLAGS(hek) |= HVhek_REHASH)
+#define HEK_TAINTED(hek)	(HEK_FLAGS(hek) & HVhek_TAINT)
+#define HEK_TAINT_on(hek)	(HEK_FLAGS(hek) |= HVhek_TAINT)
+#define HEK_TAINT_off(hek)	(HEK_FLAGS(hek) &= ~HVhek_TAINT)
 
 /* calculate HV array allocation */
 #ifndef PERL_USE_LARGE_HV_ALLOC
