@@ -20,7 +20,7 @@ use B qw(class main_root main_start main_cv svref_2object opnumber perlstring
          CVf_METHOD CVf_LVALUE
 	 PMf_KEEP PMf_GLOBAL PMf_CONTINUE PMf_EVAL PMf_ONCE
 	 PMf_MULTILINE PMf_SINGLELINE PMf_FOLD PMf_EXTENDED);
-$VERSION = "1.10";
+$VERSION = "1.11";
 use strict;
 use vars qw/$AUTOLOAD/;
 use warnings ();
@@ -1252,22 +1252,24 @@ BEGIN { map($globalnames{$_}++, "SIG", "STDIN", "STDOUT", "STDERR", "INC",
 sub gv_name {
     my $self = shift;
     my $gv = shift;
+    my $raw = shift;
 Carp::confess() unless ref($gv) eq "B::GV";
     my $stash = $gv->STASH->NAME;
-    my $name = $gv->SAFENAME;
+    my $name = $raw ? $gv->NAME : $gv->SAFENAME;
     if ($stash eq 'main' && $name =~ /^::/) {
 	$stash = '::';
     }
-    elsif (($stash eq 'main' && $globalnames{$name})
+    elsif (($stash eq 'main'
+	    && ($globalnames{$name} || $name =~ /^[^A-Za-z_:]/))
 	or ($stash eq $self->{'curstash'} && !$globalnames{$name}
 	    && ($stash eq 'main' || $name !~ /::/))
-	or $name =~ /^[^A-Za-z_:]/)
+	  )
     {
 	$stash = "";
     } else {
 	$stash = $stash . "::";
     }
-    if ($name =~ /^(\^..|{)/) {
+    if (!$raw and $name =~ /^(\^..|{)/) {
         $name = "{$name}";       # ${^WARNING_BITS}, etc and ${
     }
     return $stash . $name;
@@ -1301,6 +1303,23 @@ sub stash_variable {
     my $v = ($prefix eq '$#' ? '@' : $prefix) . $name;
     return $prefix .$self->{'curstash'}.'::'. $name if $self->lex_in_scope($v);
     return "$prefix$name";
+}
+
+# Return just the name, without the prefix.  It may be returned as a quoted
+# string.  The second return value is a boolean indicating that.
+sub stash_variable_name {
+    my($self, $prefix, $gv) = @_;
+    my $name = $self->gv_name($gv, 1);
+    $name = $self->{'curstash'}.'::'. $name
+	if $prefix and $self->lex_in_scope("$prefix$name");
+    if ($name =~ /^(?:\S|(?!\d)[\ca-\cz]?(?:\w|::)*|\d+)\z/) {
+	$name =~ s/^([\ca-\cz])/'^'.($1|'@')/e;
+	$name =~ /^(\^..|{)/ and $name = "{$name}";
+	return $name, 0; # not quoted
+    }
+    else {
+	single_delim("q", "'", $name), 1;
+    }
 }
 
 sub lex_in_scope {
@@ -1889,7 +1908,10 @@ sub pp_require {
     } else {	
 	$self->unop(
 	    $op, $cx,
-	    $op->first->private & OPpCONST_NOVER ? "no" : $opname,
+	    $op->first->name eq 'const'
+	     && $op->first->private & OPpCONST_NOVER
+		 ? "no"
+		 : $opname,
 	    1, # llafr does not apply
 	);
     }
@@ -2366,6 +2388,18 @@ sub pp_andassign { logassignop(@_, "&&=") }
 sub pp_orassign  { logassignop(@_, "||=") }
 sub pp_dorassign { logassignop(@_, "//=") }
 
+sub rv2gv_or_string {
+    my($self,$op) = @_;
+    if ($op->name eq "gv") { # could be open("open") or open("###")
+	my($name,$quoted) =
+	    $self->stash_variable_name(undef,$self->gv_or_padgv($op));
+	$quoted ? $name : "*$name";
+    }
+    else {
+	$self->deparse($op, 6);
+    }
+}
+
 sub listop {
     my $self = shift;
     my($op, $cx, $name, $kid, $nollafr) = @_;
@@ -2388,7 +2422,7 @@ sub listop {
     if (defined $proto
 	&& $proto =~ /^;?\*/
 	&& $kid->name eq "rv2gv" && !($kid->private & OPpLVAL_INTRO)) {
-	$first = $self->deparse($kid->first, 6);
+	$first = $self->rv2gv_or_string($kid->first);
     }
     else {
 	$first = $self->deparse($kid, 6);
@@ -2402,7 +2436,7 @@ sub listop {
     $kid = $kid->sibling;
     if (defined $proto && $proto =~ /^\*\*/ && $kid->name eq "rv2gv"
 	 && !($kid->private & OPpLVAL_INTRO)) {
-	push @exprs, $self->deparse($kid->first, 6);
+	push @exprs, $first = $self->rv2gv_or_string($kid->first);
 	$kid = $kid->sibling;
     }
     for (; !null($kid); $kid = $kid->sibling) {
@@ -3029,10 +3063,8 @@ sub pp_aelemfast {
     return $self->pp_aelemfast_lex(@_) if ($op->flags & OPf_SPECIAL);
 
     my $gv = $self->gv_or_padgv($op);
-    my $name = $self->gv_name($gv);
-    $name = $self->{'curstash'}."::$name"
-	if $name !~ /::/ && $self->lex_in_scope('@'.$name);
-    $name = '$' . $name;
+    my($name,$quoted) = $self->stash_variable_name('@',$gv);
+    $name = $quoted ? "$name->" : '$' . $name;
     return $name . "[" .  ($op->private + $self->{'arybase'}) . "]";
 }
 
@@ -3155,13 +3187,15 @@ sub elem_or_slice_array_name
     } elsif (is_scope($array)) { # ${expr}[0]
 	return "{" . $self->deparse($array, 0) . "}";
     } elsif ($array->name eq "gv") {
-	$array = $self->gv_name($self->gv_or_padgv($array));
-	if ($array !~ /::/) {
-	    my $prefix = ($left eq '[' ? '@' : '%');
-	    $array = $self->{curstash}.'::'.$array
-		if $self->lex_in_scope($prefix . $array);
+	($array, my $quoted) =
+	    $self->stash_variable_name(
+		$left eq '[' ? '@' : '%', $self->gv_or_padgv($array)
+	    );
+	if (!$allow_arrow && $quoted) {
+	    # This cannot happen.
+	    die "Invalid variable name $array for slice";
 	}
-	return $array;
+	return $quoted ? "$array->" : $array;
     } elsif (!$allow_arrow || is_scalar $array) { # $x[0], $$x[0], ...
 	return $self->deparse($array, 24);
     } else {
@@ -3219,7 +3253,8 @@ sub elem {
     }
     if (my $array_name=$self->elem_or_slice_array_name
 	    ($array, $left, $padname, 1)) {
-	return "\$" . $array_name . $left . $idx . $right;
+	return ($array_name =~ /->\z/ ? $array_name : "\$" . $array_name)
+	      . $left . $idx . $right;
     } else {
 	# $x[20][3]{hi} or expr->[20]
 	my $arrow = is_subscriptable($array) ? "" : "->";
@@ -3875,14 +3910,12 @@ sub const {
 	    return "{" . join(", ", @elts) . "}";
 	} elsif (class($ref) eq "CV") {
 	    BEGIN {
-# Commented out until after 5.15.6
-#		if ($] > 5.0150051) {
+		if ($] > 5.0150051) {
 		    require overloading;
 		    unimport overloading;
-#		}
+		}
 	    }
-	    # Remove the 1|| after 5.15.6
-	    if ((1||$] > 5.0150051) && $self->{curcv} &&
+	    if ($] > 5.0150051 && $self->{curcv} &&
 		 $self->{curcv}->object_2svref == $ref->object_2svref) {
 		return $self->keyword("__SUB__");
 	    }

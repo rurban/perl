@@ -4097,6 +4097,7 @@ Perl_sv_setsv_flags(pTHX_ SV *dstr, register SV* sstr, const I32 flags)
     } else if (dtype == SVt_PVAV || dtype == SVt_PVHV) {
 	const char * const type = sv_reftype(dstr,0);
 	if (PL_op)
+	    /* diag_listed_as: Cannot copy to %s */
 	    Perl_croak(aTHX_ "Cannot copy to %s in %s", type, OP_DESC(PL_op));
 	else
 	    Perl_croak(aTHX_ "Cannot copy to %s", type);
@@ -6115,6 +6116,7 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 	    /* FIXME. There are probably more unreferenced pointers to SVs
 	     * in the interpreter struct that we should check and tidy in
 	     * a similar fashion to this:  */
+	    /* See also S_sv_unglob, which does the same thing. */
 	    if ((const GV *)sv == PL_last_in_gv)
 		PL_last_in_gv = NULL;
 	case SVt_PVMG:
@@ -9477,7 +9479,7 @@ S_sv_unglob(pTHX_ SV *const sv, U32 flags)
     dVAR;
     void *xpvmg;
     HV *stash;
-    SV * const temp = sv_newmortal();
+    SV * const temp = flags & SV_COW_DROP_PV ? NULL : sv_newmortal();
 
     PERL_ARGS_ASSERT_SV_UNGLOB;
 
@@ -9517,6 +9519,9 @@ S_sv_unglob(pTHX_ SV *const sv, U32 flags)
        set operation as merely an internal storage change.  */
     if (flags & SV_COW_DROP_PV) SvOK_off(sv);
     else sv_setsv_flags(sv, temp, 0);
+
+    if ((const GV *)sv == PL_last_in_gv)
+	PL_last_in_gv = NULL;
 }
 
 /*

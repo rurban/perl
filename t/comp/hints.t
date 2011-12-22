@@ -6,7 +6,7 @@ BEGIN {
     @INC = qw(. ../lib);
 }
 
-BEGIN { print "1..24\n"; }
+BEGIN { print "1..27\n"; }
 BEGIN {
     print "not " if exists $^H{foo};
     print "ok 1 - \$^H{foo} doesn't exist initially\n";
@@ -128,6 +128,48 @@ BEGIN {
 	"ok 23 - \$^H{foo} correct after /unicode/i (res=$res)\n";
 }
 
+# [perl #106282] Crash when tying %^H
+# Tying %^H should not result in a crash when the hint hash is cloned.
+# Hints should also be copied properly to inner scopes.  See also
+# [rt.cpan.org #73402].
+eval q`
+    # Do something naughty enough, and you get your module mentioned in the
+    # test suite. :-)
+    package namespace::clean::_TieHintHash;
+
+    sub TIEHASH  { bless[] }
+    sub STORE    { $_[0][0]{$_[1]} = $_[2] }
+    sub FETCH    { $_[0][0]{$_[1]} }
+    sub FIRSTKEY { my $a = scalar keys %{$_[0][0]}; each %{$_[0][0]} }
+    sub NEXTKEY  { each %{$_[0][0]} }
+
+    package main;
+
+    BEGIN {
+	$^H{foo} = "bar"; # activate localisation magic
+	tie( %^H, 'namespace::clean::_TieHintHash' ); # sabotage %^H
+	$^H{foo} = "bar"; # create an element in the tied hash
+    }
+    { # clone the tied hint hash on scope entry
+	BEGIN {
+	    print "not " x ($^H{foo} ne 'bar'),
+		  "ok 24 - tied hint hash is copied to inner scope\n";
+	    %^H = ();
+	    tie( %^H, 'namespace::clean::_TieHintHash' );
+	    $^H{foo} = "bar";
+	}
+	{
+	    BEGIN{
+		print
+		  "not " x ($^H{foo} ne 'bar'),
+		  "ok 25 - tied empty hint hash is copied to inner scope\n"
+	    }    
+	}
+	1;
+    }
+    1;
+` or warn $@;
+print "ok 26 - no crash when cloning a tied hint hash\n";
 
 
 # Add new tests above this require, in case it fails.
@@ -139,7 +181,7 @@ my $result = runperl(
     stderr => 1
 );
 print "not " if length $result;
-print "ok 24 - double-freeing hints hash\n";
+print "ok 27 - double-freeing hints hash\n";
 print "# got: $result\n" if length $result;
 
 __END__

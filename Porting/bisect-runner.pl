@@ -678,7 +678,8 @@ sub apply_patch {
     print $fh $patch_to_use;
     return if close $fh;
     print STDERR "Patch is <<'EOPATCH'\n${patch}EOPATCH\n";
-    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n";
+    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n"
+        if $patch_to_use ne $patch;
     die "Can't $what$files: $?, $!";
 }
 
@@ -944,10 +945,12 @@ patch_ext();
 # Parallel build for miniperl is safe
 system "$options{make} $j miniperl </dev/null";
 
-my $expected = $target =~ /^test/ ? 't/perl'
+# This is the file we expect make to create
+my $expected_file = $target =~ /^test/ ? 't/perl'
     : $target eq 'Fcntl' ? "lib/auto/Fcntl/Fcntl.$Config{so}"
     : $target;
-my $real_target = $target eq 'Fcntl' ? $expected : $target;
+# This is the target we tell make to build in order to get $expected_file
+my $real_target = $target eq 'Fcntl' ? $expected_file : $target;
 
 if ($target ne 'miniperl') {
     # Nearly all parallel build issues fixed by 5.10.0. Untrustworthy before that.
@@ -967,12 +970,30 @@ if ($target ne 'miniperl') {
     system "$options{make} $j $real_target </dev/null";
 }
 
-my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
+my $expected_file_found = $expected_file =~ /perl$/
+    ? -x $expected_file : -r $expected_file;
+
+if ($expected_file_found && $expected_file eq 't/perl') {
+    # Check that it isn't actually pointing to ../miniperl, which will happen
+    # if the sanity check ./miniperl -Ilib -MExporter -e '<?>' fails, and
+    # Makefile tries to run minitest.
+
+    # Of course, helpfully sometimes it's called ../perl, other times .././perl
+    # and who knows if that list is exhaustive...
+    my ($dev0, $ino0) = stat 't/perl';
+    my ($dev1, $ino1) = stat 'perl';
+    unless (defined $dev0 && defined $dev1 && $dev0 == $dev1 && $ino0 == $ino1) {
+        undef $expected_file_found;
+        my $link = readlink $expected_file;
+        warn "'t/perl' => '$link', not 'perl'";
+        die "Could not realink t/perl: $!" unless defined $link;
+    }
+}
 
 if ($options{'test-build'}) {
-    report_and_exit($missing_target, 'could build', 'could not build',
+    report_and_exit(!$expected_file_found, 'could build', 'could not build',
                     $real_target);
-} elsif ($missing_target) {
+} elsif (!$expected_file_found) {
     skip("could not build $real_target");
 }
 
@@ -2455,7 +2476,7 @@ EOPATCH
         # corrected there. cfgperl (with the fixes) was merged back to blead.
         # The resultant rather twisty maze of commits looks like this:
 
-=for comment
+=begin comment
 
 * | |   commit 137225782c183172f360c827424b9b9f8adbef0e
 |\ \ \  Merge: 22c35a8 2a8ee23
@@ -2513,6 +2534,8 @@ EOPATCH
 | | |
 | | |     p4raw-id: //depot/perl@2133
 
+=end comment
+
 =cut
 
         # and completely confuses git bisect (and at least me), causing it to
@@ -2567,6 +2590,60 @@ EOPATCH
         # Message-Id: <tqemtae338.fsf@puma.genscan.com>
         # Subject: [PATCH 5.005_51] (was: why SAVEDESTRUCTOR()...)
         apply_commit('3c8a44569607336e', 'mg.c');
+    }
+
+    if ($major == 5) {
+        if (extract_from_file('doop.c', qr/croak\(no_modify\);/)
+            && extract_from_file('doop.c', qr/croak\(PL_no_modify\);/)) {
+            # Whilst the log suggests that this would only fix 5 commits, in
+            # practice this area of history is a complete tarpit, and git bisect
+            # gets very confused by the skips in the middle of the back and
+            # forth merging between //depot/perl and //depot/cfgperl
+            apply_commit('6393042b638dafd3');
+        }
+
+        # One error "fixed" with another:
+        if (extract_from_file('pp_ctl.c',
+                              qr/\Qstatic void *docatch_body _((void *o));\E/)) {
+            apply_commit('5b51e982882955fe');
+        }
+        # Which is then fixed by this:
+        if (extract_from_file('pp_ctl.c',
+                              qr/\Qstatic void *docatch_body _((valist\E/)) {
+            apply_commit('47aa779ee4c1a50e');
+        }
+
+        if (extract_from_file('thrdvar.h', qr/PERLVARI\(Tprotect/)
+            && !extract_from_file('embedvar.h', qr/PL_protect/)) {
+            # Commit 312caa8e97f1c7ee didn't update embedvar.h
+            apply_commit('e0284a306d2de082', 'embedvar.h');
+        }
+    }
+
+    if ($major == 5
+        && extract_from_file('sv.c',
+                             qr/PerlDir_close\(IoDIRP\((?:\(IO\*\))?sv\)\);/)
+        && !(extract_from_file('toke.c',
+                               qr/\QIoDIRP(FILTER_DATA(AvFILLp(PL_rsfp_filters))) = NULL\E/)
+             || extract_from_file('toke.c',
+                                  qr/\QIoDIRP(datasv) = (DIR*)NULL;\E/))) {
+        # Commit 93578b34124e8a3b, //depot/perl@3298
+        # close directory handles properly when localized,
+        # tweaked slightly by commit 1236053a2c722e2b,
+        # add test case for change#3298
+        #
+        # The fix is the last part of:
+        #
+        # various fixes for clean build and test on win32; configpm broken,
+        # needed to open myconfig.SH rather than myconfig; sundry adjustments
+        # to bytecode stuff; tweaks to DYNAMIC_ENV_FETCH code to make it
+        # work under win32; getenv_sv() changed to getenv_len() since SVs
+        # aren't visible in the lower echelons; remove bogus exports from
+        # config.sym; PERL_OBJECT-ness for C++ exception support; null out
+        # IoDIRP in filter_del() or sv_free() will attempt to close it
+        #
+        # The changed code is modified subsequently by commit e0c198038146b7a4
+        apply_commit('a6c403648ecd5cc7', 'toke.c');
     }
 
     if ($major < 6 && $^O eq 'netbsd'

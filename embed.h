@@ -28,7 +28,6 @@
 
 #define Gv_AMupdate(a,b)	Perl_Gv_AMupdate(aTHX_ a,b)
 #define _to_uni_fold_flags(a,b,c,d)	Perl__to_uni_fold_flags(aTHX_ a,b,c,d)
-#define _to_utf8_fold_flags(a,b,c,d)	Perl__to_utf8_fold_flags(aTHX_ a,b,c,d)
 #define amagic_call(a,b,c,d)	Perl_amagic_call(aTHX_ a,b,c,d)
 #define amagic_deref_call(a,b)	Perl_amagic_deref_call(aTHX_ a,b)
 #define apply_attrs_string(a,b,c,d)	Perl_apply_attrs_string(aTHX_ a,b,c,d)
@@ -657,9 +656,6 @@
 #define to_uni_upper(a,b,c)	Perl_to_uni_upper(aTHX_ a,b,c)
 #define to_uni_upper_lc(a)	Perl_to_uni_upper_lc(aTHX_ a)
 #define to_utf8_case(a,b,c,d,e,f)	Perl_to_utf8_case(aTHX_ a,b,c,d,e,f)
-#define to_utf8_lower(a,b,c)	Perl_to_utf8_lower(aTHX_ a,b,c)
-#define to_utf8_title(a,b,c)	Perl_to_utf8_title(aTHX_ a,b,c)
-#define to_utf8_upper(a,b,c)	Perl_to_utf8_upper(aTHX_ a,b,c)
 #define unpack_str(a,b,c,d,e,f,g,h)	Perl_unpack_str(aTHX_ a,b,c,d,e,f,g,h)
 #define unpackstring(a,b,c,d,e)	Perl_unpackstring(aTHX_ a,b,c,d,e)
 #define unsharepvn(a,b,c)	Perl_unsharepvn(aTHX_ a,b,c)
@@ -849,6 +845,10 @@
 #endif
 #if defined(PERL_CORE) || defined(PERL_EXT)
 #define _is_utf8__perl_idstart(a)	Perl__is_utf8__perl_idstart(aTHX_ a)
+#define _to_utf8_fold_flags(a,b,c,d,e)	Perl__to_utf8_fold_flags(aTHX_ a,b,c,d,e)
+#define _to_utf8_lower_flags(a,b,c,d,e)	Perl__to_utf8_lower_flags(aTHX_ a,b,c,d,e)
+#define _to_utf8_title_flags(a,b,c,d,e)	Perl__to_utf8_title_flags(aTHX_ a,b,c,d,e)
+#define _to_utf8_upper_flags(a,b,c,d,e)	Perl__to_utf8_upper_flags(aTHX_ a,b,c,d,e)
 #define av_reify(a)		Perl_av_reify(aTHX_ a)
 #define is_utf8_X_L(a)		Perl_is_utf8_X_L(aTHX_ a)
 #define is_utf8_X_LV(a)		Perl_is_utf8_X_LV(aTHX_ a)
@@ -1028,6 +1028,7 @@
 #define ck_subr(a)		Perl_ck_subr(aTHX_ a)
 #define ck_substr(a)		Perl_ck_substr(aTHX_ a)
 #define ck_svconst(a)		Perl_ck_svconst(aTHX_ a)
+#define ck_tell(a)		Perl_ck_tell(aTHX_ a)
 #define ck_trunc(a)		Perl_ck_trunc(aTHX_ a)
 #define convert(a,b,c)		Perl_convert(aTHX_ a,b,c)
 #define core_prototype(a,b,c,d)	Perl_core_prototype(aTHX_ a,b,c,d)
@@ -1584,6 +1585,7 @@
 #  endif
 #  if defined(PERL_IN_UTF8_C)
 #define _to_fold_latin1(a,b,c,d)	Perl__to_fold_latin1(aTHX_ a,b,c,d)
+#define check_locale_boundary_crossing(a,b,c,d)	S_check_locale_boundary_crossing(aTHX_ a,b,c,d)
 #define is_utf8_char_slow	S_is_utf8_char_slow
 #define is_utf8_common(a,b,c)	S_is_utf8_common(aTHX_ a,b,c)
 #define swash_get(a,b,c)	S_swash_get(aTHX_ a,b,c)

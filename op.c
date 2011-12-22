@@ -4671,17 +4671,13 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
     if (use_version) {
 	HV * const hinthv = GvHV(PL_hintgv);
 	const bool hhoff = !hinthv || !(PL_hints & HINT_LOCALIZE_HH);
+	SV *importsv;
 
 	/* Turn features off */
-	if (hhoff)
-	    /* avoid loading feature.pm */
-	    PL_hints &= ~HINT_UNI_8_BIT;
-	else {
-	    ENTER_with_name("load_feature");
-	    Perl_load_module(aTHX_
+	ENTER_with_name("load_feature");
+	Perl_load_module(aTHX_
 		PERL_LOADMOD_DENY, newSVpvs("feature"), NULL, NULL
-	    );
-	}
+	);
 
 	/* If we request a version >= 5.9.5, load feature.pm with the
 	 * feature bundle that corresponds to the required version. */
@@ -4689,13 +4685,12 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
-	    SV *const importsv = vnormal(use_version);
-	    if (hhoff) ENTER_with_name("load_feature");
+	    importsv = vnormal(use_version);
 	    *SvPVX_mutable(importsv) = ':';
-	    Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
-	    LEAVE_with_name("load_feature");
 	}
-	else if (!hhoff) LEAVE_with_name("load_feature");
+	else importsv = newSVpvs(":default");
+	Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
+	LEAVE_with_name("load_feature");
 	/* If a version >= 5.11.0 is requested, strictures are on by default! */
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
@@ -4760,7 +4755,7 @@ Loads the module whose name is pointed to by the string part of name.
 Note that the actual module name, not its filename, should be given.
 Eg, "Foo::Bar" instead of "Foo/Bar.pm".  flags can be any of
 PERL_LOADMOD_DENY, PERL_LOADMOD_NOIMPORT, or PERL_LOADMOD_IMPORT_OPS
-(or 0 for no flags). ver, if specified, provides version semantics
+(or 0 for no flags). ver, if specified and not NULL, provides version semantics
 similar to C<use Foo::Bar VERSION>.  The optional trailing SV*
 arguments can be used to specify arguments to the module's import()
 method, similar to C<use Foo::Bar VERSION LIST>.  They must be
@@ -4768,6 +4763,8 @@ terminated with a final NULL pointer.  Note that this list can only
 be omitted when the PERL_LOADMOD_NOIMPORT flag has been used.
 Otherwise at least a single NULL pointer to designate the default
 import list is required.
+
+The reference count for each specified C<SV*> parameter is decremented.
 
 =cut */
 
@@ -6152,6 +6149,7 @@ S_newGIVWHENOP(pTHX_ OP *cond, OP *block,
 	/* This is a default {} block */
 	enterop->op_first = block;
 	enterop->op_flags |= OPf_SPECIAL;
+	o      ->op_flags |= OPf_SPECIAL;
 
 	o->op_next = (OP *) enterop;
     }
@@ -7470,6 +7468,7 @@ Perl_ck_eof(pTHX_ OP *o)
     PERL_ARGS_ASSERT_CK_EOF;
 
     if (o->op_flags & OPf_KIDS) {
+	OP *kid;
 	if (cLISTOPo->op_first->op_type == OP_STUB) {
 	    OP * const newop
 		= newUNOP(o->op_type, OPf_SPECIAL, newGVOP(OP_GV, 0, PL_argvgv));
@@ -7480,7 +7479,10 @@ Perl_ck_eof(pTHX_ OP *o)
 #endif
 	    o = newop;
 	}
-	return ck_fun(o);
+	o = ck_fun(o);
+	kid = cLISTOPo->op_first;
+	if (kid->op_type == OP_RV2GV)
+	    kid->op_private |= OPpALLOW_FAKE;
     }
     return o;
 }
@@ -7949,6 +7951,7 @@ Perl_ck_fun(pTHX_ OP *o)
                             const char *name = NULL;
 			    STRLEN len = 0;
                             U32 name_utf8 = 0;
+			    bool want_dollar = TRUE;
 
 			    flags = 0;
 			    /* Set a flag to tell rv2gv to vivify
@@ -8015,6 +8018,7 @@ Perl_ck_fun(pTHX_ OP *o)
 				 if (!name) {
 				      name = "__ANONIO__";
 				      len = 10;
+				      want_dollar = FALSE;
 				 }
 				 op_lvalue(kid, type);
 			    }
@@ -8023,7 +8027,7 @@ Perl_ck_fun(pTHX_ OP *o)
 				targ = pad_alloc(OP_RV2GV, SVs_PADTMP);
 				namesv = PAD_SVl(targ);
 				SvUPGRADE(namesv, SVt_PV);
-				if (*name != '$')
+				if (want_dollar && *name != '$')
 				    sv_setpvs(namesv, "$");
 				sv_catpvn(namesv, name, len);
                                 if ( name_utf8 ) SvUTF8_on(namesv);
@@ -8281,7 +8285,11 @@ Perl_ck_readline(pTHX_ OP *o)
 {
     PERL_ARGS_ASSERT_CK_READLINE;
 
-    if (!(o->op_flags & OPf_KIDS)) {
+    if (o->op_flags & OPf_KIDS) {
+	 OP *kid = cLISTOPo->op_first;
+	 if (kid->op_type == OP_RV2GV) kid->op_private |= OPpALLOW_FAKE;
+    }
+    else {
 	OP * const newop
 	    = newUNOP(OP_READLINE, 0, newGVOP(OP_GV, 0, PL_argvgv));
 #ifdef PERL_MAD
@@ -9681,6 +9689,19 @@ Perl_ck_substr(pTHX_ OP *o)
 	if (kid)
 	    kid->op_flags |= OPf_MOD;
 
+    }
+    return o;
+}
+
+OP *
+Perl_ck_tell(pTHX_ OP *o)
+{
+    PERL_ARGS_ASSERT_CK_TELL;
+    o = ck_fun(o);
+    if (o->op_flags & OPf_KIDS) {
+     OP *kid = cLISTOPo->op_first;
+     if (kid->op_type == OP_NULL && kid->op_sibling) kid = kid->op_sibling;
+     if (kid->op_type == OP_RV2GV) kid->op_private |= OPpALLOW_FAKE;
     }
     return o;
 }

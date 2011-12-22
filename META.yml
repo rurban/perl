@@ -1,5 +1,5 @@
 name: perl
-version: 5.015005
+version: 5.015006
 abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
@@ -59,6 +59,7 @@ no_index:
     - lib/version
     - win32
   file:
+    - autodoc.pl
     - dist/IO/ChangeLog
     - dist/IO/hints/sco.pl
     - dist/IO/IO.pm
@@ -105,7 +106,6 @@ no_index:
     - lib/unicore/mktables
     - lib/version.pm
     - lib/version.pod
-    - lib/version.t
     - pod/perlfilter.pod
     - pod/perlpodstyle.pod
     - Porting/Maintainers.pm

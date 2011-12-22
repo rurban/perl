@@ -5409,7 +5409,8 @@ Perl_reg_named_buff_fetch(pTHX_ REGEXP * const r, SV * const namesv,
                     if (!retarray)
                         return ret;
                 } else {
-                    ret = newSVsv(&PL_sv_undef);
+                    if (retarray)
+                        ret = newSVsv(&PL_sv_undef);
                 }
                 if (retarray)
                     av_push(retarray, ret);
