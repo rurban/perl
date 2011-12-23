@@ -2996,7 +2996,6 @@ dist/Attribute-Handlers/demo/demo_rawdata.pl		Attribute::Handlers demo
 dist/Attribute-Handlers/demo/Descriptions.pm		Attribute::Handlers demo
 dist/Attribute-Handlers/demo/MyClass.pm			Attribute::Handlers demo
 dist/Attribute-Handlers/lib/Attribute/Handlers.pm	Attribute::Handlers
-dist/Attribute-Handlers/README				Attribute::Handlers
 dist/Attribute-Handlers/t/constants.t			Test constants and Attribute::Handlers
 dist/Attribute-Handlers/t/data_convert.t		Test attribute data conversion
 dist/Attribute-Handlers/t/linerep.t			See if Attribute::Handlers works
@@ -3080,6 +3079,7 @@ dist/Cwd/t/cwd.t			See if Cwd works
 dist/Cwd/t/Functions.t			See if File::Spec::Functions works
 dist/Cwd/t/rel2abs2rel.t		See if File::Spec->rel2abs/abs2rel works
 dist/Cwd/t/Spec.t			See if File::Spec works
+dist/Cwd/t/Spec-taint.t			See if File::Spec works with taint
 dist/Cwd/t/taint.t			See if Cwd works with taint
 dist/Cwd/t/tmpdir.t			See if File::Spec->tmpdir() works
 dist/Cwd/t/win32.t			See if Cwd works on Win32
@@ -4144,6 +4144,7 @@ lib/blib.t			blib.pm test
 lib/bytes_heavy.pl		Support routines for byte pragma
 lib/bytes.pm			Pragma to enable byte operations
 lib/bytes.t			bytes.pm test
+lib/_charnames.pm		Character names
 lib/charnames.pm		Character names
 lib/charnames.t			See if character names work
 lib/Class/Struct.pm		Declare struct-like datatypes as Perl classes
@@ -4361,7 +4362,14 @@ lib/vars.t			See if "use vars" works
 lib/version/Internals.pod	Description of the internals of version objects
 lib/version.pm			Support for version objects
 lib/version.pod			Documentation of the version module
-lib/version.t			Tests for version objects
+lib/version/t/01base.t		Tests for version objects`
+lib/version/t/02derived.t	Tests for version objects
+lib/version/t/03require.t	Tests for version objects
+lib/version/t/04strict_lax.t	Tests for version objects
+lib/version/t/05sigdie.t	Tests for version objects
+lib/version/t/06noop.t		Tests for version objects
+lib/version/t/07locale.t	Tests for version objects
+lib/version/t/coretests.pm	Tests for version objects
 lib/vmsish.pm			Control VMS-specific behavior of Perl core
 lib/vmsish.t			Tests for vmsish.pm
 lib/warnings.pm			For "use warnings"
@@ -4565,8 +4573,7 @@ plan9/plan9.c			Plan9 port: Plan9-specific C routines
 plan9/plan9ish.h		Plan9 port: Plan9-specific C header file
 plan9/setup.rc			Plan9 port: script for easy build+install
 plan9/versnum			Plan9 port: script to print version number
-pod/buildtoc			Update files based on pod.lst
-pod.lst				List the pods and their roles
+pod/buildtoc			Generate pod/perltoc.pod and pod/roffitall
 pod/Makefile.SH			generate Makefile which makes pods into something else
 pod/perl5004delta.pod		Perl changes in version 5.004
 pod/perl5005delta.pod		Perl changes in version 5.005
@@ -4586,6 +4593,7 @@ pod/perl5152delta.pod		Perl changes in version 5.15.2
 pod/perl5153delta.pod		Perl changes in version 5.15.3
 pod/perl5154delta.pod		Perl changes in version 5.15.4
 pod/perl5155delta.pod		Perl changes in version 5.15.5
+pod/perl5156delta.pod		Perl changes in version 5.15.6
 pod/perl561delta.pod		Perl changes in version 5.6.1
 pod/perl56delta.pod		Perl changes in version 5.6
 pod/perl581delta.pod		Perl changes in version 5.8.1
@@ -4732,6 +4740,7 @@ Porting/make_dot_patch.pl	Make a .patch file from a git WD
 Porting/makemeta		Create the top-level META.yml
 Porting/make_modlib_cpan.pl	Generates the list of CPAN sites in perlmodlib
 Porting/makerel			Release making utility
+Porting/make-rmg-checklist	Generates a checklist 4 the release manager
 Porting/make_snapshot.pl	Make a tgz snapshot of our tree with a .patch file in it
 Porting/manicheck		Check against MANIFEST
 Porting/manisort		Sort the MANIFEST
@@ -4739,7 +4748,7 @@ Porting/new-perldelta.pl	Generate a new perldelta
 Porting/newtests-perldelta.pl	Generate Perldelta stub for newly added tests
 Porting/perldelta_template.pod	Template for creating new perldelta.pod files
 Porting/perlhist_calculate.pl		Perform calculations to update perlhist
-Porting/pod_lib.pl		Code for handling pod.lst
+Porting/pod_lib.pl		Code for handling generated pods
 Porting/pod_rules.pl		generate lists of pod files for Makefiles
 Porting/podtidy			Reformat pod using Pod::Tidy
 Porting/pumpkin.pod		Guidelines and hints for Perl maintainers
@@ -4976,6 +4985,7 @@ t/lib/commonsense.t		See if configuration meets basic needs
 t/lib/compmod.pl		Helper for 1_compile.t
 t/lib/croak/mg			Test croak calls from mg.c
 t/lib/croak/op			Test croak calls from op.c
+t/lib/croak/pp_ctl		Test croak calls from pp_ctl.c
 t/lib/croak.t			Test calls to Perl_croak() in the C source.
 t/lib/cygwin.t			Builtin cygwin function tests
 t/lib/dbmt_common.pl		Common functionality for ?DBM_File tests
@@ -5310,6 +5320,8 @@ t/porting/bincompat.t		Check that {non_,}bincompat_options are ordered
 t/porting/checkcase.t		Check whether we are case-insensitive-fs-friendly
 t/porting/checkcfgvar.t		Check that all config.sh-like files are good
 t/porting/cmp_version.t		Test whether all changed module files have their VERSION bumped
+t/porting/customized.dat		Data file for porting/customized.t
+t/porting/customized.t		Check all CUSTOMIZED files are as they should be
 t/porting/diag.t		Test completeness of perldiag.pod
 t/porting/dual-life.t		Check that dual-life bins are in utils/
 t/porting/exec-bit.t		Check that exec-bit bins are identified
@@ -5323,6 +5335,7 @@ t/porting/podcheck.t		Test the POD of shipped modules is well formed
 t/porting/pod_rules.t		Check that various pod lists are consistent
 t/porting/regen.t		Check that regen.pl doesn't need running
 t/porting/test_bootstrap.t	Test that the instructions for test bootstrapping aren't accidentally overlooked.
+t/porting/utils.t		Check that utility scripts still compile
 t/README			Instructions for regression tests
 t/re/charset.t			See if regex modifiers like /d, /u work properly
 t/re/fold_grind.t		See if case folding works properly

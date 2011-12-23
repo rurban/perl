@@ -1450,7 +1450,7 @@ Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 {
     HV * const hv = newHV();
 
-    if (ohv && HvTOTALKEYS(ohv)) {
+    if (ohv) {
 	STRLEN hv_max = HvMAX(ohv);
 	STRLEN hv_fill = HvFILL(ohv);
 	HE *entry;
@@ -1463,13 +1463,18 @@ Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 
 	hv_iterinit(ohv);
 	while ((entry = hv_iternext_flags(ohv, 0))) {
-	    SV *const sv = newSVsv(HeVAL(entry));
-	    SV *heksv = newSVhek(HeKEY_hek(entry));
-	    sv_magic(sv, NULL, PERL_MAGIC_hintselem,
+	    SV *const sv = newSVsv(hv_iterval(ohv,entry));
+	    SV *heksv = HeSVKEY(entry);
+	    if (!heksv && sv) heksv = newSVhek(HeKEY_hek(entry));
+	    if (sv) sv_magic(sv, NULL, PERL_MAGIC_hintselem,
 		     (char *)heksv, HEf_SVKEY);
-	    SvREFCNT_dec(heksv);
-	    (void)hv_store_flags(hv, HeKEY(entry), HeKLEN(entry),
-				 sv, HeHASH(entry), HeKFLAGS(entry));
+	    if (heksv == HeSVKEY(entry))
+		(void)hv_store_ent(hv, heksv, sv, 0);
+	    else {
+		(void)hv_common(hv, heksv, HeKEY(entry), HeKLEN(entry),
+				 HeKFLAGS(entry), HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, sv, HeHASH(entry));
+		SvREFCNT_dec(heksv);
+	    }
 	}
 	HvRITER_set(ohv, riter);
 	HvEITER_set(ohv, eiter);
@@ -2990,7 +2995,7 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
     U8 utf8_flag;
     PERL_ARGS_ASSERT_REFCOUNTED_HE_FETCH_PVN;
 
-    if (flags & ~REFCOUNTED_HE_KEY_UTF8)
+    if (flags & ~(REFCOUNTED_HE_KEY_UTF8|REFCOUNTED_HE_EXISTS))
 	Perl_croak(aTHX_ "panic: refcounted_he_fetch_pvn bad flags %"UVxf,
 	    (UV)flags);
     if (!chain)
@@ -3042,9 +3047,15 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
 	    utf8_flag == (HEK_FLAGS(chain->refcounted_he_hek) & HVhek_UTF8)
 #endif
 	)
-	    return sv_2mortal(refcounted_he_value(chain));
+	    return
+		flags & REFCOUNTED_HE_EXISTS
+		    ? (chain->refcounted_he_data[0] & HVrhek_typemask)
+			== HVrhek_delete
+		       ? NULL
+		       : &PL_sv_yes
+		    : sv_2mortal(refcounted_he_value(chain));
     }
-    return &PL_sv_placeholder;
+    return flags & REFCOUNTED_HE_EXISTS ? NULL : &PL_sv_placeholder;
 }
 
 /*

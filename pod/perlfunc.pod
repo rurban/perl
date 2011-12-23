@@ -2867,6 +2867,8 @@ experimental.  The exact behaviour may change in a future version of Perl.
 See also C<each>, C<values>, and C<sort>.
 
 =item kill SIGNAL, LIST
+
+=item kill SIGNAL
 X<kill> X<signal>
 
 Sends a signal to a list of processes.  Returns the number of
@@ -2899,6 +2901,11 @@ This emulation has limitations related to kill that have to be considered,
 for code running on Windows and in code intended to be portable.
 
 See L<perlfork> for more details.
+
+If there is no I<LIST> of processes, no signal is sent, and the return
+value is 0.  This form is sometimes used, however, because it causes
+tainting checks to be run.  But see
+L<perlsec/Laundering and Detecting Tainted Data>.
 
 Portability issues: L<perlport/kill>.
 
@@ -2957,13 +2964,25 @@ respectively.
 
 =back
 
+=item Otherwise, if C<use locale> is in effect
+
+Respects current LC_CTYPE locale for code points < 256; and uses Unicode
+semantics for the remaining code points (this last can only happen if
+the UTF8 flag is also set).  See L<perllocale>.
+
+A deficiency in this is that case changes that cross the 255/256
+boundary are not well-defined.  For example, the lower case of LATIN CAPITAL
+LETTER SHARP S (U+1E9E) in Unicode semantics is U+00DF (on ASCII
+platforms).   But under C<use locale>, the lower case of U+1E9E is
+itself, because 0xDF may not be LATIN SMALL LETTER SHARP S in the
+current locale, and Perl has no way of knowing if that character even
+exists in the locale, much less what code point it is.  Perl returns
+the input character unchanged, for all instances (and there aren't
+many) where the 255/256 boundary would otherwise be crossed.
+
 =item Otherwise, If EXPR has the UTF8 flag set
 
 Unicode semantics are used for the case change.
-
-=item Otherwise, if C<use locale> is in effect
-
-Respects current LC_CTYPE locale.  See L<perllocale>.
 
 =item Otherwise, if C<use feature 'unicode_strings'> is in effect:
 

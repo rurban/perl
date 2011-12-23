@@ -6,12 +6,12 @@ use lib 'Porting';
 use Maintainers qw/%Modules/;
 use Module::CoreList;
 use Getopt::Long;
-use Algorithm::Diff;
+require Algorithm::Diff;
 
 my %sections = (
-  new     => 'New Modules and Pragmata',
+  new     => 'New Modules and Pragma',
   updated => 'Updated Modules and Pragma',
-  removed => 'Removed Modules and Pragmata',
+  removed => 'Removed Modules and Pragma',
 );
 
 my $deprecated;
@@ -207,8 +207,9 @@ sub do_check {
         my ($t, $s) = @{ $_ };
         $self->${\"_parse_${t}_section"}($s)
     } map {
-        my $s = $self->_look_for_section($pod => $sections{$_});
-        $s ? [$_, $s] : $s
+        my $s = $self->_look_for_section($pod => $sections{$_})
+            or die "failed to parse $_ section";
+        [$_, $s];
     } keys %sections;
 
     for my $s (keys %sections) {
@@ -310,8 +311,9 @@ sub do_check {
     $self->_look_for_range($pod,
       sub {
         my ($el) = @_;
-        my $f = $el->[0] =~ /^head(\d)$/ && $el->[2] eq $section;
-        $level = $1 if $f && !$level;
+        my ($heading) = $el->[0] =~ /^head(\d)$/;
+        my $f = $heading && $el->[2] =~ /^\Q$section\E/;
+        $level = $heading if $f && !$level;
         return $f;
       },
       sub {
