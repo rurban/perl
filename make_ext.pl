@@ -65,7 +65,7 @@ foreach (@ARGV) {
 	$excl{$1} = 1;
     } elsif (/^\+(.*)$/) {
 	$incl{$1} = 1;
-    } elsif (/^--verbose$/) {
+    } elsif (/^--verbose$/ or /^-v$/) {
 	$verbose = 1;
     } elsif (/^--([\w\-]+)$/) {
 	$opts{$1} = 1;
@@ -462,7 +462,7 @@ EOS
 	system(@run, @make, @args) and print "@run @make @args failed, continuing anyway...\n";
     }
     my @targ = ($target, @$pass_through);
-    print "Making $target in $ext_dir\n@run @make @targ\n";
+    print "Making $target in $ext_dir\n@run @make @targ\n" if $verbose;
     my $code = system(@run, @make, @targ);
     die "Unsuccessful make($ext_dir): code=$code" if $code != 0;
 
