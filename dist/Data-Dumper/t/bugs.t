@@ -12,7 +12,7 @@ BEGIN {
 }
 
 use strict;
-use Test::More tests => 13;
+use Test::More tests => 15;
 use Data::Dumper;
 
 {
@@ -109,13 +109,34 @@ SKIP: {
     no strict 'refs';
     is eval(Dumper \*{"foo::b\0ar"}), \*{"foo::b\0ar"},
       'GVs with nulls';
-    is eval Dumper(\*{chr 256}), \*{chr 256},
+    # There is a strange 5.6 bug that causes the eval to fail a supposed
+    # strict vars test (involving $VAR1).  Mentioning the glob beforehand
+    # somehow makes it go away.
+    () = \*{chr 256};
+    is eval Dumper(\*{chr 256})||die ($@), \*{chr 256},
       'GVs with UTF8 names (or not, depending on perl version)';
+    () = \*{"\0".chr 256}; # same bug
     is eval Dumper(\*{"\0".chr 256}), \*{"\0".chr 256},
       'GVs with UTF8 and nulls';
   };
   SKIP: {
     skip "no XS", 3 if not defined &Data::Dumper::Dumpxs;
+    local $Data::Dumper::Useperl = 0;
+    &$tests;
+  }
+  local $Data::Dumper::Useperl = 1;
+  &$tests;
+}
+
+{
+  # Test reference equivalence of dumping *{""}.
+  my $tests = sub {
+    my $VAR1;
+    no strict 'refs';
+    is eval(Dumper \*{""}), \*{""}, 'dumping \*{""}';
+  };
+  SKIP: {
+    skip "no XS", 1 if not defined &Data::Dumper::Dumpxs;
     local $Data::Dumper::Useperl = 0;
     &$tests;
   }

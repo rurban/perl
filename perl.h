@@ -1355,11 +1355,20 @@ EXTERN_C char *crypt(const char *, const char *);
 
 #ifdef PERL_CORE
 # define DEFSV (0 + GvSVn(PL_defgv))
+# define DEFSV_set(sv) \
+    (SvREFCNT_dec(GvSV(PL_defgv)), GvSV(PL_defgv) = SvREFCNT_inc(sv))
+# define SAVE_DEFSV                \
+    (                               \
+	save_gp(PL_defgv, 0),        \
+	GvINTRO_off(PL_defgv),        \
+	SAVEGENERICSV(GvSV(PL_defgv)), \
+	GvSV(PL_defgv) = NULL           \
+    )
 #else
 # define DEFSV GvSVn(PL_defgv)
+# define DEFSV_set(sv) (GvSV(PL_defgv) = (sv))
+# define SAVE_DEFSV SAVESPTR(GvSV(PL_defgv))
 #endif
-#define DEFSV_set(sv) (GvSV(PL_defgv) = (sv))
-#define SAVE_DEFSV SAVESPTR(GvSV(PL_defgv))
 
 #define ERRHV GvHV(PL_errgv)	/* XXX unused, here for compatibility */
 
@@ -4843,6 +4852,8 @@ typedef enum {
 
 #define HINT_RE_FLAGS		0x02000000 /* re '/xism' pragma */
 
+#define HINT_FEATURE_MASK	0x1c000000 /* 3 bits for feature bundles */
+
 /* The following are stored in $^H{sort}, not in PL_hints */
 #define HINT_SORT_SORT_BITS	0x000000FF /* allow 256 different ones */
 #define HINT_SORT_QUICKSORT	0x00000001
@@ -5744,19 +5755,6 @@ extern void moncontrol(int);
 /* used by pv_display in dump.c*/
 #define PERL_PV_PRETTY_DUMP  PERL_PV_PRETTY_ELLIPSES|PERL_PV_PRETTY_QUOTE
 #define PERL_PV_PRETTY_REGPROP PERL_PV_PRETTY_ELLIPSES|PERL_PV_PRETTY_LTGT|PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII
-
-#if defined(PERL_CORE) || defined(PERL_EXT)
-#  define FEATURE_IS_ENABLED(name)				        \
-	(((PL_curcop == &PL_compiling ? PL_hints : PL_curcop->cop_hints) \
-	   & HINT_LOCALIZE_HH)						\
-	    && Perl_feature_is_enabled(aTHX_ STR_WITH_LEN(name), 0))
-#  define FEATURE_IS_ENABLED_d(name)				        \
-	(!((PL_curcop == &PL_compiling ? PL_hints : PL_curcop->cop_hints) \
-	    & HINT_LOCALIZE_HH)						\
-	    || Perl_feature_is_enabled(aTHX_ STR_WITH_LEN(name), 1))
-/* The longest string we pass in.  */
-#  define MAX_FEATURE_LEN (sizeof("unicode_strings")-1)
-#endif
 
 /*
 

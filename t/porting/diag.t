@@ -50,8 +50,8 @@ while (<$func_fh>) {
 close $func_fh;
 
 my $function_re = join '|', @functions;
-my $source_msg_re = qr/(?<routine>\bDIE\b|$function_re)/;
-my $text_re = qr/"(?<text>(?:\\"|[^"])*?)"/;
+my $source_msg_re = '(?<routine>\bDIE\b|$function_re)';
+my $text_re = '"(?<text>(?:\\\\"|[^"]|"\s*[A-Z_]+\s*")*)"';
 my $source_msg_call_re = qr/$source_msg_re(?:_nocontext)? \s*
     \(aTHX_ \s*
     (?:packWARN\d*\((?<category>.*?)\),)? \s*
@@ -219,7 +219,7 @@ sub check_file {
 
     my $multiline = 0;
     # Loop to accumulate the message text all on one line.
-    if (m/$source_msg_re/) {
+    if (m/$source_msg_re(?:_nocontext)?\s*\(/) {
       while (not m/\);$/) {
         my $nextline = <$codefh>;
         # Means we fell off the end of the file.  Not terribly surprising;
@@ -274,12 +274,13 @@ sub check_file {
     } else {
       # The form listed in perldiag ignores most sorts of fancy printf
       # formatting, or makes it more perlish.
-      $name =~ s/%%/\\%/g;
+      $name =~ s/%%/%/g;
       $name =~ s/%l[ud]/%d/g;
       $name =~ s/%\.(\d+|\*)s/\%s/g;
-      $name =~ s/\\"/"/g;
+      $name =~ s/(?:%s){2,}/%s/g;
+      $name =~ s/(\\")|("\s*[A-Z_]+\s*")/$1 ? '"' : '%s'/egg;
       $name =~ s/\\t/\t/g;
-      $name =~ s/\\n/ /g;
+      $name =~ s/\\n/\n/g;
       $name =~ s/\s+$//;
       $name =~ s/(\\)\\/$1/g;
     }
@@ -297,10 +298,18 @@ sub check_file {
     # inside an #if 0 block.
     next if $name eq 'SKIPME';
 
-    $name = standardize($name);
+    check_message(standardize($name),$codefn);
+  }
+}
 
-    if (exists $entries{$name}) {
-      if ( $entries{$name}{seen}++ ) {
+sub check_message {
+    my($name,$codefn,$partial) = @_;
+    my $key = $name =~ y/\n/ /r;
+    my $ret;
+
+    if (exists $entries{$key}) {
+      $ret = 1;
+      if ( $entries{$key}{seen}++ ) {
         # no need to repeat entries we've tested
       } elsif ($entries{$name}{todo}) {
         TODO: {
@@ -315,17 +324,26 @@ sub check_file {
         }
       } else {
         # We found an actual valid entry in perldiag.pod for this error.
-        pass($name);
+        pass($key);
       }
       # Later, should start checking that the severity is correct, too.
+    } elsif ($partial) {
+      # noop
     } else {
-      if ($make_exceptions_list) {
+      my $ok;
+      if ($name =~ /\n/) {
+        $ok = 1;
+        check_message($_,$codefn,1) or $ok = 0, last for split /\n/, $name;
+      }
+      if ($ok) {
+        # noop
+      } elsif ($make_exceptions_list) {
         # We're making an updated version of the exception list, to
         # stick in the __DATA__ section.  I honestly can't think of
         # a situation where this is the right thing to do, but I'm
         # leaving it here, just in case one of my descendents thinks
         # it's a good idea.
-        print STDERR "$name\n";
+        print STDERR "$key\n";
       } else {
         # No listing found, and no excuse either.
         # Find the correct place in perldiag.pod, and add a stanza beginning =item $name.
@@ -337,7 +355,7 @@ sub check_file {
     }
 
     die if $name =~ /%$/;
-  }
+    return $ret;
 }
 
 # Lists all missing things as of the inauguration of this script, so we
@@ -353,83 +371,41 @@ Malformed UTF-8 character (unexpected non-continuation byte 0x%x, immediately af
 
 %s (%d) does not match %s (%d),
 %s (%d) smaller than %s (%d),
-Argument "%s" isn't numeric
-Argument "%s" isn't numeric in %s
-Attempt to clear deleted array
-Attempt to free non-existent shared string '%s'%s
-Attempt to free temp prematurely: SV 0x%x
-Attempt to free unreferenced scalar: SV 0x%x
-Attempt to reload %s aborted. Compilation failed in require
-av_reify called on tied array
-Bad name after %s%s
-Bad symbol for %s
 bad top format reference
-Bizarre copy of %s
-Bizarre SvTYPE [%d]
-Can't call method "%s" %s
 Can't coerce readonly %s to string
 Can't coerce readonly %s to string in %s
 Can't fix broken locale name "%s"
 Can't get short module name from a handle
-Can't goto subroutine from an eval-block
-Can't goto subroutine from an eval-string
 Can't locate object method "%s" via package "%s" (perhaps you forgot to load "%s"?)
-Can't modify non-existent substring
-Can't open
-Can't open perl script "%s": %s
-Can't open %s
-Can't reset \%ENV on this system
-Can't return array to lvalue scalar context
-Can't return a %s from lvalue subroutine
-Can't return hash to lvalue scalar context
 Can't spawn "%s": %s
 Can't %s script `%s' with ARGV[0] being `%s'
 Can't %s "%s": %s
-Can't %s %s%s%s
 Can't %s `%s' with ARGV[0] being `%s' (looking for executables only, not found)
-Can't take %s of %f
-Can't use '%c' after -mname
 Can't use string ("%s"%s) as a subroutine ref while "strict refs" in use
-Can't use when() outside a topicalizer
 \%c better written as $%c
 Character(s) in '%c' format wrapped in %s
-$%c is no longer supported
-Cloning substitution context is unimplemented
 Code missing after '/' in pack
 Code missing after '/' in unpack
 Corrupted regexp opcode %d > %d
 '%c' outside of string in pack
-Debug leaking scalars child failed%s%s with errno %d: %s
-Deep recursion on anonymous subroutine
-defined(\%hash) is deprecated
+Debug leaking scalars child failed%s with errno %d: %s
 Don't know how to handle magic of type \%o
 -Dp not implemented on this platform
-entering effective gid failed
-entering effective uid failed
 Error reading "%s": %s
-Exiting %s via %s
 Filehandle opened only for %sput
 Filehandle %s opened only for %sput
 Filehandle STD%s reopened as %s only for input
 YOU HAVEN'T DISABLED SET-ID SCRIPTS IN THE KERNEL YET! FIX YOUR KERNEL, PUT A C WRAPPER AROUND THIS SCRIPT, OR USE -u AND UNDUMP!
-Format STDOUT redefined
 Free to wrong pool %p not %p
 get %s %p %p %p
 glob failed (can't start child: %s)
 glob failed (child exited with status %d%s)
 Goto undefined subroutine
 Goto undefined subroutine &%s
-Hash \%%s missing the \% in argument %d of %s()
 Illegal character %sin prototype for %s : %s
-Integer overflow in binary number
-Integer overflow in decimal number
-Integer overflow in hexadecimal number
-Integer overflow in octal number
 Integer overflow in version %d
-internal \%<num>p might conflict with future printf extensions
+internal %<num>p might conflict with future printf extensions
 invalid control request: '\%o'
-Invalid module name %s with -%c option: contains single ':'
-invalid option -D%c, use -D'' to see choices
 Invalid range "%c-%c" in transliteration operator
 Invalid separator character %c%c%c in PerlIO layer specification %s
 Invalid TOKEN object ignored
@@ -439,56 +415,34 @@ Invalid type '%c' in unpack
 Invalid type ',' in %s
 'j' not supported on this platform
 'J' not supported on this platform
-leaving effective gid failed
-leaving effective uid failed
-List form of piped open not implemented
-Lost precision when decrementing %f by 1
-Lost precision when incrementing %f by 1
-%lx
 Malformed UTF-8 character (fatal)
-'\%' may not be used in pack
 Missing (suid) fd script name
 More than one argument to open
 More than one argument to open(,':%s')
 mprotect for %p %u failed with %d
 mprotect RW for %p %u failed with %d
-No code specified for -%c
-No directory specified for -I
-No such class field "%s"
 Not an XSUB reference
-Not %s reference
 Operator or semicolon missing before %c%s
-Perl %s required (did you mean %s?)--this is only %s, stopped
 Perl %s required--this is only %s, stopped
-Perls since %s too modern--this is %s, stopped
 ptr wrong %p != %p fl=%x nl=%p e=%p for %d
 Recompile perl with -DDEBUGGING to use -D switch (did you mean -d ?)
-Recursive call to Perl_load_module in PerlIO_find_layer
 Reversed %c= operator
 Runaway prototype
-%s(%.0
 %s(%f) failed
-%s(%f) too large
-%s(%f) too small
-Scalar value %s better written as $%s
 %sCompilation failed in regexp
 %sCompilation failed in require
 set %s %p %p %p
 %s free() ignored (RMAGIC, PERL_CORE)
 %s has too many errors.
 SIG%s handler "%s" not defined.
-%s: illegal mapping '%s'
 %s in %s
 Size magic not implemented
-%s limit (%d) exceeded
-%s method "%s" overloading "%s" in package "%s"
 %s number > %s non-portable
-%s object version %s does not match %s%s%s%s %s
+%s object version %s does not match %s %s
 %srealloc() %signored
-%s returned from lvalue subroutine in scalar context
-%s%s has too many errors.
-%s%s on %s %s
-%s%s on %s %s %s
+%s has too many errors.
+%s on %s %s
+%s on %s %s %s
 Starting Full Screen process with flag=%d, mytype=%d
 Starting PM process with flag=%d, mytype=%d
 SWASHNEW didn't return an HV ref
@@ -498,20 +452,10 @@ The rewinddir() function is not implemented on NetWare
 The seekdir() function is not implemented on NetWare
 The telldir() function is not implemented on NetWare
 Too deeply nested ()-groups in %s
-Too late to run CHECK block
-Too late to run INIT block
 Too many args on %s line of "%s"
 U0 mode on a byte string
-Unbalanced string table refcount: (%d) for "%s"
 Undefined top format called
-Unexpected constant lvalue entersub entry via type/targ %d:%d
-Unicode non-character 0x%X
-Unknown PerlIO layer "scalar"
 Unstable directory path, current directory changed unexpectedly
-Unsupported script encoding UTF-16BE
-Unsupported script encoding UTF-16LE
-Unsupported script encoding UTF-32BE
-Unsupported script encoding UTF-32LE
 Unterminated compressed integer in unpack
 Usage: CODE(0x%x)(%s)
 Usage: %s(%s)
@@ -522,9 +466,7 @@ Use of inherited AUTOLOAD for non-method %s::%s() is deprecated
 utf8 "\x%X" does not map to Unicode
 Value of logical "%s" too long. Truncating to %i bytes
 value of node is %d in Offset macro
-Value of %s%s can be "0"; test with defined()
 Variable "%c%s" is not imported
-vector argument not supported with alpha versions
 Wide character
 Wide character in $/
 Wide character in print

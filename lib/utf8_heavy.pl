@@ -524,15 +524,43 @@ sub _loose_name ($) {
 
         if ($list) {
             my $taint = substr($list,0,0); # maintain taint
-            my @tmp = split(/^/m, $list);
-            my %seen;
-            no warnings;
-            $extras = join '', $taint, grep /^[^0-9a-fA-F]/, @tmp;
-            $list = join '', $taint,
-                map  { $_->[1] }
-                sort { $a->[0] <=> $b->[0] }
-                map  { /^([0-9a-fA-F]+)/; [ CORE::hex($1), $_ ] }
-                grep { /^([0-9a-fA-F]+)/ and not $seen{$1}++ } @tmp; # XXX doesn't do ranges right
+
+            # Separate the extras from the code point list, and for
+            # user-defined properties, make sure the latter are well-behaved
+            # for downstream code.
+            if ($user_defined) {
+                my @tmp = split(/^/m, $list);
+                my %seen;
+                no warnings;
+
+                # The extras are anything that doesn't begin with a hex digit.
+                $extras = join '', $taint, grep /^[^0-9a-fA-F]/, @tmp;
+
+                # Remove the extras, and sort the remaining entries by the
+                # numeric value of their beginning hex digits, removing any
+                # duplicates.
+                $list = join '', $taint,
+                        map  { $_->[1] }
+                        sort { $a->[0] <=> $b->[0] }
+                        map  { /^([0-9a-fA-F]+)/; [ CORE::hex($1), $_ ] }
+                        grep { /^([0-9a-fA-F]+)/ and not $seen{$1}++ } @tmp; # XXX doesn't do ranges right
+            }
+            else {
+                # mktables has gone to some trouble to make non-user defined
+                # properties well-behaved, so we can skip the effort we do for
+                # user-defined ones.  Any extras are at the very beginning of
+                # the string.
+
+                # This regex splits out the first lines of $list into $1 and
+                # strips them off from $list, until we get one that begins
+                # with a hex number, alone on the line, or followed by a tab.
+                # Either portion may be empty.
+                $list =~ s/ \A ( .*? )
+                            (?: \z | (?= ^ [0-9a-fA-F]+ (?: \t | $) ) )
+                          //msx;
+
+                $extras = "$taint$1";
+            }
         }
 
         if ($none) {
