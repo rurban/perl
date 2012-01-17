@@ -1,6 +1,29 @@
 package overload;
 
-our $VERSION = '1.16';
+our $VERSION = '1.18';
+
+%ops = (
+    with_assign         => "+ - * / % ** << >> x .",
+    assign              => "+= -= *= /= %= **= <<= >>= x= .=",
+    num_comparison      => "< <= >  >= == !=",
+    '3way_comparison'   => "<=> cmp",
+    str_comparison      => "lt le gt ge eq ne",
+    binary              => '& &= | |= ^ ^=',
+    unary               => "neg ! ~",
+    mutators            => '++ --',
+    func                => "atan2 cos sin exp abs log sqrt int",
+    conversion          => 'bool "" 0+ qr',
+    iterators           => '<>',
+    filetest            => "-X",
+    dereferencing       => '${} @{} %{} &{} *{}',
+    matching            => '~~',
+    special             => 'nomethod fallback =',
+);
+
+my %ops_seen;
+for $category (keys %ops) {
+    $ops_seen{$_}++ for (split /\s+/, $ops{$category});
+}
 
 sub nil {}
 
@@ -15,6 +38,8 @@ sub OVERLOAD {
     if ($_ eq 'fallback') {
       $fb = $arg{$_};
     } else {
+      warnings::warnif("overload arg '$_' is invalid")
+        unless $ops_seen{$_};
       $sub = $arg{$_};
       if (not ref $sub and $sub !~ /::/) {
 	$ {$package . "::(" . $_} = $sub;
@@ -50,7 +75,7 @@ sub unimport {
 sub Overloaded {
   my $package = shift;
   $package = ref $package if ref $package;
-  $package->can('()');
+  mycan ($package, '()');
 }
 
 sub ov_method {
@@ -127,22 +152,6 @@ sub mycan {				# Real can would leave stubs.
 	      'q'	  =>  0x8000, # HINT_NEW_STRING
 	      'qr'	  => 0x10000, # HINT_NEW_RE
 	     );
-
-%ops = ( with_assign	  => "+ - * / % ** << >> x .",
-	 assign		  => "+= -= *= /= %= **= <<= >>= x= .=",
-	 num_comparison	  => "< <= >  >= == !=",
-	 '3way_comparison'=> "<=> cmp",
-	 str_comparison	  => "lt le gt ge eq ne",
-	 binary		  => '& &= | |= ^ ^=',
-	 unary		  => "neg ! ~",
-	 mutators	  => '++ --',
-	 func		  => "atan2 cos sin exp abs log sqrt int",
-	 conversion	  => 'bool "" 0+ qr',
-	 iterators	  => '<>',
-         filetest         => "-X",
-	 dereferencing	  => '${} @{} %{} &{} *{}',
-	 matching	  => '~~',
-	 special	  => 'nomethod fallback =');
 
 use warnings::register;
 sub constant {
@@ -379,6 +388,9 @@ Most of the overloadable operators map one-to-one to these keys.
 Exceptions, including additional overloadable operations not
 apparent from this hash, are included in the notes which follow.
 
+A warning is issued if an attempt is made to register an operator not found
+above.
+
 =over 5
 
 =item * C<not>
@@ -519,7 +531,7 @@ This overload was introduced in Perl 5.12.
 
 The key C<"~~"> allows you to override the smart matching logic used by
 the C<~~> operator and the switch construct (C<given>/C<when>).  See
-L<perlsyn/Switch statements> and L<feature>.
+L<perlsyn/Switch Statements> and L<feature>.
 
 Unusually, the overloaded implementation of the smart match operator
 does not get full control of the smart match behaviour.
@@ -543,7 +555,7 @@ so you may see between one and three of these calls instead:
     $obj->match(2,0);
     $obj->match(3,0);
 
-Consult the match table in  L<perlsyn/"Smart matching in detail"> for
+Consult the match table in  L<perlop/"Smartmatch Operator"> for
 details of when overloading is invoked.
 
 =item * I<Dereferencing>

@@ -75,6 +75,7 @@ PP(pp_padav)
        const I32 flags = is_lvalue_sub();
        if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
+	    /* diag_listed_as: Can't return %s to lvalue scalar context */
 	    Perl_croak(aTHX_ "Can't return array to lvalue scalar context");
 	PUSHs(TARG);
 	RETURN;
@@ -121,6 +122,7 @@ PP(pp_padhv)
       const I32 flags = is_lvalue_sub();
       if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
+	    /* diag_listed_as: Can't return %s to lvalue scalar context */
 	    Perl_croak(aTHX_ "Can't return hash to lvalue scalar context");
 	RETURN;
       }
@@ -163,7 +165,7 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 	sv = SvRV(sv);
 	if (SvTYPE(sv) == SVt_PVIO) {
 	    GV * const gv = MUTABLE_GV(sv_newmortal());
-	    gv_init(gv, 0, "$__ANONIO__", 11, 0);
+	    gv_init(gv, 0, "__ANONIO__", 10, 0);
 	    GvIOp(gv) = MUTABLE_IO(sv);
 	    SvREFCNT_inc_void_NN(sv);
 	    sv = MUTABLE_SV(gv);
@@ -232,7 +234,7 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 	    SvFAKE_off(sv);
 	}
     }
-    if (SvFAKE(sv)) {
+    if (SvFAKE(sv) && !(PL_op->op_private & OPpALLOW_FAKE)) {
 	SV *newsv = sv_newmortal();
 	sv_setsv_flags(newsv, sv, 0);
 	SvFAKE_off(newsv);
@@ -414,12 +416,6 @@ PP(pp_rv2cv)
     if (cv) {
 	if (CvCLONE(cv))
 	    cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
-	if ((PL_op->op_private & OPpLVAL_INTRO)) {
-	    if (gv && GvCV(gv) == cv && (gv = gv_autoload_pvn(GvSTASH(gv), GvNAME(gv), GvNAMELEN(gv), GvNAMEUTF8(gv) ? SVf_UTF8 : 0)))
-		cv = GvCV(gv);
-	    if (!CvLVALUE(cv))
-		DIE(aTHX_ "Can't modify non-lvalue subroutine call");
-	}
     }
     else if ((flags == (GV_ADD|GV_NOEXPAND)) && gv && SvROK(gv)) {
 	cv = MUTABLE_CV(gv);
@@ -2719,6 +2715,7 @@ PP(pp_sin)
       if (neg_report) {
 	  if (op_type == OP_LOG ? (value <= 0.0) : (value < 0.0)) {
 	      SET_NUMERIC_STANDARD();
+	      /* diag_listed_as: Can't take log of %g */
 	      DIE(aTHX_ "Can't take %s of %"NVgf, neg_report, value);
 	  }
       }
@@ -3481,6 +3478,7 @@ PP(pp_ucfirst)
     STRLEN tculen;  /* tculen is the byte length of the freshly titlecased (or
 		     * lowercased) character stored in tmpbuf.  May be either
 		     * UTF-8 or not, but in either case is the number of bytes */
+    bool tainted = FALSE;
 
     SvGETMAGIC(source);
     if (SvOK(source)) {
@@ -3508,8 +3506,14 @@ PP(pp_ucfirst)
     else if (DO_UTF8(source)) {	/* Is the source utf8? */
 	doing_utf8 = TRUE;
         ulen = UTF8SKIP(s);
-        if (op_type == OP_UCFIRST) toTITLE_utf8(s, tmpbuf, &tculen);
-        else toLOWER_utf8(s, tmpbuf, &tculen);
+        if (op_type == OP_UCFIRST) {
+	    _to_utf8_title_flags(s, tmpbuf, &tculen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
+	}
+        else {
+	    _to_utf8_lower_flags(s, tmpbuf, &tculen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
+	}
 
         /* we can't do in-place if the length changes.  */
         if (ulen != tculen) inplace = FALSE;
@@ -3641,6 +3645,11 @@ PP(pp_ucfirst)
 	    Copy(tmpbuf, d, tculen, U8);
 	    SvCUR_set(dest, need - 1);
 	}
+
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     }
     else {  /* Neither source nor dest are in or need to be UTF-8 */
 	if (slen) {
@@ -3746,6 +3755,7 @@ PP(pp_uc)
     if (DO_UTF8(source)) {
 	const U8 *const send = s + len;
 	U8 tmpbuf[UTF8_MAXBYTES+1];
+	bool tainted = FALSE;
 
 	/* All occurrences of these are to be moved to follow any other marks.
 	 * This is context-dependent.  We may not be passed enough context to
@@ -3777,7 +3787,8 @@ PP(pp_uc)
              * and copy it to the output buffer */
 
             u = UTF8SKIP(s);
-            uv = toUPPER_utf8(s, tmpbuf, &ulen);
+            uv = _to_utf8_upper_flags(s, tmpbuf, &ulen,
+				      cBOOL(IN_LOCALE_RUNTIME), &tainted);
             if (uv == GREEK_CAPITAL_LETTER_IOTA
                 && utf8_to_uvchr(s, 0) == COMBINING_GREEK_YPOGEGRAMMENI)
             {
@@ -3807,7 +3818,12 @@ PP(pp_uc)
 	}
 	SvUTF8_on(dest);
 	*d = '\0';
+
 	SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     }
     else {	/* Not UTF-8 */
 	if (len) {
@@ -3976,12 +3992,14 @@ PP(pp_lc)
     if (DO_UTF8(source)) {
 	const U8 *const send = s + len;
 	U8 tmpbuf[UTF8_MAXBYTES_CASE+1];
+	bool tainted = FALSE;
 
 	while (s < send) {
 	    const STRLEN u = UTF8SKIP(s);
 	    STRLEN ulen;
 
-	    toLOWER_utf8(s, tmpbuf, &ulen);
+	    _to_utf8_lower_flags(s, tmpbuf, &ulen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
 
 	    /* Here is where we would do context-sensitive actions.  See the
 	     * commit message for this comment for why there isn't any */
@@ -4011,6 +4029,10 @@ PP(pp_lc)
 	SvUTF8_on(dest);
 	*d = '\0';
 	SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     } else {	/* Not utf8 */
 	if (len) {
 	    const U8 *const send = s + len;
@@ -4604,7 +4626,7 @@ PP(pp_hslice)
         svp = he ? &HeVAL(he) : NULL;
 
         if (lval) {
-            if (!svp || *svp == &PL_sv_undef) {
+            if (!svp || !*svp || *svp == &PL_sv_undef) {
                 DIE(aTHX_ PL_no_helem_sv, SVfARG(keysv));
             }
             if (localizing) {
@@ -4617,7 +4639,7 @@ PP(pp_hslice)
 		    SAVEHDELETE(hv, keysv);
             }
         }
-        *MARK = svp ? *svp : &PL_sv_undef;
+        *MARK = svp && *svp ? *svp : &PL_sv_undef;
     }
     if (GIMME != G_ARRAY) {
 	MARK = ORIGMARK;
@@ -5203,7 +5225,7 @@ PP(pp_split)
     pm = (PMOP*)POPs;
 #endif
     if (!pm || !s)
-	DIE(aTHX_ "panic: pp_split");
+	DIE(aTHX_ "panic: pp_split, pm=%p, s=%p", pm, s);
     rx = PM_GETRE(pm);
 
     TAINT_IF(get_regex_charset(RX_EXTFLAGS(rx)) == REGEX_LOCALE_CHARSET &&

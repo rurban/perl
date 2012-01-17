@@ -28,7 +28,7 @@ BEGIN {
     }
 }
 
-plan(20);
+plan(30);
 
 my $rc_filename = '.perldb';
 
@@ -454,6 +454,255 @@ EOF
         X=\{ThirdVal\}
         /msx,
         "'c line_num' is working properly.");
+}
+
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'n',
+    'n',
+    'b . $exp > 200',
+    'c',
+    q/print "Exp={$exp}\n";/,
+    'q',
+    );
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/break-on-dot'); +
+    like($output, qr/
+        Exp=\{256\}
+        /msx,
+        "'b .' is working correctly.");
+}
+
+# Testing that the prompt with the information appears inside a subroutine call.
+# See https://rt.perl.org/rt3/Ticket/Display.html?id=104820
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'c back',
+    'q',
+    );
+}
+EOF
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/with-subroutine');
+
+    like(_out_contents(), 
+        qr/
+        ^main::back\([^\)\n]*\bwith-subroutine:15\):[\ \t]*\n
+        ^15:\s*print\ "hello\ back\\n";
+        /msx,
+        "Prompt should display the line of code inside a subroutine.");
+}
+
+# Checking that the p command works.
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'p "<<<" . (4*6) . ">>>"',
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/with-subroutine');
+
+    like(_out_contents(), 
+        qr/<<<24>>>/,
+        "p command works.");
+}
+
+# Tests for x.
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    q/x {500 => 600}/,
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/with-subroutine');
+
+    like(_out_contents(), 
+        # qr/^0\s+HASH\([^\)]+\)\n\s+500 => 600\n/,
+        qr/^0\s+HASH\([^\)]+\)\n\s+500 => 600\n/ms,
+        "x command test."
+    );
+}
+
+# Tests for "T" (stack trace).
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'c baz',
+    'T',
+    'q',
+    );
+
+}
+EOF
+
+    my $prog_fn = '../lib/perl5db/t/rt-104168';
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => $prog_fn,);
+
+    my $re_text = join('',
+        map {
+        sprintf(
+            "%s = %s\\(\\) called from file " .
+            "'" . quotemeta($prog_fn) . "' line %s\\n",
+            (map { quotemeta($_) } @$_)
+            )
+        } 
+        (
+            ['.', 'main::baz', 14,],
+            ['.', 'main::bar', 9,],
+            ['.', 'main::foo', 6]
+        )
+    );
+    like(_out_contents(), 
+        # qr/^0\s+HASH\([^\)]+\)\n\s+500 => 600\n/,
+        qr/^$re_text/ms,
+        "T command test."
+    );
+}
+
+# Test for s.
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'b 9',
+    'c',
+    's',
+    q/print "X={$x};dummy={$dummy}\n";/,
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/disable-breakpoints-1');
+    like($output, qr/
+        X=\{SecondVal\};dummy=\{1\}
+        /msx,
+        'test for s - single step',
+    );
+}
+
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'n',
+    'n',
+    'b . $exp > 200',
+    'c',
+    q/print "Exp={$exp}\n";/,
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/break-on-dot'); +
+    like($output, qr/
+        Exp=\{256\}
+        /msx,
+        "'b .' is working correctly.");
+}
+
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    's',
+    'q',
+    );
+
+}
+EOF
+
+    my $prog_fn = '../lib/perl5db/t/rt-104168';
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => $prog_fn,);
+
+    like(_out_contents(),
+        qr/
+        ^main::foo\([^\)\n]*\brt-104168:9\):[\ \t]*\n
+        ^9:\s*bar\(\);
+        /msx,
+        'Test for the s command.',
+    );
+}
+
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    's uncalled_subroutine()',
+    'c',
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/uncalled-subroutine');
+
+    like ($output, 
+        qr/<1,2,3,4,5>\n/,
+        'uncalled_subroutine was called after s EXPR()',
+        );
+
+}
+
+{
+    rc(<<'EOF');
+&parse_options("NonStop=0 TTY=db.out LineInfo=db.out");
+
+sub afterinit {
+    push (@DB::typeahead,
+    'n uncalled_subroutine()',
+    'c',
+    'q',
+    );
+
+}
+EOF
+
+    my $output = runperl(switches => [ '-d', ], stderr => 1, progfile => '../lib/perl5db/t/uncalled-subroutine');
+
+    like ($output, 
+        qr/<1,2,3,4,5>\n/,
+        'uncalled_subroutine was called after n EXPR()',
+        );
+
 }
 
 END {

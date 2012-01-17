@@ -712,8 +712,8 @@ S_mro_clean_isarev(pTHX_ HV * const isa, const char * const name,
 =for apidoc mro_package_moved
 
 Call this function to signal to a stash that it has been assigned to
-another spot in the stash hierarchy. C<stash> is the stash that has been
-assigned. C<oldstash> is the stash it replaces, if any. C<gv> is the glob
+another spot in the stash hierarchy.  C<stash> is the stash that has been
+assigned. C<oldstash> is the stash it replaces, if any.  C<gv> is the glob
 that is actually being assigned to.
 
 This can also be called with a null first argument to
@@ -727,7 +727,7 @@ It also sets the effective names (C<HvENAME>) on all the stashes as
 appropriate.
 
 If the C<gv> is present and is not in the symbol table, then this function
-simply returns. This checked will be skipped if C<flags & 1>.
+simply returns.  This checked will be skipped if C<flags & 1>.
 
 =cut
 */
@@ -1280,7 +1280,7 @@ of the given stash, so that they might notice
 the changes in this one.
 
 Ideally, all instances of C<PL_sub_generation++> in
-perl source outside of C<mro.c> should be
+perl source outside of F<mro.c> should be
 replaced by calls to this.
 
 Perl automatically handles most of the common

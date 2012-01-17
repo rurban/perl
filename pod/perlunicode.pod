@@ -155,15 +155,17 @@ Alternatively, you can use the C<\x{...}> notation for characters 0x100 and
 above.  For characters below 0x100 you may get byte semantics instead of
 character semantics;  see L</The "Unicode Bug">.  On EBCDIC machines there is
 the additional problem that the value for such characters gives the EBCDIC
-character rather than the Unicode one.
+character rather than the Unicode one, thus it is more portable to use
+C<\N{U+...}> instead.
 
-Additionally, if you
+Additionally, you can use the C<\N{...}> notation and put the official
+Unicode character name within the braces, such as
+C<\N{WHITE SMILING FACE}>.  This automatically loads the L<charnames>
+module with the C<:full> and C<:short> options.  If you prefer different
+options for this module, you can instead, before the C<\N{...}>,
+explicitly load it with your desired options; for example,
 
-   use charnames ':full';
-
-you can use the C<\N{...}> notation and put the official Unicode
-character name within the braces, such as C<\N{WHITE SMILING FACE}>.
-See L<charnames>.
+   use charnames ':loose';
 
 =item *
 
@@ -1402,9 +1404,9 @@ I<except> C<[[:ascii:]]>.
 
 =item *
 
-In C<quotemeta> or its inline equivalent C<\Q>, no characters
-code points above 127 are quoted in UTF-8 encoded strings, but in
-byte encoded strings, code points between 128-255 are always quoted.
+In C<quotemeta> or its inline equivalent C<\Q>, no code points above 127
+are quoted in UTF-8 encoded strings, but in byte encoded strings, code
+points between 128-255 are always quoted.
 
 =back
 
@@ -1521,13 +1523,14 @@ designed to be a one-way street).
 
 =item *
 
-C<is_utf8_char(s)> returns true if the pointer points to a valid UTF-8
-character.
+C<is_utf8_string(buf, len)> returns true if C<len> bytes of the buffer
+are valid UTF-8.
 
 =item *
 
-C<is_utf8_string(buf, len)> returns true if C<len> bytes of the buffer
-are valid UTF-8.
+C<is_utf8_char(s)> returns true if the pointer points to a valid UTF-8
+character.  However, this function should not be used because of
+security concerns.  Instead, use C<is_utf8_string()>.
 
 =item *
 

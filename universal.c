@@ -812,7 +812,8 @@ XS(XS_utf8_decode)
     else {
 	SV * const sv = ST(0);
 	bool RETVAL;
-	if (SvIsCOW(sv)) sv_force_normal(sv);
+	if (SvREADONLY(sv)) sv_force_normal(sv);
+	SvPV_force_nolen(sv);
 	RETVAL = sv_utf8_decode(sv);
 	ST(0) = boolSV(RETVAL);
     }
@@ -1004,14 +1005,10 @@ XS(XS_PerlIO_get_layers)
 	}
 
 	sv = POPs;
-	gv = MUTABLE_GV(sv);
+	gv = MAYBE_DEREF_GV(sv);
 
-	if (!isGV(sv)) {
-	     if (SvROK(sv) && isGV(SvRV(sv)))
-		  gv = MUTABLE_GV(SvRV(sv));
-	     else if (SvPOKp(sv))
-		  gv = gv_fetchsv(sv, 0, SVt_PVIO);
-	}
+	if (!gv && !SvROK(sv))
+	    gv = gv_fetchsv_nomg(sv, 0, SVt_PVIO);
 
 	if (gv && (io = GvIO(gv))) {
 	     AV* const av = PerlIO_get_layers(aTHX_ input ?
@@ -1367,6 +1364,15 @@ struct xsub_details details[] = {
     {"version::vcmp", XS_version_vcmp, NULL},
     {"version::(bool", XS_version_boolean, NULL},
     {"version::boolean", XS_version_boolean, NULL},
+    {"version::(+", XS_version_noop, NULL},
+    {"version::(-", XS_version_noop, NULL},
+    {"version::(*", XS_version_noop, NULL},
+    {"version::(/", XS_version_noop, NULL},
+    {"version::(+=", XS_version_noop, NULL},
+    {"version::(-=", XS_version_noop, NULL},
+    {"version::(*=", XS_version_noop, NULL},
+    {"version::(/=", XS_version_noop, NULL},
+    {"version::(abs", XS_version_noop, NULL},
     {"version::(nomethod", XS_version_noop, NULL},
     {"version::noop", XS_version_noop, NULL},
     {"version::is_alpha", XS_version_is_alpha, NULL},

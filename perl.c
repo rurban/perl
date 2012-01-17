@@ -2330,7 +2330,7 @@ perl_run(pTHXx)
 	    POPSTACK_TO(PL_mainstack);
 	    goto redo_body;
 	}
-	PerlIO_printf(Perl_error_log, "panic: restartop\n");
+	PerlIO_printf(Perl_error_log, "panic: restartop in perl_run\n");
 	FREETMPS;
 	ret = 1;
 	break;
@@ -3354,8 +3354,16 @@ Perl_moreswitches(pTHX_ const char *s)
     case 'S':			/* OS/2 needs -S on "extproc" line. */
 	break;
 #endif
-    default:
+    case 'e': case 'f': case 'x': case 'E':
+#ifndef ALTERNATE_SHEBANG
+    case 'S':
+#endif
+    case 'V':
 	Perl_croak(aTHX_ "Can't emulate -%.1s on #! line",s);
+    default:
+	Perl_croak(aTHX_
+	    "Unrecognized switch: -%.1s  (-h will show valid options)",s
+	);
     }
     return NULL;
 }
@@ -3889,6 +3897,8 @@ Perl_init_dbargs(pTHX)
 	   It might have entries, and if we just turn off AvREAL(), they will
 	   "leak" until global destruction.  */
 	av_clear(args);
+	if (SvTIED_mg((const SV *)args, PERL_MAGIC_tied))
+	    Perl_croak(aTHX_ "Cannot set tied @DB::args");
     }
     AvREIFY_only(PL_dbargs);
 }
@@ -4078,7 +4088,7 @@ S_init_predump_symbols(pTHX)
     GvMULTI_on(tmpgv);
     GvIOp(tmpgv) = MUTABLE_IO(SvREFCNT_inc_simple(io));
 
-    PL_statname = newSV(0);		/* last filename we did stat on */
+    PL_statname = newSVpvs("");		/* last filename we did stat on */
 }
 
 void
@@ -4810,7 +4820,7 @@ Perl_call_list(pTHX_ I32 oldscope, AV *paramList)
 		CopLINE_set(PL_curcop, oldline);
 		JMPENV_JUMP(3);
 	    }
-	    PerlIO_printf(Perl_error_log, "panic: restartop\n");
+	    PerlIO_printf(Perl_error_log, "panic: restartop in call_list\n");
 	    FREETMPS;
 	    break;
 	}

@@ -7903,9 +7903,9 @@ int sts, v_len, r_len, d_len, n_len, e_len, vs_len;
     nextslash = strchr(&unixptr[1],'/');
     seg_len = 0;
     if (nextslash != NULL) {
-    int cmp;
+      int cmp;
       seg_len = nextslash - &unixptr[1];
-      my_strlcpy(vmspath, unixptr, seg_len + 1);
+      my_strlcpy(vmspath, unixptr, seg_len + 2);
       cmp = 1;
       if (seg_len == 3) {
 	cmp = strncmp(vmspath, "dev", 4);
@@ -7968,7 +7968,8 @@ int sts, v_len, r_len, d_len, n_len, e_len, vs_len;
        */
 
       /* Posix to VMS destroyed this, so copy it again */
-      vmslen = my_strlcpy(vmspath, &unixptr[1], seg_len);
+      my_strlcpy(vmspath, &unixptr[1], seg_len + 1);
+      vmslen = strlen(vmspath); /* We know we're truncating. */
       vmsptr = &vmsptr[vmslen];
       islnm = 0;
 
@@ -8615,13 +8616,8 @@ static char *int_tovmsspec
       else if (*(cp2+1) == '.' && (*(cp2+2) == '/' || *(cp2+2) == '\0')) {
         if (*(cp1-1) == '-' || *(cp1-1) == '[') *(cp1++) = '-'; /* handle "../" */
         else if (*(cp1-2) == '[') *(cp1-1) = '-';
-        else {  /* back up over previous directory name */
-          cp1--;
-          while (*(cp1-1) != '.' && *(cp1-1) != '[') cp1--;
-          if (*(cp1-1) == '[') {
-            memcpy(cp1,"000000.",7);
-            cp1 += 7;
-          }
+        else {
+          *(cp1++) = '-';
         }
         cp2 += 2;
         if (cp2 == dirend) break;
@@ -9364,14 +9360,14 @@ int rms_sts;
 
 	string = PerlMem_malloc(resultspec.dsc$w_length+1);
         if (string == NULL) _ckvmssts_noperl(SS$_INSFMEM);
-	my_strlcpy(string, resultspec.dsc$a_pointer, resultspec.dsc$w_length);
+	my_strlcpy(string, resultspec.dsc$a_pointer, resultspec.dsc$w_length+1);
 	if (NULL == had_version)
 	    *(strrchr(string, ';')) = '\0';
 	if ((!had_directory) && (had_device == NULL))
 	    {
 	    if (NULL == (devdir = strrchr(string, ']')))
 		devdir = strrchr(string, '>');
-	    my_strlcpy(string, devdir + 1, resultspec.dsc$w_length);
+	    my_strlcpy(string, devdir + 1, resultspec.dsc$w_length+1);
 	    }
 	/*
 	 * Be consistent with what the C RTL has already done to the rest of
