@@ -360,10 +360,15 @@ my %excluded_files = (
                         canonicalize("lib/unicore/mktables") => 1,
                         canonicalize("Porting/make-rmg-checklist") => 1,
                         canonicalize("Porting/perldelta_template.pod") => 1,
+                        canonicalize("regen/feature.pl") => 1,
                         canonicalize("autodoc.pl") => 1,
                         canonicalize("configpm") => 1,
                         canonicalize("miniperl") => 1,
                         canonicalize("perl") => 1,
+                        canonicalize('dist/Pod-Perldoc/corpus/no-head.pod') => 1,
+                        canonicalize('dist/Pod-Perldoc/corpus/perlfunc.pod') => 1,
+                        canonicalize('dist/Pod-Perldoc/corpus/utf8.pod') => 1,
+                        canonicalize("lib/unicore/mktables") => 1,
                     );
 
 # This list should not include anything for which case sensitivity is

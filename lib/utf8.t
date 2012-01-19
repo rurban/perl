@@ -439,6 +439,28 @@ SKIP: {
 }
 
 {
+    # Make sure utf8::decode does not modify read-only scalars
+    # [perl #91850].
+    
+    my $name = "\x{c3}\x{b3}";
+    Internals::SvREADONLY($name, 1);
+    eval { utf8::decode($name) };
+    like $@, qr/^Modification of a read-only/,
+	'utf8::decode respects readonliness';
+}
+
+{
+    # utf8::decode should stringify refs [perl #91850].
+
+    package eieifg { use overload '""'      => sub { "\x{c3}\x{b3}" },
+                                   fallback => 1 }
+
+    my $name = bless[], eieifg::;
+    utf8::decode($name);
+    is $name, "\xf3", 'utf8::decode flattens references';
+}
+
+{
     my $a = "456\xb6";
     utf8::upgrade($a);
 

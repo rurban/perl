@@ -716,8 +716,8 @@ usage: $0 [-c|-p|-q|-v|-w] [-C dir] [-L filelist] [ -P pod_dir ]
   -makelist   : Rewrite the file list $file_list based on current setup
   -annotate   : Output an annotation for each character in the table files;
                 useful for debugging mktables, looking at diffs; but is slow,
-                memory intensive; resulting tables are usable but slow and
-                very large.
+                memory intensive; resulting tables are usable but are slow and
+                very large (and currently fail the Unicode::UCD.t tests).
   -check A B  : Executes $0 only if A and B are the same
 END
     }
@@ -768,6 +768,8 @@ push @tables_that_may_be_empty, 'Script=Katakana_Or_Hiragana'
                                                     if $v_version ge v4.1.0;
 push @tables_that_may_be_empty, 'Script_Extensions=Katakana_Or_Hiragana'
                                                     if $v_version ge v6.0.0;
+push @tables_that_may_be_empty, 'Grapheme_Cluster_Break=Prepend'
+                                                    if $v_version ge v6.1.0;
 
 # The lists below are hashes, so the key is the item in the list, and the
 # value is the reason why it is in the list.  This makes generation of
@@ -896,6 +898,9 @@ my %why_obsolete;    # Documentation only
         # determinable Hangul syllables'.  This file is not published, so it's
         # existence is not noted in the comment.
         'Decomposition_Mapping' => 'Accessible via Unicode::Normalize or Unicode::UCD::prop_invmap()',
+
+        'Indic_Matra_Category' => "Provisional",
+        'Indic_Syllabic_Category' => "Provisional",
 
         # Don't suppress ISO_Comment, as otherwise special handling is needed
         # to differentiate between it and gc=c, which can be written as 'isc',
@@ -1080,13 +1085,13 @@ my %ignored_files = (
     'ReadMe.txt' => 'Documentation',
     'StandardizedVariants.txt' => 'Certain glyph variations for character display are standardized.  This lists the non-Unihan ones; the Unihan ones are also not used by Perl, and are in a separate Unicode data base L<http://www.unicode.org/ivd>',
     'EmojiSources.txt' => 'Maps certain Unicode code points to their legacy Japanese cell-phone values',
-    'IndicMatraCategory.txt' => 'Provisional; for the analysis and processing of Indic scripts',
-    'IndicSyllabicCategory.txt' => 'Provisional; for the analysis and processing of Indic scripts',
     'auxiliary/WordBreakTest.html' => 'Documentation of validation tests',
     'auxiliary/SentenceBreakTest.html' => 'Documentation of validation tests',
     'auxiliary/GraphemeBreakTest.html' => 'Documentation of validation tests',
     'auxiliary/LineBreakTest.html' => 'Documentation of validation tests',
 );
+
+my %skipped_files;  # List of files that we skip
 
 ### End of externally interesting definitions, except for @input_file_objects
 
@@ -1183,9 +1188,11 @@ my $YES = 1;
 my $IF_NOT_EQUIVALENT = 1; # Replace only under certain conditions; details in
                            # the comments at the subroutine definition.
 my $UNCONDITIONALLY = 2;   # Replace without conditions.
-my $MULTIPLE = 4;          # Don't replace, but add a duplicate record if
+my $MULTIPLE_BEFORE = 4;   # Don't replace, but add a duplicate record if
                            # already there
-my $CROAK = 5;             # Die with an error if is already there
+my $MULTIPLE_AFTER = 5;    # Don't replace, but add a duplicate record if
+                           # already there
+my $CROAK = 6;             # Die with an error if is already there
 
 # Flags to give property statuses.  The phrases are to remind maintainers that
 # if the flag is changed, the indefinite article referring to it in the
@@ -2026,7 +2033,7 @@ sub trace { return main::trace(@_); }
     # contrast to the non_skip element, which is supposed to be used very
     # temporarily for debugging.  Sets 'optional' to 1.  Also, files that we
     # pretty much will never look at can be placed in the global
-    # %ignored_files instead.  Ones used here will be added to that list.
+    # %ignored_files instead.  Ones used here will be added to %skipped files
     main::set_access('skip', \%skip, 'c');
 
     my %each_line_handler;
@@ -2153,7 +2160,7 @@ sub trace { return main::trace(@_); }
         # including its reason
         if ($skip{$addr}) {
             $optional{$addr} = 1;
-            $ignored_files{$file{$addr}} = $skip{$addr}
+            $skipped_files{$file{$addr}} = $skip{$addr}
         }
 
         return $self;
@@ -2265,8 +2272,8 @@ END
             # they are deleted from the hash, so any that remain at the
             # end of the program are files that we didn't process.
             my $fkey = File::Spec->rel2abs($file);
-            my $expecting = delete $potential_files{$fkey};
-            $expecting = delete $potential_files{lc($fkey)} unless defined $expecting;
+            my $expecting = delete $potential_files{lc($fkey)};
+
             Carp::my_carp("Was not expecting '$file'.") if
                     ! $expecting
                     && ! defined $handle{$addr};
@@ -2429,7 +2436,8 @@ END
                         || @defaults > 2
                         || ($default =~ /^</
                             && $default !~ /^<code *point>$/i
-                            && $default !~ /^<none>$/i))
+                            && $default !~ /^<none>$/i
+                            && $default !~ /^<script>$/i))
                     {
                         $self->carp_bad_line("Unrecognized \@missing line: $_.  Assuming no missing entries");
                     }
@@ -2449,6 +2457,15 @@ END
                         }
                         elsif ($default =~ /^<code *point>$/i) {
                             $default = $CODE_POINT;
+                        }
+                        elsif ($default =~ /^<script>$/i) {
+
+                            # Special case this one.  Currently is from
+                            # ScriptExtensions.txt, and means for all unlisted
+                            # code points, use their Script property values.
+                            # For the code points not listed in that file, the
+                            # default value is 'Unknown'.
+                            $default = "Unknown";
                         }
 
                         # Store them as a sub-arrays with both components.
@@ -3346,13 +3363,16 @@ sub trace { return main::trace(@_); }
         #                         style when the pre-existing and replacement
         #                         standard forms are the same, we can move to
         #                         the modern style
-        #       => $MULTIPLE      means that if this range duplicates an
+        #       => $MULTIPLE_BEFORE means that if this range duplicates an
         #                         existing one, but has a different value,
         #                         don't replace the existing one, but insert
         #                         this, one so that the same range can occur
         #                         multiple times.  They are stored LIFO, so
         #                         that the final one inserted is the first one
         #                         returned in an ordered search of the table.
+        #       => $MULTIPLE_AFTER is like $MULTIPLE_BEFORE, but is stored
+        #                         FIFO, so that this one is inserted after all
+        #                         others that currently exist.
         #       => anything else  is the same as => $IF_NOT_EQUIVALENT
         #
         # "same value" means identical for non-type-0 ranges, and it means
@@ -3584,19 +3604,22 @@ sub trace { return main::trace(@_); }
         # Here, we have taken care of the case where $replace is $NO.
         # Remember that here, r[$i-1]->end < $start <= r[$i]->end
         # If inserting a multiple record, this is where it goes, before the
-        # first (if any) existing one.  This implies an insertion, and no
-        # change to any existing ranges.  Note that $i can be -1 if this new
-        # range doesn't actually duplicate any existing, and comes at the
-        # beginning of the list.
-        if ($replace == $MULTIPLE) {
+        # first (if any) existing one if inserting LIFO.  (If this is to go
+        # afterwards, FIFO, we below move the pointer to there.)  These imply
+        # an insertion, and no change to any existing ranges.  Note that $i
+        # can be -1 if this new range doesn't actually duplicate any existing,
+        # and comes at the beginning of the list.
+        if ($replace == $MULTIPLE_BEFORE || $replace == $MULTIPLE_AFTER) {
 
             if ($start != $end) {
                 Carp::my_carp_bug("$owner_name_of{$addr}Can't cope with adding a multiple record when the range ($start..$end) contains more than one code point.  No action taken.");
                 return;
             }
 
-            # Don't add an exact duplicate, as it isn't really a multiple
+            # If the new code point is within a current range ...
             if ($end >= $r->[$i]->start) {
+
+                # Don't add an exact duplicate, as it isn't really a multiple
                 my $existing_value = $r->[$i]->value;
                 my $existing_type = $r->[$i]->type;
                 return if $value eq $existing_value && $type eq $existing_type;
@@ -3613,11 +3636,27 @@ sub trace { return main::trace(@_); }
                 # pre-existing code point, which will again be a single code
                 # point range.  Because 'i' likely will have changed as a
                 # result of these operations, we can't just continue on, but
-                # do this operation recursively as well.
+                # do this operation recursively as well.  If we are inserting
+                # LIFO, the pre-existing code point needs to go after the new
+                # one, so use MULTIPLE_AFTER; and vice versa.
                 if ($r->[$i]->start != $r->[$i]->end) {
                     $self->_add_delete('-', $start, $end, "");
                     $self->_add_delete('+', $start, $end, $value, Type => $type);
-                    return $self->_add_delete('+', $start, $end, $existing_value, Type => $existing_type, Replace => $MULTIPLE);
+                    return $self->_add_delete('+',
+                            $start, $end,
+                            $existing_value,
+                            Type => $existing_type,
+                            Replace => ($replace == $MULTIPLE_BEFORE)
+                                       ? $MULTIPLE_AFTER
+                                       : $MULTIPLE_BEFORE);
+                }
+            }
+
+            # If to place this new record after, move to beyond all existing
+            # ones.
+            if ($replace == $MULTIPLE_AFTER) {
+                while ($i < @$r && $r->[$i]->start == $start) {
+                    $i++;
                 }
             }
 
@@ -3641,8 +3680,8 @@ sub trace { return main::trace(@_); }
             return @return;
         }
 
-        # Here, we have taken care of $NO and $MULTIPLE replaces.  This leaves
-        # delete, insert, and replace either unconditionally or if not
+        # Here, we have taken care of $NO and $MULTIPLE_foo replaces.  This
+        # leaves delete, insert, and replace either unconditionally or if not
         # equivalent.  $i still points to the first potential affected range.
         # Now find the highest range affected, which will determine the length
         # parameter to splice.  (The input range can span multiple existing
@@ -3753,7 +3792,7 @@ sub trace { return main::trace(@_); }
         $j--;        # $j now points to the highest affected range.
         trace "Final affected range is $j: $r->[$j]" if main::DEBUG && $to_trace;
 
-        # Here, have taken care of $NO and $MULTIPLE replaces.
+        # Here, have taken care of $NO and $MULTIPLE_foo replaces.
         # $j points to the highest affected range.  But it can be < $i or even
         # -1.  These happen only if the insertion is entirely in the gap
         # between r[$i-1] and r[$i].  Here's why: j < i means that the j loop
@@ -4454,10 +4493,12 @@ use base '_Range_List_Base';
         my $self = shift;
         my $code_point = shift;
         my $value = shift;
-        Carp::carp_extra_args(\@_) if main::DEBUG && @_;
+        my %args = @_;
+        my $replace = delete $args{'Replace'} // $MULTIPLE_BEFORE;
+        Carp::carp_extra_args(\%args) if main::DEBUG && %args;
 
         return $self->add_map($code_point, $code_point,
-                                $value, Replace => $MULTIPLE);
+                                $value, Replace => $replace);
     }
 } # End of closure for package Range_Map
 
@@ -4577,7 +4618,8 @@ sub trace { return main::trace(@_); }
     my %format;
     # The format of the entries of the table.  This is calculated from the
     # data in the table (or passed in the constructor).  This is an enum e.g.,
-    # $STRING_FORMAT
+    # $STRING_FORMAT.  It is marked protected as it should not be generally
+    # used to override calculations.
     main::set_access('format', \%format, 'r', 'p_s');
 
     sub new {
@@ -7874,6 +7916,7 @@ sub trace { return main::trace(@_) if main::DEBUG && $to_trace }
                     set_default_map
                     set_file_path
                     set_final_comment
+                    _set_format
                     set_range_size_1
                     set_status
                     set_to_output_map
@@ -9898,7 +9941,7 @@ END
                        Range_Size_1 => \&output_perl_charnames_line,
                        Type => $STRING,
                        );
-        $perl_charname->set_proxy_for('Name', 'Name_Alias');
+        $perl_charname->set_proxy_for('Name');
 
         my $Perl_decomp = Property->new('Perl_Decomposition_Mapping',
                                         Directory => File::Spec->curdir(),
@@ -10877,7 +10920,8 @@ END
         # so that _swash_inversion_hash() is able to construct closures
         # without having to worry about F mappings.
         if ($type eq 'C' || $type eq 'F' || $type eq 'I' || $type eq 'S') {
-            $_ = "$range; Case_Folding; $CMD_DELIM$REPLACE_CMD=$MULTIPLE$CMD_DELIM$map";
+            $_ = "$range; Case_Folding; "
+                 . "$CMD_DELIM$REPLACE_CMD=$MULTIPLE_BEFORE$CMD_DELIM$map";
         }
         else {
             $_ = "";
@@ -11304,13 +11348,13 @@ sub setup_script_extensions {
     # The Script_Extensions property starts out with a clone of the Script
     # property.
 
-    my $sc = property_ref("Script");
-    my $scx = Property->new("scx", Full_Name => "Script_Extensions",
-                  Initialize => $sc,
-                  Default_Map => $sc->default_map,
-                  Pre_Declared_Maps => 0,
-                  Format => $STRING_WHITE_SPACE_LIST,
-                  );
+    my $scx = property_ref("Script_Extensions");
+    $scx = Property->new("scx", Full_Name => "Script_Extensions")
+            if ! defined $scx;
+    $scx->_set_format($STRING_WHITE_SPACE_LIST);
+    $scx->initialize($script);
+    $scx->set_default_map($script->default_map);
+    $scx->set_pre_declared_maps(0);     # PropValueAliases doesn't list these
     $scx->add_comment(join_lines( <<END
 The values for code points that appear in one script are just the same as for
 the 'Script' property.  Likewise the values for those that appear in many
@@ -11320,8 +11364,8 @@ of those scripts.
 END
     ));
 
-    # Make the scx's tables and aliases for them the same as sc's
-    foreach my $table ($sc->tables) {
+    # Initialize scx's tables and the aliases for them to be the same as sc's
+    foreach my $table ($script->tables) {
         my $scx_table = $scx->add_match_table($table->name,
                                 Full_Name => $table->full_name);
         foreach my $alias ($table->aliases) {
@@ -11349,8 +11393,13 @@ sub  filter_script_extensions_line {
     return;
 }
 
-sub setup_v6_name_alias {
-        property_ref('Name_Alias')->add_map(7, 7, "ALERT");
+sub setup_early_name_alias {
+        property_ref('Name_Alias')->add_map(7, 7, "ALERT: control");
+}
+
+sub filter_early_version_name_alias_line {
+    $_ .= ": correction";
+    return;
 }
 
 sub finish_Unicode() {
@@ -11378,6 +11427,10 @@ sub finish_Unicode() {
         # $perl has been defined, but isn't one of the Unicode properties that
         # need to be finished up.
         next if $property == $perl;
+
+        # Nor do we need to do anything with properties that aren't going to
+        # be output.
+        next if $property->fate == $SUPPRESSED;
 
         # Handle the properties that have more than one possible default
         if (ref $property->default_map) {
@@ -12159,13 +12212,15 @@ sub compile_perl() {
     my $alias = property_ref('Name_Alias');
     if (defined $alias) {
         push @composition, 'Name_Alias';
+        $perl_charname->set_proxy_for('Name_Alias');
         $alias->reset_each_range;
         while (my ($range) = $alias->each_range) {
             next if $range->value eq "";
             if ($range->start != $range->end) {
                 Carp::my_carp("Expecting only one code point in the range $range.  Just to keep going, using just the first code point;");
             }
-            $perl_charname->add_duplicate($range->start, $range->value);
+            $perl_charname->add_duplicate($range->start,
+                                                $range->value =~ s/:.*//r);
         }
         $alias_sentence = <<END;
 The Name_Alias property adds duplicate code point entries with a corrected
@@ -13655,6 +13710,9 @@ END
     foreach my $file (keys %ignored_files) {
         push @{$grouped_by_reason{$ignored_files{$file}}}, $file;
     }
+    foreach my $file (keys %skipped_files) {
+        push @{$grouped_by_reason{$skipped_files{$file}}}, $file;
+    }
 
     # Then, sort each group.
     foreach my $group (keys %grouped_by_reason) {
@@ -14764,24 +14822,6 @@ sub write_all_tables() {
                 || ($table == $property->table('N')
                     && $property->table('Y')->is_empty));
 
-
-            # Some tables should match everything
-            my $expected_full =
-                ($is_property)
-                ? # All these types of map tables will be full because
-                  # they will have been populated with defaults
-                  ($type == $ENUM || $type == $FORCED_BINARY)
-
-                : # A match table should match everything if its method
-                  # shows it should
-                  ($table->matches_all
-
-                  # The complement of an empty binary table will match
-                  # everything
-                  || $is_complement_of_empty_binary
-                  )
-            ;
-
             if ($table->is_empty) {
 
                 if ($suppress_if_empty_warn_if_not) {
@@ -14816,6 +14856,25 @@ sub write_all_tables() {
 
                 Carp::my_carp("Not expecting property $table$because.  Generating file for it anyway.");
             }
+
+            # Some tables should match everything
+            my $expected_full =
+                ($table->fate == $SUPPRESSED)
+                ? 0
+                : ($is_property)
+                  ? # All these types of map tables will be full because
+                    # they will have been populated with defaults
+                    ($type == $ENUM || $type == $FORCED_BINARY)
+
+                  : # A match table should match everything if its method
+                    # shows it should
+                    ($table->matches_all
+
+                    # The complement of an empty binary table will match
+                    # everything
+                    || $is_complement_of_empty_binary
+                    )
+            ;
 
             my $count = $table->count;
             if ($expected_full) {
@@ -15693,6 +15752,7 @@ my @input_file_objects = (
     Input_file->new('SpecialCasing.txt', v2.1.8,
                     Each_Line_Handler => \&filter_special_casing_line,
                     Pre_Handler => \&setup_special_casing,
+                    Has_Missings_Defaults => $IGNORED,
                     ),
     Input_file->new(
                     'LineBreak.txt', v3.0.0,
@@ -15728,6 +15788,7 @@ my @input_file_objects = (
                                  : undef,
                            \&filter_case_folding_line
                         ],
+                    Has_Missings_Defaults => $IGNORED,
                     ),
     Input_file->new('DCoreProperties.txt', v3.1.0,
                     # 5.2 changed this file
@@ -15778,8 +15839,10 @@ my @input_file_objects = (
     Input_file->new('NameAliases.txt', v5.0.0,
                     Property => 'Name_Alias',
                     Pre_Handler => ($v_version ge v6.0.0)
-                                   ? \&setup_v6_name_alias
+                                   ? \&setup_early_name_alias
                                    : undef,
+                    Each_Line_Handler =>
+                                    \&filter_early_version_name_alias_line,
                     ),
     Input_file->new("BidiTest.txt", v5.2.0,
                     Skip => 'Validation Tests',
@@ -15821,6 +15884,23 @@ my @input_file_objects = (
                     Property => 'Script_Extensions',
                     Pre_Handler => \&setup_script_extensions,
                     Each_Line_Handler => \&filter_script_extensions_line,
+                    Has_Missings_Defaults => (($v_version le v6.0.0)
+                                            ? $NO_DEFAULTS
+                                            : $IGNORED),
+                    ),
+    # The two Indic files are actually available starting in v6.0.0, but their
+    # property values are missing from PropValueAliases.txt in that release,
+    # so that further work would have to be done to get them to work properly
+    # for that release.
+    Input_file->new('IndicMatraCategory.txt', v6.1.0,
+                    Property => 'Indic_Matra_Category',
+                    Has_Missings_Defaults => $NOT_IGNORED,
+                    Skip => "Provisional; for the analysis and processing of Indic scripts",
+                    ),
+    Input_file->new('IndicSyllabicCategory.txt', v6.1.0,
+                    Property => 'Indic_Syllabic_Category',
+                    Has_Missings_Defaults => $NOT_IGNORED,
+                    Skip => "Provisional; for the analysis and processing of Indic scripts",
                     ),
 );
 
@@ -15897,8 +15977,8 @@ else {
             # The paths are stored with relative names, and with '/' as the
             # delimiter; convert to absolute on this machine
             my $full = lc(File::Spec->rel2abs(internal_file_to_platform($input)));
-            $potential_files{$full} = 1
-                        if ! grep { lc($full) eq lc($_) } @ignored_files_full_names;
+            $potential_files{lc $full} = 1
+                if ! grep { lc($full) eq lc($_) } @ignored_files_full_names;
         }
     }
 
@@ -15918,8 +15998,8 @@ if ($glob_list) {
     }
 
     my @unknown_input_files;
-    foreach my $file (keys %potential_files) {
-        next if grep { lc($file) eq lc($_) } @known_files;
+    foreach my $file (keys %potential_files) {  # The keys are stored in lc
+        next if grep { $file eq lc($_) } @known_files;
 
         # Here, the file is unknown to us.  Get relative path name
         $file = File::Spec->abs2rel($file);

@@ -6,38 +6,28 @@
 #      License or the Artistic License, as specified in the README file.
 #
 package B;
-use strict;
 
+$B::VERSION = '1.33';
+
+use XSLoader ();
 require Exporter;
 @B::ISA = qw(Exporter);
 
 # walkoptree_slow comes from B.pm (you are there),
 # walkoptree comes from B.xs
-
-BEGIN {
-    $B::VERSION = '1.32';
-    @B::EXPORT_OK = ();
-
-    # Our BOOT code needs $VERSION set, and will append to @EXPORT_OK.
-    # Want our constants loaded before the compiler meets OPf_KIDS below, as
-    # the combination of having the constant stay a Proxy Constant Subroutine
-    # and its value being inlined saves a little over .5K
-
-    require XSLoader;
-    XSLoader::load();
-}
-
-push @B::EXPORT_OK, (qw(minus_c ppname save_BEGINs
-			class peekop cast_I32 cstring cchar hash threadsv_names
-			main_root main_start main_cv svref_2object opnumber
-			sub_generation amagic_generation perlstring
-			walkoptree_slow walkoptree walkoptree_exec walksymtable
-			parents comppadlist sv_undef compile_stats timing_info
-			begin_av init_av check_av end_av regex_padav dowarn
-			defstash curstash warnhook diehook inc_gv @optype
-			@specialsv_name
-		      ), $] > 5.009 && 'unitcheck_av');
-
+@B::EXPORT_OK = qw(minus_c ppname save_BEGINs
+		   class peekop cast_I32 cstring cchar hash threadsv_names
+		   main_root main_start main_cv svref_2object opnumber
+		   sub_generation amagic_generation perlstring
+		   walkoptree_slow walkoptree walkoptree_exec walksymtable
+		   parents comppadlist sv_undef compile_stats timing_info
+		   begin_av init_av check_av end_av regex_padav dowarn
+		   defstash curstash warnhook diehook inc_gv @optype
+		   @specialsv_name
+		  );
+push @B::EXPORT_OK, qw(unitcheck_av) if $] > 5.009;
+sub OPf_KIDS ();
+use strict;
 @B::SV::ISA = 'B::OBJECT';
 @B::NULL::ISA = 'B::SV';
 @B::PV::ISA = 'B::SV';
@@ -331,6 +321,8 @@ sub walksymtable {
 	}
     }
 }
+
+XSLoader::load 'B';
 
 1;
 

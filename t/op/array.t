@@ -3,11 +3,10 @@
 BEGIN {
     chdir 't' if -d 't';
     @INC = ('.', '../lib');
+    require 'test.pl';
 }
 
-require 'test.pl';
-
-plan (123);
+plan (127);
 
 #
 # @foo, @bar, and @ary are also used from tie-stdarray after tie-ing them
@@ -440,5 +439,37 @@ sub test_arylen {
 
 *trit = *scile;  $trit[0];
 ok(1, 'aelem_fast on a nonexistent array does not crash');
+
+# [perl #107440]
+sub A::DESTROY { $::ra = 0 }
+$::ra = [ bless [], 'A' ];
+undef @$::ra;
+pass 'no crash when freeing array that is being undeffed';
+$::ra = [ bless [], 'A' ];
+@$::ra = ('a'..'z');
+pass 'no crash when freeing array that is being cleared';
+
+# [perl #85670] Copying magic to elements
+SKIP: {
+    skip "no Scalar::Util::weaken on miniperl", 1, if is_miniperl;
+    require Scalar::Util;
+    package glelp {
+	Scalar::Util::weaken ($a = \@ISA);
+	@ISA = qw(Foo);
+	Scalar::Util::weaken ($a = \$ISA[0]);
+	::is @ISA, 1, 'backref magic is not copied to elements';
+    }
+}
+package peen {
+    $#ISA = -1;
+    @ISA = qw(Foo);
+    $ISA[0] = qw(Sphare);
+
+    sub Sphare::pling { 'pling' }
+
+    ::is eval { pling peen }, 'pling',
+	'arylen_p magic does not stop isa magic from being copied';
+}
+
 
 "We're included by lib/Tie/Array/std.t so we need to return something true";

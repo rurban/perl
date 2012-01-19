@@ -21,7 +21,8 @@
 :         proto.h: add __attribute__malloc__
 :
 :   b  Binary backward compatibility; function is a macro
-:      but has also Perl_ implementation (which is exported):
+:      but has also Perl_ implementation (which is exported); often
+:      implemented in mathoms.c:
 :
 :         add entry to the list of exported symbols;
 :         don't define PERL_ARGS_ASSERT_FOO
@@ -30,7 +31,7 @@
 :
 :         proto.h: add __attribute__deprecated__
 :
-:   d  Function has documentation with its source:
+:   d  Function has documentation in the source:
 :
 :         enables 'no docs for foo" warning in autodoc.pl
 :
@@ -763,6 +764,7 @@ p	|int	|magic_settaint	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setuvar	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setvec	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setutf8	|NN SV* sv|NN MAGIC* mg
+p	|int	|magic_setvstring|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_set_all_env|NN SV* sv|NN MAGIC* mg
 p	|U32	|magic_sizepack	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_wipepack	|NN SV* sv|NN MAGIC* mg
@@ -1386,14 +1388,14 @@ Ap	|void	|taint_env
 Ap	|void	|taint_proper	|NULLOK const char* f|NN const char *const s
 Apd	|UV	|to_utf8_case	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp \
 				|NN SV **swashp|NN const char *normal|NULLOK const char *special
-Apdm	|UV	|to_utf8_lower	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-EXMp	|UV	|_to_utf8_lower_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
-Apdm	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-EXMp	|UV	|_to_utf8_upper_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
-Apdm	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-EXMp	|UV	|_to_utf8_title_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
-Ampd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-EXMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_lower	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_lower_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_upper_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_title_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags|NULLOK bool* tainted_ptr
 #if defined(PERL_IN_MG_C) || defined(PERL_IN_PP_C)
 p	|bool	|translate_substr_offsets|STRLEN curlen|IV pos1_iv \
 					 |bool pos1_is_uv|IV len_iv \
@@ -2573,6 +2575,6 @@ op	|void	|populate_isa	|NN const char *name|STRLEN len|...
 
 : Used in keywords.c and toke.c
 Xop	|bool	|feature_is_enabled|NN const char *const name \
-		|STRLEN namelen|bool negate
+		|STRLEN namelen
 
 : ex: set ts=8 sts=4 sw=4 noet:

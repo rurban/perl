@@ -37,6 +37,7 @@ Perl stores its global variables.
 #include "perl.h"
 #include "overload.c"
 #include "keywords.h"
+#include "feature.h"
 
 static const char S_autoload[] = "AUTOLOAD";
 static const STRLEN S_autolen = sizeof(S_autoload)-1;
@@ -61,12 +62,12 @@ Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
 	     */
 	    what = OP_IS_DIRHOP(PL_op->op_type) ?
 		"dirhandle" : "filehandle";
-	    /* diag_listed_as: Bad symbol for filehandle */
 	} else if (type == SVt_PVHV) {
 	    what = "hash";
 	} else {
 	    what = type == SVt_PVAV ? "array" : "scalar";
 	}
+	/* diag_listed_as: Bad symbol for filehandle */
 	Perl_croak(aTHX_ "Bad symbol for %s", what);
     }
 
@@ -436,8 +437,7 @@ static void core_xsub(pTHX_ CV* cv);
 
 static GV *
 S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
-                          const char * const name, const STRLEN len,
-                          const char * const fullname, STRLEN const fullen)
+                          const char * const name, const STRLEN len)
 {
     const int code = keyword(name, len, 1);
     static const char file[] = __FILE__;
@@ -451,11 +451,7 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
 
     assert(gv || stash);
     assert(name);
-    assert(stash || fullname);
 
-    if (!fullname && !HvENAME(stash)) return NULL; /* pathological case
-                                                     that would require
-                                                    inlining newATTRSUB */
     if (code >= 0) return NULL; /* not overridable */
     switch (-code) {
      /* no support for \&CORE::infix;
@@ -516,19 +512,12 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
            it this order as we need an op number before calling
            new ATTRSUB. */
     (void)core_prototype((SV *)cv, name, code, &opnum);
-    if (stash && (fullname || !fullen))
+    if (stash)
 	(void)hv_store(stash,name,len,(SV *)gv,0);
     if (ampable) {
-	SV *tmpstr;
 	CvLVALUE_on(cv);
-	if (!fullname) {
-	    tmpstr = newSVhek(HvENAME_HEK(stash));
-	    sv_catpvs(tmpstr, "::");
-	    sv_catpvn(tmpstr,name,len);
-	}
-	else tmpstr = newSVpvn_share(fullname,fullen,0);
 	newATTRSUB(oldsavestack_ix,
-	           newSVOP(OP_CONST, 0, tmpstr),
+	           newSVOP(OP_CONST, 0, SvREFCNT_inc_simple_NN(gv)),
 	           NULL,NULL,
 	           coresub_op(
 	             opnum
@@ -687,7 +676,7 @@ Perl_gv_fetchmeth_pvn(pTHX_ HV *stash, const char *name, STRLEN len, I32 level, 
         }
 	else if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4
               && strnEQ(hvname, "CORE", 4)
-              && S_maybe_add_coresub(aTHX_ stash,topgv,name,len,0,1))
+              && S_maybe_add_coresub(aTHX_ NULL,topgv,name,len))
 	    goto have_gv;
     }
 
@@ -726,7 +715,7 @@ Perl_gv_fetchmeth_pvn(pTHX_ HV *stash, const char *name, STRLEN len, I32 level, 
                 const char *hvname = HvNAME(cstash); assert(hvname);
                 if (strnEQ(hvname, "CORE", 4)
                  && (candidate =
-                      S_maybe_add_coresub(aTHX_ cstash,NULL,name,len,0,0)
+                      S_maybe_add_coresub(aTHX_ cstash,NULL,name,len)
                     ))
                     goto have_candidate;
             }
@@ -1729,11 +1718,8 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4) {
 	  /* Avoid null warning: */
 	  const char * const stashname = HvNAME(stash); assert(stashname);
-	  if (strnEQ(stashname, "CORE", 4)
-	   && S_maybe_add_coresub(aTHX_
-	        addmg ? stash : 0, gv, name, len, nambeg, full_len
-	      ))
-	    addmg = 0;
+	  if (strnEQ(stashname, "CORE", 4))
+	    S_maybe_add_coresub(aTHX_ 0, gv, name, len);
 	}
     }
     else if (len > 1) {
@@ -1925,6 +1911,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	case '*':		/* $* */
 	case '#':		/* $# */
 	    if (sv_type == SVt_PV)
+		/* diag_listed_as: $* is no longer supported */
 		Perl_ck_warner_d(aTHX_ packWARN2(WARN_DEPRECATED, WARN_SYNTAX),
 				 "$%c is no longer supported", *name);
 	    break;
@@ -1940,7 +1927,7 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    goto magicalize;
 	case '[':		/* $[ */
 	    if ((sv_type == SVt_PV || sv_type == SVt_PVGV)
-	     && FEATURE_IS_ENABLED_d("$[")) {
+	     && FEATURE_ARYBASE_IS_ENABLED) {
 		if (addmg) (void)hv_store(stash,name,len,(SV *)gv,0);
 		require_tie_mod(gv,name,newSVpvs("arybase"),"FETCH",0);
 		addmg = 0;
@@ -2345,6 +2332,7 @@ Perl_Gv_AMupdate(pTHX_ HV *stash, bool destructing)
 			const SV * const name = (gvsv && SvPOK(gvsv))
                                                     ? gvsv
                                                     : newSVpvs_flags("???", SVs_TEMP);
+			/* diag_listed_as: Can't resolve method "%s" overloading "%s" in package "%s" */
 			Perl_croak(aTHX_ "%s method \"%"SVf256
 				    "\" overloading \"%s\" "\
 				    "in package \"%"HEKf256"\"",

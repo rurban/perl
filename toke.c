@@ -595,29 +595,30 @@ S_missingterm(pTHX_ char *s)
     Perl_croak(aTHX_ "Can't find string terminator %c%s%c anywhere before EOF",q,s,q);
 }
 
+#include "feature.h"
+
 /*
  * Check whether the named feature is enabled.
  */
 bool
-Perl_feature_is_enabled(pTHX_ const char *const name, STRLEN namelen,
-			      bool negate)
+Perl_feature_is_enabled(pTHX_ const char *const name, STRLEN namelen)
 {
     dVAR;
     char he_name[8 + MAX_FEATURE_LEN] = "feature_";
 
     PERL_ARGS_ASSERT_FEATURE_IS_ENABLED;
 
+    assert(CURRENT_FEATURE_BUNDLE == FEATURE_BUNDLE_CUSTOM);
+
     if (namelen > MAX_FEATURE_LEN)
 	return FALSE;
-    if (negate) he_name[8] = 'n', he_name[9] = 'o';
-    memcpy(&he_name[8 + 2*negate], name, namelen);
+    memcpy(&he_name[8], name, namelen);
 
     return
-	!cop_hints_fetch_pvn(
-	    PL_curcop, he_name, 8 + 2*negate + namelen, 0,
+	cop_hints_fetch_pvn(
+	    PL_curcop, he_name, 8 + namelen, 0,
 	    REFCOUNTED_HE_EXISTS
-	)
-	!= !negate;
+	);
 }
 
 /*
@@ -4499,6 +4500,11 @@ Perl_yylex(pTHX)
 		PL_lex_allbrackets--;
 		return REPORT(')');
 	    }
+            else if ( PL_bufptr != PL_bufend && PL_bufptr[1] == 'E' ) {
+               /* Got an unpaired \E */
+               Perl_ck_warner(aTHX_ packWARN(WARN_MISC),
+                        "Useless use of \\E");
+            }
 #ifdef PERL_MAD
 	    while (PL_bufptr != PL_bufend &&
 	      PL_bufptr[0] == '\\' && PL_bufptr[1] == 'E') {
@@ -6238,6 +6244,7 @@ Perl_yylex(pTHX)
 		    if (*t == '}' || *t == ']') {
 			t++;
 			PL_bufptr = PEEKSPACE(PL_bufptr); /* XXX can realloc */
+       /* diag_listed_as: Scalar value @%s[%s] better written as $%s[%s] */
 			Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
 			    "Scalar value %.*s better written as $%.*s",
 			    (int)(t-PL_bufptr), PL_bufptr,
@@ -7680,6 +7687,7 @@ Perl_yylex(pTHX)
 		if ( *t && strchr("|&*+-=!?:.", *t) && ckWARN_d(WARN_PRECEDENCE)
 		    /* [perl #16184] */
 		    && !(t[0] == '=' && t[1] == '>')
+		    && !(t[0] == ':' && t[1] == ':')
 		    && !keyword(s, d-s, 0)
 		) {
 		    int parms_len = (int)(d-s);
@@ -7995,8 +8003,6 @@ Perl_yylex(pTHX)
 	case KEY_sort:
 	    checkcomma(s,PL_tokenbuf,"subroutine name");
 	    s = SKIPSPACE1(s);
-	    if (*s == ';' || *s == ')')		/* probably a close */
-		Perl_croak(aTHX_ "sort is now a reserved word");
 	    PL_expect = XTERM;
 	    s = force_word(s,WORD,TRUE,TRUE,FALSE);
 	    LOP(OP_SORT,XREF);
@@ -10821,6 +10827,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	if (s[1] == 0xFE) {
 	    /* UTF-16 little-endian? (or UTF-32LE?) */
 	    if (s[2] == 0 && s[3] == 0)  /* UTF-32 little-endian */
+		/* diag_listed_as: Unsupported script encoding %s */
 		Perl_croak(aTHX_ "Unsupported script encoding UTF-32LE");
 #ifndef PERL_NO_UTF16_FILTER
 	    if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16LE script encoding (BOM)\n");
@@ -10829,6 +10836,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		s = add_utf16_textfilter(s, TRUE);
 	    }
 #else
+	    /* diag_listed_as: Unsupported script encoding %s */
 	    Perl_croak(aTHX_ "Unsupported script encoding UTF-16LE");
 #endif
 	}
@@ -10842,6 +10850,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		s = add_utf16_textfilter(s, FALSE);
 	    }
 #else
+	    /* diag_listed_as: Unsupported script encoding %s */
 	    Perl_croak(aTHX_ "Unsupported script encoding UTF-16BE");
 #endif
 	}
@@ -10857,6 +10866,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	     if (s[1] == 0) {
 		  if (s[2] == 0xFE && s[3] == 0xFF) {
 		       /* UTF-32 big-endian */
+		       /* diag_listed_as: Unsupported script encoding %s */
 		       Perl_croak(aTHX_ "Unsupported script encoding UTF-32BE");
 		  }
 	     }
@@ -10868,6 +10878,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		  if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16BE script encoding (no BOM)\n");
 		  s = add_utf16_textfilter(s, FALSE);
 #else
+		  /* diag_listed_as: Unsupported script encoding %s */
 		  Perl_croak(aTHX_ "Unsupported script encoding UTF-16BE");
 #endif
 	     }
@@ -10890,6 +10901,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	      if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16LE script encoding (no BOM)\n");
 	      s = add_utf16_textfilter(s, TRUE);
 #else
+	      /* diag_listed_as: Unsupported script encoding %s */
 	      Perl_croak(aTHX_ "Unsupported script encoding UTF-16LE");
 #endif
 	 }
@@ -11106,6 +11118,7 @@ Perl_scan_vstring(pTHX_ const char *s, const char *const e, SV *sv)
 		    rev += (*end - '0') * mult;
 		    mult *= 10;
 		    if (orev > rev)
+			/* diag_listed_as: Integer overflow in %s number */
 			Perl_ck_warner_d(aTHX_ packWARN(WARN_OVERFLOW),
 					 "Integer overflow in decimal number");
 		}

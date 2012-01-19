@@ -996,7 +996,7 @@ PERL_CALLCONV char*	Perl_fbm_instr(pTHX_ unsigned char* big, unsigned char* bige
 #define PERL_ARGS_ASSERT_FBM_INSTR	\
 	assert(big); assert(bigend); assert(littlestr)
 
-PERL_CALLCONV bool	Perl_feature_is_enabled(pTHX_ const char *const name, STRLEN namelen, bool negate)
+PERL_CALLCONV bool	Perl_feature_is_enabled(pTHX_ const char *const name, STRLEN namelen)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_FEATURE_IS_ENABLED	\
 	assert(name)
@@ -2305,6 +2305,12 @@ PERL_CALLCONV int	Perl_magic_setvec(pTHX_ SV* sv, MAGIC* mg)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2);
 #define PERL_ARGS_ASSERT_MAGIC_SETVEC	\
+	assert(sv); assert(mg)
+
+PERL_CALLCONV int	Perl_magic_setvstring(pTHX_ SV* sv, MAGIC* mg)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT_MAGIC_SETVSTRING	\
 	assert(sv); assert(mg)
 
 PERL_CALLCONV U32	Perl_magic_sizepack(pTHX_ SV* sv, MAGIC* mg)
@@ -4461,18 +4467,26 @@ PERL_CALLCONV UV	Perl_to_utf8_case(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp, S
 /* PERL_CALLCONV UV	Perl_to_utf8_fold(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2); */
+#define PERL_ARGS_ASSERT_TO_UTF8_FOLD	\
+	assert(p); assert(ustrp)
 
 /* PERL_CALLCONV UV	Perl_to_utf8_lower(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2); */
+#define PERL_ARGS_ASSERT_TO_UTF8_LOWER	\
+	assert(p); assert(ustrp)
 
 /* PERL_CALLCONV UV	Perl_to_utf8_title(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2); */
+#define PERL_ARGS_ASSERT_TO_UTF8_TITLE	\
+	assert(p); assert(ustrp)
 
 /* PERL_CALLCONV UV	Perl_to_utf8_upper(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2); */
+#define PERL_ARGS_ASSERT_TO_UTF8_UPPER	\
+	assert(p); assert(ustrp)
 
 PERL_CALLCONV bool	Perl_try_amagic_bin(pTHX_ int method, int flags);
 PERL_CALLCONV bool	Perl_try_amagic_un(pTHX_ int method, int flags);

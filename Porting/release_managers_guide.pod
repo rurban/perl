@@ -319,20 +319,12 @@ release (so for 5.15.3 this would be 5.15.2).
 
 =head3 Check more build configurations
 
-Check some more build configurations. The check that setuid builds and
-installs is for < 5.11.0 only.
+Check some more build configurations.
 
     $ sh Configure -Dprefix=/tmp/perl-5.x.y  -Uinstallusrbinperl \
-        -Duseshrplib -Dd_dosuid
+        -Duseshrplib -Dusesitecustomize
     $ make
-    $ LD_LIBRARY_PATH=`pwd` make test     # or similar for useshrplib
-
-    $ make suidperl
-    $ su -c 'make install'
-    $ ls -l .../bin/sperl
-    -rws--x--x 1 root root 69974 2009-08-22 21:55 .../bin/sperl
-
-(Then delete the installation directory.)
+    $ make test
 
 XXX think of other configurations that need testing.
 
@@ -939,11 +931,14 @@ If this was a BLEAD-FINAL release (i.e. the first release of a new maint
 series, 5.x.0 where x is even), then bump the version in the blead branch
 in git, e.g. 5.12.0 to 5.13.0.
 
-First, add a new feature bundle to F<lib/feature.pm>, initially by just
-copying the exiting entry, and bump the file's $VERSION; e.g.
+First, add a new feature bundle to F<regen/feature.pl>, initially by just
+copying the exiting entry, and bump the file's $VERSION (after the __END__
+marker); e.g.
 
 	 "5.14" => [qw(switch say state unicode_strings)],
     +    "5.15" => [qw(switch say state unicode_strings)],
+
+Run F<regen/feature.pl> to propagate the changes to F<lib/feature.pm>.
 
 Then follow the section L<"Bump the version number"> to bump the version
 in the remaining files and test and commit.
@@ -1110,10 +1105,11 @@ It should be visible at a URL like C<http://search.cpan.org/dist/perl-5.10.1/>.
 
 =back
 
+=for checklist skip RC
 
 =head3 update dev.perl.org
 
-I<This step ONLY for BLEAD-FINAL and MAINT>
+I<You MUST SKIP this step for a RC release>
 
 Ask Leo Lapworth to update the front page of L<http://dev.perl.org/perl5/> to
 link to this new release. If you're feeling ambitious, you can fork

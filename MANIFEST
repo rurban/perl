@@ -197,6 +197,7 @@ cpan/CGI/t/pretty.t			See if CGI.pm works
 cpan/CGI/t/push.t			See if CGI::Push works
 cpan/CGI/t/query_string.t		See if CGI->query_string() works
 cpan/CGI/t/request.t			See if CGI.pm works
+cpan/CGI/t/rt-52469.t			See if CGI.pm works
 cpan/CGI/t/save_read_roundtrip.t	See if CGI.pm works
 cpan/CGI/t/start_end_asterisk.t		See if CGI.pm works
 cpan/CGI/t/start_end_end.t		See if CGI.pm works
@@ -319,8 +320,11 @@ cpan/CPAN-Meta/lib/CPAN/Meta/Feature.pm
 cpan/CPAN-Meta/lib/CPAN/Meta/History.pm
 cpan/CPAN-Meta/lib/CPAN/Meta.pm
 cpan/CPAN-Meta/lib/CPAN/Meta/Prereqs.pm
+cpan/CPAN-Meta/lib/CPAN/Meta/Requirements.pm
 cpan/CPAN-Meta/lib/CPAN/Meta/Spec.pm
 cpan/CPAN-Meta/lib/CPAN/Meta/Validator.pm
+cpan/CPAN-Meta/t/accepts.t
+cpan/CPAN-Meta/t/basic.t
 cpan/CPAN-Meta/t/converter-bad.t
 cpan/CPAN-Meta/t/converter-fail.t
 cpan/CPAN-Meta/t/converter.t
@@ -361,7 +365,10 @@ cpan/CPAN-Meta/t/data/resources.yml
 cpan/CPAN-Meta/t/data/restricted-2.json
 cpan/CPAN-Meta/t/data/restrictive-1_4.yml
 cpan/CPAN-Meta/t/data/unicode.yml
+cpan/CPAN-Meta/t/finalize.t
+cpan/CPAN-Meta/t/from-hash.t
 cpan/CPAN-Meta/t/load-bad.t
+cpan/CPAN-Meta/t/merge.t
 cpan/CPAN-Meta/t/meta-obj.t
 cpan/CPAN-Meta/t/no-index.t
 cpan/CPAN-Meta/t/prereqs-finalize.t
@@ -2605,45 +2612,6 @@ cpan/Text-Tabs/t/sep.t			See if Text::Tabs is working
 cpan/Text-Tabs/t/tabs.t			See if Text::Tabs works
 cpan/Text-Tabs/t/wrap_separator2.t	See if Text::Wrap::wrap works
 cpan/Text-Tabs/t/wrap.t			See if Text::Wrap::wrap works
-cpan/Tie-File/lib/Tie/File.pm		Files as tied arrays
-cpan/Tie-File/t/00_version.t		Trivial test for Tie::File
-cpan/Tie-File/t/01_gen.t		Generic read/write tests for Tie::File
-cpan/Tie-File/t/02_fetchsize.t		File length fetch test for Tie::File
-cpan/Tie-File/t/03_longfetch.t		Past-the-end-of-the-array tests for Tie::File
-cpan/Tie-File/t/04_splice.t		SPLICE method tests for Tie::File
-cpan/Tie-File/t/05_size.t		$#a tests for Tie::File
-cpan/Tie-File/t/06_fixrec.t		'_fixrec' method functional tests for Tie::File
-cpan/Tie-File/t/07_rv_splice.t		SPLICE method return value tests for Tie::File
-cpan/Tie-File/t/08_ro.t			read-only mode tests for Tie::File
-cpan/Tie-File/t/09_gen_rs.t		Like 01_gen.t, with unusual record separator
-cpan/Tie-File/t/10_splice_rs.t		Like 04_splice.t, with unusual record separator
-cpan/Tie-File/t/11_rv_splice_rs.t	Like 07_rv_splice.t, with unusual record separator
-cpan/Tie-File/t/12_longfetch_rs.t	Like 03_longfetch.t, with unusual record separator
-cpan/Tie-File/t/13_size_rs.t		Like 05_size.t, with unusual record separator
-cpan/Tie-File/t/14_lock.t		File locking method tests for Tie::File
-cpan/Tie-File/t/15_pushpop.t		PUSH / POP / SHIFT / UNSHIFT for Tie::File
-cpan/Tie-File/t/16_handle.t		Tying a handle instead of a file for Tie::File
-cpan/Tie-File/t/17_misc_meth.t		CLEAR / EXISTS / DELETE / EXTEND for Tie::File
-cpan/Tie-File/t/18_rs_fixrec.t		Like 06_fixrec.t, with unusual record separator
-cpan/Tie-File/t/19_cache.t		Read cache exercises and regression for Tie::File
-cpan/Tie-File/t/20_cache_full.t		LRU expiry exercises and regression for Tie::File
-cpan/Tie-File/t/21_win32.t		Win32 special behavior of Tie::File
-cpan/Tie-File/t/22_autochomp.t		'autochomp' option of Tie::File
-cpan/Tie-File/t/23_rv_ac_splice.t	Like 07_rv_splice.t, but with autochomp
-cpan/Tie-File/t/24_cache_loop.t		Regression for old Tie::File cache bug
-cpan/Tie-File/t/25_gen_nocache.t	Like 01_gen.t, but with caching disabled
-cpan/Tie-File/t/26_twrite.t		Unit tests for Tie::File::_twrite
-cpan/Tie-File/t/27_iwrite.t		Unit tests for Tie::File::_iwrite
-cpan/Tie-File/t/28_mtwrite.t		Unit tests for Tie::File::_mtwrite
-cpan/Tie-File/t/29a_upcopy.t		Unit tests for Tie::File::_upcopy
-cpan/Tie-File/t/29_downcopy.t		Unit tests for Tie::File::_downcopy
-cpan/Tie-File/t/30_defer.t		deferred writing feature tests for Tie::File
-cpan/Tie-File/t/31_autodefer.t		'autodefer' feature tests for Tie::File
-cpan/Tie-File/t/32_defer_misc.t		Like 17_misc_meth.t, but with deferred writing
-cpan/Tie-File/t/33_defer_vs.t		Like 30_defer.t, but with varying-length records
-cpan/Tie-File/t/40_abs_cache.t		Unit tests for Tie::File::Cache
-cpan/Tie-File/t/41_heap.t		Unit tests for Tie::File::Heap
-cpan/Tie-File/t/42_offset.t		Unit tests for the offset method
 cpan/Tie-RefHash/lib/Tie/RefHash.pm		Base class for tied hashes with references as keys
 cpan/Tie-RefHash/t/rebless.t	Test for Tie::RefHash with rebless
 cpan/Tie-RefHash/t/refhash.t	Test for Tie::RefHash and Tie::RefHash::Nestable
@@ -3396,22 +3364,26 @@ dist/Net-Ping/t/410_syn_host.t		Ping Net::Ping
 dist/Net-Ping/t/450_service.t		Ping Net::Ping
 dist/Net-Ping/t/500_ping_icmp.t		Ping Net::Ping
 dist/Net-Ping/t/510_ping_udp.t		Ping Net::Ping
-dist/Pod-Perldoc/lib/perldoc.pod			Look up Perl documentation in Pod format
+dist/Pod-Perldoc/corpus/no-head.pod		test file for Pod-Perldoc
+dist/Pod-Perldoc/corpus/perlfunc.pod		test file for Pod-Perldoc
+dist/Pod-Perldoc/corpus/utf8.pod		test file for Pod-Perldoc
+dist/Pod-Perldoc/lib/perldoc.pod		Look up Perl documentation in Pod format
 dist/Pod-Perldoc/lib/Pod/Perldoc/BaseTo.pm	utility module for perldoc
 dist/Pod-Perldoc/lib/Pod/Perldoc/GetOptsOO.pm	options parsing for perldoc
 dist/Pod-Perldoc/lib/Pod/Perldoc.pm		guts of the 'perldoc' utility
+dist/Pod-Perldoc/lib/Pod/Perldoc/ToANSI.pm	convert POD to ANSI text
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToChecker.pm	let perldoc check POD for errors
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToMan.pm	render POD as man pages
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToNroff.pm	convert POD to nroff
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToPod.pm	convert POD to POD
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToRtf.pm	convert POD to RTF
+dist/Pod-Perldoc/lib/Pod/Perldoc/ToTerm.pm	convert POD to terminal output
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToText.pm	convert POD to plain text
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToTk.pm	convert POD via Tk::Pod
 dist/Pod-Perldoc/lib/Pod/Perldoc/ToXml.pm	convert POD to XML
-dist/Pod-Perldoc/t/01_about_verbose.t		test Pod::Perldoc
-dist/Pod-Perldoc/t/checkerbasic.t		test Pod::Perldoc::ToChecker
-dist/Pod-Perldoc/t/perldocbasic.t		test Pod::Perldoc basic operation
-dist/Pod-Perldoc/t/textbasic.t			test Pod::Perldoc::ToText
+dist/Pod-Perldoc/t/load.t			test file for Pod-Perldoc
+dist/Pod-Perldoc/t/man/_get_columns.t		test file for Pod-Perldoc
+dist/Pod-Perldoc/t/pod.t			test file for Pod-Perldoc
 dist/Safe/Changes		Changes for Safe.pm
 dist/Safe/Makefile.PL		Makefile.PL for Safe.pm
 dist/Safe/MANIFEST		MANIFEST for Safe.pm
@@ -3553,6 +3525,45 @@ dist/threads/t/stress_cv.t	Test with multiple threads, coderef cv argument.
 dist/threads/t/stress_re.t	Test with multiple threads, string cv argument and regexes.
 dist/threads/t/stress_string.t	Test with multiple threads, string cv argument.
 dist/threads/t/thread.t		General ithread tests from thr5005
+dist/Tie-File/lib/Tie/File.pm		Files as tied arrays
+dist/Tie-File/t/00_version.t		Trivial test for Tie::File
+dist/Tie-File/t/01_gen.t		Generic read/write tests for Tie::File
+dist/Tie-File/t/02_fetchsize.t		File length fetch test for Tie::File
+dist/Tie-File/t/03_longfetch.t		Past-the-end-of-the-array tests for Tie::File
+dist/Tie-File/t/04_splice.t		SPLICE method tests for Tie::File
+dist/Tie-File/t/05_size.t		$#a tests for Tie::File
+dist/Tie-File/t/06_fixrec.t		'_fixrec' method functional tests for Tie::File
+dist/Tie-File/t/07_rv_splice.t		SPLICE method return value tests for Tie::File
+dist/Tie-File/t/08_ro.t			read-only mode tests for Tie::File
+dist/Tie-File/t/09_gen_rs.t		Like 01_gen.t, with unusual record separator
+dist/Tie-File/t/10_splice_rs.t		Like 04_splice.t, with unusual record separator
+dist/Tie-File/t/11_rv_splice_rs.t	Like 07_rv_splice.t, with unusual record separator
+dist/Tie-File/t/12_longfetch_rs.t	Like 03_longfetch.t, with unusual record separator
+dist/Tie-File/t/13_size_rs.t		Like 05_size.t, with unusual record separator
+dist/Tie-File/t/14_lock.t		File locking method tests for Tie::File
+dist/Tie-File/t/15_pushpop.t		PUSH / POP / SHIFT / UNSHIFT for Tie::File
+dist/Tie-File/t/16_handle.t		Tying a handle instead of a file for Tie::File
+dist/Tie-File/t/17_misc_meth.t		CLEAR / EXISTS / DELETE / EXTEND for Tie::File
+dist/Tie-File/t/18_rs_fixrec.t		Like 06_fixrec.t, with unusual record separator
+dist/Tie-File/t/19_cache.t		Read cache exercises and regression for Tie::File
+dist/Tie-File/t/20_cache_full.t		LRU expiry exercises and regression for Tie::File
+dist/Tie-File/t/21_win32.t		Win32 special behavior of Tie::File
+dist/Tie-File/t/22_autochomp.t		'autochomp' option of Tie::File
+dist/Tie-File/t/23_rv_ac_splice.t	Like 07_rv_splice.t, but with autochomp
+dist/Tie-File/t/24_cache_loop.t		Regression for old Tie::File cache bug
+dist/Tie-File/t/25_gen_nocache.t	Like 01_gen.t, but with caching disabled
+dist/Tie-File/t/26_twrite.t		Unit tests for Tie::File::_twrite
+dist/Tie-File/t/27_iwrite.t		Unit tests for Tie::File::_iwrite
+dist/Tie-File/t/28_mtwrite.t		Unit tests for Tie::File::_mtwrite
+dist/Tie-File/t/29a_upcopy.t		Unit tests for Tie::File::_upcopy
+dist/Tie-File/t/29_downcopy.t		Unit tests for Tie::File::_downcopy
+dist/Tie-File/t/30_defer.t		deferred writing feature tests for Tie::File
+dist/Tie-File/t/31_autodefer.t		'autodefer' feature tests for Tie::File
+dist/Tie-File/t/32_defer_misc.t		Like 17_misc_meth.t, but with deferred writing
+dist/Tie-File/t/33_defer_vs.t		Like 30_defer.t, but with varying-length records
+dist/Tie-File/t/40_abs_cache.t		Unit tests for Tie::File::Cache
+dist/Tie-File/t/41_heap.t		Unit tests for Tie::File::Heap
+dist/Tie-File/t/42_offset.t		Unit tests for the offset method
 dist/XSLoader/Makefile.PL	Dynamic Loader makefile writer
 dist/XSLoader/t/XSLoader.t	See if XSLoader works
 dist/XSLoader/XSLoader_pm.PL	Simple XS Loader perl module
@@ -3622,6 +3633,7 @@ ext/B/t/optree_sort.t		inplace sort optimization regression
 ext/B/t/optree_specials.t	BEGIN, END, etc code
 ext/B/t/optree_varinit.t	my,our,local var init optimization
 ext/B/t/o.t		See if O works
+ext/B/t/pollute.t	constants may not pollute the compiler
 ext/B/t/pragma.t	See if user pragmas work.
 ext/B/t/showlex.t	See if B::ShowLex works
 ext/B/t/terse.t		See if B::Terse works
@@ -4002,6 +4014,7 @@ ext/XS-Typemap/Typemap.pm	XS::Typemap extension
 ext/XS-Typemap/Typemap.xs	XS::Typemap extension
 fakesdio.h			stdio in terms of PerlIO
 fakethr.h			Fake threads header
+feature.h			Feature header
 form.h				Public declarations for formats
 generate_uudmap.c		Generate uudmap.h, the uuencode decoding map
 genpacksizetables.pl		Generate the size tables for pack/unpack
@@ -4236,6 +4249,7 @@ lib/overload.pm			Module for overloading perl operators
 lib/overload.t			See if operator overloading works
 lib/perl5db.pl			Perl debugging routines
 lib/perl5db.t			Tests for the Perl debugger
+lib/perl5db/t/break-on-dot	Test script used by perl5db.t
 lib/perl5db/t/breakpoint-bug	Test script used by perl5db.t
 lib/perl5db/t/disable-breakpoints-1	Test script used by perl5db.t
 lib/perl5db/t/disable-breakpoints-2	Test script used by perl5db.t
@@ -4251,6 +4265,8 @@ lib/perl5db/t/rt-61222		Tests for the Perl debugger
 lib/perl5db/t/rt-66110		Tests for the Perl debugger
 lib/perl5db/t/symbol-table-bug	Tests for the Perl debugger
 lib/perl5db/t/taint		Tests for the Perl debugger
+lib/perl5db/t/uncalled-subroutine	Tests for the Perl debugger
+lib/perl5db/t/with-subroutine		Tests for the Perl debugger
 lib/PerlIO.pm			PerlIO support module
 lib/Pod/Functions.pm		used by pod/splitpod
 lib/Pod/t/eol.t			end of line agnosticism
@@ -4822,6 +4838,7 @@ regcomp.h			Private declarations for above
 regcomp.sym			Data for regnodes.h
 regen/embed_lib.pl		Reads embed.fnc and regen/opcodes
 regen/embed.pl			Produces {embed,embedvar,proto}.h
+regen/feature.pl		Generates feature.pm
 regen/keywords.pl		Program to write keywords.h
 regen/mg_vtable.pl		generate mg_vtable.h
 regen/mk_PL_charclass.pl	Populate the PL_charclass table
@@ -5258,8 +5275,10 @@ t/op/require_errors.t		See if errors from require are reported correctly
 t/op/reset.t			See if reset operator works
 t/op/reverse.t			See if reverse operator works
 t/op/runlevel.t			See if die() works from perl_call_*()
+t/op/select.t			See if 0- and 1-argument select works
 t/op/setpgrpstack.t		See if setpgrp works
 t/op/sigdispatch.t		See if signals are always dispatched
+t/op/sigsystem.t		See if system and SIGCHLD handlers play together nicely
 t/op/sleep.t			See if sleep works
 t/op/smartkve.t			See if smart deref for keys/values/each works
 t/op/smartmatch.t		See if the ~~ operator works

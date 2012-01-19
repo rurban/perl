@@ -3354,8 +3354,16 @@ Perl_moreswitches(pTHX_ const char *s)
     case 'S':			/* OS/2 needs -S on "extproc" line. */
 	break;
 #endif
-    default:
+    case 'e': case 'f': case 'x': case 'E':
+#ifndef ALTERNATE_SHEBANG
+    case 'S':
+#endif
+    case 'V':
 	Perl_croak(aTHX_ "Can't emulate -%.1s on #! line",s);
+    default:
+	Perl_croak(aTHX_
+	    "Unrecognized switch: -%.1s  (-h will show valid options)",s
+	);
     }
     return NULL;
 }
@@ -3889,6 +3897,8 @@ Perl_init_dbargs(pTHX)
 	   It might have entries, and if we just turn off AvREAL(), they will
 	   "leak" until global destruction.  */
 	av_clear(args);
+	if (SvTIED_mg((const SV *)args, PERL_MAGIC_tied))
+	    Perl_croak(aTHX_ "Cannot set tied @DB::args");
     }
     AvREIFY_only(PL_dbargs);
 }

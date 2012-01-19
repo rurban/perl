@@ -5,7 +5,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan( tests => 83 );
+    plan( tests => 85 );
 }
 
 my @c;
@@ -233,6 +233,22 @@ sub {
   ()=caller(0);
 }->();
 pass 'No crash when @DB::args is freed between caller calls';
+
+# This also crashed:
+package glelp;
+sub TIEARRAY { bless [] }
+sub EXTEND   {         }
+sub CLEAR    {        }
+sub FETCH    { $_[0][$_[1]] }
+sub STORE    { $_[0][$_[1]] = $_[2] }
+package DB;
+tie @args, 'glelp';
+eval { sub { () = caller 0; } ->(1..3) };
+::like $@, qr "^Cannot set tied \@DB::args at ",
+              'caller dies with tie @DB::args';
+::ok tied @args, '@DB::args is still tied';
+untie @args;
+package main;
 
 $::testing_caller = 1;
 
