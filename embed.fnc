@@ -21,7 +21,8 @@
 :         proto.h: add __attribute__malloc__
 :
 :   b  Binary backward compatibility; function is a macro
-:      but has also Perl_ implementation (which is exported):
+:      but has also Perl_ implementation (which is exported); often
+:      implemented in mathoms.c:
 :
 :         add entry to the list of exported symbols;
 :         don't define PERL_ARGS_ASSERT_FOO
@@ -30,7 +31,7 @@
 :
 :         proto.h: add __attribute__deprecated__
 :
-:   d  Function has documentation with its source:
+:   d  Function has documentation in the source:
 :
 :         enables 'no docs for foo" warning in autodoc.pl
 :
@@ -602,14 +603,14 @@ Ap	|UV	|to_uni_upper	|UV c|NN U8 *p|NN STRLEN *lenp
 Ap	|UV	|to_uni_title	|UV c|NN U8 *p|NN STRLEN *lenp
 #ifdef PERL_IN_UTF8_C
 sR	|U8	|to_lower_latin1|const U8 c|NULLOK U8 *p|NULLOK STRLEN *lenp
-p	|UV	|_to_fold_latin1|const U8 c|NN U8 *p|NN STRLEN *lenp|const U8 flags
+p	|UV	|_to_fold_latin1|const U8 c|NN U8 *p|NN STRLEN *lenp|const bool flags
 #endif
 #if defined(PERL_IN_UTF8_C) || defined(PERL_IN_PP_C)
 p	|UV	|_to_upper_title_latin1|const U8 c|NN U8 *p|NN STRLEN *lenp|const char S_or_s
 #endif
 Ap	|UV	|to_uni_lower	|UV c|NN U8 *p|NN STRLEN *lenp
 Amp	|UV	|to_uni_fold	|UV c|NN U8 *p|NN STRLEN *lenp
-AMp	|UV	|_to_uni_fold_flags|UV c|NN U8 *p|NN STRLEN *lenp|U8 flags
+AMp	|UV	|_to_uni_fold_flags|UV c|NN U8 *p|NN STRLEN *lenp|const bool flags
 ApPR	|bool	|is_uni_alnum_lc|UV c
 ApPR	|bool	|is_uni_idfirst_lc|UV c
 ApPR	|bool	|is_uni_alpha_lc|UV c
@@ -763,6 +764,7 @@ p	|int	|magic_settaint	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setuvar	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setvec	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_setutf8	|NN SV* sv|NN MAGIC* mg
+p	|int	|magic_setvstring|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_set_all_env|NN SV* sv|NN MAGIC* mg
 p	|U32	|magic_sizepack	|NN SV* sv|NN MAGIC* mg
 p	|int	|magic_wipepack	|NN SV* sv|NN MAGIC* mg
@@ -1352,7 +1354,7 @@ Apd	|void	|sv_vsetpvfn	|NN SV *const sv|NN const char *const pat|const STRLEN pa
 				|NULLOK va_list *const args|NULLOK SV **const svargs \
 				|const I32 svmax|NULLOK bool *const maybe_tainted
 ApR	|NV	|str_to_version	|NN SV *sv
-Ap	|SV*	|swash_init	|NN const char* pkg|NN const char* name|NN SV* listsv|I32 minbits|I32 none
+ApR	|SV*	|swash_init	|NN const char* pkg|NN const char* name|NN SV* listsv|I32 minbits|I32 none
 Ap	|UV	|swash_fetch	|NN SV *swash|NN const U8 *ptr|bool do_utf8
 #ifdef PERL_IN_REGCOMP_C
 EiMR	|SV*	|add_cp_to_invlist	|NULLOK SV* invlist|const UV cp
@@ -1370,6 +1372,7 @@ EiMR	|SV*	|invlist_clone	|NN SV* const invlist
 EiMR	|UV*	|get_invlist_iter_addr	|NN SV* invlist
 EiM	|void	|invlist_iterinit|NN SV* invlist
 EsMR	|bool	|invlist_iternext|NN SV* invlist|NN UV* start|NN UV* end
+EsMR	|IV	|invlist_search	|NN SV* const invlist|const UV cp
 #endif
 #if defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_UTF8_C)
 EXpM	|void	|_invlist_intersection	|NN SV* const a|NN SV* const b|NN SV** i
@@ -1381,16 +1384,26 @@ EXMpR	|HV*	|_swash_inversion_hash	|NN SV* const swash
 EXMpR	|SV*	|_new_invlist	|IV initial_size
 EXMpR	|SV*	|_swash_to_invlist	|NN SV* const swash
 EXMp	|void	|_append_range_to_invlist   |NN SV* const invlist|const UV start|const UV end
+EXMp	|void	|_invlist_populate_swatch   |NN SV* const invlist|const UV start|const UV end|NN U8* swatch
+#endif
+#if defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_REGEXEC_C) || defined(PERL_IN_UTF8_C)
+EXp	|SV*	|_core_swash_init|NN const char* pkg|NN const char* name|NN SV* listsv|I32 minbits \
+                |I32 none|bool return_if_undef|NULLOK SV* invlist \
+		|bool passed_in_invlist_has_user_defined_property
+EXMpR	|SV*	|_invlist_contents|NN SV* const invlist
 #endif
 Ap	|void	|taint_env
 Ap	|void	|taint_proper	|NULLOK const char* f|NN const char *const s
 Apd	|UV	|to_utf8_case	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp \
 				|NN SV **swashp|NN const char *normal|NULLOK const char *special
-Apd	|UV	|to_utf8_lower	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-Apd	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-Apd	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-Ampd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
-AMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags
+Abmd	|UV	|to_utf8_lower	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_lower_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_upper	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_upper_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_title	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_title_flags	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|const bool flags|NULLOK bool* tainted_ptr
+Abmd	|UV	|to_utf8_fold	|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp
+AMp	|UV	|_to_utf8_fold_flags|NN const U8 *p|NN U8* ustrp|NULLOK STRLEN *lenp|U8 flags|NULLOK bool* tainted_ptr
 #if defined(PERL_IN_MG_C) || defined(PERL_IN_PP_C)
 p	|bool	|translate_substr_offsets|STRLEN curlen|IV pos1_iv \
 					 |bool pos1_is_uv|IV len_iv \
@@ -1954,6 +1967,9 @@ ERs	|bool	|reginclass	|NULLOK const regexp * const prog|NN const regnode * const
 Es	|CHECKPOINT|regcppush	|I32 parenfloor
 Es	|char*	|regcppop	|NN const regexp *rex
 ERsn	|U8*	|reghop3	|NN U8 *s|I32 off|NN const U8 *lim
+ERsM	|SV*	|core_regclass_swash|NULLOK const regexp *prog \
+				|NN const struct regnode *node|bool doinit \
+				|NULLOK SV **listsvp|NULLOK SV **altsvp
 #ifdef XXX_dmq
 ERsn	|U8*	|reghop4	|NN U8 *s|I32 off|NN const U8 *llim \
 				|NN const U8 *rlim
@@ -2142,8 +2158,9 @@ sn	|NV|mulexp10	|NV value|I32 exponent
 
 #if defined(PERL_IN_UTF8_C)
 sRn	|STRLEN	|is_utf8_char_slow|NN const U8 *s|const STRLEN len
+sRM	|UV	|check_locale_boundary_crossing|NN const U8* const p|const UV result|NN U8* const ustrp|NN STRLEN *lenp
 sR	|bool	|is_utf8_common	|NN const U8 *const p|NN SV **swash|NN const char * const swashname
-sR	|SV*	|swash_get	|NN SV* swash|UV start|UV span
+sR	|SV*	|swatch_get	|NN SV* swash|UV start|UV span
 #endif
 
 Apd	|void	|sv_setsv_flags	|NN SV *dstr|NULLOK SV *sstr|const I32 flags
@@ -2568,6 +2585,7 @@ Anop	|void	|clone_params_del|NN CLONE_PARAMS *param
 op	|void	|populate_isa	|NN const char *name|STRLEN len|...
 
 : Used in keywords.c and toke.c
-op	|bool	|feature_is_enabled|NN const char *const name|STRLEN namelen
+Xop	|bool	|feature_is_enabled|NN const char *const name \
+		|STRLEN namelen
 
 : ex: set ts=8 sts=4 sw=4 noet:

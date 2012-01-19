@@ -774,6 +774,7 @@ PP(pp_rv2av)
 	}
 	sv = SvRV(sv);
 	if (SvTYPE(sv) != type)
+	    /* diag_listed_as: Not an ARRAY reference */
 	    DIE(aTHX_ "Not %s reference", is_pp_rv2av ? an_array : a_hash);
 	if (PL_op->op_flags & OPf_REF) {
 	    SETs(sv);
@@ -994,6 +995,8 @@ PP(pp_aassign)
 	case SVt_PVAV:
 	    ary = MUTABLE_AV(sv);
 	    magic = SvMAGICAL(ary) != 0;
+	    ENTER;
+	    SAVEFREESV(SvREFCNT_inc_simple_NN(sv));
 	    av_clear(ary);
 	    av_extend(ary, lastrelem - relem);
 	    i = 0;
@@ -1014,6 +1017,7 @@ PP(pp_aassign)
 	    }
 	    if (PL_delaymagic & DM_ARRAY_ISA)
 		SvSETMAGIC(MUTABLE_SV(ary));
+	    LEAVE;
 	    break;
 	case SVt_PVHV: {				/* normal hash */
 		SV *tmpstr;
@@ -1021,6 +1025,8 @@ PP(pp_aassign)
 
 		hash = MUTABLE_HV(sv);
 		magic = SvMAGICAL(hash) != 0;
+		ENTER;
+		SAVEFREESV(SvREFCNT_inc_simple_NN(sv));
 		hv_clear(hash);
 		firsthashrelem = relem;
 
@@ -1057,6 +1063,7 @@ PP(pp_aassign)
 		    do_oddball(hash, relem, firstrelem);
 		    relem++;
 		}
+		LEAVE;
 	    }
 	    break;
 	default:
@@ -1383,7 +1390,10 @@ PP(pp_match)
 		s = RX_OFFS(rx)[i].start + truebase;
 	        if (RX_OFFS(rx)[i].end < 0 || RX_OFFS(rx)[i].start < 0 ||
 		    len < 0 || len > strend - s)
-		    DIE(aTHX_ "panic: pp_match start/end pointers");
+		    DIE(aTHX_ "panic: pp_match start/end pointers, i=%ld, "
+			"start=%ld, end=%ld, s=%p, strend=%p, len=%"UVuf,
+			(long) i, (long) RX_OFFS(rx)[i].start,
+			(long)RX_OFFS(rx)[i].end, s, strend, (UV) len);
 		sv_setpvn(*SP, s, len);
 		if (DO_UTF8(TARG) && is_utf8_string((U8*)s, len))
 		    SvUTF8_on(*SP);
@@ -1773,7 +1783,7 @@ PP(pp_helem)
     he = hv_fetch_ent(hv, keysv, lval && !defer, hash);
     svp = he ? &HeVAL(he) : NULL;
     if (lval) {
-	if (!svp || *svp == &PL_sv_undef) {
+	if (!svp || !*svp || *svp == &PL_sv_undef) {
 	    SV* lv;
 	    SV* key2;
 	    if (!defer) {
@@ -1803,7 +1813,7 @@ PP(pp_helem)
 	    RETURN;
 	}
     }
-    sv = (svp ? *svp : &PL_sv_undef);
+    sv = (svp && *svp ? *svp : &PL_sv_undef);
     /* Originally this did a conditional C<sv = sv_mortalcopy(sv)>; this
      * was to make C<local $tied{foo} = $tied{foo}> possible.
      * However, it seems no longer to be needed for that purpose, and
@@ -1834,7 +1844,7 @@ PP(pp_iter)
     EXTEND(SP, 1);
     cx = &cxstack[cxstack_ix];
     if (!CxTYPE_is_LOOP(cx))
-	DIE(aTHX_ "panic: pp_iter");
+	DIE(aTHX_ "panic: pp_iter, type=%u", CxTYPE(cx));
 
     itersvp = CxITERVAR(cx);
     if (CxTYPE(cx) == CXt_LOOP_LAZYSV) {
@@ -2112,7 +2122,7 @@ PP(pp_subst)
 
   force_it:
     if (!pm || !s)
-	DIE(aTHX_ "panic: pp_subst");
+	DIE(aTHX_ "panic: pp_subst, pm=%p, s=%p", pm, s);
 
     strend = s + len;
     slen = RX_MATCH_UTF8(rx) ? utf8_length((U8*)s, (U8*)strend) : len;
@@ -2491,7 +2501,8 @@ PP(pp_leavesub)
 	MARK = newsp + 1;
 	if (MARK <= SP) {
 	    if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+		if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1
+		     && !SvMAGICAL(TOPs)) {
 		    *MARK = SvREFCNT_inc(TOPs);
 		    FREETMPS;
 		    sv_2mortal(*MARK);
@@ -2503,7 +2514,8 @@ PP(pp_leavesub)
 		    SvREFCNT_dec(sv);
 		}
 	    }
-	    else if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+	    else if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1
+		     && !SvMAGICAL(TOPs)) {
 		*MARK = TOPs;
 	    }
 	    else
@@ -2517,7 +2529,8 @@ PP(pp_leavesub)
     }
     else if (gimme == G_ARRAY) {
 	for (MARK = newsp + 1; MARK <= SP; MARK++) {
-	    if (!SvTEMP(*MARK) || SvREFCNT(*MARK) != 1) {
+	    if (!SvTEMP(*MARK) || SvREFCNT(*MARK) != 1
+		 || SvMAGICAL(*MARK)) {
 		*MARK = sv_mortalcopy(*MARK);
 		TAINT_NOT;	/* Each item is independent */
 	    }
@@ -2714,6 +2727,9 @@ try_autoload:
 		MARK++;
 	    }
 	}
+	if ((cx->blk_u16 & OPpENTERSUB_LVAL_MASK) == OPpLVAL_INTRO &&
+	    !CvLVALUE(cv))
+	    DIE(aTHX_ "Can't modify non-lvalue subroutine call");
 	/* warning must come *after* we fully set up the context
 	 * stuff so that __WARN__ handlers can safely dounwind()
 	 * if they want to
@@ -2885,6 +2901,7 @@ Perl_vivify_ref(pTHX_ SV *sv, U32 to_what)
 	}
 	SvROK_on(sv);
 	SvSETMAGIC(sv);
+	SvGETMAGIC(sv);
     }
     if (SvGMAGICAL(sv)) {
 	/* copy the sv without magic to prevent magic from being
@@ -2973,9 +2990,10 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
 	    if (!packname ||
 		((UTF8_IS_START(*packname) && DO_UTF8(sv))
 		    ? !isIDFIRST_utf8((U8*)packname)
-		    : !isIDFIRST(*packname)
+		    : !isIDFIRST_L1((U8)*packname)
 		))
 	    {
+		/* diag_listed_as: Can't call method "%s" without a package or object reference */
 		Perl_croak(aTHX_ "Can't call method \"%"SVf"\" %s",
 			   SVfARG(meth),
 			   SvOK(sv) ? "without a package or object reference"

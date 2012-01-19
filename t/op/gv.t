@@ -192,7 +192,10 @@ is (*{*x{GLOB}}, "*main::STDOUT");
     my $a = "SYM000";
     ok(!defined *{$a});
 
-    ok(!defined @{$a});
+    {
+	no warnings 'deprecated';
+	ok(!defined @{$a});
+    }
     ok(!defined *{$a});
 
     {
@@ -614,7 +617,7 @@ foreach my $type (qw(integer number string)) {
     use warnings;
     my $str = "$glob";
     is($warn, '', "RT #65582 anon glob stringification shouldn't warn");
-    is($str,  '*__ANON__::$__ANONIO__',
+    is($str,  '*__ANON__::__ANONIO__',
 	"RT #65582/#96326 anon glob stringification");
 }
 

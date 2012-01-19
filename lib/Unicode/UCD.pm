@@ -6,7 +6,7 @@ no warnings 'surrogate';    # surrogates can be inputs to this
 use charnames ();
 use Unicode::Normalize qw(getCombinClass NFD);
 
-our $VERSION = '0.37';
+our $VERSION = '0.39';
 
 use Storable qw(dclone);
 
@@ -1623,8 +1623,16 @@ sub prop_aliases ($) {
                 # Here, it wasn't one of the gc or script single-form
                 # extensions.  It could be a block property single-form
                 # extension.  An 'in' prefix definitely means that, and should
-                # be looked up without the prefix.
-                my $began_with_in = $loose =~ s/^in//;
+                # be looked up without the prefix.  However, starting in
+                # Unicode 6.1, we have to special case 'indic...', as there
+                # is a property that begins with that name.   We shouldn't
+                # strip the 'in' from that.   I'm (khw) generalizing this to
+                # 'indic' instead of the single property, because I suspect
+                # that others of this class may come along in the future.
+                # However, this could backfire and a block created whose name
+                # begins with 'dic...', and we would want to strip the 'in'.
+                # At which point this would have to be tweaked.
+                my $began_with_in = $loose =~ s/^in(?!dic)//;
                 @list = prop_value_aliases("block", $loose);
                 if (@list) {
                     map { $_ =~ s/^/In_/ } @list;
@@ -1979,8 +1987,16 @@ sub prop_invlist ($) {
         my ($hex_begin, $hex_end) = split "\t", $range;
         my $begin = hex $hex_begin;
 
-        # Add the beginning of the range
-        push @invlist, $begin;
+        # If the new range merely extends the old, we remove the marker
+        # created the last time through the loop for the old's end, which
+        # causes the new one's end to be used instead.
+        if (@invlist && $begin == $invlist[-1]) {
+            pop @invlist;
+        }
+        else {
+            # Add the beginning of the range
+            push @invlist, $begin;
+        }
 
         if (defined $hex_end) { # The next item starts with the code point 1
                                 # beyond the end of the range.
@@ -2225,13 +2241,30 @@ of calling C<prop_invmap>() with the "Script Extensions" property:
 
  @scripts_ranges  @scripts_maps
       ...
-      0x0953      Deva
-      0x0964      [ Beng Deva Guru Orya ]
-      0x0966      Deva
+      0x0953      Devanagari
+      0x0964      [ Bengali, Devanagari, Gurumukhi, Oriya ]
+      0x0966      Devanagari
       0x0970      Common
 
 Here, the code points 0x964 and 0x965 are used in the Bengali,
 Devanagari, Gurmukhi, and Oriya  scripts.
+
+The Name_Alias property is of this form.  But each scalar consists of two
+components:  1) the name, and 2) the type of alias this is.  They are
+separated by a colon and a space.  In Unicode 6.0, there are two alias types:
+C<"correction">, which indicates that the name is a corrected form for the
+original name (which remains valid) for the same code point; and C<"control">,
+which adds a new name for a control character.
+
+For example,
+
+ @aliases_ranges  @alias_maps
+    ...
+    0x01A2        LATIN CAPITAL LETTER GHA: correction
+    0x01A3        LATIN SMALL LETTER GHA: correction
+
+Unicode 6.1 will introduce other types, and some map entries will be lists of
+multiple name-alias pairs for a single code point.
 
 =item C<r>
 
@@ -2452,10 +2485,6 @@ Note that the inversion maps returned for the C<Case_Folding> and
 C<Simple_Case_Folding> properties do not include the Turkic-locale mappings.
 Use L</casefold()> for these.
 
-The C<Name_Alias> property is potentially undergoing signficant revision by
-Unicode at the time of this writing.  The format of the values returned for it
-may change substantially in future Unicode versions.
-
 C<prop_invmap> does not know about any user-defined properties, and will
 return C<undef> if called with one of those.
 
@@ -2503,6 +2532,9 @@ RETRY:
     # Try to get the map swash for the property.  They have 'To' prepended to
     # the property name, and 32 means we will accept 32 bit return values.
     my $swash = utf8::SWASHNEW(__PACKAGE__, "To$prop", undef, 32, 0);
+
+    # If there are multiple entries for a single code point;
+    my $has_multiples = 0;
 
     # If didn't find it, could be because needs a proxy.  And if was the
     # 'Block' or 'Name' property, use a proxy even if did find it.  Finding it
@@ -2780,13 +2812,50 @@ RETRY:
                   ? hex $hex_end
                   : $begin;
 
-        # If the property doesn't have a range that begins at 0, add one that
-        # maps to the default value (for missing ranges).
+        # Each time through the loop (after the first):
+        # $invlist[-2] contains the beginning of the previous range processed
+        # $invlist[-1] contains the end+1 of the previous range processed
+        # $invmap[-2] contains the value of the previous range processed
+        # $invmap[-1] contains the default value for missing ranges ($missing)
+        #
+        # Thus, things are set up for the typical case of a new non-adjacent
+        # range of non-missings to be added.  But, if the new range is
+        # adjacent, it needs to replace the [-1] elements; and if the new
+        # range is a multiple value of the previous one, it needs to be added
+        # to the [-2] map element.
+
+        # The first time through, everything will be empty.  If the property
+        # doesn't have a range that begins at 0, add one that maps to $missing
         if (! @invlist) {
             if ($begin != 0) {
                 push @invlist, 0;
                 push @invmap, $missing;
             }
+        }
+        elsif (@invlist > 1 && $invlist[-2] == $begin) {
+
+            # Here we handle the case where the input has multiple entries for
+            # each code point.  mktables should have made sure that each such
+            # range contains only one code point.  At this point, $invlist[-1]
+            # is the $missing that was added at the end of the last loop
+            # iteration, and [-2] is the last real input code point, and that
+            # code point is the same as the one we are adding now, making the
+            # new one a multiple entry.  Add it to the existing entry, either
+            # by pushing it to the existing list of multiple entries, or
+            # converting the single current entry into a list with both on it.
+            # This is all we need do for this iteration.
+
+            if ($end != $begin) {
+                croak __PACKAGE__, "Multiple maps per code point in '$prop' require single-element ranges: begin=$begin, end=$end, map=$map";
+            }
+            if (! ref $invmap[-2]) {
+                $invmap[-2] = [ $invmap[-2], $map ];
+            }
+            else {
+                push @{$invmap[-2]}, $map;
+            }
+            $has_multiples = 1;
+            next;
         }
         elsif ($invlist[-1] == $begin) {
 
@@ -2805,7 +2874,10 @@ RETRY:
             # We now see that it should be
             # 12 => XYZ
             # 18 => $missing
-            if (@invlist > 1 && $invmap[-2] eq $map) {
+            if (@invlist > 1 && ( (defined $map)
+                                  ? $invmap[-2] eq $map
+                                  : $invmap[-2] eq 'Y'))
+            {
                 $invlist[-1] = $end + 1;
                 next;
             }
@@ -3011,6 +3083,9 @@ RETRY:
 
         # All others are simple scalars
         $format = 's';
+    }
+    if ($has_multiples &&  $format !~ /l/) {
+	croak __PACKAGE__, "Wrong format '$format' for prop_invmap('$prop'); should indicate has lists";
     }
 
     return (\@invlist, \@invmap, $format, $missing);

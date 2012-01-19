@@ -479,7 +479,7 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5156delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5157delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -1055,8 +1055,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5156delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5156delta.pod
+pod/perl5157delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5157delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1114,7 +1114,6 @@ install.html: all installhtml
       --htmlroot=$(privlib)/html  \
       --splithead=pod/perlipc     \
       --splititem=pod/perlfunc    \
-      --libpods=perlfunc:perlguts:perlvar:perlrun:perlop \
       --ignore=Porting/Maintainers.pm,Porting/pumpkin.pod,Porting/repository.pod \
       --verbose
 
@@ -1153,6 +1152,7 @@ CHMOD_W = chmod +w
 #	opcode.pl:	opcode.h opnames.h pp_proto.h
 #	regcomp.pl:	regnodes.h
 #	warnings.pl:	warnings.h lib/warnings.pm
+#	feature.pl:	feature.h lib/feature.pm
 # The correct versions should be already supplied with the perl kit,
 # in case you don't have perl available.
 # To force them to be regenerated, run
@@ -1161,7 +1161,8 @@ CHMOD_W = chmod +w
 # (make regen_headers is kept for backwards compatibility)
 
 AUTOGEN_FILES = opcode.h opnames.h pp_proto.h proto.h embed.h embedvar.h \
-		perlapi.h perlapi.c regnodes.h warnings.h lib/warnings.pm
+		perlapi.h perlapi.c regnodes.h warnings.h lib/warnings.pm \
+		lib/feature.pm feature.h
 
 .PHONY: regen_headers regen_all
 

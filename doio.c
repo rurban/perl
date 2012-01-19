@@ -149,7 +149,8 @@ Perl_do_openn(pTHX_ GV *gv, register const char *oname, I32 len, int as_raw,
 	int ismodifying;
 
 	if (num_svs != 0) {
-	     Perl_croak(aTHX_ "panic: sysopen with multiple args");
+	    Perl_croak(aTHX_ "panic: sysopen with multiple args, num_svs=%ld",
+		       (long) num_svs);
 	}
 	/* It's not always
 
@@ -1278,21 +1279,18 @@ Perl_my_stat_flags(pTHX_ const U32 flags)
 	io = GvIO(gv);
         do_fstat_have_io:
         PL_laststype = OP_STAT;
-        PL_statgv = gv;
+        PL_statgv = gv ? gv : (GV *)io;
         sv_setpvs(PL_statname, "");
         if(io) {
 	    if (IoIFP(io)) {
 	        return (PL_laststatval = PerlLIO_fstat(PerlIO_fileno(IoIFP(io)), &PL_statcache));
             } else if (IoDIRP(io)) {
                 return (PL_laststatval = PerlLIO_fstat(my_dirfd(IoDIRP(io)), &PL_statcache));
-            } else {
-		report_evil_fh(gv);
-                return (PL_laststatval = -1);
             }
-	} else {
-	    report_evil_fh(gv);
-            return (PL_laststatval = -1);
         }
+	PL_laststatval = -1;
+	report_evil_fh(gv);
+	return -1;
     }
     else if (PL_op->op_private & OPpFT_STACKED) {
 	return PL_laststatval;
@@ -1339,12 +1337,13 @@ Perl_my_lstat_flags(pTHX_ const U32 flags)
 		Perl_croak(aTHX_ no_prev_lstat);
 	    return PL_laststatval;
 	}
+	PL_laststatval = -1;
 	if (ckWARN(WARN_IO)) {
 	    Perl_warner(aTHX_ packWARN(WARN_IO),
 		 	     "Use of -l on filehandle %"HEKf,
 			      HEKfARG(GvENAME_HEK(cGVOP_gv)));
 	}
-	return (PL_laststatval = -1);
+	return -1;
     }
     else if (PL_op->op_private & OPpFT_STACKED) {
       if (PL_laststype != OP_LSTAT)

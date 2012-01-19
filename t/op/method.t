@@ -13,7 +13,7 @@ BEGIN {
 use strict;
 no warnings 'once';
 
-plan(tests => 83);
+plan(tests => 85);
 
 @A::ISA = 'B';
 @B::ISA = 'C';
@@ -85,6 +85,11 @@ is(A->d, "B::d2");		# Update hash table;
 
 undef &B::d;
 delete $B::{d};
+is(A->d, "C::d");
+
+eval 'sub B::d {"B::d2.5"}';
+A->d;				# Update hash table;
+my $glob = \delete $B::{d};	# non-void context; hang on to the glob
 is(A->d, "C::d");		# Update hash table;
 
 eval 'sub B::d {"B::d3"}';	# Import now.
@@ -167,7 +172,10 @@ is(A->eee(), "new B: In A::eee, 4");	# Which sticks
 
 {
     no strict 'refs';
+    no warnings 'deprecated';
     # this test added due to bug discovery (in 5.004_04, fb73857aa0bfa8ed)
+    # Possibly kill this test now that defined @::array is finally properly
+    # deprecated?
     is(defined(@{"unknown_package::ISA"}) ? "defined" : "undefined", "undefined");
 }
 
@@ -352,4 +360,12 @@ is $kalled, 1, 'calling a class method via a magic variable';
     {},
 	"DESTROY creating a new reference to the object generates a warning."
     );
+}
+
+# [perl #43663]
+{
+    $::{"Just"} = \1;
+    sub Just::a_japh { return "$_[0] another Perl hacker," }
+    is eval { "Just"->a_japh }, "Just another Perl hacker,",
+	'constants do not interfere with class methods';
 }

@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan tests => 27;
+plan tests => 30;
 
 # [perl #19566]: sv_gets writes directly to its argument via
 # TARG. Test that we respect SvREADONLY.
@@ -255,6 +255,19 @@ if (exists $::{$yunk}) {
 ok !defined *$yunk, '<> does not autovivify';
 readline($yunk);
 ok !defined *$yunk, "readline does not autovivify";
+
+# [perl #97988] PL_last_in_gv could end up pointing to junk.
+#               Now glob copies set PL_last_in_gv to null when unglobbed.
+open *foom,'test.pl';
+my %f;
+$f{g} = *foom;
+readline $f{g};
+$f{g} = 3; # PL_last_in_gv should be cleared now
+is tell, -1, 'tell returns -1 after last gv is unglobbed';
+$f{g} = *foom; # since PL_last_in_gv is null, this should have no effect
+is tell, -1, 'unglobbery of last gv nullifies PL_last_in_gv';
+readline *{$f{g}};
+is tell, tell *foom, 'readline *$glob_copy sets PL_last_in_gv';
 
 __DATA__
 moo

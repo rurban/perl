@@ -5,7 +5,7 @@ BEGIN {
     chdir 't' if -d 't';
     @INC = '../lib';
     require './test.pl';
-    plan (tests => 150);
+    plan (tests => 156);
 }
 
 # Test that defined() returns true for magic variables created on the fly,
@@ -179,6 +179,14 @@ is $`, 'foo';
 is $&, 'bar';
 is $', 'baz';
 is $+, 'a';
+
+# [perl #24237]
+for (qw < ` & ' >) {
+ fresh_perl_is
+  qq < \@$_; q "fff" =~ /(?!^)./; print "[\$$_]\\n" >,
+  "[f]\n", {},
+  "referencing \@$_ before \$$_ etc. still saws off ampersands";
+}
 
 # $"
 @a = qw(foo bar baz);
@@ -408,7 +416,7 @@ SKIP: {
 }
 
 SKIP:  {
-    skip_if_miniperl("miniperl can't rely on loading %Errno", 1);
+    skip_if_miniperl("miniperl can't rely on loading %Errno", 2);
     # Make sure that Errno loading doesn't clobber $!
 
     undef %Errno::;
@@ -417,6 +425,14 @@ SKIP:  {
     open(FOO, "nonesuch"); # Generate ENOENT
     my %errs = %{"!"}; # Cause Errno.pm to be loaded at run-time
     ok ${"!"}{ENOENT};
+
+    # Make sure defined(*{"!"}) before %! does not stop %! from working
+    is
+      runperl(
+	prog => 'BEGIN { defined *{q-!-} } print qq-ok\n- if tied %!',
+      ),
+     "ok\n",
+     'defined *{"!"} does not stop %! from working';
 }
 
 # Check that we don't auto-load packages
@@ -527,6 +543,24 @@ foreach my $sig (qw(__DIE__ _BOGUS_HOOK KILL THIRSTY)) {
     $! = 9999;
     is int $!, 9999, q{[perl #72850] Core dump in bleadperl from perl -e '$! = 9999; $a = $!;'};
 
+}
+
+# %+ %-
+SKIP: {
+    skip_if_miniperl("No XS in miniperl", 2);
+    # Make sure defined(*{"+"}) before %+ does not stop %+ from working
+    is
+      runperl(
+	prog => 'BEGIN { defined *{q-+-} } print qq-ok\n- if tied %+',
+      ),
+     "ok\n",
+     'defined *{"+"} does not stop %+ from working';
+    is
+      runperl(
+	prog => 'BEGIN { defined *{q=-=} } print qq-ok\n- if tied %-',
+      ),
+     "ok\n",
+     'defined *{"-"} does not stop %- from working';
 }
 
 SKIP: {

@@ -102,6 +102,7 @@ recursive, but it's recursive on basic blocks, not on tree nodes.
 #define PERL_IN_OP_C
 #include "perl.h"
 #include "keywords.h"
+#include "feature.h"
 
 #define CALL_PEEP(o) PL_peepp(aTHX_ o)
 #define CALL_RPEEP(o) PL_rpeepp(aTHX_ o)
@@ -836,7 +837,8 @@ Perl_op_contextualize(pTHX_ OP *o, I32 context)
 	case G_ARRAY:  return list(o);
 	case G_VOID:   return scalarvoid(o);
 	default:
-	    Perl_croak(aTHX_ "panic: op_contextualize bad context");
+	    Perl_croak(aTHX_ "panic: op_contextualize bad context %ld",
+		       (long) context);
 	    return o;
     }
 }
@@ -1730,6 +1732,8 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 
     assert( (o->op_flags & OPf_WANT) != OPf_WANT_VOID );
 
+    if (type == OP_PRTF || type == OP_SPRINTF) type = OP_ENTERSUB;
+
     switch (o->op_type) {
     case OP_UNDEF:
 	localize = 0;
@@ -1756,7 +1760,7 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 	                   |(OPpENTERSUB_INARGS * (type == OP_LEAVESUBLV));
 	    PL_modcount = RETURN_UNLIMITED_NUMBER;
 	    if (type == OP_GREPSTART || type == OP_ENTERSUB || type == OP_REFGEN) {
-		/* Backward compatibility mode: */
+		/* Potential lvalue context: */
 		o->op_private |= OPpENTERSUB_INARGS;
 		break;
 	    }
@@ -1776,29 +1780,6 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 		while (kid->op_sibling)
 		    kid = kid->op_sibling;
 		if (!(kid->op_type == OP_NULL && kid->op_targ == OP_RV2CV)) {
-		    /* Indirect call */
-		    if (kid->op_type == OP_METHOD_NAMED
-			|| kid->op_type == OP_METHOD)
-		    {
-			UNOP *newop;
-
-			NewOp(1101, newop, 1, UNOP);
-			newop->op_type = OP_RV2CV;
-			newop->op_ppaddr = PL_ppaddr[OP_RV2CV];
-			newop->op_first = NULL;
-                        newop->op_next = (OP*)newop;
-			kid->op_sibling = (OP*)newop;
-			newop->op_private |= OPpLVAL_INTRO;
-			newop->op_private &= ~1;
-			break;
-		    }
-
-		    if (kid->op_type != OP_RV2CV)
-			Perl_croak(aTHX_
-				   "panic: unexpected lvalue entersub "
-				   "entry via type/targ %ld:%"UVuf,
-				   (long)kid->op_type, (UV)kid->op_targ);
-		    kid->op_private |= OPpLVAL_INTRO;
 		    break;	/* Postpone until runtime */
 		}
 
@@ -1812,25 +1793,12 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 			       "entry via type/targ %ld:%"UVuf,
 			       (long)kid->op_type, (UV)kid->op_targ);
 		if (kid->op_type != OP_GV) {
-		    /* Restore RV2CV to check lvalueness */
-		  restore_2cv:
-		    if (kid->op_next && kid->op_next != kid) { /* Happens? */
-			okid->op_next = kid->op_next;
-			kid->op_next = okid;
-		    }
-		    else
-			okid->op_next = NULL;
-		    okid->op_type = OP_RV2CV;
-		    okid->op_targ = 0;
-		    okid->op_ppaddr = PL_ppaddr[OP_RV2CV];
-		    okid->op_private |= OPpLVAL_INTRO;
-		    okid->op_private &= ~1;
 		    break;
 		}
 
 		cv = GvCV(kGVOP_gv);
 		if (!cv)
-		    goto restore_2cv;
+		    break;
 		if (CvLVALUE(cv))
 		    break;
 	    }
@@ -2567,7 +2535,9 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
           && (gv = cGVOPx_gv(cUNOPx(left)->op_first))
               ? varname(gv, isary ? '@' : '%', 0, NULL, 0, 1)
               : NULL
-        : varname(NULL, isary ? '@' : '%', left->op_targ, NULL, 0, 1);
+        : varname(
+           (GV *)PL_compcv, isary ? '@' : '%', left->op_targ, NULL, 0, 1
+          );
       if (name)
 	Perl_warner(aTHX_ packWARN(WARN_MISC),
              "Applying %s to %"SVf" will act on scalar(%"SVf")",
@@ -4672,30 +4642,11 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	HV * const hinthv = GvHV(PL_hintgv);
 	const bool hhoff = !hinthv || !(PL_hints & HINT_LOCALIZE_HH);
 
-	/* Turn features off */
-	if (hhoff)
-	    /* avoid loading feature.pm */
-	    PL_hints &= ~HINT_UNI_8_BIT;
-	else {
-	    ENTER_with_name("load_feature");
-	    Perl_load_module(aTHX_
-		PERL_LOADMOD_DENY, newSVpvs("feature"), NULL, NULL
-	    );
-	}
-
-	/* If we request a version >= 5.9.5, load feature.pm with the
+	/* Enable the
 	 * feature bundle that corresponds to the required version. */
 	use_version = sv_2mortal(new_version(use_version));
+	S_enable_feature_bundle(aTHX_ use_version);
 
-	if (vcmp(use_version,
-		 sv_2mortal(upg_version(newSVnv(5.009005), FALSE))) >= 0) {
-	    SV *const importsv = vnormal(use_version);
-	    if (hhoff) ENTER_with_name("load_feature");
-	    *SvPVX_mutable(importsv) = ':';
-	    Perl_load_module(aTHX_ 0, newSVpvs("feature"), NULL, importsv, NULL);
-	    LEAVE_with_name("load_feature");
-	}
-	else if (!hhoff) LEAVE_with_name("load_feature");
 	/* If a version >= 5.11.0 is requested, strictures are on by default! */
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
@@ -4760,7 +4711,7 @@ Loads the module whose name is pointed to by the string part of name.
 Note that the actual module name, not its filename, should be given.
 Eg, "Foo::Bar" instead of "Foo/Bar.pm".  flags can be any of
 PERL_LOADMOD_DENY, PERL_LOADMOD_NOIMPORT, or PERL_LOADMOD_IMPORT_OPS
-(or 0 for no flags). ver, if specified, provides version semantics
+(or 0 for no flags). ver, if specified and not NULL, provides version semantics
 similar to C<use Foo::Bar VERSION>.  The optional trailing SV*
 arguments can be used to specify arguments to the module's import()
 method, similar to C<use Foo::Bar VERSION LIST>.  They must be
@@ -4768,6 +4719,8 @@ terminated with a final NULL pointer.  Note that this list can only
 be omitted when the PERL_LOADMOD_NOIMPORT flag has been used.
 Otherwise at least a single NULL pointer to designate the default
 import list is required.
+
+The reference count for each specified C<SV*> parameter is decremented.
 
 =cut */
 
@@ -6152,6 +6105,7 @@ S_newGIVWHENOP(pTHX_ OP *cond, OP *block,
 	/* This is a default {} block */
 	enterop->op_first = block;
 	enterop->op_flags |= OPf_SPECIAL;
+	o      ->op_flags |= OPf_SPECIAL;
 
 	o->op_next = (OP *) enterop;
     }
@@ -6518,7 +6472,9 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	ps = NULL;
 
     if (name) {
-	gv = gv_fetchsv(cSVOPo->op_sv, gv_fetch_flags, SVt_PVCV);
+	gv = isGV(cSVOPo->op_sv)
+	      ? (GV *)cSVOPo->op_sv
+	      : gv_fetchsv(cSVOPo->op_sv, gv_fetch_flags, SVt_PVCV);
 	has_name = TRUE;
     } else if (PERLDB_NAMEANON && CopLINE(PL_curcop)) {
 	SV * const sv = sv_newmortal();
@@ -6882,6 +6838,7 @@ S_process_special_blocks(pTHX_ const char *const fullname, GV *const gv,
 	} else if (*name == 'C') {
 	    if (strEQ(name, "CHECK")) {
 		if (PL_main_start)
+		    /* diag_listed_as: Too late to run %s block */
 		    Perl_ck_warner(aTHX_ packWARN(WARN_VOID),
 				   "Too late to run CHECK block");
 		Perl_av_create_and_unshift_one(aTHX_ &PL_checkav, MUTABLE_SV(cv));
@@ -6891,6 +6848,7 @@ S_process_special_blocks(pTHX_ const char *const fullname, GV *const gv,
 	} else if (*name == 'I') {
 	    if (strEQ(name, "INIT")) {
 		if (PL_main_start)
+		    /* diag_listed_as: Too late to run %s block */
 		    Perl_ck_warner(aTHX_ packWARN(WARN_VOID),
 				   "Too late to run INIT block");
 		Perl_av_create_and_push(aTHX_ &PL_initav, MUTABLE_SV(cv));
@@ -7123,6 +7081,7 @@ Perl_newFORM(pTHX_ I32 floor, OP *o, OP *block)
 		Perl_warner(aTHX_ packWARN(WARN_REDEFINE),
 			    "Format %"SVf" redefined", SVfARG(cSVOPo->op_sv));
 	    } else {
+		/* diag_listed_as: Format %s redefined */
 		Perl_warner(aTHX_ packWARN(WARN_REDEFINE),
 			    "Format STDOUT redefined");
 	    }
@@ -7364,8 +7323,12 @@ Perl_ck_cmp(pTHX_ OP *o)
     if (ckWARN(WARN_SYNTAX)) {
 	const OP *kid = cUNOPo->op_first;
 	if (kid && (
-		is_dollar_bracket(aTHX_ kid)
-	     || ((kid = kid->op_sibling) && is_dollar_bracket(aTHX_ kid))
+		(
+		   is_dollar_bracket(aTHX_ kid)
+		&& kid->op_sibling && kid->op_sibling->op_type == OP_CONST
+		)
+	     || (  kid->op_type == OP_CONST
+		&& (kid = kid->op_sibling) && is_dollar_bracket(aTHX_ kid))
 	   ))
 	    Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
 			"$[ used in %s (did you mean $] ?)", OP_DESC(o));
@@ -7470,6 +7433,7 @@ Perl_ck_eof(pTHX_ OP *o)
     PERL_ARGS_ASSERT_CK_EOF;
 
     if (o->op_flags & OPf_KIDS) {
+	OP *kid;
 	if (cLISTOPo->op_first->op_type == OP_STUB) {
 	    OP * const newop
 		= newUNOP(o->op_type, OPf_SPECIAL, newGVOP(OP_GV, 0, PL_argvgv));
@@ -7480,7 +7444,10 @@ Perl_ck_eof(pTHX_ OP *o)
 #endif
 	    o = newop;
 	}
-	return ck_fun(o);
+	o = ck_fun(o);
+	kid = cLISTOPo->op_first;
+	if (kid->op_type == OP_RV2GV)
+	    kid->op_private |= OPpALLOW_FAKE;
     }
     return o;
 }
@@ -7552,7 +7519,7 @@ Perl_ck_eval(pTHX_ OP *o)
 	o->op_private |= OPpEVAL_HAS_HH;
 
 	if (!(o->op_private & OPpEVAL_BYTES)
-	 && FEATURE_IS_ENABLED("unieval"))
+	 && FEATURE_UNIEVAL_IS_ENABLED)
 	    o->op_private |= OPpEVAL_UNICODE;
     }
     return o;
@@ -7949,6 +7916,7 @@ Perl_ck_fun(pTHX_ OP *o)
                             const char *name = NULL;
 			    STRLEN len = 0;
                             U32 name_utf8 = 0;
+			    bool want_dollar = TRUE;
 
 			    flags = 0;
 			    /* Set a flag to tell rv2gv to vivify
@@ -8015,6 +7983,7 @@ Perl_ck_fun(pTHX_ OP *o)
 				 if (!name) {
 				      name = "__ANONIO__";
 				      len = 10;
+				      want_dollar = FALSE;
 				 }
 				 op_lvalue(kid, type);
 			    }
@@ -8023,7 +7992,7 @@ Perl_ck_fun(pTHX_ OP *o)
 				targ = pad_alloc(OP_RV2GV, SVs_PADTMP);
 				namesv = PAD_SVl(targ);
 				SvUPGRADE(namesv, SVt_PV);
-				if (*name != '$')
+				if (want_dollar && *name != '$')
 				    sv_setpvs(namesv, "$");
 				sv_catpvn(namesv, name, len);
                                 if ( name_utf8 ) SvUTF8_on(namesv);
@@ -8183,7 +8152,7 @@ Perl_ck_grep(pTHX_ OP *o)
 	return o;
     kid = cLISTOPo->op_first->op_sibling;
     if (kid->op_type != OP_NULL)
-	Perl_croak(aTHX_ "panic: ck_grep");
+	Perl_croak(aTHX_ "panic: ck_grep, type=%u", (unsigned) kid->op_type);
     kid = kUNOP->op_first;
 
     if (!gwop)
@@ -8249,11 +8218,6 @@ Perl_ck_defined(pTHX_ OP *o)		/* 19990527 MJD */
     if ((o->op_flags & OPf_KIDS)) {
 	switch (cUNOPo->op_first->op_type) {
 	case OP_RV2AV:
-	    /* This is needed for
-	       if (defined %stash::)
-	       to work.   Do not break Tk.
-	       */
-	    break;                      /* Globals via GV can be undef */
 	case OP_PADAV:
 	case OP_AASSIGN:		/* Is this a good idea? */
 	    Perl_ck_warner_d(aTHX_ packWARN(WARN_DEPRECATED),
@@ -8281,7 +8245,11 @@ Perl_ck_readline(pTHX_ OP *o)
 {
     PERL_ARGS_ASSERT_CK_READLINE;
 
-    if (!(o->op_flags & OPf_KIDS)) {
+    if (o->op_flags & OPf_KIDS) {
+	 OP *kid = cLISTOPo->op_first;
+	 if (kid->op_type == OP_RV2GV) kid->op_private |= OPpALLOW_FAKE;
+    }
+    else {
 	OP * const newop
 	    = newUNOP(OP_READLINE, 0, newGVOP(OP_GV, 0, PL_argvgv));
 #ifdef PERL_MAD
@@ -8333,6 +8301,7 @@ Perl_ck_listiob(pTHX_ OP *o)
     if (!kid)
 	op_append_elem(o->op_type, o, newDEFSVOP());
 
+    if (o->op_type == OP_PRTF) return modkids(listkids(o), OP_PRTF);
     return listkids(o);
 }
 
@@ -8790,8 +8759,6 @@ Perl_ck_sort(pTHX_ OP *o)
 		kid->op_next = k;
 	    o->op_flags |= OPf_SPECIAL;
 	}
-	else if (kid->op_type == OP_RV2SV || kid->op_type == OP_PADSV)
-	    op_null(firstkid);
 
 	firstkid = firstkid->op_sibling;
     }
@@ -8893,7 +8860,7 @@ Perl_ck_split(pTHX_ OP *o)
 
     kid = cLISTOPo->op_first;
     if (kid->op_type != OP_NULL)
-	Perl_croak(aTHX_ "panic: ck_split");
+	Perl_croak(aTHX_ "panic: ck_split, type=%u", (unsigned) kid->op_type);
     kid = kid->op_sibling;
     op_free(cLISTOPo->op_first);
     if (kid)
@@ -9117,7 +9084,8 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
     const char *e = NULL;
     PERL_ARGS_ASSERT_CK_ENTERSUB_ARGS_PROTO;
     if (SvTYPE(protosv) == SVt_PVCV ? !SvPOK(protosv) : !SvOK(protosv))
-	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto");
+	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto,"
+		   "flags=%lx", (unsigned long) SvFLAGS(protosv));
     if (SvTYPE(protosv) == SVt_PVCV)
 	 proto = CvPROTO(protosv), proto_len = CvPROTOLEN(protosv);
     else proto = SvPV(protosv, proto_len);
@@ -9402,7 +9370,6 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
 	for (cvop = aop; cvop->op_sibling; cvop = cvop->op_sibling) ;
 	if (PL_madskills) while (aop != cvop && aop->op_type == OP_STUB) {
 	    aop = aop->op_sibling;
-	    continue;
 	}
 	if (aop != cvop)
 	    (void)too_many_arguments(entersubop, GvNAME(namegv));
@@ -9686,6 +9653,19 @@ Perl_ck_substr(pTHX_ OP *o)
 }
 
 OP *
+Perl_ck_tell(pTHX_ OP *o)
+{
+    PERL_ARGS_ASSERT_CK_TELL;
+    o = ck_fun(o);
+    if (o->op_flags & OPf_KIDS) {
+     OP *kid = cLISTOPo->op_first;
+     if (kid->op_type == OP_NULL && kid->op_sibling) kid = kid->op_sibling;
+     if (kid->op_type == OP_RV2GV) kid->op_private |= OPpALLOW_FAKE;
+    }
+    return o;
+}
+
+OP *
 Perl_ck_each(pTHX_ OP *o)
 {
     dVAR;
@@ -9742,7 +9722,8 @@ Perl_ck_length(pTHX_ OP *o)
                 case OP_PADHV:
                 case OP_PADAV:
                     name = varname(
-                        NULL, hash ? '%' : '@', kid->op_targ, NULL, 0, 1
+                        (GV *)PL_compcv, hash ? '%' : '@', kid->op_targ,
+                        NULL, 0, 1
                     );
                     break;
                 case OP_RV2HV:
@@ -9830,7 +9811,7 @@ S_inplace_aassign(pTHX_ OP *o) {
 	return;
 
     assert(cUNOPx(modop)->op_first->op_type == OP_PUSHMARK);
-    oright = cUNOPx(modop)->op_first->op_sibling;
+    if (!(oright = cUNOPx(modop)->op_first->op_sibling)) return;
 
     if (modop->op_flags & OPf_STACKED) {
 	/* skip sort subroutine/block */

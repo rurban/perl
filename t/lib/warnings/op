@@ -799,6 +799,12 @@ my $a
 EXPECT
 ########
 # op.c
+defined(@a);
+EXPECT
+defined(@array) is deprecated at - line 2.
+	(Maybe you should just omit the defined()?)
+########
+# op.c
 my @a; defined(@a);
 EXPECT
 defined(@array) is deprecated at - line 2.
@@ -808,6 +814,12 @@ defined(@array) is deprecated at - line 2.
 defined(@a = (1,2,3));
 EXPECT
 defined(@array) is deprecated at - line 2.
+	(Maybe you should just omit the defined()?)
+########
+# op.c
+defined(%h);
+EXPECT
+defined(%hash) is deprecated at - line 2.
 	(Maybe you should just omit the defined()?)
 ########
 # op.c
@@ -918,6 +930,24 @@ use integer;
 @a = 42 > $[;
 @a = 42 <= $[;
 @a = 42 >= $[;
+no integer;
+@a = $[ < $5;
+@a = $[ > $5;
+@a = $[ <= $5;
+@a = $[ >= $5;
+@a = $42 < $[;
+@a = $42 > $[;
+@a = $42 <= $[;
+@a = $42 >= $[;
+use integer;
+@a = $[ < $5;
+@a = $[ > $5;
+@a = $[ <= $5;
+@a = $[ >= $5;
+@a = $42 < $[;
+@a = $42 > $[;
+@a = $42 <= $[;
+@a = $42 >= $[;
 EXPECT
 $[ used in numeric lt (<) (did you mean $] ?) at - line 4.
 $[ used in numeric gt (>) (did you mean $] ?) at - line 5.
