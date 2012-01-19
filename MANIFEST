@@ -3144,6 +3144,7 @@ dist/ExtUtils-ParseXS/t/510-t-bare.t				ExtUtils::Typemaps tests
 dist/ExtUtils-ParseXS/t/511-t-whitespace.t			ExtUtils::Typemaps tests
 dist/ExtUtils-ParseXS/t/512-t-file.t				ExtUtils::Typemaps tests
 dist/ExtUtils-ParseXS/t/513-t-merge.t				ExtUtils::Typemaps tests
+dist/ExtUtils-ParseXS/t/514-t-embed.t				ExtUtils::Typemaps tests
 dist/ExtUtils-ParseXS/t/600-t-compat.t				ExtUtils::Typemaps tests
 dist/ExtUtils-ParseXS/t/data/b.typemap				ExtUtils::Typemaps test data
 dist/ExtUtils-ParseXS/t/data/combined.typemap			ExtUtils::Typemaps test data
@@ -4761,6 +4762,7 @@ Porting/manicheck		Check against MANIFEST
 Porting/manisort		Sort the MANIFEST
 Porting/new-perldelta.pl	Generate a new perldelta
 Porting/newtests-perldelta.pl	Generate Perldelta stub for newly added tests
+Porting/perl5160delta.pod	The perldelta that will be perl5160delta
 Porting/perldelta_template.pod	Template for creating new perldelta.pod files
 Porting/perlhist_calculate.pl		Perform calculations to update perlhist
 Porting/pod_lib.pl		Code for handling generated pods

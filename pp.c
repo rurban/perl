@@ -2193,7 +2193,7 @@ PP(pp_bit_and)
 	  const UV u = SvUV_nomg(left) & SvUV_nomg(right);
 	  SETu(u);
 	}
-	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (left_ro_nonnum && left != TARG) SvNIOK_off(left);
 	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
@@ -2227,7 +2227,7 @@ PP(pp_bit_or)
 	  const UV result = op_type == OP_BIT_OR ? (l | r) : (l ^ r);
 	  SETu(result);
 	}
-	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (left_ro_nonnum && left != TARG) SvNIOK_off(left);
 	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
@@ -5225,7 +5225,7 @@ PP(pp_split)
     pm = (PMOP*)POPs;
 #endif
     if (!pm || !s)
-	DIE(aTHX_ "panic: pp_split");
+	DIE(aTHX_ "panic: pp_split, pm=%p, s=%p", pm, s);
     rx = PM_GETRE(pm);
 
     TAINT_IF(get_regex_charset(RX_EXTFLAGS(rx)) == REGEX_LOCALE_CHARSET &&

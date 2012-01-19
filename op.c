@@ -837,7 +837,8 @@ Perl_op_contextualize(pTHX_ OP *o, I32 context)
 	case G_ARRAY:  return list(o);
 	case G_VOID:   return scalarvoid(o);
 	default:
-	    Perl_croak(aTHX_ "panic: op_contextualize bad context");
+	    Perl_croak(aTHX_ "panic: op_contextualize bad context %ld",
+		       (long) context);
 	    return o;
     }
 }
@@ -2534,7 +2535,9 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
           && (gv = cGVOPx_gv(cUNOPx(left)->op_first))
               ? varname(gv, isary ? '@' : '%', 0, NULL, 0, 1)
               : NULL
-        : varname(NULL, isary ? '@' : '%', left->op_targ, NULL, 0, 1);
+        : varname(
+           (GV *)PL_compcv, isary ? '@' : '%', left->op_targ, NULL, 0, 1
+          );
       if (name)
 	Perl_warner(aTHX_ packWARN(WARN_MISC),
              "Applying %s to %"SVf" will act on scalar(%"SVf")",
@@ -8149,7 +8152,7 @@ Perl_ck_grep(pTHX_ OP *o)
 	return o;
     kid = cLISTOPo->op_first->op_sibling;
     if (kid->op_type != OP_NULL)
-	Perl_croak(aTHX_ "panic: ck_grep");
+	Perl_croak(aTHX_ "panic: ck_grep, type=%u", (unsigned) kid->op_type);
     kid = kUNOP->op_first;
 
     if (!gwop)
@@ -8215,11 +8218,6 @@ Perl_ck_defined(pTHX_ OP *o)		/* 19990527 MJD */
     if ((o->op_flags & OPf_KIDS)) {
 	switch (cUNOPo->op_first->op_type) {
 	case OP_RV2AV:
-	    /* This is needed for
-	       if (defined %stash::)
-	       to work.   Do not break Tk.
-	       */
-	    break;                      /* Globals via GV can be undef */
 	case OP_PADAV:
 	case OP_AASSIGN:		/* Is this a good idea? */
 	    Perl_ck_warner_d(aTHX_ packWARN(WARN_DEPRECATED),
@@ -8862,7 +8860,7 @@ Perl_ck_split(pTHX_ OP *o)
 
     kid = cLISTOPo->op_first;
     if (kid->op_type != OP_NULL)
-	Perl_croak(aTHX_ "panic: ck_split");
+	Perl_croak(aTHX_ "panic: ck_split, type=%u", (unsigned) kid->op_type);
     kid = kid->op_sibling;
     op_free(cLISTOPo->op_first);
     if (kid)
@@ -9086,7 +9084,8 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
     const char *e = NULL;
     PERL_ARGS_ASSERT_CK_ENTERSUB_ARGS_PROTO;
     if (SvTYPE(protosv) == SVt_PVCV ? !SvPOK(protosv) : !SvOK(protosv))
-	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto");
+	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto,"
+		   "flags=%lx", (unsigned long) SvFLAGS(protosv));
     if (SvTYPE(protosv) == SVt_PVCV)
 	 proto = CvPROTO(protosv), proto_len = CvPROTOLEN(protosv);
     else proto = SvPV(protosv, proto_len);
@@ -9723,7 +9722,8 @@ Perl_ck_length(pTHX_ OP *o)
                 case OP_PADHV:
                 case OP_PADAV:
                     name = varname(
-                        NULL, hash ? '%' : '@', kid->op_targ, NULL, 0, 1
+                        (GV *)PL_compcv, hash ? '%' : '@', kid->op_targ,
+                        NULL, 0, 1
                     );
                     break;
                 case OP_RV2HV:

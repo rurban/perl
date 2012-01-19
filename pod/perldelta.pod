@@ -1,15 +1,12 @@
 =encoding utf8
 
 =for comment
-This has been completed up to 9ac8a16, except for:
+This has been completed up to 1a50d74bac4, except for:
 8629c11317 smueller Escape double-quotes in generated #line directives
 8dc67a69b  shlomif  perl -d: display lines inside subroutines.
 3dfd1b5cd2 leont    Export PerlIOBase_open
 
 =head1 NAME
-
-[ this is a template for a new perldelta file. Any text flagged as
-XXX needs to be processed before release. ]
 
 perldelta - what is new for perl v5.15.7
 
@@ -28,17 +25,31 @@ XXX Any important notices here
 
 =head1 Core Enhancements
 
-XXX New core language features go here. Summarise user-visible core language
-enhancements. Particularly prominent performance optimisations could go
-here, but most should go in the L</Performance Enhancements> section.
-
-[ List each enhancement as a =head2 entry ]
-
 =head2 C<use charnames> no longer needed for C<\N{I<name>}>
 
 The C<charnames> module is now automatically loaded when needed as if
 the C<:full> and C<:short> options had been specified.  See
 L<charnames>.
+
+=head2 Improved performance for Unicode properties in regular expressions
+
+Matching a code point against a Unicode property is now done via a
+binary search instead of linear.  This means for example that the worst
+case for a 1000 item property is 10 probes instead of 1000.  This
+inefficiency has been compensated for in the past by permanently storing
+in a hash the results of a given probe plus the results for the adjacent
+64 code points, under the theory that near-by code points are likely to
+be searched for.  A separate hash was used for each mention of a Unicode
+property in each regular expression.  Thus, C<qr/\p{foo}abc\p{foo}/>
+would generate two hashes.  Any probes in one instance would be unknown
+to the other, and the hashes could expand separately to be quite large
+if the regular expression were used on many different widely-separated
+code points.  This can lead to running out of memory in extreme cases.
+Now, however, there is just one hash shared by all instances of a given
+property.  This means that if C<\p{foo}> is matched against "A" in one
+regular expression in a thread, the result will be known immediately to
+all regular expressions, and the relentless march of using up memory is
+slowed considerably.
 
 =head1 Security
 
@@ -60,12 +71,6 @@ XXX For a release on a stable branch, this section aspires to be:
 
 =head1 Deprecations
 
-XXX Any deprecated features, syntax, modules etc. should be listed here.
-In particular, deprecated modules should be listed here even if they are
-listed as an updated module in the L</Modules and Pragmata> section.
-
-[ List each deprecation as a =head2 entry ]
-
 =head2 Deprecated Modules
 
 =over
@@ -80,17 +85,17 @@ in v5.17.0.
 
 =head1 Performance Enhancements
 
-XXX Changes which enhance performance without changing behaviour go here. There
-may well be none in a stable release.
-
-[ List each enhancement as a =item entry ]
-
 =over 4
 
 =item *
 
 Version declarations with the C<use> keyword (e.g., C<use 5.012>) are now
 faster, as they enable features without loading F<feature.pm>.
+
+=item *
+
+C<local $_> is faster now, as it no longer iterates through magic that it
+is not going to copy anyway.
 
 =back
 
@@ -105,16 +110,6 @@ In an ideal world, dual-life modules would have a F<Changes> file that could be
 cribbed.
 
 [ Within each section, list entries as a =item entry ]
-
-=head2 New Modules and Pragmata
-
-=over 4
-
-=item *
-
-XXX
-
-=back
 
 =head2 Updated Modules and Pragmata
 
@@ -148,13 +143,16 @@ The C</applaud> regular expression flags are no longer omitted.
 Feature hints are now deparsed with C<use feature> rather than C<%^H>
 assignments.
 
-A regression in 1.10 that caused C<ambient_pragmas> to disabled strict mode
+A regression in 1.10 that caused C<ambient_pragmas> to disable strict mode
 in obscure cases has been fixed.
 
 Strict mode is now fully deparsed, including subs and vars [perl #24027].
 
 The global variables C<$(>, C<$|> and C<$)> are now deparsed with braces
 (i.e., C<${(}>) in regular expressions [perl #86060].
+
+C<continue> blocks after C<for> loops are now deparsed correctly, as they
+were back in 0.67 (included with Perl 5.8.5) [perl #108224]
 
 =item *
 
@@ -194,11 +192,55 @@ and the same.
 
 =item *
 
+L<ExtUtils::Packlist> has been upgraded from version 1.45 to version 1.46.
+
+It no longer produces "used once" warnings when the C<read> and C<write>
+methods are called while the main program is still compiling (e.g., from
+within a BEGIN block) [perl #107410] [rt.cpan.org #50315].
+
+=item *
+
+L<Locale::Maketext> has been upgraded from version 1.21 to version 1.22.
+
+=item *
+
 L<Module::Pluggable> has been upgraded from version 3.9 to version 4.0.
 
 =item *
 
+L<overload> has been upgraded from version 1.16 to version 1.17.
+
+C<overload::Overloaded> no longer calls C<can> on the class, but uses
+another means to determine whether the object has overloading.  It was
+never correct for it to call C<can>, as overloading does not respect
+AUTOLOAD.  So classes that autoload methods and implement C<can> no longer
+have to account for overloading [perl #40333].
+
+A warning is now produced for invalid arguments.  See L</New Diagnostics>.
+
+=item *
+
 L<perlfaq> has been upgraded from version 5.0150036 to version 5.0150037.
+
+=item *
+
+L<PerlIO::scalar> has been upgraded from version 0.12 to version 0.13.
+
+(This is the module that implements C<< open $fh, '>', \$scalar >>.)
+
+It no longer assumes during C<seek> that $scalar is a string internally.
+If it didn't crash, it was close to doing so [perl #92706].
+
+Printing to an in-memory handle now works if the $scalar holds a reference,
+stringifying the reference before modifying it.  References used to be
+treated as empty strings.
+
+Printing to an in-memory handle no longer crashes if the $scalar happens to
+hold a number internally, but no string buffer.
+
+=item *
+
+L<Pod::Html> has been upgraded from version 1.12 to 1.13
 
 =item *
 
@@ -245,42 +287,41 @@ which is a drop-in replacement.
 
 =back
 
-=head2 Removed Modules and Pragmata
-
-=over 4
-
-=item *
-
-XXX
-
-=back
-
 =head1 Documentation
-
-XXX Changes to files in F<pod/> go here.  Consider grouping entries by
-file and be sure to link to the appropriate page, e.g. L<perlfunc>.
-
-=head2 New Documentation
-
-XXX Changes which create B<new> files in F<pod/> go here.
-
-=head3 L<XXX>
-
-XXX Description of the purpose of the new file here
 
 =head2 Changes to Existing Documentation
 
-XXX Changes which significantly change existing files in F<pod/> go here.
-However, any changes to F<pod/perldiag.pod> should go in the L</Diagnostics>
-section.
-
-=head3 L<XXX>
+=head3 L<perlfunc>
 
 =over 4
 
 =item *
 
-XXX Description of the change here
+C<dbmopen> treats a 0 mode as a special case, that prevents a nonexistent
+file from being created.  This has been the case since Perl 5.000, but was
+never documented anywhere.  Now the perlfunc entry mentions it
+[perl #90064].
+
+=item *
+
+The entry for C<split> has been rewritten.  It is now far clearer than
+before.
+
+=back
+
+=head3 L<perlop> and L<perlsyn>
+
+=over 4
+
+=item *
+
+Documentation of the smartmatch operator has been reworked and moved from
+perlsyn to perlop where it belongs.
+
+=item *
+
+Documentation of the ellipsis statement (C<...>) has been reworked and
+moved from perlop to perlsyn.
 
 =back
 
@@ -290,20 +331,7 @@ The following additions or changes have been made to diagnostic output,
 including warnings and fatal error messages.  For the complete list of
 diagnostic messages, see L<perldiag>.
 
-XXX New or changed warnings emitted by the core's C<C> code go here. Also
-include any changes in L<perldiag> that reconcile it to the C<C> code.
-
-[ Within each section, list entries as a =item entry that links to perldiag,
-  e.g.
-
-  =item *
-
-  L<Invalid version object|perldiag/"Invalid version object">
-]
-
 =head2 New Diagnostics
-
-XXX Newly added diagnostic messages go here
 
 =head3 New Errors
 
@@ -331,30 +359,45 @@ tying a special array like C<@_>.  You should never see this message.
 
 =item *
 
-XXX L<message|perldiag/"message">
+L<defined(@array) is deprecated|perldiag/"defined(@array) is deprecated">
+
+The long-deprecated C<defined(@array)> now also warns for package variables.
+Previously it only issued a warning for lexical variables.
+
+=item *
+
+L<Useless use of \E|perldiag/"Useless use of \E">
+
+C<\E> does nothing unless preceded by C<\Q>, C<\L> or C<\U>.
+
+=item *
+
+L<overload arg '%s' is invalid|perldiag/"overload arg '%s' is invalid">
+
+This warning, in the "overload" category, is produced when the overload
+pragma is given an argument it doesn't recognize, presumably a mistyped
+operator.
 
 =back
 
-=head2 Changes to Existing Diagnostics
-
-XXX Changes (i.e. rewording) of diagnostic messages go here
+=head2 Removals
 
 =over 4
 
 =item *
 
-XXX Describe change here
+"sort is now a reserved word"
+
+This error used to occur when C<sort> was called without arguments, followed by C<;> or C<)>.  (E.g., C<sort;> would die, but C<{sort}> was
+OK.)  This error message was added in Perl 3 to catch code like
+C<close(sort)> which would no longer work.  More than two decades later,
+this message is no longer appropriate.  Now C<sort> without arguments is
+always allowed, and returns an empty list, as it did in those cases where
+it was already allowed [perl #90030].
 
 =back
 
 =head1 Utility Changes
-
-XXX Changes to installed programs such as F<perlbug> and F<xsubpp> go
-here. Most of these are built within the directories F<utils> and F<x2p>.
-
-[ List utility changes as a =head3 entry for each utility and =item
-entries for each change
-Use L<XXX> with program names to get proper documentation linking. ]
 
 =head3 L<splain>
 
@@ -382,20 +425,13 @@ has become this:
 
 =item *
 
-Some error message consist of multiple lines that are listed as separate
+Some error messages consist of multiple lines that are listed as separate
 entries in L<perldiag>.  splain has been taught to find the separate
 entries in these cases, instead of simply failing to find the message.
 
 =back
 
 =head1 Configuration and Compilation
-
-XXX Changes to F<Configure>, F<installperl>, F<installman>, and analogous tools
-go here.  Any other changes to the Perl build process should be listed here.
-However, any platform-specific changes should be listed in the
-L</Platform Support> section, instead.
-
-[ List changes as a =item entry ].
 
 =over 4
 
@@ -411,14 +447,6 @@ Pods.
 
 =head1 Testing
 
-XXX Any significant changes to the testing of a freshly built perl should be
-listed here.  Changes which create B<new> files in F<t/> go here as do any
-large changes to the testing harness (e.g. when parallel testing was added).
-Changes to existing files in F<t/> aren't worth summarising, although the bugs
-that they represent may be covered elsewhere.
-
-[ List each test improvement as a =item entry ]
-
 =over 4
 
 =item *
@@ -431,62 +459,7 @@ C<make install>, are tested here.
 
 =back
 
-=head1 Platform Support
-
-XXX Any changes to platform support should be listed in the sections below.
-
-[ Within the sections, list each platform as a =item entry with specific
-changes as paragraphs below it. ]
-
-=head2 New Platforms
-
-XXX List any platforms that this version of perl compiles on, that previous
-versions did not. These will either be enabled by new files in the F<hints/>
-directories, or new subdirectories and F<README> files at the top level of the
-source tree.
-
-=over 4
-
-=item XXX-some-platform
-
-XXX
-
-=back
-
-=head2 Discontinued Platforms
-
-XXX List any platforms that this version of perl no longer compiles on.
-
-=over 4
-
-=item XXX-some-platform
-
-XXX
-
-=back
-
-=head2 Platform-Specific Notes
-
-XXX List any changes for specific platforms. This could include configuration
-and compilation changes or changes in portability/compatibility.  However,
-changes within modules for platforms should generally be listed in the
-L</Modules and Pragmata> section.
-
-=over 4
-
-=item XXX-some-platform
-
-XXX
-
-=back
-
 =head1 Internal Changes
-
-XXX Changes which affect the interface available to C<XS> code go here.
-Other significant internal changes for future core maintainers should
-be noted as well.
-
-[ List each change as a =item entry ]
 
 =over 4
 
@@ -516,12 +489,6 @@ is reified first, to make sure this is always the case.
 =back
 
 =head1 Selected Bug Fixes
-
-XXX Important bug fixes in the core language are summarised here.
-Bug fixes in files in F<ext/> and F<lib/> are best summarised in
-L</Modules and Pragmata>.
-
-[ List each fix as a =item entry ]
 
 =over 4
 
@@ -572,8 +539,8 @@ message.
 
 When one writes C<open foo || die>, which used to work in Perl 4, a
 "Precedence problem" warning is produced.  This warning used erroneously to
-apply to fully-qualified bareword handle names as well.  This has been
-corrected.
+apply to fully-qualified bareword handle names not followed by C<||>.  This
+has been corrected.
 
 =item * C<select> and package aliasing
 
@@ -641,7 +608,7 @@ more.
 =item * Unrecognised switches on C<#!> line
 
 If a switch, such as B<-x>, that cannot occur on the C<#!> line is used
-there, perl dies with "Can’t emulate...".
+there, perl dies with "Can't emulate...".
 
 It used to produce the same message for switches that perl did not
 recognise at all, whether on the command line or the C<#!> line.
@@ -662,7 +629,7 @@ Now it always updates those caches.
 =item * Hash element deletion and destructors
 
 When hash elements are deleted in void context, the internal hash entry is
-now freed before the value is freed, to prevent destructors call by that
+now freed before the value is freed, to prevent destructors called by that
 latter freeing from seeing the hash in an inconsistent state.  It was
 possible to cause double-frees if the destructor freed the hash itself
 [perl #100340].
@@ -682,31 +649,180 @@ Typeglobs returned from threads are no longer cloned if the parent thread
 already has a glob with the same name.  This means that returned
 subroutines will now assign to the right package variables [perl #107366].
 
-=back
+=item * C<local $_>
 
-=head1 Known Problems
+In Perl 5.14, C<local $_> was changed to create a new variable not tied to
+anything, even if $_ was tied before that.  But, due to an oversight, it
+would still call FETCH once on a tied $_ before replacing it with the new
+variable.  This has been fixed [perl #105912].
 
-XXX Descriptions of platform agnostic bugs we know we can't fix go here. Any
-tests that had to be C<TODO>ed for the release would be noted here, unless
-they were specific to a particular platform (see below).
+=item * Returning tied variables
 
-This is a list of some significant unfixed bugs, which are regressions
-from either 5.XXX.XXX or 5.XXX.XXX.
+When returning a value from a non-lvalue subroutine, Perl copies the value.
+Sometimes it cheats for the sake of speed, and does not copy the value if
+it makes no observable difference.  This optimisation was erroneously
+allowing the copy to be skipped on tied variables, causing a difference in
+behaviour depending on the tied variable's reference count.  This has been
+fixed [perl #95548].
 
-[ List each fix as a =item entry ]
+=item * C<{@a = sort}> no longer crashes
 
-=over 4
+This particular piece of code (C<sort> with no arguments assigned to an
+array, inside a block with no C<;>) started crashing in an earlier 5.15.x
+release.  It has been fixed.
+
+=item * C<utf8::decode> and read-only scalars
+
+C<utf8::decode> now refuses to modify read-only scalars [perl #91850].
+
+=item * C<dbmopen> with undefined mode
+
+C<dbmopen> now only warns once, rather than three times, if the mode
+argument is C<undef> [perl #90064].
+
+=item * Freeing an aggregate during list assignment
+
+If list assignment to a hash or array triggered destructors that freed the
+hash or array itself, a crash would ensue.  This is no longer the case
+[perl #107440].
+
+=item * Confused internal bookkeeping with @ISA arrays
+
+Creating a weak reference to an @ISA array or accessing the array index
+(C<$#ISA>) could result in confused internal bookkeeping for elements
+subsequently added to the @ISA array.  For instance, creating a weak
+reference to the element itself could push that weak reference on to @ISA;
+and elements added after use of C<$#ISA> would be ignored by method lookup
+[perl #85670].
+
+=item * DELETE on scalar ties
+
+Tying an element of %ENV or C<%^H> and then deleting that element would
+result in a call to the tie object's DELETE method, even though tying the
+element itself is supposed to be equivalent to tying a scalar (the element
+is, of course, a scalar) [perl #67490].
+
+=item * Freeing $_ inside C<grep> or C<map>
+
+Freeing $_ inside a C<grep> or C<map> block or a code block embedded in a
+regular expression used to result in double frees [perl #92254, #92256].
+
+=item * Warnings with C<+=>
+
+The C<+=> operator does not usually warn when the left-hand side is
+C<undef>, but it was doing so for tied variables.  This has been fixed
+[perl #44895].
+
+=item * Tying and autovivification
+
+When Perl autovivifies an element of a tied array or hash (which entails
+calling STORE with a new reference), it now calls FETCH immediately after
+the STORE, instead of assuming that FETCH would have returned the same
+reference.  This can make it easier to implement tied objects [perl #35865, #43011].
+
+=item * C<@&> and C<$&>
+
+Mentioning a variable named "&" other than C<$&> (i.e., C<@&> or C<%&>) no
+longer stops C<$&> from working.  The same applies to variables named "'"
+and "`" [perl #24237].
+
+=item * Stacked filetests
+
+C<-T> and C<-B> now work when stacked up with other filetest operators
+[perl #77388].
+
+=item * Filetests and stat buffers
+
+Perl keeps several internal variables to keep track of the last stat
+buffer, from which file(handle) it originated, what type it was, and
+whether the last stat succeeded.
+
+There were various cases where these could get out of synch, resulting in
+inconsistent or erratic behaviour in edge cases (every mention of C<-T>
+applies to C<-B> as well):
+
+=over
 
 =item *
 
-XXX
+C<-T I<HANDLE>>, even though it does a C<stat>, was not resetting the last
+stat type, so an C<lstat _> following it would merrily return the wrong
+results.  Also, it was not setting the success status.
+
+=item *
+
+Freeing the handle last used by C<stat> or a filetest could result in
+S<C<-T _>> using an unrelated handle.
+
+=item *
+
+C<stat> with an IO reference (as returned by C<*STDIO{IO}>, for instance)
+would not reset the stat type.
+
+=item *
+
+C<stat> with an IO reference was not recording the filehandle for
+S<C<-T _>> to use.
+
+=item *
+
+The presence of fatal warnings could cause the stat buffer not to be reset
+for a filetest operator on an unopened filehandle or C<-l> on any handle.
+
+=item *
+
+Fatal warnings would stop C<-T> from setting C<$!>.
+
+=item *
+
+When the last stat was on an unreadable file, C<-T _> is supposed to
+return C<undef>, leaving the last stat buffer unchanged.  But it was
+setting the stat type, causing C<lstat _> to stop working.
+
+=item *
+
+C<-T I<FILENAME>> was not resetting the internal stat buffers for
+unreadable files.
 
 =back
 
-=head1 Obituary
+These have all been fixed.
 
-XXX If any significant core contributor has died, we've added a short obituary
-here.
+=item * C<defined *{"!"}>
+
+An earlier 5.15.x release caused this construct to stop the C<%!> hash
+from working.  Likewise C<defined *{"+"}> and C<defined *{"-"}> caused
+C<%+> and C<%->, respectively, to stop working.  This has been fixed.
+
+=item * C<-T _> with no preceding C<stat>
+
+This used to produce a confusing "uninitialized" warning, even though there
+is no visible uninitialized value to speak of.
+
+=item * C<stat I<HANDLE>> and fstat failures
+
+If the operating system's C<fstat> function failed, C<stat> would warn
+about an unopened handle, even though that was not the case.  This has been
+fixed.
+
+=item * C<lstat I<IOREF>>
+
+C<lstat> is documented to fall back to C<stat> (with a warning) when given
+a filehandle.  When passed an IO reference, it was actually doing the
+equivalent of S<C<stat _>> and ignoring the handle.
+
+=item * Crashes with warnings
+
+Two warning messages that mention variable names started crashing in
+5.15.5, but have been fixed [perl #106726, #107656].
+
+=item * Bitwise assignment operators and copy-on-write
+
+In 5.14.0, the bitwise assignment operators C<|=>, C<^=> and C<&=> starting
+leaving the left-hand side undefined if it happened to be a copy-on-write
+string.  This has been fixed [perl #108480].
+
+=back
 
 =head1 Acknowledgements
 

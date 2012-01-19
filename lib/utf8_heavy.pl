@@ -97,17 +97,18 @@ sub _loose_name ($) {
         #   USER_DEFINED is non-zero if the result came from a user-defined
         #       property.
         my $file; ## file to load data from, and also part of the %Cache key.
-        my $ListSorted = 0;
 
         # Change this to get a different set of Unicode tables
         my $unicore_dir = 'unicore';
         my $invert_it = 0;
+        my $list_is_from_mktables = 0;  # Is $list returned from a mktables
+                                        # generated file?  If so, we know it's
+                                        # well behaved.
 
         if ($type)
         {
-
             # Verify that this isn't a recursive call for this property.
-            # Can't use croak, as it may try to recurse here itself.
+            # Can't use croak, as it may try to recurse to here itself.
             my $class_type = $class . "::$type";
             if (grep { $_ eq $class_type } @recursed) {
                 CORE::die "panic: Infinite recursion in SWASHNEW for '$type'\n";
@@ -119,7 +120,7 @@ sub _loose_name ($) {
 
             # regcomp.c surrounds the property name with '__" and '_i' if this
             # is to be caseless matching.
-            my $caseless = $type =~ s/^__(.*)_i$/$1/;
+            my $caseless = $type =~ s/^(.*)__(.*)_i$/$1$2/;
 
             print STDERR __LINE__, ": type=$type, caseless=$caseless\n" if DEBUG;
 
@@ -130,7 +131,10 @@ sub _loose_name ($) {
                 ## package if no package given
                 ##
 
-                my $caller1 = $type =~ s/(.+)::// ? $1 : caller(1);
+
+                my $caller0 = caller(0);
+                my $caller1 = $type =~ s/(.+)::// ? $1 : $caller0 eq 'main' ?
+                'main' : caller(1);
 
                 if (defined $caller1 && $type =~ /^I[ns]\w+$/) {
                     my $prop = "${caller1}::$type";
@@ -401,8 +405,9 @@ sub _loose_name ($) {
                 # Add the constant and go fetch it in.
                 if (defined $file) {
 
-                    # A beginning ! means to invert
-                    $invert_it = $file =~ s/^!//;
+                    # A beginning ! means to invert.  The 0+ makes sure is
+                    # numeric
+                    $invert_it = 0 + $file =~ s/^!//;
 
                     if ($utf8::why_deprecated{$file}) {
                         warnings::warnif('deprecated', "Use of '$type' in \\p{} or \\P{} is deprecated because: $utf8::why_deprecated{$file};");
@@ -474,7 +479,8 @@ sub _loose_name ($) {
                         # get it.
                         $minbits = 1;
 
-                        $invert_it = $file =~ s/^!//;
+                        # The 0+ makes sure is numeric
+                        $invert_it = 0 + $file =~ s/^!//;
                         $file = "$unicore_dir/lib/$file.pl";
                         last GETFILE;
                     }
@@ -497,32 +503,34 @@ sub _loose_name ($) {
                 ## (exception: user-defined properties and mappings), so we
                 ## have a filename, so now we load it if we haven't already.
                 ## If we have, return the cached results. The cache key is the
-                ## class and file to load.
+                ## class and file to load, and whether the results need to be
+                ## inverted.
                 ##
-                my $found = $Cache{$class, $file};
+                my $found = $Cache{$class, $file, $invert_it};
                 if ($found and ref($found) eq $class) {
-                    print STDERR __LINE__, ": Returning cached '$file' for \\p{$type}; invert_it=$invert_it\n" if DEBUG;
+                    print STDERR __LINE__, ": Returning cached swash for '$class,$file,$invert_it' for \\p{$type}\n" if DEBUG;
                     pop @recursed if @recursed;
-                    $found->{'INVERT_IT'} = $invert_it;
                     return $found;
                 }
 
                 local $@;
                 local $!;
                 $list = do $file; die $@ if $@;
+                $list_is_from_mktables = 1;
             }
-
-            $ListSorted = 1; ## we know that these lists are sorted
         } # End of $type is non-null
 
         # Here, either $type was null, or we found the requested property and
         # read it into $list
 
-        my $extras;
+        my $extras = "";
 
         my $bits = $minbits;
 
-        if ($list) {
+        # mktables lists don't have extras, like '&utf8::prop', so don't need
+        # to separate them; also lists are already sorted, so don't need to do
+        # that.
+        if ($list && ! $list_is_from_mktables) {
             my $taint = substr($list,0,0); # maintain taint
 
             # Separate the extras from the code point list, and for
@@ -605,6 +613,7 @@ sub _loose_name ($) {
                         elsif ($c =~ /^([0-9a-fA-F]+)/) {
                             $subobj = utf8->SWASHNEW("", $c, $minbits, 0);
                         }
+                        print STDERR __LINE__, ": returned from getting sub object for $name\n" if DEBUG;
                         if (! ref $subobj) {
                             pop @recursed if @recursed && $type;
                             return $subobj;
@@ -636,7 +645,7 @@ sub _loose_name ($) {
         } => $class;
 
         if ($file) {
-            $Cache{$class, $file} = $SWASH;
+            $Cache{$class, $file, $invert_it} = $SWASH;
             if ($type
                 && exists $utf8::SwashInfo{$type}
                 && exists $utf8::SwashInfo{$type}{'specials_name'})
@@ -655,6 +664,6 @@ sub _loose_name ($) {
     }
 }
 
-# Now SWASHGET is recasted into a C function S_swash_get (see utf8.c).
+# Now SWASHGET is recasted into a C function S_swatch_get (see utf8.c).
 
 1;

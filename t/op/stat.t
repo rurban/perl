@@ -20,7 +20,7 @@ if(eval {require File::Spec; 1}) {
 }
 
 
-plan tests => 109;
+plan tests => 112;
 
 my $Perl = which_perl();
 
@@ -456,14 +456,30 @@ eval { lstat _ };
 is( "$@", "", "lstat _ ok after lstat" );
 eval { -l _ };
 is( "$@", "", "-l _ ok after lstat" );
+
+eval { lstat "test.pl" };
+{
+    open my $fh, "test.pl";
+    stat *$fh{IO};
+    eval { lstat _ }
+}
+like $@, qr/^The stat preceding lstat\(\) wasn't an lstat at /,
+'stat $ioref resets stat type';
+
+{
+    my @statbuf = stat STDOUT;
+    stat "test.pl";
+    my @lstatbuf = lstat *STDOUT{IO};
+    is "@lstatbuf", "@statbuf", 'lstat $ioref reverts to regular fstat';
+}
   
 SKIP: {
     skip "No lstat", 2 unless $Config{d_lstat};
 
     # bug id 20020124.004
     # If we have d_lstat, we should have symlink()
-    my $linkname = 'dolzero';
-    symlink $0, $linkname or die "# Can't symlink $0: $!";
+    my $linkname = 'stat-' . rand =~ y/.//dr;
+    symlink $Perl, $linkname or die "# Can't symlink $0: $!";
     lstat $linkname;
     -T _;
     eval { lstat _ };
@@ -494,6 +510,7 @@ SKIP: {
     ok(unlink($f), 'unlink tmp file');
 }
 
+# [perl #4253]
 {
     ok(open(F, ">", $tmpfile), 'can create temp file');
     close F;
@@ -503,6 +520,13 @@ SKIP: {
     -T _;
     my $s2 = -s _;
     is($s1, $s2, q(-T _ doesn't break the statbuffer));
+    SKIP: {
+	skip "No lstat", 1 unless $Config{d_lstat};
+	lstat($tmpfile);
+	-T _;
+	ok(eval { lstat _ },
+	   q(-T _ doesn't break lstat for unreadable file));
+    }
     unlink $tmpfile;
 }
 
