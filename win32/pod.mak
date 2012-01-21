@@ -1,7 +1,5 @@
 HTMLROOT = /	# Change this to fix cross-references in HTML
-POD2HTML_ARGS = --htmlroot=$(HTMLROOT) \
-	    --podroot=.. --podpath=pod:lib:ext:vms \
-	    --libpods=perlfunc:perlguts:perlvar:perlrun:perlop
+POD2HTML_ARGS = --htmlroot=$(HTMLROOT) --podroot=.. --podpath=pod:lib:ext:vms
 POD2HTML = ../ext/Pod-Html/pod2html
 POD2MAN = ../cpan/podlators/pod2man
 POD2TEXT = ../cpan/podlators/pod2text
@@ -36,6 +34,7 @@ POD = perl.pod	\
 	perl5155delta.pod	\
 	perl5156delta.pod	\
 	perl5157delta.pod	\
+	perl5158delta.pod	\
 	perl561delta.pod	\
 	perl56delta.pod	\
 	perl581delta.pod	\
@@ -161,6 +160,7 @@ MAN = perl.man	\
 	perl5155delta.man	\
 	perl5156delta.man	\
 	perl5157delta.man	\
+	perl5158delta.man	\
 	perl561delta.man	\
 	perl56delta.man	\
 	perl581delta.man	\
@@ -286,6 +286,7 @@ HTML = perl.html	\
 	perl5155delta.html	\
 	perl5156delta.html	\
 	perl5157delta.html	\
+	perl5158delta.html	\
 	perl561delta.html	\
 	perl56delta.html	\
 	perl581delta.html	\
@@ -411,6 +412,7 @@ TEX = perl.tex	\
 	perl5155delta.tex	\
 	perl5156delta.tex	\
 	perl5157delta.tex	\
+	perl5158delta.tex	\
 	perl561delta.tex	\
 	perl56delta.tex	\
 	perl581delta.tex	\

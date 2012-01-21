@@ -2535,7 +2535,9 @@ Perl_bind_match(pTHX_ I32 type, OP *left, OP *right)
           && (gv = cGVOPx_gv(cUNOPx(left)->op_first))
               ? varname(gv, isary ? '@' : '%', 0, NULL, 0, 1)
               : NULL
-        : varname(NULL, isary ? '@' : '%', left->op_targ, NULL, 0, 1);
+        : varname(
+           (GV *)PL_compcv, isary ? '@' : '%', left->op_targ, NULL, 0, 1
+          );
       if (name)
 	Perl_warner(aTHX_ packWARN(WARN_MISC),
              "Applying %s to %"SVf" will act on scalar(%"SVf")",
@@ -2934,7 +2936,7 @@ S_fold_constants(pTHX_ register OP *o)
     case OP_SCMP:
     case OP_SPRINTF:
 	/* XXX what about the numeric ops? */
-	if (PL_hints & HINT_LOCALE)
+	if (IN_LOCALE_COMPILETIME)
 	    goto nope;
 	break;
     }
@@ -4097,10 +4099,13 @@ Perl_newPMOP(pTHX_ I32 type, I32 flags)
 
     if (PL_hints & HINT_RE_TAINT)
 	pmop->op_pmflags |= PMf_RETAINT;
-    if (PL_hints & HINT_LOCALE) {
+    if (IN_LOCALE_COMPILETIME) {
 	set_regex_charset(&(pmop->op_pmflags), REGEX_LOCALE_CHARSET);
     }
-    else if ((! (PL_hints & HINT_BYTES)) && (PL_hints & HINT_UNI_8_BIT)) {
+    else if ((! (PL_hints & HINT_BYTES))
+                /* Both UNI_8_BIT and locale :not_characters imply Unicode */
+	     && (PL_hints & (HINT_UNI_8_BIT|HINT_LOCALE_NOT_CHARS)))
+    {
 	set_regex_charset(&(pmop->op_pmflags), REGEX_UNICODE_CHARSET);
     }
     if (PL_hints & HINT_RE_FLAGS) {
@@ -9720,7 +9725,8 @@ Perl_ck_length(pTHX_ OP *o)
                 case OP_PADHV:
                 case OP_PADAV:
                     name = varname(
-                        NULL, hash ? '%' : '@', kid->op_targ, NULL, 0, 1
+                        (GV *)PL_compcv, hash ? '%' : '@', kid->op_targ,
+                        NULL, 0, 1
                     );
                     break;
                 case OP_RV2HV:

@@ -11,9 +11,6 @@ use strict;
 use warnings;
 my @tests;
 
-my %todo_pass = map { $_ => 1 }
-	    qw(00DF 1E9E FB00 FB01 FB02 FB03 FB04 FB05 FB06);
-
 my $file="../lib/unicore/CaseFolding.txt";
 open my $fh,"<",$file or die "Failed to read '$file': $!";
 while (<$fh>) {
@@ -21,14 +18,13 @@ while (<$fh>) {
     my ($line,$comment)= split/\s+#\s+/, $_;
     my ($cp,$type,@folded)=split/[\s;]+/,$line||'';
     next unless $type and ($type eq 'F' or $type eq 'C');
-    next if $type eq 'C';   # 'C' tests now done by fold_grind.t
     my $fold_above_latin1 = grep { hex("0x$_") > 255 } @folded;
     $_="\\x{$_}" for @folded;
     my $cpv=hex("0x$cp");
     my $chr="\\x{$cp}";
     my @str;
     foreach my $swap (0, 1) {   # swap lhs and rhs, or not.
-        foreach my $charclass (0) {   # Put rhs in [...], or not
+        foreach my $charclass (0, 1) {   # Put rhs in [...], or not
             my $lhs;
             my $rhs;
             if ($swap) {
@@ -36,6 +32,7 @@ while (<$fh>) {
                 $rhs = $chr;
                 $rhs = "[$rhs]" if $charclass;
             } else {
+                #next if $charclass && @folded > 1;
                 $lhs = $chr;
                 $rhs = "";
                 foreach my $rhs_char (@folded) {
@@ -45,26 +42,21 @@ while (<$fh>) {
                 }
             }
             $lhs = "\"$lhs\"";
-            $rhs = "/^$rhs\$/i";
+            $rhs = "/^$rhs\$/iu";
 
             # Try both Latin1 and Unicode for code points below 256
             foreach my $upgrade ("", 'utf8::upgrade($c); ') {
-                if ($upgrade) {
+                if ($upgrade) { # No need to upgrade if already must be in
+                                # utf8
                     next if $swap && $fold_above_latin1;
                     next if !$swap && $cpv > 255;
                 }
                 my $eval = "my \$c = $lhs; $upgrade\$c =~ $rhs";
                 #print __LINE__, ": $eval\n";
                 push @tests, qq[ok(eval '$eval', '$eval - $comment')];
-                if ($charclass && @folded > 1 && $swap && ! $upgrade && ! $fold_above_latin1) {
-                    $tests[-1]="TODO: { local \$::TODO='Multi-char, non-utf8 folded inside character class [ ] doesnt work';\n$tests[-1] }"
-                } elsif (! $upgrade && $cpv >= 128 && $cpv <= 255 && $cpv != 0xb5) {
-                    $tests[-1]="TODO: { local \$::TODO='Most non-utf8 latin1 doesnt work';\n$tests[-1] }"
-                } elsif (! $swap && $charclass && @folded > 1
-		    && ! $todo_pass{$cp})
+                if (! $swap && $charclass && @folded > 1)
 		{
-                    # There are a few of these that pass; most fail.
-                    $tests[-1]="TODO: { local \$::TODO='Some multi-char, f8 folded inside character class [ ] doesnt work';\n$tests[-1] }"
+                    $tests[-1]="TODO: { local \$::TODO='A multi-char fold \"foo\", doesnt work for /[f][o][o]/i';\n$tests[-1] }"
                 }
             }
         }
@@ -107,7 +99,7 @@ for my $i (0x61 .. 0x7A, 0xE0 .. 0xF6, 0xF8 .. 0xFE) {
     $fold_ascii[$lower_ord] = $upper_ord;
 }
 
-# Test every latin1 character that the correct values in both /u and /d
+# Test every latin1 character for the correct values in both /u and /d
 for my $i (0 .. 255) {
     my $chr = sprintf "\\x%02X", $i;
     my $hex_fold_ascii = sprintf "0x%02X", $fold_ascii[$i];

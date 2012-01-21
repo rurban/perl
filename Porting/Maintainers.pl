@@ -748,7 +748,7 @@ use File::Glob qw(:case);
 
     'perlfaq' => {
         'MAINTAINER'   => 'perlfaq',
-        'DISTRIBUTION' => 'LLAP/perlfaq-5.0150037.tar.gz',
+        'DISTRIBUTION' => 'LLAP/perlfaq-5.0150038.tar.gz',
         'FILES'        => q[cpan/perlfaq],
         'EXCLUDED'     => [
             qw( t/release-pod-syntax.t
@@ -1096,7 +1096,7 @@ use File::Glob qw(:case);
 
     'Locale::Maketext' => {
         'MAINTAINER'   => 'ferreira',
-        'DISTRIBUTION' => 'TODDR/Locale-Maketext-1.21.tar.gz',
+        'DISTRIBUTION' => 'TODDR/Locale-Maketext-1.22.tar.gz',
         'FILES'        => q[dist/Locale-Maketext],
         'EXCLUDED'     => [
             qw(

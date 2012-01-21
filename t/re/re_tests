@@ -1,8 +1,8 @@
 # This stops me getting screenfulls of syntax errors every time I accidentally
 # run this file via a shell glob.  The full format of this file is given
 # in regexp.t
-# Can't use \N{VALID NAME TEST} here because need 'use charnames'; but can use
-# \N{U+valid} here.
+# Prior to the implementation of autoloading of \N{}, tests that used \N{name}
+# could not go in this file, and were farmed out to other .t's.
 #
 # pat	string	y/n/etc	expr	expected-expr	skip-reason
 __END__
@@ -1536,7 +1536,7 @@ abc\N{def	-	c	-	\\N{NAME} must be resolved by the lexer
 /^\p{L}/	\x{3400}	y	$&	\x{3400}
 
 # RT #89774
-/s\xDF/ui	\xDFs	yT	$&	\xDFs
+/[s\xDF]/ui	\xDFs	ybT	$&	\xDFs
 
 # RT #99928
 /^\R\x0A$/	\x0D\x0A	n	-	-
@@ -1551,8 +1551,17 @@ abc\N{def	-	c	-	\\N{NAME} must be resolved by the lexer
 /ffiffl/i	abcdef\x{FB03}\x{FB04}	y	$&	\x{FB03}\x{FB04}
 /\xdf\xdf/ui	abcdefssss	y	$&	ssss
 
+/st/i	\x{DF}\x{FB05}	y	$&	\x{FB05}
+/ssst/i	\x{DF}\x{FB05}	y	$&	\x{DF}\x{FB05}
+
 # [perl #101970]
 /[[:lower:]]/i	\x{100}	y	$&	\x{100}
 /[[:upper:]]/i	\x{101}	y	$&	\x{101}
+
+# Was matching 'ss' only and failing the entire match, not seeing the
+# alternative that would succeed
+/s\xDF/ui	\xDFs	y	$&	\xDFs
+/sst/ui	s\N{LATIN SMALL LIGATURE ST}	y	$&	s\N{LATIN SMALL LIGATURE ST}
+/sst/ui	s\N{LATIN SMALL LIGATURE LONG S T}	y	$&	s\N{LATIN SMALL LIGATURE LONG S T}
 
 # vim: softtabstop=0 noexpandtab
