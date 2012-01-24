@@ -814,6 +814,12 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 	    if (purity)
 		warn("Encountered CODE ref, using dummy placeholder");
 	}
+	else if (realtype == SVt_PVIO) {
+	    /* TODO should detect 1-3 STD handles and print the other handles numerically */
+	    sv_catpvn(retval, "*{$::{DUMMY}{IO}}", 17);
+	    if (purity)
+		warn("Encountered IO type, using dummy placeholder");
+	}
 	else {
 	    warn("cannot handle ref type %d", (int)realtype);
 	}

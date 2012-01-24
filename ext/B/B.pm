@@ -334,7 +334,11 @@ sub walksymtable {
     }
 }
 
+<<<<<<< HEAD
 XSLoader::load();
+=======
+XSLoader::load 'B';
+>>>>>>> 1b0bb960c921d16bf06b2d3d8489d741f7f0d9f4
 
 1;
 
@@ -897,8 +901,12 @@ If you're working with globs at runtime, and need to disambiguate
 
 =head2 B::IO Methods
 
+<<<<<<< HEAD
 B::IO objects derive from IO objects and you will get more information from
 the IO object itself.
+=======
+B::IO objects derive from IO objects and you will get more information there.
+>>>>>>> 1b0bb960c921d16bf06b2d3d8489d741f7f0d9f4
 
 For example:
 
@@ -949,11 +957,17 @@ A character symbolizing the type of IO Handle.
 
 =item IoFLAGS
 
+See F<perliol.h>
+
 =item IsSTD
 
 Takes one argument ( 'stdin' | 'stdout' | 'stderr' ) and returns true
 if the IoIFP of the object is equal to the handle whose name was
+<<<<<<< HEAD
 passed as argument; i.e., $io->IsSTD('stderr') is true if
+=======
+passed as argument. i.e. $io->IsSTD('stderr') is true if
+>>>>>>> 1b0bb960c921d16bf06b2d3d8489d741f7f0d9f4
 IoIFP($io) == PerlIO_stderr().
 
 =back
