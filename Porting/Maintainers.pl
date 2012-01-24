@@ -748,7 +748,7 @@ use File::Glob qw(:case);
 
     'perlfaq' => {
         'MAINTAINER'   => 'perlfaq',
-        'DISTRIBUTION' => 'LLAP/perlfaq-5.0150037.tar.gz',
+        'DISTRIBUTION' => 'LLAP/perlfaq-5.0150038.tar.gz',
         'FILES'        => q[cpan/perlfaq],
         'EXCLUDED'     => [
             qw( t/release-pod-syntax.t
@@ -1243,7 +1243,7 @@ use File::Glob qw(:case);
 
     'Module::CoreList' => {
         'MAINTAINER'   => 'bingos',
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-2.59.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-2.60.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
         'UPSTREAM'     => 'blead',
     },
@@ -1494,11 +1494,7 @@ use File::Glob qw(:case);
 
     'Pod::Parser' => {
         'MAINTAINER' => 'marekr',
-
-        # XXX Parser.pm in the 1.38 distribution identifies itself as
-        # version 1.37!
-
-        'DISTRIBUTION' => 'MAREKR/Pod-Parser-1.38.tar.gz',
+        'DISTRIBUTION' => 'MAREKR/Pod-Parser-1.50.tar.gz',
         'FILES'        => q[cpan/Pod-Parser],
         'UPSTREAM'     => undef,
     },

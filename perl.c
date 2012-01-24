@@ -2,7 +2,7 @@
 /*    perl.c
  *
  *    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001
- *    2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+ *    2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
  *     by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
@@ -92,7 +92,7 @@ static I32 read_e_script(pTHX_ int idx, SV *buf_sv, int maxlen);
 
 #define CALL_LIST_BODY(cv) \
     PUSHMARK(PL_stack_sp); \
-    call_sv(MUTABLE_SV((cv)), G_EVAL|G_DISCARD);
+    call_sv(MUTABLE_SV((cv)), G_EVAL|G_DISCARD|G_VOID);
 
 static void
 S_init_tls_and_interp(PerlInterpreter *my_perl)

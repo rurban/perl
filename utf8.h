@@ -1,6 +1,7 @@
 /*    utf8.h
  *
- *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009 by Larry Wall and others
+ *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009,
+ *    2010, 2011 by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
@@ -250,8 +251,8 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 
 #define IN_BYTES (CopHINTS_get(PL_curcop) & HINT_BYTES)
 #define DO_UTF8(sv) (SvUTF8(sv) && !IN_BYTES)
-#define IN_UNI_8_BIT ( (CopHINTS_get(PL_curcop) & HINT_UNI_8_BIT) \
-			&& ! IN_LOCALE_RUNTIME && ! IN_BYTES)
+#define IN_UNI_8_BIT \
+	    (CopHINTS_get(PL_curcop) & (HINT_UNI_8_BIT|HINT_LOCALE_NOT_CHARS))
 
 #define UTF8_ALLOW_EMPTY		0x0001	/* Allow a zero length string */
 

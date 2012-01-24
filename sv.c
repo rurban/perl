@@ -3521,11 +3521,8 @@ Perl_sv_utf8_encode(pTHX_ register SV *const sv)
 {
     PERL_ARGS_ASSERT_SV_UTF8_ENCODE;
 
-    if (SvIsCOW(sv)) {
-        sv_force_normal_flags(sv, 0);
-    }
     if (SvREADONLY(sv)) {
-	Perl_croak_no_modify(aTHX);
+	sv_force_normal_flags(sv, 0);
     }
     (void) sv_utf8_upgrade(sv);
     SvUTF8_off(sv);
@@ -3562,7 +3559,7 @@ Perl_sv_utf8_decode(pTHX_ register SV *const sv)
          * we want to make sure everything inside is valid utf8 first.
          */
         c = start = (const U8 *) SvPVX_const(sv);
-	if (!is_utf8_string(c, SvCUR(sv)+1))
+	if (!is_utf8_string(c, SvCUR(sv)))
 	    return FALSE;
         e = (const U8 *) SvEND(sv);
         while (c < e) {
@@ -4797,7 +4794,7 @@ Perl_sv_force_normal_flags(pTHX_ register SV *const sv, const U32 flags)
     }
 #else
     if (SvREADONLY(sv)) {
-	if (SvFAKE(sv) && !isGV_with_GP(sv)) {
+	if (SvIsCOW(sv)) {
 	    const char * const pvx = SvPVX_const(sv);
 	    const STRLEN len = SvCUR(sv);
 	    SvFAKE_off(sv);
@@ -5310,7 +5307,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
     if (SvREADONLY(sv)) {
 	if (
 	    /* its okay to attach magic to shared strings */
-	    (!SvFAKE(sv) || isGV_with_GP(sv))
+	    !SvIsCOW(sv)
 
 	    && IN_PERL_RUNTIME
 	    && !PERL_MAGIC_TYPE_READONLY_ACCEPTABLE(how)
@@ -6191,7 +6188,7 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 		     && !(SvTYPE(sv) == SVt_PVIO
 		     && !(IoFLAGS(sv) & IOf_FAKE_DIRP)))
 		Safefree(SvPVX_mutable(sv));
-	    else if (SvPVX_const(sv) && SvREADONLY(sv) && SvFAKE(sv)) {
+	    else if (SvPVX_const(sv) && SvIsCOW(sv)) {
 		unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
 		SvFAKE_off(sv);
 	    }

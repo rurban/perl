@@ -2548,6 +2548,7 @@ PERL_CALLCONV OP*	Perl_newASSIGNOP(pTHX_ I32 flags, OP* left, I32 optype, OP* ri
 			__attribute__warn_unused_result__;
 
 PERL_CALLCONV CV*	Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block);
+PERL_CALLCONV CV*	Perl_newATTRSUB_flags(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block, U32 flags);
 /* PERL_CALLCONV AV*	Perl_newAV(pTHX)
 			__attribute__warn_unused_result__; */
 
@@ -6371,12 +6372,13 @@ PERL_STATIC_INLINE void	S_invlist_trim(pTHX_ SV* const invlist)
 #define PERL_ARGS_ASSERT_INVLIST_TRIM	\
 	assert(invlist)
 
-STATIC U32	S_join_exact(pTHX_ struct RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags, regnode *val, U32 depth)
+STATIC U32	S_join_exact(pTHX_ struct RExC_state_t *pRExC_state, regnode *scan, UV *min_subtract, bool *has_exactf_sharp_s, U32 flags, regnode *val, U32 depth)
 			__attribute__nonnull__(pTHX_1)
 			__attribute__nonnull__(pTHX_2)
-			__attribute__nonnull__(pTHX_3);
+			__attribute__nonnull__(pTHX_3)
+			__attribute__nonnull__(pTHX_4);
 #define PERL_ARGS_ASSERT_JOIN_EXACT	\
-	assert(pRExC_state); assert(scan); assert(min)
+	assert(pRExC_state); assert(scan); assert(min_subtract); assert(has_exactf_sharp_s)
 
 STATIC I32	S_make_trie(pTHX_ struct RExC_state_t *pRExC_state, regnode *startbranch, regnode *first, regnode *last, regnode *tail, U32 word_count, U32 flags, U32 depth)
 			__attribute__nonnull__(pTHX_1)

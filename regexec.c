@@ -303,13 +303,13 @@
 /* Currently these are only used when PL_regkind[OP(rn)] == EXACT so
    we don't need this definition. */
 #define IS_TEXT(rn)   ( OP(rn)==EXACT   || OP(rn)==REF   || OP(rn)==NREF   )
-#define IS_TEXTF(rn)  ( (OP(rn)==EXACTFU || OP(rn)==EXACTFA ||  OP(rn)==EXACTF)  || OP(rn)==REFF  || OP(rn)==NREFF )
+#define IS_TEXTF(rn)  ( OP(rn)==EXACTFU || OP(rn)==EXACTFU_SS || OP(rn)==EXACTFU_NO_TRIE || OP(rn)==EXACTFA || OP(rn)==EXACTF || OP(rn)==REFF  || OP(rn)==NREFF )
 #define IS_TEXTFL(rn) ( OP(rn)==EXACTFL || OP(rn)==REFFL || OP(rn)==NREFFL )
 
 #else
 /* ... so we use this as its faster. */
 #define IS_TEXT(rn)   ( OP(rn)==EXACT   )
-#define IS_TEXTFU(rn)  ( OP(rn)==EXACTFU || OP(rn) == EXACTFA)
+#define IS_TEXTFU(rn)  ( OP(rn)==EXACTFU || OP(rn)==EXACTFU_SS || OP(rn)==EXACTFU_NO_TRIE || OP(rn) == EXACTFA)
 #define IS_TEXTF(rn)  ( OP(rn)==EXACTF  )
 #define IS_TEXTFL(rn) ( OP(rn)==EXACTFL )
 
@@ -1465,10 +1465,10 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    goto do_exactf_non_utf8;	    /* isn't dealt with by these */
 
 	case EXACTF:
-	    if (UTF_PATTERN || utf8_target) {
+	    if (utf8_target) {
 
 		/* regcomp.c already folded this if pattern is in UTF-8 */
-		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
+		utf8_fold_flags = 0;
 		goto do_exactf_utf8;
 	    }
 	    fold_array = PL_fold;
@@ -1484,6 +1484,13 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    folder = foldEQ_locale;
 	    goto do_exactf_non_utf8;
 
+	case EXACTFU_SS:
+	    if (UTF_PATTERN) {
+		utf8_fold_flags = FOLDEQ_S2_ALREADY_FOLDED;
+	    }
+	    goto do_exactf_utf8;
+
+	case EXACTFU_NO_TRIE:
 	case EXACTFU:
 	    if (UTF_PATTERN || utf8_target) {
 		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
@@ -1498,7 +1505,9 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 
 	    /* FALL THROUGH */
 
-	do_exactf_non_utf8: /* Neither pattern nor string are UTF8 */
+	do_exactf_non_utf8: /* Neither pattern nor string are UTF8, and there
+			       are no glitches with fold-length differences
+			       between the target string and pattern */
 
 	    /* The idea in the non-utf8 EXACTF* cases is to first find the
 	     * first character of the EXACTF* node and then, if necessary,
@@ -3661,6 +3670,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	    fold_utf8_flags = FOLDEQ_UTF8_LOCALE;
 	    goto do_exactf;
 
+	case EXACTFU_SS:
+	case EXACTFU_NO_TRIE:
 	case EXACTFU:
 	    folder = foldEQ_latin1;
 	    fold_array = PL_fold_latin1;
@@ -3676,19 +3687,20 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	case EXACTF:
 	    folder = foldEQ;
 	    fold_array = PL_fold;
-	    fold_utf8_flags = (UTF_PATTERN) ? FOLDEQ_S1_ALREADY_FOLDED : 0;
+	    fold_utf8_flags = 0;
 
 	  do_exactf:
 	    s = STRING(scan);
 	    ln = STR_LEN(scan);
 
-	    if (utf8_target || UTF_PATTERN) {
-	      /* Either target or the pattern are utf8. */
+	    if (utf8_target || UTF_PATTERN || state_num == EXACTFU_SS) {
+	      /* Either target or the pattern are utf8, or has the issue where
+	       * the fold lengths may differ. */
 		const char * const l = locinput;
 		char *e = PL_regeol;
 
 		if (! foldEQ_utf8_flags(s, 0,  ln, cBOOL(UTF_PATTERN),
-			       l, &e, 0,  utf8_target, fold_utf8_flags))
+			                l, &e, 0,  utf8_target, fold_utf8_flags))
 		{
 		    sayNO;
 		}
@@ -5072,6 +5084,8 @@ NULL
 			switch (OP(text_node)) {
 			    case EXACTF: ST.c2 = PL_fold[ST.c1]; break;
 			    case EXACTFA:
+			    case EXACTFU_SS:
+			    case EXACTFU_NO_TRIE:
 			    case EXACTFU: ST.c2 = PL_fold_latin1[ST.c1]; break;
 			    case EXACTFL: ST.c2 = PL_fold_locale[ST.c1]; break;
 			    default: ST.c2 = ST.c1;
@@ -5226,6 +5240,8 @@ NULL
 			switch (OP(text_node)) {
 			    case EXACTF: ST.c2 = PL_fold[ST.c1]; break;
 			    case EXACTFA:
+			    case EXACTFU_SS:
+			    case EXACTFU_NO_TRIE:
 			    case EXACTFU: ST.c2 = PL_fold_latin1[ST.c1]; break;
 			    case EXACTFL: ST.c2 = PL_fold_locale[ST.c1]; break;
 			    default: ST.c2 = ST.c1; break;
@@ -5694,27 +5710,6 @@ NULL
             sayNO;
             /* NOTREACHED */
 #undef ST
-        case FOLDCHAR:
-            n = ARG(scan);
-            if ( n == (U32)what_len_TRICKYFOLD(locinput,utf8_target,ln) ) {
-                locinput += ln;
-            } else if ( LATIN_SMALL_LETTER_SHARP_S == n && !utf8_target && !UTF_PATTERN ) {
-                sayNO;
-            } else  {
-                U8 folded[UTF8_MAXBYTES_CASE+1];
-                STRLEN foldlen;
-                const char * const l = locinput;
-                char *e = PL_regeol;
-                to_uni_fold(n, folded, &foldlen);
-
-		if (! foldEQ_utf8((const char*) folded, 0,  foldlen, 1,
-                	       l, &e, 0,  utf8_target)) {
-                        sayNO;
-                }
-                locinput = e;
-            } 
-            nextchr = UCHARAT(locinput);  
-            break;
         case LNBREAK:
             if ((n=is_LNBREAK(locinput,utf8_target))) {
                 locinput += n;
@@ -6036,6 +6031,11 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	goto do_exactf;
 
     case EXACTF:
+	    utf8_flags = 0;
+	    goto do_exactf;
+
+    case EXACTFU_SS:
+    case EXACTFU_NO_TRIE:
     case EXACTFU:
 	utf8_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
 
@@ -6046,7 +6046,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	c = (U8)*STRING(p);
 	assert(! UTF_PATTERN || UNI_IS_INVARIANT(c));
 
-	if (utf8_target) { /* Use full Unicode fold matching */
+	if (utf8_target || OP(p) == EXACTFU_SS) { /* Use full Unicode fold matching */
 	    char *tmpeol = loceol;
 	    while (hardcount < max
 		    && foldEQ_utf8_flags(scan, &tmpeol, 0, utf8_target,
@@ -6077,6 +6077,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	    switch (OP(p)) {
 		case EXACTF: folded = PL_fold[c]; break;
 		case EXACTFA:
+		case EXACTFU_NO_TRIE:
 		case EXACTFU: folded = PL_fold_latin1[c]; break;
 		case EXACTFL: folded = PL_fold_locale[c]; break;
 		default: Perl_croak(aTHX_ "panic: Unexpected op %u", OP(p));

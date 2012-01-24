@@ -918,7 +918,7 @@
 #define invlist_search(a,b)	S_invlist_search(aTHX_ a,b)
 #define invlist_set_len(a,b)	S_invlist_set_len(aTHX_ a,b)
 #define invlist_trim(a)		S_invlist_trim(aTHX_ a)
-#define join_exact(a,b,c,d,e,f)	S_join_exact(aTHX_ a,b,c,d,e,f)
+#define join_exact(a,b,c,d,e,f,g)	S_join_exact(aTHX_ a,b,c,d,e,f,g)
 #define make_trie(a,b,c,d,e,f,g,h)	S_make_trie(aTHX_ a,b,c,d,e,f,g,h)
 #define make_trie_failtable(a,b,c,d)	S_make_trie_failtable(aTHX_ a,b,c,d)
 #define nextchar(a)		S_nextchar(aTHX_ a)
@@ -1146,6 +1146,7 @@
 #define my_stat_flags(a)	Perl_my_stat_flags(aTHX_ a)
 #define my_swabn		Perl_my_swabn
 #define my_unexec()		Perl_my_unexec(aTHX)
+#define newATTRSUB_flags(a,b,c,d,e,f)	Perl_newATTRSUB_flags(aTHX_ a,b,c,d,e,f)
 #define newXS_len_flags(a,b,c,d,e,f,g)	Perl_newXS_len_flags(aTHX_ a,b,c,d,e,f,g)
 #define nextargv(a)		Perl_nextargv(aTHX_ a)
 #define oopsAV(a)		Perl_oopsAV(aTHX_ a)

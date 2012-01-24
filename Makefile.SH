@@ -479,7 +479,7 @@ mini_obj = $(minindt_obj) $(MINIDTRACE_O)
 ndt_obj = $(obj0) $(obj1) $(obj2) $(obj3) $(ARCHOBJS)
 obj = $(ndt_obj) $(DTRACE_O)
 
-perltoc_pod_prereqs = extra.pods pod/perl5157delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
+perltoc_pod_prereqs = extra.pods pod/perl5158delta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)
 generated_headers = uudmap.h bitcount.h mg_data.h
 
@@ -1055,8 +1055,8 @@ pod/perlintern.pod: $(MINIPERL_EXE) autodoc.pl embed.fnc
 pod/perlmodlib.pod: $(MINIPERL_EXE) pod/perlmodlib.PL MANIFEST
 	$(MINIPERL) $(Icwd) pod/perlmodlib.PL -q
 
-pod/perl5157delta.pod: pod/perldelta.pod
-	$(LNS) perldelta.pod pod/perl5157delta.pod
+pod/perl5158delta.pod: pod/perldelta.pod
+	$(LNS) perldelta.pod pod/perl5158delta.pod
 
 extra.pods: $(MINIPERL_EXE)
 	-@test ! -f extra.pods || rm -f `cat extra.pods`
@@ -1316,6 +1316,7 @@ _cleaner2:
 	rm -fr lib/B
 	rm -fr lib/CPAN lib/CPANPLUS
 	rm -fr lib/ExtUtils/CBuilder
+	rm -rf pod/perlfunc pod/perlipc
 	-rmdir cpan/CPANPLUS-Dist-Build/t/dummy-cpanplus cpan/CPANPLUS/t/dummy-cpanplus cpan/CPANPLUS/t/dummy-localmirror
 	-rmdir ext/B/lib
 	-rmdir lib/Archive/Tar lib/Archive lib/Attribute

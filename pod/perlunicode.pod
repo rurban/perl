@@ -90,10 +90,12 @@ semantics.  For operations where this determination cannot be made
 without additional information from the user, Perl decides in favor of
 compatibility and chooses to use byte semantics.
 
-When C<use locale> is in effect (which overrides
-C<use feature 'unicode_strings'> in the same scope), Perl uses the
-semantics associated
-with the current locale.  Otherwise, Perl uses the platform's native
+When C<use locale> (but not C<use locale ':not_characters'>) is in
+effect, Perl uses the semantics associated with the current locale.
+(C<use locale> overrides C<use feature 'unicode_strings'> in the same scope;
+while C<use locale ':not_characters'> effectively also selects
+C<use feature 'unicode_strings'> in its scope; see L<perllocale>.)
+Otherwise, Perl uses the platform's native
 byte semantics for characters whose code points are less than 256, and
 Unicode semantics for those greater than 255.  On EBCDIC platforms, this
 is almost seamless, as the EBCDIC code pages that Perl handles are
@@ -847,28 +849,32 @@ tabular characters) denoting a range of Unicode code points to include.
 =item *
 
 Something to include, prefixed by "+": a built-in character
-property (prefixed by "utf8::") or a user-defined character property,
+property (prefixed by "utf8::") or a fully qualified (including package
+name) user-defined character property,
 to represent all the characters in that property; two hexadecimal code
 points for a range; or a single hexadecimal code point.
 
 =item *
 
 Something to exclude, prefixed by "-": an existing character
-property (prefixed by "utf8::") or a user-defined character property,
+property (prefixed by "utf8::") or a fully qualified (including package
+name) user-defined character property,
 to represent all the characters in that property; two hexadecimal code
 points for a range; or a single hexadecimal code point.
 
 =item *
 
 Something to negate, prefixed "!": an existing character
-property (prefixed by "utf8::") or a user-defined character property,
+property (prefixed by "utf8::") or a fully qualified (including package
+name) user-defined character property,
 to represent all the characters in that property; two hexadecimal code
 points for a range; or a single hexadecimal code point.
 
 =item *
 
 Something to intersect with, prefixed by "&": an existing character
-property (prefixed by "utf8::") or a user-defined character property,
+property (prefixed by "utf8::") or a fully qualified (including package
+name) user-defined character property,
 for all the characters except the characters in the property; two
 hexadecimal code points for a range; or a single hexadecimal code point.
 

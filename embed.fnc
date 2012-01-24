@@ -1590,6 +1590,9 @@ Apd	|SV*	|sv_rvweaken	|NN SV *const sv
 p	|int	|magic_killbackrefs|NN SV *sv|NN MAGIC *mg
 Ap	|OP*	|newANONATTRSUB	|I32 floor|NULLOK OP *proto|NULLOK OP *attrs|NULLOK OP *block
 Ap	|CV*	|newATTRSUB	|I32 floor|NULLOK OP *o|NULLOK OP *proto|NULLOK OP *attrs|NULLOK OP *block
+p	|CV*	|newATTRSUB_flags|I32 floor|NULLOK OP *o|NULLOK OP *proto \
+				 |NULLOK OP *attrs|NULLOK OP *block \
+				 |U32 flags
 #ifdef PERL_MAD
 Apr	|OP *	|newMYSUB	|I32 floor|NULLOK OP *o|NULLOK OP *proto \
 				|NULLOK OP *attrs|NULLOK OP *block
@@ -1899,7 +1902,9 @@ Es	|void	|regtail	|NN struct RExC_state_t *pRExC_state \
 Es	|SV *	|reg_scan_name	|NN struct RExC_state_t *pRExC_state \
 				|U32 flags
 Es	|U32	|join_exact	|NN struct RExC_state_t *pRExC_state \
-				|NN regnode *scan|NN I32 *min|U32 flags|NULLOK regnode *val|U32 depth
+				|NN regnode *scan|NN UV *min_subtract  \
+				|NN bool *has_exactf_sharp_s  \
+				|U32 flags|NULLOK regnode *val|U32 depth
 EsRn	|char *	|regwhite	|NN struct RExC_state_t *pRExC_state \
 				|NN char *p
 Es	|char *	|nextchar	|NN struct RExC_state_t *pRExC_state

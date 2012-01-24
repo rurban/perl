@@ -6133,6 +6133,20 @@ int_fileify_dirspec(const char *dir, char *buf, int *utf8_fl)
                 /* The .dir for now, and fix this better later */
                 dirlen = cp2 - trndir;
             }
+            if (decc_efs_charset) {
+                /* Dots are allowed in dir names, so escape them. */
+                char *cp4 = is_dir ? (cp2 - 1) : cp2;
+                  
+                for (; cp4 > cp1; cp4--) {
+                    if (*cp4 == '.') {
+                        if ((cp4 - 1 > trndir) && (*(cp4 - 1) != '^')) {
+                            memmove(cp4 + 1, cp4, trndir + dirlen - cp4 + 1);
+                            *cp4 = '^';
+                            dirlen++;
+	                }
+                    }
+                }
+            }
         }
 
       }
@@ -8466,17 +8480,6 @@ static char *int_tovmsspec
           return rslt;
       }
   }
-
-/* If EFS charset mode active, handle the conversion */
-#if __CRTL_VER >= 80200000 && !defined(__VAX)
-  if (decc_efs_charset) {
-    posix_to_vmsspec_hardway(rslt, rslt_len, path, dir_flag, utf8_flag);
-    if (vms_debug_fileify) {
-        fprintf(stderr, "int_tovmsspec: rslt = %s\n", rslt);
-    }
-    return rslt;
-  }
-#endif
 
   if (*(dirend+1) == '.') {  /* do we have trailing "/." or "/.." or "/..."? */
     if (!*(dirend+2)) dirend +=2;

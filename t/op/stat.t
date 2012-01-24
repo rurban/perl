@@ -20,7 +20,7 @@ if(eval {require File::Spec; 1}) {
 }
 
 
-plan tests => 112;
+plan tests => 113;
 
 my $Perl = which_perl();
 
@@ -479,7 +479,9 @@ SKIP: {
     # bug id 20020124.004
     # If we have d_lstat, we should have symlink()
     my $linkname = 'stat-' . rand =~ y/.//dr;
-    symlink $Perl, $linkname or die "# Can't symlink $0: $!";
+    my $target = $Perl;
+    $target =~ s/;\d+\z// if $Is_VMS; # symlinks don't like version numbers
+    symlink $target, $linkname or die "# Can't symlink $0: $!";
     lstat $linkname;
     -T _;
     eval { lstat _ };
@@ -585,6 +587,16 @@ SKIP: {
 	closedir DIR or die $!;
 	close DIR or die $!;
     }
+}
+
+# [perl #71002]
+{
+    local $^W = 1;
+    my $w;
+    local $SIG{__WARN__} = sub { warn shift; ++$w };
+    stat 'prepeinamehyparcheiarcheiometoonomaavto';
+    stat _;
+    is $w, undef, 'no unopened warning from stat _';
 }
 
 END {

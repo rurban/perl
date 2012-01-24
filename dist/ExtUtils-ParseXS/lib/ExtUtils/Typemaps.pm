@@ -2,7 +2,7 @@ package ExtUtils::Typemaps;
 use 5.006001;
 use strict;
 use warnings;
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 #use Carp qw(croak);
 
 require ExtUtils::ParseXS;
@@ -688,6 +688,18 @@ sub is_empty {
       && @{ $self->{output_section} } == 0;
 }
 
+=head2 list_mapped_ctypes
+
+Returns a list of the C types that are mappable by
+this typemap object.
+
+=cut
+
+sub list_mapped_ctypes {
+  my $self = shift;
+  return sort keys %{ $self->{typemap_lookup} };
+}
+
 =head2 _get_typemap_hash
 
 Returns a hash mapping the C types to the XS types:
@@ -1008,7 +1020,7 @@ Steffen Mueller C<<smueller@cpan.org>>
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2011 Steffen Mueller
+Copyright 2009, 2010, 2011, 2012 Steffen Mueller
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
