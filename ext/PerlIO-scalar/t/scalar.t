@@ -329,6 +329,7 @@ sub has_trailing_nul(\$) {
    return 0 if $cur >= $len;
 
    my $pv_addr = unpack 'J', pack 'P', $$ref;
+   $pv_addr = unpack 'I', pack 'p', $$ref unless $pv_addr;
    my $trailing = unpack 'P', pack 'J', $pv_addr+$cur;
    return $trailing eq "\0";
 }
