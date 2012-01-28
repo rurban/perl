@@ -179,6 +179,7 @@ XEop	|bool	|try_amagic_bin	|int method|int flags
 XEop	|bool	|try_amagic_un	|int method|int flags
 Ap	|SV*	|amagic_call	|NN SV* left|NN SV* right|int method|int dir
 Ap	|SV *	|amagic_deref_call|NN SV *ref|int method
+p	|bool	|amagic_is_enabled|int method
 Ap	|int	|Gv_AMupdate	|NN HV* stash|bool destructing
 ApR	|CV*	|gv_handler	|NULLOK HV* stash|I32 id
 Apd	|OP*	|op_append_elem	|I32 optype|NULLOK OP* first|NULLOK OP* last
@@ -1590,6 +1591,9 @@ Apd	|SV*	|sv_rvweaken	|NN SV *const sv
 p	|int	|magic_killbackrefs|NN SV *sv|NN MAGIC *mg
 Ap	|OP*	|newANONATTRSUB	|I32 floor|NULLOK OP *proto|NULLOK OP *attrs|NULLOK OP *block
 Ap	|CV*	|newATTRSUB	|I32 floor|NULLOK OP *o|NULLOK OP *proto|NULLOK OP *attrs|NULLOK OP *block
+p	|CV*	|newATTRSUB_flags|I32 floor|NULLOK OP *o|NULLOK OP *proto \
+				 |NULLOK OP *attrs|NULLOK OP *block \
+				 |U32 flags
 #ifdef PERL_MAD
 Apr	|OP *	|newMYSUB	|I32 floor|NULLOK OP *o|NULLOK OP *proto \
 				|NULLOK OP *attrs|NULLOK OP *block

@@ -44,7 +44,6 @@ available for ARGV and environment variable conversions.
 
 Full details are in L<perllocale>.
 
->>>>>>> Add :not_characters parameter to 'use locale'
 =head1 Security
 
 XXX Any security-related notices go here.  In particular, any security
@@ -114,7 +113,17 @@ XXX
 
 =item *
 
-L<XXX> has been upgraded from version 0.69 to version 0.70.
+L<DB_File> has been upgraded from version 1.824 to version 1.826.
+
+=item *
+
+L<Pod::Parser> has been upgraded from version 1.37 to version 1.51.
+
+=item *
+
+L<Unicode::UCD> has been upgraded from version 0.39 to 0.40.
+
+The only change is to fix a formatting error in the Pod.
 
 =back
 
@@ -341,7 +350,8 @@ L</Modules and Pragmata>.
 
 =item *
 
-XXX
+C<~~> now correctly handles the precedence of Any~~Object, and is not tricked
+by an overloaded object on the left-hand side.
 
 =back
 

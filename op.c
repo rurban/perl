@@ -1167,14 +1167,6 @@ Perl_scalarvoid(pTHX_ OP *o)
 	    no_bareword_allowed(o);
 	else {
 	    if (ckWARN(WARN_VOID)) {
-		if (SvOK(sv)) {
-		    SV* msv = sv_2mortal(Perl_newSVpvf(aTHX_
-				"a constant (%"SVf")", sv));
-		    useless = SvPV_nolen(msv);
-                    useless_is_utf8 = SvUTF8(msv);
-		}
-		else
-		    useless = "a constant (undef)";
 		/* don't warn on optimised away booleans, eg 
 		 * use constant Foo, 5; Foo || print; */
 		if (cSVOPo->op_private & OPpCONST_SHORTCIRCUIT)
@@ -1196,7 +1188,24 @@ Perl_scalarvoid(pTHX_ OP *o)
 			strnEQ(maybe_macro, "ds", 2) ||
 			strnEQ(maybe_macro, "ig", 2))
 			    useless = NULL;
+		    else {
+			SV * const dsv = newSVpvs("");
+			SV* msv = sv_2mortal(Perl_newSVpvf(aTHX_
+				    "a constant (%s)",
+				    pv_pretty(dsv, maybe_macro, SvCUR(sv), 32, NULL, NULL,
+					    PERL_PV_PRETTY_DUMP | PERL_PV_ESCAPE_NOCLEAR | PERL_PV_ESCAPE_UNI_DETECT )));
+			SvREFCNT_dec(dsv);
+			useless = SvPV_nolen(msv);
+			useless_is_utf8 = SvUTF8(msv);
+		    }
 		}
+		else if (SvOK(sv)) {
+		    SV* msv = sv_2mortal(Perl_newSVpvf(aTHX_
+				"a constant (%"SVf")", sv));
+		    useless = SvPV_nolen(msv);
+		}
+		else
+		    useless = "a constant (undef)";
 	    }
 	}
 	op_null(o);		/* don't execute or even remember it */
@@ -6445,6 +6454,13 @@ Perl_newMYSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 CV *
 Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 {
+    return newATTRSUB_flags(floor, o, proto, attrs, block, 0);
+}
+
+CV *
+Perl_newATTRSUB_flags(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs,
+			    OP *block, U32 flags)
+{
     dVAR;
     GV *gv;
     const char *ps;
@@ -6462,9 +6478,11 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 	   || PL_madskills)
 	? GV_ADDMULTI : GV_ADDMULTI | GV_NOINIT;
     STRLEN namlen = 0;
-    const char * const name = o ? SvPV_const(cSVOPo->op_sv, namlen) : NULL;
+    const bool o_is_gv = flags & 1;
+    const char * const name =
+	 o ? SvPV_const(o_is_gv ? (SV *)o : cSVOPo->op_sv, namlen) : NULL;
     bool has_name;
-    bool name_is_utf8 = o ? (SvUTF8(cSVOPo->op_sv) ? 1 : 0) : 0;
+    bool name_is_utf8 = o && !o_is_gv && SvUTF8(cSVOPo->op_sv);
 
     if (proto) {
 	assert(proto->op_type == OP_CONST);
@@ -6474,10 +6492,12 @@ Perl_newATTRSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
     else
 	ps = NULL;
 
-    if (name) {
-	gv = isGV(cSVOPo->op_sv)
-	      ? (GV *)cSVOPo->op_sv
-	      : gv_fetchsv(cSVOPo->op_sv, gv_fetch_flags, SVt_PVCV);
+    if (o_is_gv) {
+	gv = (GV*)o;
+	o = NULL;
+	has_name = TRUE;
+    } else if (name) {
+	gv = gv_fetchsv(cSVOPo->op_sv, gv_fetch_flags, SVt_PVCV);
 	has_name = TRUE;
     } else if (PERLDB_NAMEANON && CopLINE(PL_curcop)) {
 	SV * const sv = sv_newmortal();
@@ -7730,6 +7750,11 @@ Perl_ck_ftst(pTHX_ OP *o)
 	        && kidtype != OP_STAT && kidtype != OP_LSTAT) {
 	    o->op_private |= OPpFT_STACKED;
 	    kid->op_private |= OPpFT_STACKING;
+	    if (kidtype == OP_FTTTY && (
+		   !(kid->op_private & OPpFT_STACKED)
+		|| kid->op_private & OPpFT_AFTER_t
+	       ))
+		o->op_private |= OPpFT_AFTER_t;
 	}
     }
     else {
@@ -9120,7 +9145,7 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
 		continue;
 	    case '_':
 		/* _ must be at the end */
-		if (proto[1] && proto[1] != ';')
+		if (proto[1] && !strchr(";@%", proto[1]))
 		    goto oops;
 	    case '$':
 		proto++;

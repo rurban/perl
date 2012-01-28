@@ -14,8 +14,23 @@ require Exporter;
 # walkoptree_slow comes from B.pm (you are there),
 # walkoptree comes from B.xs
 
+<<<<<<< HEAD
 $B::VERSION = '1.30_01';
 @EXPORT_OK = ();
+=======
+BEGIN {
+    $B::VERSION = '1.34';
+    @B::EXPORT_OK = ();
+
+    # Our BOOT code needs $VERSION set, and will append to @EXPORT_OK.
+    # Want our constants loaded before the compiler meets OPf_KIDS below, as
+    # the combination of having the constant stay a Proxy Constant Subroutine
+    # and its value being inlined saves a little over .5K
+
+    require XSLoader;
+    XSLoader::load();
+}
+>>>>>>> origin/blead
 
 push @EXPORT_OK = (qw(minus_c ppname save_BEGINs
 			class peekop cast_I32 cstring cchar hash threadsv_names
@@ -938,8 +953,6 @@ A character symbolizing the type of IO Handle.
   \0    closed internal handle
 
 =item IoFLAGS
-
-See F<perliol.h>.
 
 =item IsSTD
 

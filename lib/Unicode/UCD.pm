@@ -6,7 +6,7 @@ no warnings 'surrogate';    # surrogates can be inputs to this
 use charnames ();
 use Unicode::Normalize qw(getCombinClass NFD);
 
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 
 use Storable qw(dclone);
 
@@ -106,6 +106,7 @@ you want a code point to be interpreted as a hexadecimal number, you must
 prefix it with either C<0x> or C<U+>, because a string like e.g. C<123> will be
 interpreted as a decimal code point.  Note that the largest code point in
 Unicode is U+10FFFF.
+
 =cut
 
 my $BLOCKSFH;

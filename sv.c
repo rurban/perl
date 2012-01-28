@@ -2809,7 +2809,10 @@ Perl_sv_2pv_flags(pTHX_ register SV *const sv, STRLEN *const lp, const I32 flags
 		if (!referent) {
 		    len = 7;
 		    retval = buffer = savepvn("NULLREF", len);
-		} else if (SvTYPE(referent) == SVt_REGEXP) {
+		} else if (SvTYPE(referent) == SVt_REGEXP && (
+			      !(PL_curcop->cop_hints & HINT_NO_AMAGIC)
+			   || amagic_is_enabled(string_amg)
+			  )) {
 		    REGEXP * const re = (REGEXP *)MUTABLE_PTR(referent);
 		    I32 seen_evals = 0;
 
@@ -3521,11 +3524,8 @@ Perl_sv_utf8_encode(pTHX_ register SV *const sv)
 {
     PERL_ARGS_ASSERT_SV_UTF8_ENCODE;
 
-    if (SvIsCOW(sv)) {
-        sv_force_normal_flags(sv, 0);
-    }
     if (SvREADONLY(sv)) {
-	Perl_croak_no_modify(aTHX);
+	sv_force_normal_flags(sv, 0);
     }
     (void) sv_utf8_upgrade(sv);
     SvUTF8_off(sv);
@@ -4797,7 +4797,7 @@ Perl_sv_force_normal_flags(pTHX_ register SV *const sv, const U32 flags)
     }
 #else
     if (SvREADONLY(sv)) {
-	if (SvFAKE(sv) && !isGV_with_GP(sv)) {
+	if (SvIsCOW(sv)) {
 	    const char * const pvx = SvPVX_const(sv);
 	    const STRLEN len = SvCUR(sv);
 	    SvFAKE_off(sv);
@@ -5310,7 +5310,7 @@ Perl_sv_magic(pTHX_ register SV *const sv, SV *const obj, const int how,
     if (SvREADONLY(sv)) {
 	if (
 	    /* its okay to attach magic to shared strings */
-	    (!SvFAKE(sv) || isGV_with_GP(sv))
+	    !SvIsCOW(sv)
 
 	    && IN_PERL_RUNTIME
 	    && !PERL_MAGIC_TYPE_READONLY_ACCEPTABLE(how)
@@ -6191,7 +6191,7 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 		     && !(SvTYPE(sv) == SVt_PVIO
 		     && !(IoFLAGS(sv) & IOf_FAKE_DIRP)))
 		Safefree(SvPVX_mutable(sv));
-	    else if (SvPVX_const(sv) && SvREADONLY(sv) && SvFAKE(sv)) {
+	    else if (SvPVX_const(sv) && SvIsCOW(sv)) {
 		unshare_hek(SvSHARED_HEK_FROM_PV(SvPVX_const(sv)));
 		SvFAKE_off(sv);
 	    }
@@ -13895,7 +13895,8 @@ Perl_varname(pTHX_ const GV *const gv, const char gvtype, PADOFFSET targ,
 	SV * const sv = newSV(0);
 	*SvPVX(name) = '$';
 	Perl_sv_catpvf(aTHX_ name, "{%s}",
-	    pv_display(sv,SvPVX_const(keyname), SvCUR(keyname), 0, 32));
+	    pv_pretty(sv, SvPVX_const(keyname), SvCUR(keyname), 32, NULL, NULL,
+		    PERL_PV_PRETTY_DUMP | PERL_PV_ESCAPE_UNI_DETECT ));
 	SvREFCNT_dec(sv);
     }
     else if (subscript_type == FUV_SUBSCRIPT_ARRAY) {

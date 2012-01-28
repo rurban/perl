@@ -511,7 +511,7 @@ use File::Glob qw(:case);
 
     'DB_File' => {
         'MAINTAINER'   => 'pmqs',
-        'DISTRIBUTION' => 'PMQS/DB_File-1.824.tar.gz',
+        'DISTRIBUTION' => 'PMQS/DB_File-1.826.tar.gz',
         'FILES'        => q[cpan/DB_File],
         'EXCLUDED'     => [
             qr{^patches/},
@@ -520,7 +520,7 @@ use File::Glob qw(:case);
                 fallback.xs
                 ),
         ],
-        'UPSTREAM' => undef,
+        'UPSTREAM' => 'cpan',
     },
 
     'DBM_Filter' => {
@@ -1243,7 +1243,7 @@ use File::Glob qw(:case);
 
     'Module::CoreList' => {
         'MAINTAINER'   => 'bingos',
-        'DISTRIBUTION' => 'BINGOS/Module-CoreList-2.59.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-2.60.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
         'UPSTREAM'     => 'blead',
     },
@@ -1494,13 +1494,9 @@ use File::Glob qw(:case);
 
     'Pod::Parser' => {
         'MAINTAINER' => 'marekr',
-
-        # XXX Parser.pm in the 1.38 distribution identifies itself as
-        # version 1.37!
-
-        'DISTRIBUTION' => 'MAREKR/Pod-Parser-1.38.tar.gz',
+        'DISTRIBUTION' => 'MAREKR/Pod-Parser-1.51.tar.gz',
         'FILES'        => q[cpan/Pod-Parser],
-        'UPSTREAM'     => undef,
+        'UPSTREAM'     => 'cpan',
     },
 
     'Pod::Perldoc' => {
@@ -2006,7 +2002,7 @@ use File::Glob qw(:case);
                  lib/warnings
                  t/lib/warnings
                 ],
-        'UPSTREAM' => undef,
+        'UPSTREAM' => 'blead',
     },
 
     'win32' => {

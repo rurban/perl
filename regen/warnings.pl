@@ -427,7 +427,7 @@ read_only_bottom_close_and_rename($pm);
 __END__
 package warnings;
 
-our $VERSION = '1.12';
+our $VERSION = '1.13';
 
 # Verify that we're called correctly so that warnings will work.
 # see also strict.pm.
@@ -635,7 +635,7 @@ sub import
 {
     shift;
 
-    my $mask = ${^WARNING_BITS} ;
+    my $mask = ${^WARNING_BITS} // ($^W ? $Bits{all} : $NONE) ;
 
     if (vec($mask, $Offsets{'all'}, 1)) {
         $mask |= $Bits{'all'} ;
@@ -651,7 +651,7 @@ sub unimport
     shift;
 
     my $catmask ;
-    my $mask = ${^WARNING_BITS} ;
+    my $mask = ${^WARNING_BITS} // ($^W ? $Bits{all} : $NONE) ;
 
     if (vec($mask, $Offsets{'all'}, 1)) {
         $mask |= $Bits{'all'} ;
