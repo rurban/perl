@@ -642,7 +642,7 @@ Perl_do_trans(pTHX_ SV *sv)
 	return 0;
     if (!(PL_op->op_private & OPpTRANS_IDENTICAL)) {
 	if (!SvPOKp(sv))
-	    (void)SvPV_force(sv, len);
+	    (void)SvPV_force_nomg(sv, len);
 	(void)SvPOK_only_UTF8(sv);
     }
 
@@ -1014,7 +1014,7 @@ Perl_do_vop(pTHX_ I32 optype, SV *sv, SV *left, SV *right)
 
     PERL_ARGS_ASSERT_DO_VOP;
 
-    if (sv != left || (optype != OP_BIT_AND && !SvOK(sv) && !SvGMAGICAL(sv)))
+    if (sv != left || (optype != OP_BIT_AND && !SvOK(sv)))
 	sv_setpvs(sv, "");	/* avoid undef warning on |= and ^= */
     if (sv == left) {
 	lsave = lc = SvPV_force_nomg(left, leftlen);
@@ -1224,8 +1224,7 @@ Perl_do_kv(pTHX)
 {
     dVAR;
     dSP;
-    HV * const hv = MUTABLE_HV(POPs);
-    HV *keys;
+    HV * const keys = MUTABLE_HV(POPs);
     register HE *entry;
     const I32 gimme = GIMME_V;
     const I32 dokv =     (PL_op->op_type == OP_RV2HV || PL_op->op_type == OP_PADHV);
@@ -1233,17 +1232,6 @@ Perl_do_kv(pTHX)
     const I32 dokeys =   dokv || (PL_op->op_type == OP_KEYS || PL_op->op_type == OP_RKEYS);
     const I32 dovalues = dokv || (PL_op->op_type == OP_VALUES || PL_op->op_type == OP_RVALUES);
 
-    if (!hv) {
-	if (PL_op->op_flags & OPf_MOD || LVRET) {	/* lvalue */
-	    dTARGET;		/* make sure to clear its target here */
-	    if (SvTYPE(TARG) == SVt_PVLV)
-		LvTARG(TARG) = NULL;
-	    PUSHs(TARG);
-	}
-	RETURN;
-    }
-
-    keys = hv;
     (void)hv_iterinit(keys);	/* always reset iterator regardless */
 
     if (gimme == G_VOID)
@@ -1285,7 +1273,7 @@ Perl_do_kv(pTHX)
 	if (dovalues) {
 	    SV *tmpstr;
 	    PUTBACK;
-	    tmpstr = hv_iterval(hv,entry);
+	    tmpstr = hv_iterval(keys,entry);
 	    DEBUG_H(Perl_sv_setpvf(aTHX_ tmpstr, "%lu%%%d=%lu",
 			    (unsigned long)HeHASH(entry),
 			    (int)HvMAX(keys)+1,

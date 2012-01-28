@@ -1,15 +1,23 @@
 package ExtUtils::ParseXS;
 use strict;
 
-use 5.006;  # We use /??{}/ in regexes
+use 5.008001;  # We use /??{}/ in regexes
 use Cwd;
 use Config;
 use Exporter;
 use File::Basename;
 use File::Spec;
 use Symbol;
-use ExtUtils::ParseXS::Constants ();
-use ExtUtils::ParseXS::CountLines;
+
+our $VERSION;
+BEGIN {
+  $VERSION = '3.13';
+}
+use ExtUtils::ParseXS::Constants $VERSION;
+use ExtUtils::ParseXS::CountLines $VERSION;
+use ExtUtils::ParseXS::Utilities $VERSION;
+$VERSION = eval $VERSION if $VERSION =~ /_/;
+
 use ExtUtils::ParseXS::Utilities qw(
   standard_typemap_locations
   trim_whitespace
@@ -28,6 +36,8 @@ use ExtUtils::ParseXS::Utilities qw(
   blurt
   death
   check_conditional_preprocessor_statements
+  escape_file_for_line_directive
+  report_typemap_failure
 );
 
 our @ISA = qw(Exporter);
@@ -35,8 +45,6 @@ our @EXPORT_OK = qw(
   process_file
   report_error_count
 );
-our $VERSION = '3.00_03';
-$VERSION = eval $VERSION if $VERSION =~ /_/;
 
 # The scalars in the line below remain as 'our' variables because pulling
 # them into $self led to build problems.  In most cases, strings being
@@ -187,7 +195,7 @@ sub process_file {
 EOM
 
 
-  print("#line 1 \"$self->{filepathname}\"\n")
+  print("#line 1 \"" . escape_file_for_line_directive($self->{filepathname}) . "\"\n")
     if $self->{WantLineNumbers};
 
   # Open the input file (using $self->{filename} which
@@ -214,7 +222,7 @@ EOM
           # concatenated until 2 steps later, so we are safe.
           #     - Nicholas Clark
           print("#if 0\n  \"Skipped embedded POD.\"\n#endif\n");
-          printf("#line %d \"$self->{filepathname}\"\n", $. + 1)
+          printf("#line %d \"%s\"\n", $. + 1, escape_file_for_line_directive($self->{filepathname}))
             if $self->{WantLineNumbers};
           next firstmodule
         }
@@ -298,7 +306,7 @@ EOM
     my $xsreturn = 0;
 
     $_ = shift(@{ $self->{line} });
-    while (my $kwd = $self->check_keyword("REQUIRE|PROTOTYPES|FALLBACK|VERSIONCHECK|INCLUDE(?:_COMMAND)?|SCOPE")) {
+    while (my $kwd = $self->check_keyword("REQUIRE|PROTOTYPES|EXPORT_XSUB_SYMBOLS|FALLBACK|VERSIONCHECK|INCLUDE(?:_COMMAND)?|SCOPE")) {
       my $method = $kwd . "_handler";
       $self->$method($_);
       next PARAGRAPH unless @{ $self->{line} };
@@ -307,7 +315,8 @@ EOM
 
     if ($self->check_keyword("BOOT")) {
       check_conditional_preprocessor_statements($self);
-      push (@{ $BootCode_ref }, "#line $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} }] \"$self->{filepathname}\"")
+      push (@{ $BootCode_ref }, "#line $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} }] \""
+                                . escape_file_for_line_directive($self->{filepathname}) . "\"")
         if $self->{WantLineNumbers} && $self->{line}->[0] !~ /^\s*#\s*line\b/;
       push (@{ $BootCode_ref }, @{ $self->{line} }, "");
       next PARAGRAPH;
@@ -387,7 +396,7 @@ EOM
           if ($len_name =~ /^length\( \s* (\w+) \s* \)\z/x) {
             $len_name = "XSauto_length_of_$1";
             $islength = 1;
-            die "Default value on length() argument: `$_'"
+            die "Default value on length() argument: '$_'"
               if length $default;
           }
           if (length $pre or $islength) { # Has a type
@@ -496,14 +505,10 @@ EOM
     # print function header
     print Q(<<"EOF");
 #$externC
-#XS(XS_${Full_func_name}); /* prototype to pass -Wmissing-prototypes */
-#XS(XS_${Full_func_name})
+#XS_EUPXS(XS_${Full_func_name}); /* prototype to pass -Wmissing-prototypes */
+#XS_EUPXS(XS_${Full_func_name})
 #[[
-##ifdef dVAR
 #    dVAR; dXSARGS;
-##else
-#    dXSARGS;
-##endif
 EOF
     print Q(<<"EOF") if $ALIAS;
 #    dXSI32;
@@ -516,7 +521,7 @@ EOF
 
     print Q(<<"EOF") if $self->{except};
 #    char errbuf[1024];
-#    *errbuf = '\0';
+#    *errbuf = '\\0';
 EOF
 
     if($self->{cond}) {
@@ -534,7 +539,7 @@ EOF
 
     #gcc -Wall: if an xsub has PPCODE is used
     #it is possible none of ST, XSRETURN or XSprePUSH macros are used
-    #hence `ax' (setup by dXSARGS) is unused
+    #hence 'ax' (setup by dXSARGS) is unused
     #XXX: could breakup the dXSARGS; into dSP;dMARK;dITEMS
     #but such a move could break third-party extensions
     print Q(<<"EOF") if $PPCODE;
@@ -554,6 +559,7 @@ EOF
     $_ = '';
     check_conditional_preprocessor_statements();
     while (@{ $self->{line} }) {
+
       $self->CASE_handler($_) if $self->check_keyword("CASE");
       print Q(<<"EOF");
 #   $self->{except} [[
@@ -565,7 +571,6 @@ EOF
       $self->{deferred} = "";
       %{ $self->{arg_list} } = ();
       $self->{gotRETVAL} = 0;
-
       $self->INPUT_handler($_);
       $self->process_keyword("INPUT|PREINIT|INTERFACE_MACRO|C_ARGS|ALIAS|ATTRS|PROTOTYPE|SCOPE|OVERLOAD");
 
@@ -596,6 +601,9 @@ EOF
           } );
         }
       }
+
+      # These are set if OUTPUT is found and/or CODE using RETVAL
+      $self->{have_OUTPUT} = $self->{have_CODE_with_RETVAL} = 0;
 
       my ($wantRETVAL);
       # do code
@@ -631,7 +639,10 @@ EOF
           print "\tPUTBACK;\n\treturn;\n";
         }
         elsif ($self->check_keyword("CODE")) {
-          $self->print_section();
+          my $consumed_code = $self->print_section();
+          if ($consumed_code =~ /\bRETVAL\b/) {
+            $self->{have_CODE_with_RETVAL} = 1;
+          }
         }
         elsif (defined($class) and $func_name eq "DESTROY") {
           print "\n\t";
@@ -672,7 +683,13 @@ EOF
       # $wantRETVAL set if 'RETVAL =' autogenerated
       ($wantRETVAL, $self->{ret_type}) = (0, 'void') if $RETVAL_no_return;
       undef %{ $self->{outargs} };
+
       $self->process_keyword("POSTCALL|OUTPUT|ALIAS|ATTRS|PROTOTYPE|OVERLOAD");
+
+      # A CODE section with RETVAL, but no OUTPUT? FAIL!
+      if ($self->{have_CODE_with_RETVAL} and not $self->{have_OUTPUT} and $self->{ret_type} ne 'void') {
+        $self->Warn("Warning: Found a 'CODE' section which seems to be using 'RETVAL' but no 'OUTPUT' section.");
+      }
 
       generate_output( {
         type        => $self->{var_types}->{$_},
@@ -767,13 +784,13 @@ EOF
 #    ENDHANDLERS
 EOF
       if ($self->check_keyword("CASE")) {
-        $self->blurt("Error: No `CASE:' at top of function")
+        $self->blurt("Error: No 'CASE:' at top of function")
           unless $self->{condnum};
         $_ = "CASE: $_";    # Restore CASE: label
         next;
       }
       last if $_ eq "$END:";
-      $self->death(/^$self->{BLOCK_re}/o ? "Misplaced `$1:'" : "Junk at end of function ($_)");
+      $self->death(/^$self->{BLOCK_re}/o ? "Misplaced '$1:'" : "Junk at end of function ($_)");
     }
 
     print Q(<<"EOF") if $self->{except};
@@ -862,8 +879,8 @@ EOF
 
   if ($self->{Overload}) { # make it findable with fetchmethod
     print Q(<<"EOF");
-#XS(XS_$self->{Packid}_nil); /* prototype to pass -Wmissing-prototypes */
-#XS(XS_$self->{Packid}_nil)
+#XS_EUPXS(XS_$self->{Packid}_nil); /* prototype to pass -Wmissing-prototypes */
+#XS_EUPXS(XS_$self->{Packid}_nil)
 #{
 #   dXSARGS;
 #   XSRETURN_EMPTY;
@@ -887,24 +904,20 @@ MAKE_FETCHMETHOD_WORK
 EOF
 
   print Q(<<"EOF");
-#XS(boot_$self->{Module_cname}); /* prototype to pass -Wmissing-prototypes */
-#XS(boot_$self->{Module_cname})
+#XS_EXTERNAL(boot_$self->{Module_cname}); /* prototype to pass -Wmissing-prototypes */
+#XS_EXTERNAL(boot_$self->{Module_cname})
 EOF
 
   print Q(<<"EOF");
 #[[
-##ifdef dVAR
 #    dVAR; dXSARGS;
-##else
-#    dXSARGS;
-##endif
 EOF
 
   #Under 5.8.x and lower, newXS is declared in proto.h as expecting a non-const
   #file name argument. If the wrong qualifier is used, it causes breakage with
   #C++ compilers and warnings with recent gcc.
   #-Wall: if there is no $Full_func_name there are no xsubs in this .xs
-  #so `file' is unused
+  #so 'file' is unused
   print Q(<<"EOF") if $Full_func_name;
 ##if (PERL_REVISION == 5 && PERL_VERSION < 9)
 #    char* file = __FILE__;
@@ -1000,12 +1013,18 @@ sub print_section {
   # the "do" is required for right semantics
   do { $_ = shift(@{ $self->{line} }) } while !/\S/ && @{ $self->{line} };
 
-  print("#line ", $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1], " \"$self->{filepathname}\"\n")
+  my $consumed_code = '';
+
+  print("#line ", $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1], " \"",
+        escape_file_for_line_directive($self->{filepathname}), "\"\n")
     if $self->{WantLineNumbers} && !/^\s*#\s*line\b/ && !/^#if XSubPPtmp/;
   for (;  defined($_) && !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
     print "$_\n";
+    $consumed_code .= "$_\n";
   }
   print 'ExtUtils::ParseXS::CountLines'->end_marker, "\n" if $self->{WantLineNumbers};
+
+  return $consumed_code;
 }
 
 sub merge_section {
@@ -1035,7 +1054,7 @@ sub process_keyword {
 sub CASE_handler {
   my $self = shift;
   $_ = shift;
-  $self->blurt("Error: `CASE:' after unconditional `CASE:'")
+  $self->blurt("Error: 'CASE:' after unconditional 'CASE:'")
     if $self->{condnum} && $self->{cond} eq '';
   $self->{cond} = $_;
   trim_whitespace($self->{cond});
@@ -1067,6 +1086,8 @@ sub INPUT_handler {
     my $var_init = '';
     $var_init = $1 if s/\s*([=;+].*)$//s;
     $var_init =~ s/"/\\"/g;
+    # *sigh* It's valid to supply explicit input typemaps in the argument list...
+    my $is_overridden_typemap = $var_init =~ /ST\s*\(|\$arg\b/;
 
     s/\s+/ /g;
     my ($var_type, $var_addr, $var_name) = /^(.*?[^&\s])\s*(\&?)\s*\b(\w+)$/s
@@ -1097,8 +1118,8 @@ sub INPUT_handler {
 
     if ($self->{var_num}) {
       my $typemap = $self->{typemap}->get_typemap(ctype => $var_type);
-      $self->death("Could not find a typemap for C type '$var_type'")
-        if not $typemap;
+      $self->report_typemap_failure($self->{typemap}, $var_type, "death")
+        if not $typemap and not $is_overridden_typemap;
       $self->{proto_arg}->[$self->{var_num}] = ($typemap && $typemap->proto) || "\$";
     }
     $self->{func_args} =~ s/\b($var_name)\b/&$1/ if $var_addr;
@@ -1137,6 +1158,8 @@ sub INPUT_handler {
 
 sub OUTPUT_handler {
   my $self = shift;
+  $self->{have_OUTPUT} = 1;
+
   $_ = shift;
   for (;  !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
     next unless /\S/;
@@ -1433,6 +1456,34 @@ sub PROTOTYPES_handler {
   $self->{ProtoUsed} = 1;
 }
 
+sub EXPORT_XSUB_SYMBOLS_handler {
+  my $self = shift;
+  $_ = shift;
+
+  # the rest of the current line should contain either ENABLE or
+  # DISABLE
+
+  trim_whitespace($_);
+
+  # check for ENABLE/DISABLE
+  $self->death("Error: EXPORT_XSUB_SYMBOLS: ENABLE/DISABLE")
+    unless /^(ENABLE|DISABLE)/i;
+
+  my $xs_impl = $1 eq 'ENABLE' ? 'XS_EXTERNAL' : 'XS_INTERNAL';
+
+  print Q(<<"EOF");
+##undef XS_EUPXS
+##if defined(PERL_EUPXS_ALWAYS_EXPORT)
+##  define XS_EUPXS(name) XS_EXTERNAL(name)
+##elif defined(PERL_EUPXS_NEVER_EXPORT)
+##  define XS_EUPXS(name) XS_INTERNAL(name)
+##else
+##  define XS_EUPXS(name) $xs_impl(name)
+##endif
+EOF
+}
+
+
 sub PushXSStack {
   my $self = shift;
   my %args = @_;
@@ -1485,7 +1536,7 @@ sub INCLUDE_handler {
   $self->{FH} = Symbol::gensym();
 
   # open the new file
-  open ($self->{FH}, '<', $_) or $self->death("Cannot open '$_': $!");
+  open($self->{FH}, $_) or $self->death("Cannot open '$_': $!");
 
   print Q(<<"EOF");
 #
@@ -1494,7 +1545,9 @@ sub INCLUDE_handler {
 EOF
 
   $self->{filename} = $_;
-  $self->{filepathname} = File::Spec->catfile($self->{dir}, $self->{filename});
+  $self->{filepathname} = ( $^O =~ /^mswin/i )
+                          ? qq($self->{dir}/$self->{filename}) # See CPAN RT #61908: gcc doesn't like backslashes on win32?
+                          : File::Spec->catfile($self->{dir}, $self->{filename});
 
   # Prime the pump by reading the first
   # non-blank line
@@ -1553,7 +1606,8 @@ EOF
 
   $self->{filename} = $_;
   $self->{filepathname} = $self->{filename};
-  $self->{filepathname} =~ s/\"/\\"/g;
+  #$self->{filepathname} =~ s/\"/\\"/g; # Fails? See CPAN RT #53938: MinGW Broken after 2.21
+  $self->{filepathname} =~ s/\\/\\\\/g; # Works according to reporter of #53938
 
   # Prime the pump by reading the first
   # non-blank line
@@ -1620,7 +1674,7 @@ sub fetch_para {
   my $self = shift;
 
   # parse paragraph
-  $self->death("Error: Unterminated `#if/#ifdef/#ifndef'")
+  $self->death("Error: Unterminated '#if/#ifdef/#ifndef'")
     if !defined $self->{lastline} && $self->{XSStack}->[-1]{type} eq 'if';
   @{ $self->{line} } = ();
   @{ $self->{line_no} } = ();
@@ -1668,13 +1722,12 @@ sub fetch_para {
       my $tmapcode = join "", @tmaplines;
       my $tmap = ExtUtils::Typemaps->new(
         string => $tmapcode,
-        lineno_offset => $self->current_line_number()+1,
+        lineno_offset => ($self->current_line_number()||0)+1,
         fake_filename => $self->{filename},
       );
       $self->{typemap}->merge(typemap => $tmap, replace => 1);
 
-      last unless defined($self->{lastline} = readline($self->{FH}));
-      next;
+      $self->{lastline} = "";
     }
 
     if ($self->{lastline} !~ /^\s*#/ ||
@@ -1762,7 +1815,7 @@ sub generate_init {
   my $typemaps = $self->{typemap};
 
   $type = tidy_type($type);
-  $self->blurt("Error: '$type' not in typemap"), return
+  $self->report_typemap_failure($typemaps, $type), return
     unless $typemaps->get_typemap(ctype => $type);
 
   ($ntype = $type) =~ s/\s*\*/Ptr/g;
@@ -1788,7 +1841,7 @@ sub generate_init {
   # Note: This gruesome bit either needs heavy rethinking or documentation. I vote for the former. --Steffen
   if ($expr =~ /DO_ARRAY_ELEM/) {
     my $subtypemap  = $typemaps->get_typemap(ctype => $subtype);
-    $self->blurt("Error: C type '$subtype' not in typemap"), return
+    $self->report_typemap_failure($typemaps, $subtype), return
       if not $subtypemap;
     my $subinputmap = $typemaps->get_inputmap(xstype => $subtypemap->xstype);
     $self->blurt("Error: No INPUT definition for type '$subtype', typekind '" . $subtypemap->xstype . "' found"), return
@@ -1863,8 +1916,8 @@ sub generate_output {
     print "\tSvSETMAGIC($arg);\n" if $do_setmagic;
   }
   else {
-    my $typemap   = $typemaps->get_typemap(ctype => $type);
-    $self->blurt("Could not find a typemap for C type '$type'"), return
+    my $typemap = $typemaps->get_typemap(ctype => $type);
+    $self->report_typemap_failure($typemaps, $type), return
       if not $typemap;
     my $outputmap = $typemaps->get_outputmap(xstype => $typemap->xstype);
     $self->blurt("Error: No OUTPUT definition for type '$type', typekind '" . $typemap->xstype . "' found"), return
@@ -1876,8 +1929,8 @@ sub generate_output {
 
     my $expr = $outputmap->cleaned_code;
     if ($expr =~ /DO_ARRAY_ELEM/) {
-      my $subtypemap   = $typemaps->get_typemap(ctype => $subtype);
-      $self->blurt("Could not find a typemap for C type '$subtype'"), return
+      my $subtypemap = $typemaps->get_typemap(ctype => $subtype);
+      $self->report_typemap_failure($typemaps, $subtype), return
         if not $subtypemap;
       my $suboutputmap = $typemaps->get_outputmap(xstype => $subtypemap->xstype);
       $self->blurt("Error: No OUTPUT definition for type '$subtype', typekind '" . $subtypemap->xstype . "' found"), return

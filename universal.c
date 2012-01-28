@@ -39,12 +39,11 @@
  */
 
 STATIC bool
-S_isa_lookup(pTHX_ HV *stash, const char * const name)
+S_isa_lookup(pTHX_ HV *stash, const char * const name, STRLEN len, U32 flags)
 {
     dVAR;
     const struct mro_meta *const meta = HvMROMETA(stash);
     HV *isa = meta->isa;
-    STRLEN len = strlen(name);
     const HV *our_stash;
 
     PERL_ARGS_ASSERT_ISA_LOOKUP;
@@ -54,8 +53,7 @@ S_isa_lookup(pTHX_ HV *stash, const char * const name)
 	isa = meta->isa;
     }
 
-    if (hv_common(isa, NULL, name, len, 0 /* No "UTF-8" flag possible with only
-					     a char * argument*/,
+    if (hv_common(isa, NULL, name, len, ( flags & SVf_UTF8 ? HVhek_UTF8 : 0),
 		  HV_FETCH_ISEXISTS, NULL, 0)) {
 	/* Direct name lookup worked.  */
 	return TRUE;
@@ -64,7 +62,7 @@ S_isa_lookup(pTHX_ HV *stash, const char * const name)
     /* A stash/class can go by many names (ie. User == main::User), so 
        we use the HvENAME in the stash itself, which is canonical, falling
        back to HvNAME if necessary.  */
-    our_stash = gv_stashpvn(name, len, 0);
+    our_stash = gv_stashpvn(name, len, flags);
 
     if (our_stash) {
 	HEK *canon_name = HvENAME_HEK(our_stash);
@@ -83,11 +81,41 @@ S_isa_lookup(pTHX_ HV *stash, const char * const name)
 /*
 =head1 SV Manipulation Functions
 
-=for apidoc sv_derived_from
+=for apidoc sv_derived_from_pvn
 
 Returns a boolean indicating whether the SV is derived from the specified class
 I<at the C level>.  To check derivation at the Perl level, call C<isa()> as a
 normal Perl method.
+
+Currently, the only significant value for C<flags> is SVf_UTF8.
+
+=cut
+
+=for apidoc sv_derived_from_sv
+
+Exactly like L</sv_derived_from_pvn>, but takes the name string in the form
+of an SV instead of a string/length pair.
+
+=cut
+
+*/
+
+bool
+Perl_sv_derived_from_sv(pTHX_ SV *sv, SV *namesv, U32 flags)
+{
+    char *namepv;
+    STRLEN namelen;
+    PERL_ARGS_ASSERT_SV_DERIVED_FROM_SV;
+    namepv = SvPV(namesv, namelen);
+    if (SvUTF8(namesv))
+       flags |= SVf_UTF8;
+    return sv_derived_from_pvn(sv, namepv, namelen, flags);
+}
+
+/*
+=for apidoc sv_derived_from
+
+Exactly like L</sv_derived_from_pv>, but doesn't take a C<flags> parameter.
 
 =cut
 */
@@ -95,10 +123,34 @@ normal Perl method.
 bool
 Perl_sv_derived_from(pTHX_ SV *sv, const char *const name)
 {
+    PERL_ARGS_ASSERT_SV_DERIVED_FROM;
+    return sv_derived_from_pvn(sv, name, strlen(name), 0);
+}
+
+/*
+=for apidoc sv_derived_from_pv
+
+Exactly like L</sv_derived_from_pvn>, but takes a nul-terminated string 
+instead of a string/length pair.
+
+=cut
+*/
+
+
+bool
+Perl_sv_derived_from_pv(pTHX_ SV *sv, const char *const name, U32 flags)
+{
+    PERL_ARGS_ASSERT_SV_DERIVED_FROM_PV;
+    return sv_derived_from_pvn(sv, name, strlen(name), flags);
+}
+
+bool
+Perl_sv_derived_from_pvn(pTHX_ SV *sv, const char *const name, const STRLEN len, U32 flags)
+{
     dVAR;
     HV *stash;
 
-    PERL_ARGS_ASSERT_SV_DERIVED_FROM;
+    PERL_ARGS_ASSERT_SV_DERIVED_FROM_PVN;
 
     SvGETMAGIC(sv);
 
@@ -114,11 +166,11 @@ Perl_sv_derived_from(pTHX_ SV *sv, const char *const name)
         stash = gv_stashsv(sv, 0);
     }
 
-    return stash ? isa_lookup(stash, name) : FALSE;
+    return stash ? isa_lookup(stash, name, len, flags) : FALSE;
 }
 
 /*
-=for apidoc sv_does
+=for apidoc sv_does_sv
 
 Returns a boolean indicating whether the SV performs a specific, named role.
 The SV can be a Perl object or the name of a Perl class.
@@ -129,14 +181,15 @@ The SV can be a Perl object or the name of a Perl class.
 #include "XSUB.h"
 
 bool
-Perl_sv_does(pTHX_ SV *sv, const char *const name)
+Perl_sv_does_sv(pTHX_ SV *sv, SV *namesv, U32 flags)
 {
-    const char *classname;
+    SV *classname;
     bool does_it;
     SV *methodname;
     dSP;
 
-    PERL_ARGS_ASSERT_SV_DOES;
+    PERL_ARGS_ASSERT_SV_DOES_SV;
+    PERL_UNUSED_ARG(flags);
 
     ENTER;
     SAVETMPS;
@@ -150,19 +203,20 @@ Perl_sv_does(pTHX_ SV *sv, const char *const name)
     }
 
     if (sv_isobject(sv)) {
-	classname = sv_reftype(SvRV(sv),TRUE);
+	classname = sv_ref(NULL,SvRV(sv),TRUE);
     } else {
-	classname = SvPV_nolen(sv);
+	classname = sv;
     }
 
-    if (strEQ(name,classname)) {
+    if (sv_eq(classname, namesv)) {
 	LEAVE;
 	return TRUE;
     }
 
     PUSHMARK(SP);
-    XPUSHs(sv);
-    mXPUSHs(newSVpv(name, 0));
+    EXTEND(SP, 2);
+    PUSHs(sv);
+    PUSHs(namesv);
     PUTBACK;
 
     methodname = newSVpvs_flags("isa", SVs_TEMP);
@@ -181,6 +235,53 @@ Perl_sv_does(pTHX_ SV *sv, const char *const name)
 }
 
 /*
+=for apidoc sv_does
+
+Like L</sv_does_pv>, but doesn't take a C<flags> parameter.
+
+=cut
+*/
+
+bool
+Perl_sv_does(pTHX_ SV *sv, const char *const name)
+{
+    PERL_ARGS_ASSERT_SV_DOES;
+    return sv_does_sv(sv, newSVpvn_flags(name, strlen(name), SVs_TEMP), 0);
+}
+
+/*
+=for apidoc sv_does_pv
+
+Like L</sv_does_sv>, but takes a nul-terminated string instead of an SV.
+
+=cut
+*/
+
+
+bool
+Perl_sv_does_pv(pTHX_ SV *sv, const char *const name, U32 flags)
+{
+    PERL_ARGS_ASSERT_SV_DOES_PV;
+    return sv_does_sv(sv, newSVpvn_flags(name, strlen(name), SVs_TEMP | flags), flags);
+}
+
+/*
+=for apidoc sv_does_pvn
+
+Like L</sv_does_sv>, but takes a string/length pair instead of an SV.
+
+=cut
+*/
+
+bool
+Perl_sv_does_pvn(pTHX_ SV *sv, const char *const name, const STRLEN len, U32 flags)
+{
+    PERL_ARGS_ASSERT_SV_DOES_PVN;
+
+    return sv_does_sv(sv, newSVpvn_flags(name, len, flags | SVs_TEMP), flags);
+}
+
+/*
 =for apidoc croak_xs_usage
 
 A specialised variant of C<croak()> for emitting the usage message for xsubs
@@ -190,7 +291,7 @@ A specialised variant of C<croak()> for emitting the usage message for xsubs
 works out the package name and subroutine name from C<cv>, and then calls
 C<croak()>. Hence if C<cv> is C<&ouch::awk>, it would call C<croak> as:
 
-    Perl_croak(aTHX_ "Usage: %s::%s(%s)", "ouch" "awk", "eee_yow");
+    Perl_croak(aTHX_ "Usage: %"SVf"::%"SVf"(%s)", "ouch" "awk", "eee_yow");
 
 =cut
 */
@@ -203,14 +304,16 @@ Perl_croak_xs_usage(pTHX_ const CV *const cv, const char *const params)
     PERL_ARGS_ASSERT_CROAK_XS_USAGE;
 
     if (gv) {
-	const char *const gvname = GvNAME(gv);
 	const HV *const stash = GvSTASH(gv);
-	const char *const hvname = stash ? HvNAME_get(stash) : NULL;
 
-	if (hvname)
-	    Perl_croak(aTHX_ "Usage: %s::%s(%s)", hvname, gvname, params);
+	if (HvNAME_get(stash))
+	    Perl_croak(aTHX_ "Usage: %"HEKf"::%"HEKf"(%s)",
+                                HEKfARG(HvNAME_HEK(stash)),
+                                HEKfARG(GvNAME_HEK(gv)),
+                                params);
 	else
-	    Perl_croak(aTHX_ "Usage: %s(%s)", gvname, params);
+	    Perl_croak(aTHX_ "Usage: %"HEKf"(%s)",
+                                HEKfARG(GvNAME_HEK(gv)), params);
     } else {
 	/* Pants. I don't think that it should be possible to get here. */
 	Perl_croak(aTHX_ "Usage: CODE(0x%"UVxf")(%s)", PTR2UV(cv), params);
@@ -226,7 +329,6 @@ XS(XS_UNIVERSAL_isa)
 	croak_xs_usage(cv, "reference, kind");
     else {
 	SV * const sv = ST(0);
-	const char *name;
 
 	SvGETMAGIC(sv);
 
@@ -234,9 +336,7 @@ XS(XS_UNIVERSAL_isa)
 		    || (SvGMAGICAL(sv) && SvPOKp(sv) && SvCUR(sv))))
 	    XSRETURN_UNDEF;
 
-	name = SvPV_nolen_const(ST(1));
-
-	ST(0) = boolSV(sv_derived_from(sv, name));
+	ST(0) = boolSV(sv_derived_from_sv(sv, ST(1), 0));
 	XSRETURN(1);
     }
 }
@@ -246,7 +346,6 @@ XS(XS_UNIVERSAL_can)
     dVAR;
     dXSARGS;
     SV   *sv;
-    const char *name;
     SV   *rv;
     HV   *pkg = NULL;
 
@@ -261,7 +360,6 @@ XS(XS_UNIVERSAL_can)
 		|| (SvGMAGICAL(sv) && SvPOKp(sv) && SvCUR(sv))))
 	XSRETURN_UNDEF;
 
-    name = SvPV_nolen_const(ST(1));
     rv = &PL_sv_undef;
 
     if (SvROK(sv)) {
@@ -274,7 +372,7 @@ XS(XS_UNIVERSAL_can)
     }
 
     if (pkg) {
-	GV * const gv = gv_fetchmethod_autoload(pkg, name, FALSE);
+	GV * const gv = gv_fetchmethod_sv_flags(pkg, ST(1), 0);
         if (gv && isGV(gv))
 	    rv = sv_2mortal(newRV(MUTABLE_SV(GvCV(gv))));
     }
@@ -293,10 +391,7 @@ XS(XS_UNIVERSAL_DOES)
 	Perl_croak(aTHX_ "Usage: invocant->DOES(kind)");
     else {
 	SV * const sv = ST(0);
-	const char *name;
-
-	name = SvPV_nolen_const(ST(1));
-	if (sv_does( sv, name ))
+	if (sv_does_sv( sv, ST(1), 0 ))
 	    XSRETURN_YES;
 
 	XSRETURN_NO;
@@ -330,8 +425,9 @@ XS(XS_UNIVERSAL_VERSION)
         SV * const nsv = sv_newmortal();
         sv_setsv(nsv, sv);
         sv = nsv;
-	if ( !sv_derived_from(sv, "version"))
+	if ( !sv_isobject(sv) || !sv_derived_from(sv, "version"))
 	    upg_version(sv, FALSE);
+
         undef = NULL;
     }
     else {
@@ -344,31 +440,34 @@ XS(XS_UNIVERSAL_VERSION)
 
 	if (undef) {
 	    if (pkg) {
-		const char * const name = HvNAME_get(pkg);
+		const HEK * const name = HvNAME_HEK(pkg);
 		Perl_croak(aTHX_
-			   "%s does not define $%s::VERSION--version check failed",
-			   name, name);
+			   "%"HEKf" does not define $%"HEKf
+			   "::VERSION--version check failed",
+			   HEKfARG(name), HEKfARG(name));
 	    } else {
 		Perl_croak(aTHX_
-			     "%s defines neither package nor VERSION--version check failed",
-			     SvPVx_nolen_const(ST(0)) );
+			     "%"SVf" defines neither package nor VERSION--version check failed",
+			     SVfARG(ST(0)) );
 	     }
 	}
 
-	if ( !sv_derived_from(req, "version")) {
+	if ( !sv_isobject(req) || !sv_derived_from(req, "version")) {
 	    /* req may very well be R/O, so create a new object */
 	    req = sv_2mortal( new_version(req) );
 	}
 
 	if ( vcmp( req, sv ) > 0 ) {
 	    if ( hv_exists(MUTABLE_HV(SvRV(req)), "qv", 2 ) ) {
-		Perl_croak(aTHX_ "%s version %"SVf" required--"
-		       "this is only version %"SVf"", HvNAME_get(pkg),
+		Perl_croak(aTHX_ "%"HEKf" version %"SVf" required--"
+		       "this is only version %"SVf"",
+                       HEKfARG(HvNAME_HEK(pkg)),
 		       SVfARG(sv_2mortal(vnormal(req))),
 		       SVfARG(sv_2mortal(vnormal(sv))));
 	    } else {
-		Perl_croak(aTHX_ "%s version %"SVf" required--"
-		       "this is only version %"SVf"", HvNAME_get(pkg),
+		Perl_croak(aTHX_ "%"HEKf" version %"SVf" required--"
+		       "this is only version %"SVf,
+                       HEKfARG(HvNAME_HEK(pkg)),
 		       SVfARG(sv_2mortal(vstringify(req))),
 		       SVfARG(sv_2mortal(vstringify(sv))));
 	    }
@@ -395,10 +494,19 @@ XS(XS_version_new)
     {
         SV *vs = ST(1);
 	SV *rv;
-	const char * const classname =
-	    sv_isobject(ST(0)) /* get the class if called as an object method */
-		? HvNAME(SvSTASH(SvRV(ST(0))))
-		: (char *)SvPV_nolen(ST(0));
+        STRLEN len;
+        const char *classname;
+        U32 flags;
+        if ( sv_isobject(ST(0)) ) { /* get the class if called as an object method */
+            const HV * stash = SvSTASH(SvRV(ST(0)));
+            classname = HvNAME(stash);
+            len       = HvNAMELEN(stash);
+            flags     = HvNAMEUTF8(stash) ? SVf_UTF8 : 0;
+        }
+        else {
+	    classname = SvPV(ST(0), len);
+            flags     = SvUTF8(ST(0));
+        }
 
 	if ( items == 1 || ! SvOK(vs) ) { /* no param or explicit undef */
 	    /* create empty object */
@@ -411,8 +519,8 @@ XS(XS_version_new)
 	}
 
 	rv = new_version(vs);
-	if ( strcmp(classname,"version") != 0 ) /* inherited new() */
-	    sv_bless(rv, gv_stashpv(classname, GV_ADD));
+	if ( strnNE(classname,"version", len) ) /* inherited new() */
+	    sv_bless(rv, gv_stashpvn(classname, len, GV_ADD | flags));
 
 	mPUSHs(rv);
 	PUTBACK;
@@ -430,7 +538,7 @@ XS(XS_version_stringify)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -453,7 +561,7 @@ XS(XS_version_numify)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -476,7 +584,7 @@ XS(XS_version_normal)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -499,7 +607,7 @@ XS(XS_version_vcmp)
      {
 	  SV *	lobj = ST(0);
 
-	  if (sv_derived_from(lobj, "version") && SvROK(lobj)) {
+	  if (sv_isobject(lobj) && sv_derived_from(lobj, "version")) {
 	       lobj = SvRV(lobj);
 	  }
 	  else
@@ -511,7 +619,7 @@ XS(XS_version_vcmp)
 	       SV * robj = ST(1);
 	       const IV	 swap = (IV)SvIV(ST(2));
 
-	       if ( ! sv_derived_from(robj, "version") )
+	       if ( !sv_isobject(robj) || !sv_derived_from(robj, "version") )
 	       {
 		    robj = new_version(SvOK(robj) ? robj : newSVpvs_flags("0", SVs_TEMP));
 		    sv_2mortal(robj);
@@ -542,7 +650,7 @@ XS(XS_version_boolean)
     if (items < 1)
 	croak_xs_usage(cv, "lobj, ...");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = SvRV(ST(0));
 	SV * const rs = newSViv( vcmp(lobj,new_version(newSVpvs("0"))) );
 	mPUSHs(rs);
@@ -559,7 +667,7 @@ XS(XS_version_noop)
     dXSARGS;
     if (items < 1)
 	croak_xs_usage(cv, "lobj, ...");
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0)))
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version"))
 	Perl_croak(aTHX_ "operation not supported with version object");
     else
 	Perl_croak(aTHX_ "lobj is not of type version");
@@ -575,7 +683,7 @@ XS(XS_version_is_alpha)
     if (items != 1)
 	croak_xs_usage(cv, "lobj");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = ST(0);
 	if ( hv_exists(MUTABLE_HV(SvRV(lobj)), "alpha", 5 ) )
 	    XSRETURN_YES;
@@ -597,15 +705,22 @@ XS(XS_version_qv)
     {
 	SV * ver = ST(0);
 	SV * rv;
-	const char * classname = "";
-	if ( items == 2 && SvOK(ST(1)) ) {
-	    /* getting called as object or class method */
-	    ver = ST(1);
-	    classname = 
-		sv_isobject(ST(0)) /* class called as an object method */
-		    ? HvNAME_get(SvSTASH(SvRV(ST(0))))
-		    : (char *)SvPV_nolen(ST(0));
-	}
+        STRLEN len = 0;
+        const char * classname = "";
+        U32 flags = 0;
+        if ( items == 2 && SvOK(ST(1)) ) {
+            ver = ST(1);
+            if ( sv_isobject(ST(0)) ) { /* class called as an object method */
+                const HV * stash = SvSTASH(SvRV(ST(0)));
+                classname = HvNAME(stash);
+                len       = HvNAMELEN(stash);
+                flags     = HvNAMEUTF8(stash) ? SVf_UTF8 : 0;
+            }
+            else {
+	       classname = SvPV(ST(0), len);
+                flags     = SvUTF8(ST(0));
+            }
+        }
 	if ( !SvVOK(ver) ) { /* not already a v-string */
 	    rv = sv_newmortal();
 	    sv_setsv(rv,ver); /* make a duplicate */
@@ -613,9 +728,10 @@ XS(XS_version_qv)
 	} else {
 	    rv = sv_2mortal(new_version(ver));
 	}
-	if ( items == 2 && strcmp(classname,"version") ) { /* inherited new() */
-	    sv_bless(rv, gv_stashpv(classname, GV_ADD));
-	}
+	if ( items == 2
+                && strnNE(classname,"version", len) ) { /* inherited new() */
+	    sv_bless(rv, gv_stashpvn(classname, len, GV_ADD | flags));
+        }
 	PUSHs(rv);
     }
     PUTBACK;
@@ -629,7 +745,7 @@ XS(XS_version_is_qv)
     if (items != 1)
 	croak_xs_usage(cv, "lobj");
     SP -= items;
-    if (sv_derived_from(ST(0), "version") && SvROK(ST(0))) {
+    if (sv_isobject(ST(0)) && sv_derived_from(ST(0), "version")) {
 	SV * const lobj = ST(0);
 	if ( hv_exists(MUTABLE_HV(SvRV(lobj)), "qv", 2 ) )
 	    XSRETURN_YES;
@@ -696,7 +812,8 @@ XS(XS_utf8_decode)
     else {
 	SV * const sv = ST(0);
 	bool RETVAL;
-	if (SvIsCOW(sv)) sv_force_normal(sv);
+	if (SvREADONLY(sv)) sv_force_normal(sv);
+	SvPV_force_nolen(sv);
 	RETVAL = sv_utf8_decode(sv);
 	ST(0) = boolSV(RETVAL);
     }
@@ -812,11 +929,11 @@ XS(XS_Internals_SvREFCNT)	/* This is dangerous stuff. */
     sv = SvRV(svz);
 
     if (items == 1)
-	 XSRETURN_IV(SvREFCNT(sv) - 1); /* Minus the ref created for us. */
+	 XSRETURN_UV(SvREFCNT(sv) - 1); /* Minus the ref created for us. */
     else if (items == 2) {
          /* I hope you really know what you are doing. */
-	 SvREFCNT(sv) = SvIV(ST(1));
-	 XSRETURN_IV(SvREFCNT(sv));
+	 SvREFCNT(sv) = SvUV(ST(1)) + 1; /* we free one ref on exit */
+	 XSRETURN_UV(SvREFCNT(sv) - 1);
     }
     XSRETURN_UNDEF; /* Can't happen. */
 }
@@ -888,14 +1005,10 @@ XS(XS_PerlIO_get_layers)
 	}
 
 	sv = POPs;
-	gv = MUTABLE_GV(sv);
+	gv = MAYBE_DEREF_GV(sv);
 
-	if (!isGV(sv)) {
-	     if (SvROK(sv) && isGV(SvRV(sv)))
-		  gv = MUTABLE_GV(SvRV(sv));
-	     else if (SvPOKp(sv))
-		  gv = gv_fetchsv(sv, 0, SVt_PVIO);
-	}
+	if (!gv && !SvROK(sv))
+	    gv = gv_fetchsv_nomg(sv, 0, SVt_PVIO);
 
 	if (gv && (io = GvIO(gv))) {
 	     AV* const av = PerlIO_get_layers(aTHX_ input ?
@@ -1251,6 +1364,15 @@ struct xsub_details details[] = {
     {"version::vcmp", XS_version_vcmp, NULL},
     {"version::(bool", XS_version_boolean, NULL},
     {"version::boolean", XS_version_boolean, NULL},
+    {"version::(+", XS_version_noop, NULL},
+    {"version::(-", XS_version_noop, NULL},
+    {"version::(*", XS_version_noop, NULL},
+    {"version::(/", XS_version_noop, NULL},
+    {"version::(+=", XS_version_noop, NULL},
+    {"version::(-=", XS_version_noop, NULL},
+    {"version::(*=", XS_version_noop, NULL},
+    {"version::(/=", XS_version_noop, NULL},
+    {"version::(abs", XS_version_noop, NULL},
     {"version::(nomethod", XS_version_noop, NULL},
     {"version::noop", XS_version_noop, NULL},
     {"version::is_alpha", XS_version_is_alpha, NULL},
@@ -1296,8 +1418,13 @@ Perl_boot_core_UNIVERSAL(pTHX)
     PL_amagic_generation++;
 
     /* Providing a Regexp::DESTROY fixes #21347. See test in t/op/ref.t  */
-    CvFILE(newCONSTSUB(get_hv("Regexp::", GV_ADD), "DESTROY", NULL))
-	= (char *)file;
+    {
+	CV * const cv =
+	    newCONSTSUB(get_hv("Regexp::", GV_ADD), "DESTROY", NULL);
+	Safefree(CvFILE(cv));
+	CvFILE(cv) = (char *)file;
+	CvDYNFILE_off(cv);
+    }
 }
 
 /*

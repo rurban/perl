@@ -385,14 +385,17 @@ typedef enum opcode {
 	OP_REACH	 = 368,
 	OP_RKEYS	 = 369,
 	OP_RVALUES	 = 370,
+	OP_COREARGS	 = 371,
+	OP_RUNCV	 = 372,
 	OP_max		
 } opcode;
 
-#define MAXO 371
+#define MAXO 373
 
-/* the OP_IS_(SOCKET|FILETEST) macros are optimized to a simple range
-    check because all the member OPs are contiguous in opcode.pl
-    <OPS> table.  opcode.pl verifies the range contiguity.  */
+/* the OP_IS_* macros are optimized to a simple range check because
+    all the member OPs are contiguous in regen/opcodes table.
+    opcode.pl verifies the range contiguity, or generates an OR-equals
+    expression */
 
 #define OP_IS_SOCKET(op)	\
 	((op) >= OP_SEND && (op) <= OP_GETPEERNAME)
@@ -402,5 +405,11 @@ typedef enum opcode {
 
 #define OP_IS_FILETEST_ACCESS(op)	\
 	((op) >= OP_FTRREAD && (op) <= OP_FTEEXEC)
+
+#define OP_IS_NUMCOMPARE(op)	\
+	((op) >= OP_LT && (op) <= OP_I_NCMP)
+
+#define OP_IS_DIRHOP(op)	\
+	((op) >= OP_READDIR && (op) <= OP_CLOSEDIR)
 
 /* ex: set ro: */

@@ -10,7 +10,7 @@ BEGIN {
 
 use warnings;
 use strict;
-plan tests => 77;
+plan tests => 79;
 our $TODO;
 
 my $deprecated = 0;
@@ -204,6 +204,17 @@ sub f1 {
     goto sub { $x=0; ok(1,"don't prematurely free CV\n") }
 }
 f1();
+
+# bug #99850, which is similar - freeing the subroutine we are about to
+# go(in)to during a FREETMPS call should not crash perl.
+
+package _99850 {
+    sub reftype{}
+    DESTROY { undef &reftype }
+    eval { sub { my $guard = bless []; goto &reftype }->() };
+}
+like $@, qr/^Goto undefined subroutine &_99850::reftype at /,
+   'goto &foo undefining &foo on sub cleanup';
 
 # bug #22181 - this used to coredump or make $x undefined, due to
 # erroneous popping of the inner BLOCK context
@@ -415,7 +426,11 @@ sub recurse2 {
     my $x = shift;
     $_[0] ? +1 + recurse1($_[0] - 1) : 0
 }
+my $w = 0;
+$SIG{__WARN__} = sub { ++$w };
 is(recurse1(500), 500, 'recursive goto &foo');
+is $w, 0, 'no recursion warnings for "no warnings; goto &sub"';
+delete $SIG{__WARN__};
 
 # [perl #32039] Chained goto &sub drops data too early. 
 

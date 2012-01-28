@@ -48,7 +48,7 @@ package main;
 
 $| = 1;
 BEGIN { require './test.pl' }
-plan tests => 4982;
+plan tests => 5041;
 
 use Scalar::Util qw(tainted);
 
@@ -297,7 +297,7 @@ like($@, qr/no method found/);
 bless \$x, Oscalar;
 
 $na = eval { ~$a };		# Hash updated
-warn "`$na', $@" if $@;
+warn "'$na', $@" if $@;
 ok !$@;
 is($na, '_!_xx_!_');
 
@@ -935,25 +935,37 @@ unless ($aaa) {
 }
 
 {
-    # check the `$_[0]' is not an overloadable type warning
+    # check the '$_[0]' is not an overloadable type warning
     my $a = "" ;
     local $SIG{__WARN__} = sub {$a = $_[0]} ;
     $x = eval ' overload::constant "fred" => sub {} ; ' ;
     is($a, "");
     use warnings 'overload' ;
     $x = eval ' overload::constant "fred" => sub {} ; ' ;
-    like($a, qr/^`fred' is not an overloadable type at/);
+    like($a, qr/^'fred' is not an overloadable type at/);
 }
 
 {
-    # check the `$_[1]' is not a code reference warning
+    # check the '$_[1]' is not a code reference warning
     my $a = "" ;
     local $SIG{__WARN__} = sub {$a = $_[0]} ;
     $x = eval ' overload::constant "integer" => 1; ' ;
     is($a, "");
     use warnings 'overload' ;
     $x = eval ' overload::constant "integer" => 1; ' ;
-    like($a, qr/^`1' is not a code reference at/);
+    like($a, qr/^'1' is not a code reference at/);
+}
+
+{
+    # check the invalid argument warning [perl #74098]
+    my $a = "" ;
+    local $SIG{__WARN__} = sub {$a = $_[0]} ;
+    $x = eval ' use overload "~|_|~" => sub{} ' ;
+    is($a, "");
+    use warnings 'overload' ;
+    $x = eval ' use overload "~|_|~" => sub{} ' ;
+    like($a, qr/^overload arg '~\|_\|~' is invalid at \(eval \d+\) line /,
+	'invalid arg warning');
 }
 
 {
@@ -1793,6 +1805,8 @@ foreach my $op (qw(<=> == != < <= > >=)) {
 	# note: this is testing unary qr, not binary =~
 	$subs{qr} = '(qr/%s/)';
 	push @tests, [ "abc", '"abc" =~ (%s)', '(qr)', '("")', [ 1, 2, 0 ], 0 ];
+	push @tests, [ chr 256, 'chr(256) =~ (%s)', '(qr)', '("")',
+	                                                  [ 1, 2, 0 ], 0 ];
 
 	$e = '"abc" ~~ (%s)';
 	$subs{'~~'} = $e;
@@ -1820,7 +1834,7 @@ foreach my $op (qw(<=> == != < <= > >=)) {
 
 	$subs{'%{}'} = '%s';
 	push @tests, [ {qw(a 1 b 2 c 3)}, 'join "", sort keys %%{%s}',
-			'(%{})', undef, [ 1, 2, 0 ], 0 ];
+			'(%{})', undef, [ 1, 1, 0 ], 0 ];
 
 	$subs{'&{}'} = '%s';
 	push @tests, [ sub {99}, 'do {&{%s} for 1,2}',
@@ -2173,7 +2187,7 @@ fresh_perl_is
     use overload '+' => 'justice';
     eval {bless[]};
     ::like $@, qr/^Can't resolve method "justice" overloading "\+" in p(?x:
-                  )ackage "overload" at /,
+                  )ackage "Justus" at /,
       'Error message when explicitly named overload method does not exist';
 
     package JustUs;
@@ -2182,8 +2196,52 @@ fresh_perl_is
     "JustUs"->${\"(+"};
     eval {bless []};
     ::like $@, qr/^Stub found while resolving method "\?{3}" overloadin(?x:
-                  )g "\+" in package "overload" at /,
+                  )g "\+" in package "JustUs" at /,
       'Error message when sub stub is encountered';
 }
+
+{ # undefining the overload stash -- KEEP THIS TEST LAST
+    package ant;
+    use overload '+' => 'onion';
+    $_ = \&overload::nil;
+    undef %overload::;
+    bless[];
+    ::ok(1, 'no crash when undefining %overload::');
+}
+
+# [perl #40333]
+# overload::Overloaded should not use a ->can designed for autoloading.
+# This example attempts to be as realistic as possible.  The o class has a
+# default singleton object, but can have instances, too.  The proxy class
+# represents proxies for o objects, but class methods delegate to the
+# singleton.
+# overload::Overloaded used to return incorrect results for proxy objects.
+package proxy {
+    sub new { bless [$_[1]], $_[0] }
+    sub AUTOLOAD {
+       our $AUTOLOAD =~ s/.*:://;
+       &_self->$AUTOLOAD;
+    }
+    sub can      { SUPER::can{@_} || &_self->can($_[1]) }
+    sub _self { ref $_[0] ? $_[0][0] : $o::singleton }
+}
+package o     { use overload '""' => sub { 'keck' };
+                sub new { bless[], $_[0] }
+                our $singleton = o->new; }
+ok !overload::Overloaded(new proxy new o),
+ 'overload::Overloaded does not incorrectly return true for proxy classes';
+
+# Another test, based on the type of explosive test class for which
+# perl #40333 was filed.
+{
+    package broken_can;
+    sub can {}
+    use overload '""' => sub {"Ahoy!"};
+
+    package main;
+    my $obj = bless [], 'broken_can';
+    ok(overload::Overloaded($obj));
+}
+
 
 # EOF

@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use Symbol;
 
+our $VERSION = '3.13';
+
 =head1 NAME
 
 ExtUtils::ParseXS::Constants - Initialization values for some globals
@@ -34,6 +36,7 @@ our @XSKeywords      = qw(
   OUTPUT CLEANUP ALIAS ATTRS PROTOTYPES PROTOTYPE
   VERSIONCHECK INCLUDE INCLUDE_COMMAND SCOPE INTERFACE
   INTERFACE_MACRO C_ARGS POSTCALL OVERLOAD FALLBACK
+  EXPORT_XSUB_SYMBOLS
 );
 
 1;

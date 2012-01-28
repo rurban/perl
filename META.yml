@@ -1,5 +1,5 @@
 name: perl
-version: 5.015001
+version: 5.015007
 abstract: The Perl 5 language interpreter
 author: perl5-porters@perl.org
 license: perl
@@ -18,6 +18,7 @@ no_index:
     - dist/B-Lint
     - dist/base
     - dist/bignum
+    - dist/Carp
     - dist/constant
     - dist/Cwd
     - dist/Data-Dumper
@@ -42,7 +43,6 @@ no_index:
     - dist/Math-BigRat
     - dist/Module-CoreList
     - dist/Net-Ping
-    - dist/perlfaq
     - dist/Pod-Perldoc
     - dist/Safe
     - dist/Search-Dict
@@ -55,10 +55,12 @@ no_index:
     - dist/Thread-Semaphore
     - dist/threads
     - dist/threads-shared
+    - dist/Tie-File
     - dist/XSLoader
     - lib/version
     - win32
   file:
+    - autodoc.pl
     - dist/IO/ChangeLog
     - dist/IO/hints/sco.pl
     - dist/IO/IO.pm
@@ -94,6 +96,7 @@ no_index:
     - dist/IO/t/io_udp.t
     - dist/IO/t/io_unix.t
     - dist/IO/t/io_utf8.t
+    - dist/IO/t/io_utf8argv.t
     - dist/IO/t/io_xs.t
     - dist/lib/lib_pm.PL
     - dist/lib/Makefile.PL
@@ -104,7 +107,6 @@ no_index:
     - lib/unicore/mktables
     - lib/version.pm
     - lib/version.pod
-    - lib/version.t
     - pod/perlfilter.pod
     - pod/perlpodstyle.pod
     - Porting/Maintainers.pm

@@ -7,7 +7,7 @@ use warnings;
 
 use Scalar::Util qw(reftype refaddr blessed);
 
-our $VERSION = '1.38';
+our $VERSION = '1.40';
 my $XS_VERSION = $VERSION;
 $VERSION = eval $VERSION;
 
@@ -187,7 +187,7 @@ threads::shared - Perl extension for sharing data structures between threads
 
 =head1 VERSION
 
-This document describes threads::shared version 1.37
+This document describes threads::shared version 1.40
 
 =head1 SYNOPSIS
 
@@ -526,6 +526,11 @@ called multiple times, once for each thread's scope exit.  Another danger is
 that the contents of hash-based objects will be lost due to the above
 mentioned limitation.  See F<examples/class.pl> (in the CPAN distribution of
 this module) for how to create a class that supports object sharing.
+
+Destructors may not be called on objects if those objects still exist at
+global destruction time.  If the destructors must be called, make sure
+there are no circular references and that nothing is referencing the
+objects, before the program ends.
 
 Does not support C<splice> on arrays.  Does not support explicitly changing
 array lengths via $#array -- use C<push> and C<pop> instead.

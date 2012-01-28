@@ -59,13 +59,14 @@ descriptions).  User code generated warnings a la warn() are unaffected,
 allowing duplicate user messages to be displayed.
 
 This module also adds a stack trace to the error message when perl dies.
-This is useful for pinpointing what caused the death. The B<-traceonly> (or
+This is useful for pinpointing what
+caused the death.  The B<-traceonly> (or
 just B<-t>) flag turns off the explanations of warning messages leaving just
-the stack traces. So if your script is dieing, run it again with
+the stack traces.  So if your script is dieing, run it again with
 
   perl -Mdiagnostics=-traceonly my_bad_script
 
-to see the call stack at the time of death. By supplying the B<-warntrace>
+to see the call stack at the time of death.  By supplying the B<-warntrace>
 (or just B<-w>) flag, any warnings emitted will also come with a stack
 trace.
 
@@ -185,7 +186,7 @@ use 5.009001;
 use Carp;
 $Carp::Internal{__PACKAGE__.""}++;
 
-our $VERSION = '1.23';
+our $VERSION = '1.27';
 our $DEBUG;
 our $VERBOSE;
 our $PRETTY;
@@ -215,7 +216,7 @@ $DEBUG ||= 0;
 my $WHOAMI = ref bless [];  # nobody's business, prolly not even mine
 
 local $| = 1;
-my $_;
+local $_;
 local $.;
 
 my $standalone;
@@ -318,6 +319,7 @@ my %msg;
 {
     print STDERR "FINISHING COMPILATION for $_\n" if $DEBUG;
     local $/ = '';
+    local $_;
     my $header;
     my @headers;
     my $for_item;
@@ -344,6 +346,9 @@ my %msg;
 	           ? italic($sect) . ' in ' . italic($page)
 	           : italic($page)
 	     /ges;
+	     s/S<(.*?)>/
+               $1
+             /ges;
 	} else {
 	    s/C<<< (.*?) >>>|C<< (.*?) >>|[BC]<(.*?)>/$+/gs;
 	    s/[IF]<(.*?)>/$1/gs;
@@ -355,6 +360,9 @@ my %msg;
 	           ? qq '"$sect" in $page'
 	           : $page
 	     /ges;
+	    s/S<(.*?)>/
+               $1
+             /ges;
 	} 
 	unless (/^=/) {
 	    if (defined $header) { 
@@ -410,22 +418,22 @@ my %msg;
 	# Since we strip "\.\n" when we search a warning, strip it here as well
 	$header =~ s/\.?$//;
 
-        my @toks = split( /(%l?[dx]|%c|%(?:\.\d+)?[fs])/, $header );
+        my @toks = split( /(%l?[dxX]|%u|%c|%(?:\.\d+)?[fs])/, $header );
 	if (@toks > 1) {
             my $conlen = 0;
             for my $i (0..$#toks){
                 if( $i % 2 ){
                     if(      $toks[$i] eq '%c' ){
                         $toks[$i] = '.';
-                    } elsif( $toks[$i] eq '%d' ){
+                    } elsif( $toks[$i] =~ /^%(?:d|u)$/ ){
                         $toks[$i] = '\d+';
                     } elsif( $toks[$i] =~ '^%(?:s|.*f)$' ){
                         $toks[$i] = $i == $#toks ? '.*' : '.*?';
                     } elsif( $toks[$i] =~ '%.(\d+)s' ){
                         $toks[$i] = ".{$1}";
-                     } elsif( $toks[$i] =~ '^%l*x$' ){
-                        $toks[$i] = '[\da-f]+';
-                   }
+                    } elsif( $toks[$i] =~ '^%l*([xX])$' ){
+                        $toks[$i] = $1 eq 'x' ? '[\da-f]+' : '[\dA-F]+';
+                    }
                 } elsif( length( $toks[$i] ) ){
                     $toks[$i] = quotemeta $toks[$i];
                     $conlen += length( $toks[$i] );
@@ -566,10 +574,12 @@ sub death_trap {
     # traps.
     $SIG{__DIE__} = $SIG{__WARN__} = '';
 
-    # Have carp skip over death_trap() when showing the stack trace.
-    local($Carp::CarpLevel) = 1;
+    $exception =~ s/\n(?=.)/\n\t/gas;
 
-    confess "Uncaught exception from user code:\n\t$exception";
+    die Carp::longmess("__diagnostics__")
+	  =~ s/^__diagnostics__.*?line \d+\.?\n/
+		  "Uncaught exception from user code:\n\t$exception"
+	      /re;
 	# up we go; where we stop, nobody knows, but i think we die now
 	# but i'm deeply afraid of the &$olddie guy reraising and us getting
 	# into an indirect recursion loop
@@ -580,8 +590,8 @@ my %old_diag;
 my $count;
 my $wantspace;
 sub splainthis {
-    return 0 if $TRACEONLY;
-    $_ = shift;
+  return 0 if $TRACEONLY;
+  for (my $tmp = shift) {
     local $\;
     local $!;
     ### &finish_compilation unless %msg;
@@ -616,17 +626,25 @@ sub splainthis {
 	return 0 unless &transmo;
     }
 
-    $orig = shorten($orig);
+    my $short = shorten($orig);
     if ($old_diag{$_}) {
 	autodescribe();
-	print THITHER "$orig (#$old_diag{$_})\n";
+	print THITHER "$short (#$old_diag{$_})\n";
 	$wantspace = 1;
+    } elsif (!$msg{$_} && $orig =~ /\n./s) {
+	# A multiline message, like "Attempt to reload /
+	# Compilation failed"
+	my $found;
+	for (split /^/, $orig) {
+	    splainthis($_) and $found = 1;
+	}
+	return $found;
     } else {
 	autodescribe();
 	$old_diag{$_} = ++$count;
 	print THITHER "\n" if $wantspace;
 	$wantspace = 0;
-	print THITHER "$orig (#$old_diag{$_})\n";
+	print THITHER "$short (#$old_diag{$_})\n";
 	if ($msg{$_}) {
 	    print THITHER $msg{$_};
 	} else {
@@ -639,6 +657,7 @@ sub splainthis {
 	} 
     }
     return 1;
+  }
 } 
 
 sub autodescribe {

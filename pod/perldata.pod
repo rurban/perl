@@ -179,8 +179,9 @@ are considered pretty much the same thing for nearly all purposes,
 references are strongly-typed, uncastable pointers with builtin
 reference-counting and destructor invocation.
 
-A scalar value is interpreted as TRUE in the Boolean sense if it is not
-the null string or the number 0 (or its string equivalent, "0").  The
+A scalar value is interpreted as FALSE in the Boolean sense
+if it is undefined, the null string or the number 0 (or its
+string equivalent, "0"), and TRUE if it is anything else.  The
 Boolean context is just a special kind of scalar context where no 
 conversion to a string or a number is ever performed.
 X<boolean> X<bool> X<true> X<false> X<truth>
@@ -251,14 +252,6 @@ which return whatever they feel like returning.)  The following is
 always true:
 X<array, length>
 
-    scalar(@whatever) == $#whatever - $[ + 1;
-
-Version 5 of Perl changed the semantics of C<$[>: files that don't set
-the value of C<$[> no longer need to worry about whether another
-file changed its value.  (In other words, use of C<$[> is deprecated.)
-So in general you can assume that
-X<$[>
-
     scalar(@whatever) == $#whatever + 1;
 
 Some programmers choose to use an explicit conversion so as to 
@@ -302,7 +295,9 @@ integer formats:
     0b011011            # binary
 
 You are allowed to use underscores (underbars) in numeric literals
-between digits for legibility.  You could, for example, group binary
+between digits for legibility (but not multiple underscores in a row:
+C<23__500> is not legal; C<23_500> is).
+You could, for example, group binary
 digits by threes (as for a Unix-style mode argument such as 0b110_100_100)
 or by fours (to represent nibbles, as in 0b1010_0110) or in other groups.
 X<number, literal>
@@ -403,12 +398,16 @@ X<end> X<data> X<^D> X<^Z>
 
 The special literals __FILE__, __LINE__, and __PACKAGE__
 represent the current filename, line number, and package name at that
-point in your program.  They may be used only as separate tokens; they
+point in your program.  __SUB__ gives a reference to the current
+subroutine.  They may be used only as separate tokens; they
 will not be interpolated into strings.  If there is no current package
 (due to an empty C<package;> directive), __PACKAGE__ is the undefined
 value. (But the empty C<package;> is no longer supported, as of version
-5.10.)
-X<__FILE__> X<__LINE__> X<__PACKAGE__> X<line> X<file> X<package>
+5.10.)  Outside of a subroutine, __SUB__ is the undefined value.  __SUB__
+is only available in 5.16 or higher, and only with a C<use v5.16> or
+C<use feature "current_sub"> declaration.
+X<__FILE__> X<__LINE__> X<__PACKAGE__> X<__SUB__>
+X<line> X<file> X<package>
 
 The two control characters ^D and ^Z, and the tokens __END__ and __DATA__
 may be used to indicate the logical end of the script before the actual

@@ -20,6 +20,8 @@ BEGIN {
 use Test::More;
 use Config ();
 
+my $tests = 17; # not counting those in the __DATA__ section
+
 use B::Deparse;
 my $deparse = B::Deparse->new();
 isa_ok($deparse, 'B::Deparse', 'instantiate a B::Deparse object');
@@ -30,7 +32,6 @@ isa_ok($deparse, 'B::Deparse', 'instantiate a B::Deparse object');
  $deparse->ambient_pragmas (
      hint_bits    => $hint_bits,
      warning_bits => $warning_bits,
-     '$['         => 0 + $[,
      '%^H'	  => $hinthash,
  );
 }
@@ -38,6 +39,7 @@ isa_ok($deparse, 'B::Deparse', 'instantiate a B::Deparse object');
 $/ = "\n####\n";
 while (<DATA>) {
     chomp;
+    $tests ++;
     # This code is pinched from the t/lib/common.pl for TODO.
     # It's not clear how to avoid duplication
     # Now tweaked a bit to do skip or todo
@@ -208,6 +210,12 @@ sub BEGIN {
 }
 EOCODF
 
+# [perl #91384]
+$a =
+  `$^X $path "-MO=Deparse" -e "BEGIN{*Acme::Acme:: = *Acme::}" 2>&1`;
+like($a, qr/-e syntax OK/,
+    "Deparse does not hang when traversing stash circularities");
+
 # [perl #93990]
 @* = ();
 is($deparse->coderef2text(sub{ print "@{*}" }),
@@ -219,7 +227,29 @@ q<{
     print "@-";
 }>, 'no need to curly around to interpolate "@-"');
 
-done_testing();
+# Strict hints in %^H are mercilessly suppressed
+$a =
+  `$^X $path "-MO=Deparse" -e "use strict; print;" 2>&1`;
+unlike($a, qr/BEGIN/,
+    "Deparse does not emit strict hh hints");
+
+# ambient_pragmas should not mess with strict settings.
+SKIP: {
+    skip "requires 5.11", 1 unless $] >= 5.011;
+    eval q`
+	no strict;
+	BEGIN {
+	    # Clear out the strict hints from %^H
+	    %^H = ();
+	    new B::Deparse -> ambient_pragmas(strict => 'all');
+	}
+	use 5.011;  # should enable strict
+	ok !eval '$do_noT_create_a_variable_with_this_name = 1',
+	  'ambient_pragmas do not mess with compiling scope';
+   `;
+}
+
+done_testing($tests);
 
 __DATA__
 # A constant
@@ -400,6 +430,13 @@ my $f = sub {
 # bug #43010
 &::::;
 ####
+# [perl #77172]
+package rt77172;
+sub foo {} foo & & & foo;
+>>>>
+package rt77172;
+foo(&{&} & foo());
+####
 # variables as method names
 my $bar;
 'Foo'->$bar('orz');
@@ -410,6 +447,17 @@ my $bar;
 ####
 # constants as method names without ()
 'Foo'->bar;
+####
+# [perl #47359] "indirect" method call notation
+our @bar;
+foo{@bar}+1,->foo;
+(foo{@bar}+1),foo();
+foo{@bar}1 xor foo();
+>>>>
+our @bar;
+(foo { @bar } 1)->foo;
+(foo { @bar } 1), foo();
+foo { @bar } 1 xor foo();
 ####
 # SKIP ?$] < 5.010 && "say not implemented on this Perl version"
 # say
@@ -630,9 +678,16 @@ warn O_EXCL;
 # tests for deparsing of blessed constant with overloaded numification
 warn OVERLOADED_NUMIFICATION;
 ####
-# TODO Only strict 'refs' currently supported
 # strict
 no strict;
+print $x;
+use strict 'vars';
+print $main::x;
+use strict 'subs';
+print $main::x;
+use strict 'refs';
+print $main::x;
+no strict 'vars';
 $x;
 ####
 # TODO Subsets of warnings could be encoded textually, rather than as bitflips.
@@ -715,11 +770,62 @@ pop @_;
 #[perl #20444]
 "foo" =~ (1 ? /foo/ : /bar/);
 "foo" =~ (1 ? y/foo// : /bar/);
+"foo" =~ (1 ? y/foo//r : /bar/);
 "foo" =~ (1 ? s/foo// : /bar/);
 >>>>
 'foo' =~ ($_ =~ /foo/);
 'foo' =~ ($_ =~ tr/fo//);
+'foo' =~ ($_ =~ tr/fo//r);
 'foo' =~ ($_ =~ s/foo//);
+####
+# The fix for [perl #20444] broke this.
+'foo' =~ do { () };
+####
+# [perl #81424] match against aelemfast_lex
+my @s;
+print /$s[1]/;
+####
+# /$#a/
+print /$#main::a/;
+####
+# [perl #91318] /regexp/applaud
+print /a/a, s/b/c/a;
+print /a/aa, s/b/c/aa;
+print /a/p, s/b/c/p;
+print /a/l, s/b/c/l;
+print /a/u, s/b/c/u;
+{
+    use feature "unicode_strings";
+    print /a/d, s/b/c/d;
+}
+{
+    use re "/u";
+    print /a/d, s/b/c/d;
+}
+{
+    use 5.012;
+    print /a/d, s/b/c/d;
+}
+>>>>
+print /a/a, s/b/c/a;
+print /a/aa, s/b/c/aa;
+print /a/p, s/b/c/p;
+print /a/l, s/b/c/l;
+print /a/u, s/b/c/u;
+{
+    use feature 'unicode_strings';
+    print /a/d, s/b/c/d;
+}
+{
+    BEGIN { $^H{'reflags'}         = '0';
+	    $^H{'reflags_charset'} = '2'; }
+    print /a/d, s/b/c/d;
+}
+{
+    no feature;
+    use feature ':5.12';
+    print /a/d, s/b/c/d;
+}
 ####
 # Test @threadsv_names under 5005threads
 foreach $' (1, 2) {
@@ -751,11 +857,7 @@ my @a;
 $a[0] = 1;
 ####
 # feature features without feature
-BEGIN {
-    delete $^H{'feature_say'};
-    delete $^H{'feature_state'};
-    delete $^H{'feature_switch'};
-}
+no feature 'say', 'state', 'switch';
 CORE::state $x;
 CORE::say $x;
 CORE::given ($x) {
@@ -765,4 +867,260 @@ CORE::given ($x) {
     CORE::default {
         CORE::break;
     }
+}
+CORE::evalbytes '';
+() = CORE::__SUB__;
+####
+# feature features when feature has been disabled by use VERSION
+use feature (sprintf(":%vd", $^V));
+use 1;
+CORE::state $x;
+CORE::say $x;
+CORE::given ($x) {
+    CORE::when (3) {
+        continue;
+    }
+    CORE::default {
+        CORE::break;
+    }
+}
+CORE::evalbytes '';
+() = CORE::__SUB__;
+>>>>
+no feature;
+use feature ':default';
+CORE::state $x;
+CORE::say $x;
+CORE::given ($x) {
+    CORE::when (3) {
+        continue;
+    }
+    CORE::default {
+        CORE::break;
+    }
+}
+CORE::evalbytes '';
+() = CORE::__SUB__;
+####
+# Feature hints
+use feature 'current_sub', 'evalbytes';
+print;
+use 1;
+print;
+use 5.014;
+print;
+no feature 'unicode_strings';
+print;
+>>>>
+use feature 'current_sub', 'evalbytes';
+print $_;
+no feature;
+use feature ':default';
+print $_;
+no feature;
+use feature ':5.12';
+print $_;
+no feature 'unicode_strings';
+print $_;
+####
+# $#- $#+ $#{%} etc.
+my @x;
+@x = ($#{`}, $#{~}, $#{!}, $#{@}, $#{$}, $#{%}, $#{^}, $#{&}, $#{*});
+@x = ($#{(}, $#{)}, $#{[}, $#{{}, $#{]}, $#{}}, $#{'}, $#{"}, $#{,});
+@x = ($#{<}, $#{.}, $#{>}, $#{/}, $#{?}, $#{=}, $#+, $#{\}, $#{|}, $#-);
+@x = ($#{;}, $#{:});
+####
+# ${#} interpolated (the first line magically disables the warning)
+() = *#;
+() = "${#}a";
+####
+# [perl #86060] $( $| $) in regexps need braces
+/${(}/;
+/${|}/;
+/${)}/;
+/${(}${|}${)}/;
+####
+# ()[...]
+my(@a) = ()[()];
+####
+# sort(foo(bar))
+# sort(foo(bar)) is interpreted as sort &foo(bar)
+# sort foo(bar) is interpreted as sort foo bar
+# parentheses are not optional in this case
+print sort(foo('bar'));
+>>>>
+print sort(foo('bar'));
+####
+# substr assignment
+substr(my $a, 0, 0) = (foo(), bar());
+$a++;
+####
+# hint hash
+BEGIN { $^H{'foo'} = undef; }
+{
+ BEGIN { $^H{'bar'} = undef; }
+ {
+  BEGIN { $^H{'baz'} = undef; }
+  {
+   print $_;
+  }
+  print $_;
+ }
+ print $_;
+}
+BEGIN { $^H{q[']} = '('; }
+print $_;
+####
+# hint hash changes that serialise the same way with sort %hh
+BEGIN { $^H{'a'} = 'b'; }
+{
+ BEGIN { $^H{'b'} = 'a'; delete $^H{'a'}; }
+ print $_;
+}
+print $_;
+####
+# [perl #47361] do({}) and do +{} (variants of do-file)
+do({});
+do +{};
+sub foo::do {}
+package foo;
+CORE::do({});
+CORE::do +{};
+>>>>
+do({});
+do({});
+package foo;
+CORE::do({});
+CORE::do({});
+####
+# [perl #77096] functions that do not follow the llafr
+() = (return 1) + time;
+() = (return ($1 + $2) * $3) + time;
+() = (return ($a xor $b)) + time;
+() = (do 'file') + time;
+() = (do ($1 + $2) * $3) + time;
+() = (do ($1 xor $2)) + time;
+() = (goto 1) + 3;
+() = (require 'foo') + 3;
+() = (require foo) + 3;
+() = (CORE::dump 1) + 3;
+() = (last 1) + 3;
+() = (next 1) + 3;
+() = (redo 1) + 3;
+() = (-R $_) + 3;
+() = (-W $_) + 3;
+() = (-X $_) + 3;
+() = (-r $_) + 3;
+() = (-w $_) + 3;
+() = (-x $_) + 3;
+####
+# [perl #97476] not() *does* follow the llafr
+$_ = ($a xor not +($1 || 2) ** 2);
+####
+# Precedence conundrums with argument-less function calls
+() = (eof) + 1;
+() = (return) + 1;
+() = (return, 1);
+() = warn;
+() = warn() + 1;
+() = setpgrp() + 1;
+####
+# [perl #63558] open local(*FH)
+open local *FH;
+pipe local *FH, local *FH;
+####
+# [perl #91416] open "string"
+open 'open';
+open '####';
+open '^A';
+open "\ca";
+>>>>
+open *open;
+open '####';
+open '^A';
+open *^A;
+####
+# "string"->[] ->{}
+no strict 'vars';
+() = 'open'->[0]; #aelemfast
+() = '####'->[0];
+() = '^A'->[0];
+() = "\ca"->[0];
+() = 'a::]b'->[0];
+() = 'open'->[$_]; #aelem
+() = '####'->[$_];
+() = '^A'->[$_];
+() = "\ca"->[$_];
+() = 'a::]b'->[$_];
+() = 'open'->{0}; #helem
+() = '####'->{0};
+() = '^A'->{0};
+() = "\ca"->{0};
+() = 'a::]b'->{0};
+>>>>
+no strict 'vars';
+() = $open[0];
+() = '####'->[0];
+() = '^A'->[0];
+() = $^A[0];
+() = 'a::]b'->[0];
+() = $open[$_];
+() = '####'->[$_];
+() = '^A'->[$_];
+() = $^A[$_];
+() = 'a::]b'->[$_];
+() = $open{'0'};
+() = '####'->{'0'};
+() = '^A'->{'0'};
+() = $^A{'0'};
+() = 'a::]b'->{'0'};
+####
+# [perl #74740] -(f()) vs -f()
+$_ = -(f());
+####
+# require <binop>
+require 'a' . $1;
+####
+#[perl #30504] foreach-my postfix/prefix difference
+$_ = 'foo' foreach my ($foo1, $bar1, $baz1);
+foreach (my ($foo2, $bar2, $baz2)) { $_ = 'foo' }
+foreach my $i (my ($foo3, $bar3, $baz3)) { $i = 'foo' }
+>>>>
+$_ = 'foo' foreach (my($foo1, $bar1, $baz1));
+foreach $_ (my($foo2, $bar2, $baz2)) {
+    $_ = 'foo';
+}
+foreach my $i (my($foo3, $bar3, $baz3)) {
+    $i = 'foo';
+}
+####
+#[perl #108224] foreach with continue block
+foreach (1 .. 3) { print } continue { print "\n" }
+foreach (1 .. 3) { } continue { }
+foreach my $i (1 .. 3) { print $i } continue { print "\n" }
+foreach my $i (1 .. 3) { } continue { }
+>>>>
+foreach $_ (1 .. 3) {
+    print $_;
+}
+continue {
+    print "\n";
+}
+foreach $_ (1 .. 3) {
+    ();
+}
+continue {
+    ();
+}
+foreach my $i (1 .. 3) {
+    print $i;
+}
+continue {
+    print "\n";
+}
+foreach my $i (1 .. 3) {
+    ();
+}
+continue {
+    ();
 }

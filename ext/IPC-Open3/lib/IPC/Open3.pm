@@ -9,7 +9,7 @@ require Exporter;
 use Carp;
 use Symbol qw(gensym qualify);
 
-$VERSION	= '1.11';
+$VERSION	= '1.12';
 @ISA		= qw(Exporter);
 @EXPORT		= qw(open3);
 
@@ -269,12 +269,15 @@ sub _open3 {
 			    fileno $_->{open_as};
 		    }
 		}
-		return 0 if ($_[0] eq '-');
+		return 1 if ($_[0] eq '-');
 		exec @_ or do {
 		    local($")=(" ");
 		    croak "$Me: exec of @_ failed";
 		};
-	    };
+	    } and do {
+                close $stat_w;
+                return 0;
+            };
 
 	    my $bang = 0+$!;
 	    my $err = $@;

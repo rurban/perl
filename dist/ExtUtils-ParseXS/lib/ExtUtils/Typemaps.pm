@@ -2,7 +2,7 @@ package ExtUtils::Typemaps;
 use 5.006001;
 use strict;
 use warnings;
-our $VERSION = '1.00';
+our $VERSION = '1.04';
 #use Carp qw(croak);
 
 require ExtUtils::ParseXS;
@@ -26,9 +26,14 @@ ExtUtils::Typemaps - Read/Write/Modify Perl/XS typemap files
   
   # add a mapping
   $typemap->add_typemap(ctype => 'NV', xstype => 'T_NV');
-  $typemap->add_inputmap (xstype => 'T_NV', code => '$var = ($type)SvNV($arg);');
-  $typemap->add_outputmap(xstype => 'T_NV', code => 'sv_setnv($arg, (NV)$var);');
-  $typemap->add_string(string => $typemapstring); # will be parsed and merged
+  $typemap->add_inputmap(
+     xstype => 'T_NV', code => '$var = ($type)SvNV($arg);'
+  );
+  $typemap->add_outputmap(
+     xstype => 'T_NV', code => 'sv_setnv($arg, (NV)$var);'
+  );
+  $typemap->add_string(string => $typemapstring);
+                                           # will be parsed and merged
   
   # remove a mapping (same for remove_typemap and remove_outputmap...)
   $typemap->remove_inputmap(xstype => 'SomeType');
@@ -585,6 +590,40 @@ sub as_string {
   return join '', @code;
 }
 
+=head2 as_embedded_typemap
+
+Generates and returns the string form of the typemap with the
+appropriate prefix around it for verbatim inclusion into an
+XS file as an embedded typemap. This will return a string like
+
+  TYPEMAP: <<END_OF_TYPEMAP
+  ... typemap here (see as_string) ...
+  END_OF_TYPEMAP
+
+The method takes care not to use a HERE-doc end marker that
+appears in the typemap string itself.
+
+=cut
+
+sub as_embedded_typemap {
+  my $self = shift;
+  my $string = $self->as_string;
+
+  my @ident_cand = qw(END_TYPEMAP END_OF_TYPEMAP END);
+  my $icand = 0;
+  my $cand_suffix = "";
+  while ($string =~ /^\Q$ident_cand[$icand]$cand_suffix\E\s*$/m) {
+    $icand++;
+    if ($icand == @ident_cand) {
+      $icand = 0;
+      ++$cand_suffix;
+    }
+  }
+
+  my $marker = "$ident_cand[$icand]$cand_suffix";
+  return "TYPEMAP: <<$marker;\n$string\n$marker\n";
+}
+
 =head2 merge
 
 Merges a given typemap into the object. Note that a failed merge
@@ -647,6 +686,18 @@ sub is_empty {
   return @{ $self->{typemap_section} } == 0
       && @{ $self->{input_section} } == 0
       && @{ $self->{output_section} } == 0;
+}
+
+=head2 list_mapped_ctypes
+
+Returns a list of the C types that are mappable by
+this typemap object.
+
+=cut
+
+sub list_mapped_ctypes {
+  my $self = shift;
+  return sort keys %{ $self->{typemap_lookup} };
 }
 
 =head2 _get_typemap_hash
@@ -732,7 +783,10 @@ corresponding OUTPUT code:
     'T_OUT' => '    {
             GV *gv = newGVgen("$Package");
             if ( do_open(gv, "+>&", 3, FALSE, 0, 0, $var) )
-                sv_setsv($arg, sv_bless(newRV((SV*)gv), gv_stashpv("$Package",1)));
+                sv_setsv(
+                  $arg,
+                  sv_bless(newRV((SV*)gv), gv_stashpv("$Package",1))
+                );
             else
                 $arg = &PL_sv_undef;
          }
@@ -966,7 +1020,7 @@ Steffen Mueller C<<smueller@cpan.org>>
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2011 Steffen Mueller
+Copyright 2009, 2010, 2011, 2012 Steffen Mueller
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

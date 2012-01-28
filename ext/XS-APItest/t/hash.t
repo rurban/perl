@@ -204,6 +204,61 @@ sub test_precomputed_hashes {
     is "@objs", "", 'freeing a hash with nulls frees all entries';
 }
 
+# Tests for HvENAME and UTF8
+{
+    no strict;
+    no warnings 'void';
+    my $hvref;
+
+    *{"\xff::bar"}; # autovivify %ÿ:: without UTF8
+    *{"\xff::bαr::"} = $hvref = \%foo::;
+    undef *foo::;
+    is HvENAME($hvref), "\xff::bαr",
+	'stash alias (utf8 inside bytes) does not create malformed UTF8';
+
+    *{"é::foo"}; # autovivify %é:: with UTF8
+    *{"\xe9::\xe9::"} = $hvref = \%bar::;
+    undef *bar::;
+    is HvENAME($hvref), "\xe9::\xe9",
+	'stash alias (bytes inside utf8) does not create malformed UTF8';
+
+    *{"\xfe::bar"}; *{"\xfd::bar"};
+    *{"\xfe::bαr::"} = \%goo::;
+    *{"\xfd::bαr::"} = $hvref = \%goo::;
+    undef *goo::;
+    like HvENAME($hvref), qr/^[\xfe\xfd]::bαr\z/,
+	'multiple stash aliases (utf8 inside bytes) do not cause bad UTF8';
+
+    *{"è::foo"}; *{"ë::foo"};
+    *{"\xe8::\xe9::"} = $hvref = \%bear::;
+    *{"\xeb::\xe9::"} = \%bear::;
+    undef *bear::;
+    like HvENAME($hvref), qr"^[\xe8\xeb]::\xe9\z",
+	'multiple stash aliases (bytes inside utf8) do not cause bad UTF8';
+}
+
+{ # newHVhv
+    use Tie::Hash;
+    tie my %h, 'Tie::StdHash';
+    %h = 1..10;
+    is join(' ', sort %{newHVhv \%h}), '1 10 2 3 4 5 6 7 8 9',
+      'newHVhv on tied hash';
+}
+
+# helem and hslice on entry with null value
+# This is actually a test for a Perl operator, not an XS API test.  But it
+# requires a hash that can only be produced by XS (although recently it
+# could be encountered when tying hint hashes).
+{
+    my %h;
+    fill_hash_with_nulls(\%h);
+    eval{ $h{84} = 1 };
+    pass 'no crash when writing to hash elem with null value';
+    eval{ no # silly
+	  warnings; # thank you!
+	  @h{85} = 1 };
+    pass 'no crash when writing to hash elem with null value via slice';
+}
 
 done_testing;
 exit;

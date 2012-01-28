@@ -1,3 +1,27 @@
+2.60 Fri Jan 20 2012
+  - Updated for v5.15.7
+
+2.59 Sun Dec 20 2011
+  - Updated for v5.15.6
+
+2.58 Sun Nov 20 2011
+  - Updated for v5.15.5
+
+2.57 Thu Oct 20 2011
+  - Updated for v5.15.4
+
+2.56 Tues Sept 20 2011
+  - Updated for v5.15.3
+  - Corrected version of Module::CoreList shipped
+    with v5.10.0
+  - Corrected Errno being shipped with v5.6.0 and v5.6.1
+  - Corrected VMS::Filespec being shipped with v5.12.3
+  - Corrected DB_File being shipped with v5.8.2
+  - Added http://perlpunks.de/corelist to SEE ALSO
+
+2.55 Sat Aug 20 2011
+  - Updated for v5.15.2
+
 2.54 Wed Jul 20 2011
   - Updated for v5.15.1
 

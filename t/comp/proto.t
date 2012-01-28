@@ -18,7 +18,7 @@ BEGIN {
 # strict
 use strict;
 
-print "1..174\n";
+print "1..177\n";
 
 my $i = 1;
 
@@ -409,7 +409,7 @@ print "ok ", $i++, "\n";
 print "# CORE::open => ($p)\nnot " if ($p = prototype('CORE::open')) ne '*;$@';
 print "ok ", $i++, "\n";
 
-print "# CORE:Foo => ($p), \$@ => `$@'\nnot " 
+print "# CORE:Foo => ($p), \$@ => '$@'\nnot " 
     if defined ($p = eval { prototype('CORE::Foo') or 1 }) or $@ !~ /^Can't find an opnumber/;
 print "ok ", $i++, "\n";
 
@@ -698,6 +698,17 @@ print "not "
 print "ok ", $i++, "\n";
 print "not "
  unless eval 'sub uniproto9 (;+) {} uniproto9 $_, 1' or warn $@;
+print "ok ", $i++, "\n";
+
+# Test that a trailing semicolon makes a sub have listop precedence
+sub unilist ($;)  { $_[0]+1 }
+sub unilist2(_;)  { $_[0]+1 }
+sub unilist3(;$;) { $_[0]+1 }
+print "not " unless (unilist 0 || 5) == 6;
+print "ok ", $i++, "\n";
+print "not " unless (unilist2 0 || 5) == 6;
+print "ok ", $i++, "\n";
+print "not " unless (unilist3 0 || 5) == 6;
 print "ok ", $i++, "\n";
 
 {

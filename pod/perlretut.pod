@@ -781,7 +781,7 @@ so may lead to surprising and unsatisfactory results.
 =head2 Relative backreferences
 
 Counting the opening parentheses to get the correct number for a
-backreference is errorprone as soon as there is more than one
+backreference is error-prone as soon as there is more than one
 capturing group.  A more convenient technique became available
 with Perl 5.10: relative backreferences. To refer to the immediately
 preceding capture group one now may write C<\g{-1}>, the next but
@@ -1537,7 +1537,7 @@ the regexp in the I<last successful match> is used instead.  So we have
 
 =head3 Global matching
 
-The final two modifiers we will disccuss here,
+The final two modifiers we will discuss here,
 C<//g> and C<//c>, concern multiple matches.
 The modifier C<//g> stands for global matching and allows the
 matching operator to match within a string as many times as possible.
@@ -1870,7 +1870,7 @@ substituted.
 
 C<\Q>, C<\L>, C<\l>, C<\U>, C<\u> and C<\E> are actually part of
 double-quotish syntax, and not part of regexp syntax proper.  They will
-work if they appear in a regular expression embeddded directly in a
+work if they appear in a regular expression embedded directly in a
 program, but not when contained in a string that is interpolated in a
 pattern.
 
@@ -1907,23 +1907,24 @@ specified in the Unicode standard.  For instance, if we wanted to
 represent or match the astrological sign for the planet Mercury, we
 could use
 
-    use charnames ":full"; # use named chars with Unicode full names
     $x = "abc\N{MERCURY}def";
     $x =~ /\N{MERCURY}/;   # matches
 
-One can also use short names or restrict names to a certain alphabet:
+One can also use "short" names:
 
-    use charnames ':full';
     print "\N{GREEK SMALL LETTER SIGMA} is called sigma.\n";
-
-    use charnames ":short";
     print "\N{greek:Sigma} is an upper-case sigma.\n";
+
+You can also restrict names to a certain alphabet by specifying the
+L<charnames> pragma:
 
     use charnames qw(greek);
     print "\N{sigma} is Greek sigma\n";
 
-A list of full names can be found in F<NamesList.txt> in the Unicode standard
-(available at L<http://www.unicode.org/Public/UNIDATA/>).
+An index of character names is available on-line from the Unicode
+Consortium, L<http://www.unicode.org/charts/charindex.html>; explanatory
+material with links to other resources at
+L<http://www.unicode.org/standard/where>.
 
 The answer to requirement 2) is, as of 5.6.0, that a regexp (mostly)
 uses Unicode characters.  (The "mostly" is for messy backward
@@ -1943,7 +1944,6 @@ C<\p{name}> escape sequence.  Closely associated is the C<\P{name}>
 character class, which is the negation of the C<\p{name}> class.  For
 example, to match lower and uppercase characters,
 
-    use charnames ":full"; # use named chars with Unicode full names
     $x = "BOB";
     $x =~ /^\p{IsUpper}/;   # matches, uppercase char class
     $x =~ /^\P{IsUpper}/;   # doesn't match, char class sans uppercase
@@ -2731,7 +2731,7 @@ groups or produce results, it may be necessary to use this in
 combination with embedded code.
 
    %count = ();
-   "supercalifragilisticexpialidoceous" =~
+   "supercalifragilisticexpialidocious" =~
        /([aeiou])(?{ $count{$1}++; })(*FAIL)/i;
    printf "%3d '%s'\n", $count{$_}, $_ for (sort keys %count);
 
@@ -2744,7 +2744,7 @@ for another vowel. Thus, match or no match makes no difference, and the
 regexp engine proceeds until the entire string has been inspected.
 (It's remarkable that an alternative solution using something like
 
-   $count{lc($_)}++ for split('', "supercalifragilisticexpialidoceous");
+   $count{lc($_)}++ for split('', "supercalifragilisticexpialidocious");
    printf "%3d '%s'\n", $count2{$_}, $_ for ( qw{ a e i o u } );
 
 is considerably slower.)
@@ -2792,7 +2792,7 @@ information is displayed in color on terminals that can display
 termcap color sequences.  Here is example output:
 
     % perl -e 'use re "debug"; "abc" =~ /a*b+c/;'
-    Compiling REx `a*b+c'
+    Compiling REx 'a*b+c'
     size 9 first at 1
        1: STAR(4)
        2:   EXACT <a>(0)
@@ -2800,11 +2800,11 @@ termcap color sequences.  Here is example output:
        5:   EXACT <b>(0)
        7: EXACT <c>(9)
        9: END(0)
-    floating `bc' at 0..2147483647 (checking floating) minlen 2
-    Guessing start of match, REx `a*b+c' against `abc'...
-    Found floating substr `bc' at offset 1...
+    floating 'bc' at 0..2147483647 (checking floating) minlen 2
+    Guessing start of match, REx 'a*b+c' against 'abc'...
+    Found floating substr 'bc' at offset 1...
     Guessed: match at offset 0
-    Matching REx `a*b+c' against `abc'
+    Matching REx 'a*b+c' against 'abc'
       Setting an EVAL scope, savestack=3
        0 <> <abc>             |  1:  STAR
                                EXACT <a> can match 1 times out of 32767...
@@ -2815,13 +2815,13 @@ termcap color sequences.  Here is example output:
        2 <ab> <c>             |  7:      EXACT <c>
        3 <abc> <>             |  9:      END
     Match successful!
-    Freeing REx: `a*b+c'
+    Freeing REx: 'a*b+c'
 
 If you have gotten this far into the tutorial, you can probably guess
 what the different parts of the debugging output tell you.  The first
 part
 
-    Compiling REx `a*b+c'
+    Compiling REx 'a*b+c'
     size 9 first at 1
        1: STAR(4)
        2:   EXACT <a>(0)
@@ -2835,15 +2835,15 @@ starred object, in this case C<'a'>, and if it matches, goto line 4,
 i.e., C<PLUS(7)>.  The middle lines describe some heuristics and
 optimizations performed before a match:
 
-    floating `bc' at 0..2147483647 (checking floating) minlen 2
-    Guessing start of match, REx `a*b+c' against `abc'...
-    Found floating substr `bc' at offset 1...
+    floating 'bc' at 0..2147483647 (checking floating) minlen 2
+    Guessing start of match, REx 'a*b+c' against 'abc'...
+    Found floating substr 'bc' at offset 1...
     Guessed: match at offset 0
 
 Then the match is executed and the remaining lines describe the
 process:
 
-    Matching REx `a*b+c' against `abc'
+    Matching REx 'a*b+c' against 'abc'
       Setting an EVAL scope, savestack=3
        0 <> <abc>             |  1:  STAR
                                EXACT <a> can match 1 times out of 32767...
@@ -2854,7 +2854,7 @@ process:
        2 <ab> <c>             |  7:      EXACT <c>
        3 <abc> <>             |  9:      END
     Match successful!
-    Freeing REx: `a*b+c'
+    Freeing REx: 'a*b+c'
 
 Each step is of the form S<C<< n <x> <y> >>>, with C<< <x> >> the
 part of the string matched and C<< <y> >> the part not yet

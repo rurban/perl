@@ -74,6 +74,7 @@ PP(pp_null)
     return NORMAL;
 }
 
+/* This is sometimes called directly by pp_coreargs. */
 PP(pp_pushmark)
 {
     dVAR;
@@ -134,7 +135,7 @@ PP(pp_sassign)
 	   context. */
 	if (!got_coderef && !is_gv && GIMME_V == G_VOID) {
 	    /* Is the target symbol table currently empty?  */
-	    GV * const gv = gv_fetchsv(right, GV_NOINIT, SVt_PVGV);
+	    GV * const gv = gv_fetchsv_nomg(right, GV_NOINIT, SVt_PVGV);
 	    if (SvTYPE(gv) != SVt_PVGV && !SvOK(gv)) {
 		/* Good. Create a new proxy constant subroutine in the target.
 		   The gv becomes a(nother) reference to the constant.  */
@@ -152,7 +153,7 @@ PP(pp_sassign)
 	/* Need to fix things up.  */
 	if (!is_gv) {
 	    /* Need to fix GV.  */
-	    right = MUTABLE_SV(gv_fetchsv(right, GV_ADD, SVt_PVGV));
+	    right = MUTABLE_SV(gv_fetchsv_nomg(right,GV_ADD, SVt_PVGV));
 	}
 
 	if (!got_coderef) {
@@ -311,7 +312,7 @@ PP(pp_padsv)
 		SAVECLEARSV(PAD_SVl(PL_op->op_targ));
         if (PL_op->op_private & OPpDEREF) {
 	    PUTBACK;
-	    vivify_ref(PAD_SVl(PL_op->op_targ), PL_op->op_private & OPpDEREF);
+	    TOPs = vivify_ref(TOPs, PL_op->op_private & OPpDEREF);
 	    SPAGAIN;
 	}
     }
@@ -321,9 +322,13 @@ PP(pp_padsv)
 PP(pp_readline)
 {
     dVAR;
-    dSP; SvGETMAGIC(TOPs);
-    tryAMAGICunTARGET(iter_amg, 0, 0);
-    PL_last_in_gv = MUTABLE_GV(*PL_stack_sp--);
+    dSP;
+    if (TOPs) {
+	SvGETMAGIC(TOPs);
+	tryAMAGICunTARGET(iter_amg, 0, 0);
+	PL_last_in_gv = MUTABLE_GV(*PL_stack_sp--);
+    }
+    else PL_last_in_gv = PL_argvgv, PL_stack_sp--;
     if (!isGV_with_GP(PL_last_in_gv)) {
 	if (SvROK(PL_last_in_gv) && isGV_with_GP(SvRV(PL_last_in_gv)))
 	    PL_last_in_gv = MUTABLE_GV(SvRV(PL_last_in_gv));
@@ -357,16 +362,19 @@ PP(pp_eq)
 PP(pp_preinc)
 {
     dVAR; dSP;
-    if (SvTYPE(TOPs) >= SVt_PVAV || isGV_with_GP(TOPs))
+    const bool inc =
+	PL_op->op_type == OP_PREINC || PL_op->op_type == OP_I_PREINC;
+    if (SvTYPE(TOPs) >= SVt_PVAV || (isGV_with_GP(TOPs) && !SvFAKE(TOPs)))
 	Perl_croak_no_modify(aTHX);
     if (!SvREADONLY(TOPs) && SvIOK_notUV(TOPs) && !SvNOK(TOPs) && !SvPOK(TOPs)
-        && SvIVX(TOPs) != IV_MAX)
+        && SvIVX(TOPs) != (inc ? IV_MAX : IV_MIN))
     {
-	SvIV_set(TOPs, SvIVX(TOPs) + 1);
+	SvIV_set(TOPs, SvIVX(TOPs) + (inc ? 1 : -1));
 	SvFLAGS(TOPs) &= ~(SVp_NOK|SVp_POK);
     }
     else /* Do all the PERL_PRESERVE_IVUV conditionals in sv_inc */
-	sv_inc(TOPs);
+	if (inc) sv_inc(TOPs);
+	else sv_dec(TOPs);
     SvSETMAGIC(TOPs);
     return NORMAL;
 }
@@ -759,15 +767,14 @@ PP(pp_rv2av)
     const bool is_pp_rv2av = PL_op->op_type == OP_RV2AV;
     const svtype type = is_pp_rv2av ? SVt_PVAV : SVt_PVHV;
 
-    if (!(PL_op->op_private & OPpDEREFed))
-	SvGETMAGIC(sv);
+    SvGETMAGIC(sv);
     if (SvROK(sv)) {
 	if (SvAMAGIC(sv)) {
 	    sv = amagic_deref_call(sv, is_pp_rv2av ? to_av_amg : to_hv_amg);
-	    SPAGAIN;
 	}
 	sv = SvRV(sv);
 	if (SvTYPE(sv) != type)
+	    /* diag_listed_as: Not an ARRAY reference */
 	    DIE(aTHX_ "Not %s reference", is_pp_rv2av ? an_array : a_hash);
 	if (PL_op->op_flags & OPf_REF) {
 	    SETs(sv);
@@ -988,6 +995,8 @@ PP(pp_aassign)
 	case SVt_PVAV:
 	    ary = MUTABLE_AV(sv);
 	    magic = SvMAGICAL(ary) != 0;
+	    ENTER;
+	    SAVEFREESV(SvREFCNT_inc_simple_NN(sv));
 	    av_clear(ary);
 	    av_extend(ary, lastrelem - relem);
 	    i = 0;
@@ -1008,6 +1017,7 @@ PP(pp_aassign)
 	    }
 	    if (PL_delaymagic & DM_ARRAY_ISA)
 		SvSETMAGIC(MUTABLE_SV(ary));
+	    LEAVE;
 	    break;
 	case SVt_PVHV: {				/* normal hash */
 		SV *tmpstr;
@@ -1015,6 +1025,8 @@ PP(pp_aassign)
 
 		hash = MUTABLE_HV(sv);
 		magic = SvMAGICAL(hash) != 0;
+		ENTER;
+		SAVEFREESV(SvREFCNT_inc_simple_NN(sv));
 		hv_clear(hash);
 		firsthashrelem = relem;
 
@@ -1051,6 +1063,7 @@ PP(pp_aassign)
 		    do_oddball(hash, relem, firstrelem);
 		    relem++;
 		}
+		LEAVE;
 	    }
 	    break;
 	default:
@@ -1377,7 +1390,10 @@ PP(pp_match)
 		s = RX_OFFS(rx)[i].start + truebase;
 	        if (RX_OFFS(rx)[i].end < 0 || RX_OFFS(rx)[i].start < 0 ||
 		    len < 0 || len > strend - s)
-		    DIE(aTHX_ "panic: pp_match start/end pointers");
+		    DIE(aTHX_ "panic: pp_match start/end pointers, i=%ld, "
+			"start=%ld, end=%ld, s=%p, strend=%p, len=%"UVuf,
+			(long) i, (long) RX_OFFS(rx)[i].start,
+			(long)RX_OFFS(rx)[i].end, s, strend, (UV) len);
 		sv_setpvn(*SP, s, len);
 		if (DO_UTF8(TARG) && is_utf8_string((U8*)s, len))
 		    SvUTF8_on(*SP);
@@ -1608,12 +1624,12 @@ Perl_do_readline(pTHX)
 	    mg_get(sv);
 	if (SvROK(sv)) {
 	    if (type == OP_RCATLINE)
-		SvPV_force_nolen(sv);
+		SvPV_force_nomg_nolen(sv);
 	    else
 		sv_unref(sv);
 	}
 	else if (isGV_with_GP(sv)) {
-	    SvPV_force_nolen(sv);
+	    SvPV_force_nomg_nolen(sv);
 	}
 	SvUPGRADE(sv, SVt_PV);
 	tmplen = SvLEN(sv);	/* remember if already alloced */
@@ -1626,7 +1642,7 @@ Perl_do_readline(pTHX)
 	offset = 0;
 	if (type == OP_RCATLINE && SvOK(sv)) {
 	    if (!SvPOK(sv)) {
-		SvPV_force_nolen(sv);
+		SvPV_force_nomg_nolen(sv);
 	    }
 	    offset = SvCUR(sv);
 	}
@@ -1767,7 +1783,7 @@ PP(pp_helem)
     he = hv_fetch_ent(hv, keysv, lval && !defer, hash);
     svp = he ? &HeVAL(he) : NULL;
     if (lval) {
-	if (!svp || *svp == &PL_sv_undef) {
+	if (!svp || !*svp || *svp == &PL_sv_undef) {
 	    SV* lv;
 	    SV* key2;
 	    if (!defer) {
@@ -1792,10 +1808,12 @@ PP(pp_helem)
 	    else
 		SAVEHDELETE(hv, keysv);
 	}
-	else if (PL_op->op_private & OPpDEREF)
-	    vivify_ref(*svp, PL_op->op_private & OPpDEREF);
+	else if (PL_op->op_private & OPpDEREF) {
+	    PUSHs(vivify_ref(*svp, PL_op->op_private & OPpDEREF));
+	    RETURN;
+	}
     }
-    sv = (svp ? *svp : &PL_sv_undef);
+    sv = (svp && *svp ? *svp : &PL_sv_undef);
     /* Originally this did a conditional C<sv = sv_mortalcopy(sv)>; this
      * was to make C<local $tied{foo} = $tied{foo}> possible.
      * However, it seems no longer to be needed for that purpose, and
@@ -1826,7 +1844,7 @@ PP(pp_iter)
     EXTEND(SP, 1);
     cx = &cxstack[cxstack_ix];
     if (!CxTYPE_is_LOOP(cx))
-	DIE(aTHX_ "panic: pp_iter");
+	DIE(aTHX_ "panic: pp_iter, type=%u", CxTYPE(cx));
 
     itersvp = CxITERVAR(cx);
     if (CxTYPE(cx) == CXt_LOOP_LAZYSV) {
@@ -1955,7 +1973,7 @@ PP(pp_iter)
 /*
 A description of how taint works in pattern matching and substitution.
 
-While the pattern is being assembled/concatenated and them compiled,
+While the pattern is being assembled/concatenated and then compiled,
 PL_tainted will get set if any component of the pattern is tainted, e.g.
 /.*$tainted/.  At the end of pattern compilation, the RXf_TAINTED flag
 is set on the pattern if PL_tainted is set.
@@ -2104,7 +2122,7 @@ PP(pp_subst)
 
   force_it:
     if (!pm || !s)
-	DIE(aTHX_ "panic: pp_subst");
+	DIE(aTHX_ "panic: pp_subst, pm=%p, s=%p", pm, s);
 
     strend = s + len;
     slen = RX_MATCH_UTF8(rx) ? utf8_length((U8*)s, (U8*)strend) : len;
@@ -2288,6 +2306,14 @@ PP(pp_subst)
     else {
 	if (force_on_match) {
 	    force_on_match = 0;
+	    if (rpm->op_pmflags & PMf_NONDESTRUCT) {
+		/* I feel that it should be possible to avoid this mortal copy
+		   given that the code below copies into a new destination.
+		   However, I suspect it isn't worth the complexity of
+		   unravelling the C<goto force_it> for the small number of
+		   cases where it would be viable to drop into the copy code. */
+		TARG = sv_2mortal(newSVsv(TARG));
+	    }
 	    s = SvPV_force(TARG, len);
 	    goto force_it;
 	}
@@ -2463,25 +2489,23 @@ PP(pp_leavesub)
     I32 gimme;
     register PERL_CONTEXT *cx;
     SV *sv;
-    bool gmagic;
 
     if (CxMULTICALL(&cxstack[cxstack_ix]))
 	return 0;
 
     POPBLOCK(cx,newpm);
     cxstack_ix++; /* temporarily protect top context */
-    gmagic = CxLVAL(cx) & OPpENTERSUB_DEREF;
 
     TAINT_NOT;
     if (gimme == G_SCALAR) {
 	MARK = newsp + 1;
 	if (MARK <= SP) {
 	    if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+		if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1
+		     && !SvMAGICAL(TOPs)) {
 		    *MARK = SvREFCNT_inc(TOPs);
 		    FREETMPS;
 		    sv_2mortal(*MARK);
-		    if (gmagic) SvGETMAGIC(*MARK);
 		}
 		else {
 		    sv = SvREFCNT_inc(TOPs);	/* FREETMPS could clobber it */
@@ -2490,9 +2514,9 @@ PP(pp_leavesub)
 		    SvREFCNT_dec(sv);
 		}
 	    }
-	    else if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+	    else if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1
+		     && !SvMAGICAL(TOPs)) {
 		*MARK = TOPs;
-		if (gmagic) SvGETMAGIC(TOPs);
 	    }
 	    else
 		*MARK = sv_mortalcopy(TOPs);
@@ -2505,7 +2529,8 @@ PP(pp_leavesub)
     }
     else if (gimme == G_ARRAY) {
 	for (MARK = newsp + 1; MARK <= SP; MARK++) {
-	    if (!SvTEMP(*MARK) || SvREFCNT(*MARK) != 1) {
+	    if (!SvTEMP(*MARK) || SvREFCNT(*MARK) != 1
+		 || SvMAGICAL(*MARK)) {
 		*MARK = sv_mortalcopy(*MARK);
 		TAINT_NOT;	/* Each item is independent */
 	    }
@@ -2536,8 +2561,6 @@ PP(pp_entersub)
     switch (SvTYPE(sv)) {
 	/* This is overwhelming the most common case:  */
     case SVt_PVGV:
-	if (!isGV_with_GP(sv))
-	    DIE(aTHX_ "Not a CODE reference");
       we_have_a_glob:
 	if (!(cv = GvCVu((const GV *)sv))) {
 	    HV *stash;
@@ -2574,7 +2597,7 @@ PP(pp_entersub)
 	    if (!sym)
 		DIE(aTHX_ PL_no_usym, "a subroutine");
 	    if (PL_op->op_private & HINT_STRICT_REFS)
-		DIE(aTHX_ "Can't use string (\"%.32s\"%s) as a subroutine ref while \"strict refs\" in use", sym, len>32 ? "..." : "");
+		DIE(aTHX_ "Can't use string (\"%" SVf32 "\"%s) as a subroutine ref while \"strict refs\" in use", sv, len>32 ? "..." : "");
 	    cv = get_cvn_flags(sym, len, GV_ADD|SvUTF8(sv));
 	    break;
 	}
@@ -2612,8 +2635,8 @@ PP(pp_entersub)
 	/* should call AUTOLOAD now? */
 	else {
 try_autoload:
-	    if ((autogv = gv_autoload4(GvSTASH(gv), GvNAME(gv), GvNAMELEN(gv),
-				   FALSE)))
+	    if ((autogv = gv_autoload_pvn(GvSTASH(gv), GvNAME(gv), GvNAMELEN(gv),
+				   GvNAMEUTF8(gv) ? SVf_UTF8 : 0)))
 	    {
 		cv = GvCV(autogv);
 	    }
@@ -2704,6 +2727,9 @@ try_autoload:
 		MARK++;
 	    }
 	}
+	if ((cx->blk_u16 & OPpENTERSUB_LVAL_MASK) == OPpLVAL_INTRO &&
+	    !CvLVALUE(cv))
+	    DIE(aTHX_ "Can't modify non-lvalue subroutine call");
 	/* warning must come *after* we fully set up the context
 	 * stuff so that __WARN__ handlers can safely dounwind()
 	 * if they want to
@@ -2790,8 +2816,6 @@ PP(pp_aelem)
 	Perl_warner(aTHX_ packWARN(WARN_MISC),
 		    "Use of reference \"%"SVf"\" as array index",
 		    SVfARG(elemsv));
-    if (elem > 0)
-	elem -= CopARYBASE_get(PL_curcop);
     if (SvTYPE(av) != SVt_PVAV)
 	RETPUSHUNDEF;
 
@@ -2842,8 +2866,10 @@ PP(pp_aelem)
 	    else
 		SAVEADELETE(av, elem);
 	}
-	else if (PL_op->op_private & OPpDEREF)
-	    vivify_ref(*svp, PL_op->op_private & OPpDEREF);
+	else if (PL_op->op_private & OPpDEREF) {
+	    PUSHs(vivify_ref(*svp, PL_op->op_private & OPpDEREF));
+	    RETURN;
+	}
     }
     sv = (svp ? *svp : &PL_sv_undef);
     if (!lval && SvRMAGICAL(av) && SvGMAGICAL(sv)) /* see note in pp_helem() */
@@ -2852,7 +2878,7 @@ PP(pp_aelem)
     RETURN;
 }
 
-void
+SV*
 Perl_vivify_ref(pTHX_ SV *sv, U32 to_what)
 {
     PERL_ARGS_ASSERT_VIVIFY_REF;
@@ -2875,7 +2901,16 @@ Perl_vivify_ref(pTHX_ SV *sv, U32 to_what)
 	}
 	SvROK_on(sv);
 	SvSETMAGIC(sv);
+	SvGETMAGIC(sv);
     }
+    if (SvGMAGICAL(sv)) {
+	/* copy the sv without magic to prevent magic from being
+	   executed twice */
+	SV* msv = sv_newmortal();
+	sv_setsv_nomg(msv, sv);
+	return msv;
+    }
+    return sv;
 }
 
 PP(pp_method)
@@ -2912,9 +2947,7 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
     SV* ob;
     GV* gv;
     HV* stash;
-    const char* packname = NULL;
     SV *packsv = NULL;
-    STRLEN packlen;
     SV * const sv = *(PL_stack_base + TOPMARK + 1);
 
     PERL_ARGS_ASSERT_METHOD_COMMON;
@@ -2928,10 +2961,18 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
 	ob = MUTABLE_SV(SvRV(sv));
     else {
 	GV* iogv;
+        STRLEN packlen;
+        const char * packname = NULL;
+	bool packname_is_utf8 = FALSE;
 
 	/* this isn't a reference */
-        if(SvOK(sv) && (packname = SvPV_const(sv, packlen))) {
-          const HE* const he = hv_fetch_ent(PL_stashcache, sv, 0, 0);
+        if(SvOK(sv) && (packname = SvPV_nomg_const(sv, packlen))) {
+          const HE* const he =
+	    (const HE *)hv_common_key_len(
+	      PL_stashcache, packname,
+	      packlen * -(packname_is_utf8 = !!SvUTF8(sv)), 0, NULL, 0
+	    );
+	  
           if (he) { 
             stash = INT2PTR(HV*,SvIV(HeVAL(he)));
             goto fetch;
@@ -2940,28 +2981,32 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
 
 	if (!SvOK(sv) ||
 	    !(packname) ||
-	    !(iogv = gv_fetchsv(sv, 0, SVt_PVIO)) ||
+	    !(iogv = gv_fetchpvn_flags(
+	        packname, packlen, SVf_UTF8 * packname_is_utf8, SVt_PVIO
+	     )) ||
 	    !(ob=MUTABLE_SV(GvIO(iogv))))
 	{
 	    /* this isn't the name of a filehandle either */
 	    if (!packname ||
 		((UTF8_IS_START(*packname) && DO_UTF8(sv))
 		    ? !isIDFIRST_utf8((U8*)packname)
-		    : !isIDFIRST(*packname)
+		    : !isIDFIRST_L1((U8)*packname)
 		))
 	    {
+		/* diag_listed_as: Can't call method "%s" without a package or object reference */
 		Perl_croak(aTHX_ "Can't call method \"%"SVf"\" %s",
 			   SVfARG(meth),
 			   SvOK(sv) ? "without a package or object reference"
 				    : "on an undefined value");
 	    }
 	    /* assume it's a package name */
-	    stash = gv_stashpvn(packname, packlen, 0);
+	    stash = gv_stashpvn(packname, packlen, packname_is_utf8 ? SVf_UTF8 : 0);
 	    if (!stash)
 		packsv = sv;
             else {
 	        SV* const ref = newSViv(PTR2IV(stash));
-	        (void)hv_store(PL_stashcache, packname, packlen, ref, 0);
+	        (void)hv_store(PL_stashcache, packname,
+                                packname_is_utf8 ? -(I32)packlen : (I32)packlen, ref, 0);
 	    }
 	    goto fetch;
 	}
@@ -2976,10 +3021,10 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
 		     && (ob = MUTABLE_SV(GvIO((const GV *)ob)))
 		     && SvOBJECT(ob))))
     {
-	const char * const name = SvPV_nolen_const(meth);
-	Perl_croak(aTHX_ "Can't call method \"%s\" on unblessed reference",
-		   (SvSCREAM(meth) && strEQ(name,"isa")) ? "DOES" :
-		   name);
+	Perl_croak(aTHX_ "Can't call method \"%"SVf"\" on unblessed reference",
+		   SVfARG((SvSCREAM(meth) && strEQ(SvPV_nolen_const(meth),"isa"))
+                                        ? newSVpvs_flags("DOES", SVs_TEMP)
+                                        : meth));
     }
 
     stash = SvSTASH(ob);
@@ -3000,9 +3045,8 @@ S_method_common(pTHX_ SV* meth, U32* hashp)
 	}
     }
 
-    gv = gv_fetchmethod_flags(stash ? stash : MUTABLE_HV(packsv),
-			      SvPV_nolen_const(meth),
-			      GV_AUTOLOAD | GV_CROAK);
+    gv = gv_fetchmethod_sv_flags(stash ? stash : MUTABLE_HV(packsv),
+			             meth, GV_AUTOLOAD | GV_CROAK);
 
     assert(gv);
 

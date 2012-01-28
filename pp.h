@@ -345,15 +345,7 @@ Does not use C<TARG>.  See also C<XPUSHu>, C<mPUSHu> and C<PUSHu>.
 #define dPOPXiirl(X)	IV right = POPi; IV left = CAT2(X,i)
 
 #define USE_LEFT(sv) \
-	(SvOK(sv) || SvGMAGICAL(sv) || !(PL_op->op_flags & OPf_STACKED))
-#define dPOPXnnrl_ul(X)	\
-    NV right = POPn;				\
-    SV *leftsv = CAT2(X,s);				\
-    NV left = USE_LEFT(leftsv) ? SvNV(leftsv) : 0.0
-#define dPOPXiirl_ul(X) \
-    IV right = POPi;					\
-    SV *leftsv = CAT2(X,s);				\
-    IV left = USE_LEFT(leftsv) ? SvIV(leftsv) : 0
+	(SvOK(sv) || !(PL_op->op_flags & OPf_STACKED))
 #define dPOPXiirl_ul_nomg(X) \
     IV right = (sp--, SvIV_nomg(TOPp1s));		\
     SV *leftsv = CAT2(X,s);				\
@@ -361,17 +353,13 @@ Does not use C<TARG>.  See also C<XPUSHu>, C<mPUSHu> and C<PUSHu>.
 
 #define dPOPPOPssrl	dPOPXssrl(POP)
 #define dPOPPOPnnrl	dPOPXnnrl(POP)
-#define dPOPPOPnnrl_ul	dPOPXnnrl_ul(POP)
 #define dPOPPOPiirl	dPOPXiirl(POP)
-#define dPOPPOPiirl_ul	dPOPXiirl_ul(POP)
 
 #define dPOPTOPssrl	dPOPXssrl(TOP)
 #define dPOPTOPnnrl	dPOPXnnrl(TOP)
-#define dPOPTOPnnrl_ul	dPOPXnnrl_ul(TOP)
 #define dPOPTOPnnrl_nomg \
     NV right = SvNV_nomg(TOPs); NV left = (sp--, SvNV_nomg(TOPs))
 #define dPOPTOPiirl	dPOPXiirl(TOP)
-#define dPOPTOPiirl_ul	dPOPXiirl_ul(TOP)
 #define dPOPTOPiirl_ul_nomg dPOPXiirl_ul_nomg(TOP)
 #define dPOPTOPiirl_nomg \
     IV right = SvIV_nomg(TOPs); IV left = (sp--, SvIV_nomg(TOPs))
@@ -448,8 +436,12 @@ Does not use C<TARG>.  See also C<XPUSHu>, C<mPUSHu> and C<PUSHu>.
 	    SETTARG;						\
 	    PUTBACK;						\
 	    if (jump) {						\
+	        OP *jump_o = NORMAL->op_next;                   \
+		while (jump_o->op_type == OP_NULL)		\
+		    jump_o = jump_o->op_next;			\
+		assert(jump_o->op_type == OP_ENTERSUB);		\
 		PL_markstack_ptr--;				\
-		return NORMAL->op_next->op_next;		\
+		return jump_o->op_next;				\
 	    }							\
 	    return NORMAL;					\
 	}							\
@@ -492,12 +484,28 @@ True if this op will be the return value of an lvalue subroutine
   )
 
 #ifdef PERL_CORE
+
 /* These are just for Perl_tied_method(), which is not part of the public API.
    Use 0x04 rather than the next available bit, to help the compiler if the
    architecture can generate more efficient instructions.  */
 #  define TIED_METHOD_MORTALIZE_NOT_NEEDED	0x04
 #  define TIED_METHOD_ARGUMENTS_ON_STACK	0x08
 #  define TIED_METHOD_SAY			0x10
+
+/* Used in various places that need to dereference a glob or globref */
+#  define MAYBE_DEREF_GV_flags(sv,phlags)                          \
+    (                                                               \
+	(void)(phlags & SV_GMAGIC && (SvGETMAGIC(sv),0)),            \
+	isGV_with_GP(sv)                                              \
+	  ? (GV *)sv                                                   \
+	  : SvROK(sv) && SvTYPE(SvRV(sv)) <= SVt_PVLV &&               \
+	    (SvGETMAGIC(SvRV(sv)), isGV_with_GP(SvRV(sv)))              \
+	     ? (GV *)SvRV(sv)                                            \
+	     : NULL                                                       \
+    )
+#  define MAYBE_DEREF_GV(sv)      MAYBE_DEREF_GV_flags(sv,SV_GMAGIC)
+#  define MAYBE_DEREF_GV_nomg(sv) MAYBE_DEREF_GV_flags(sv,0)
+
 #endif
 
 /*

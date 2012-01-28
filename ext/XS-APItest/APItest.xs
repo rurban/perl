@@ -1063,10 +1063,22 @@ filter_call(pTHX_ int idx, SV *buf_sv, int maxlen)
     return SvCUR(buf_sv);
 }
 
+static AV *
+myget_linear_isa(pTHX_ HV *stash, U32 level) {
+    GV **gvp = (GV **)hv_fetchs(stash, "ISA", 0);
+    PERL_UNUSED_ARG(level);
+    return gvp && *gvp && GvAV(*gvp)
+	 ? GvAV(*gvp)
+	 : (AV *)sv_2mortal((SV *)newAV());
+}
 
-XS(XS_XS__APItest__XSUB_XS_VERSION_undef);
-XS(XS_XS__APItest__XSUB_XS_VERSION_empty);
-XS(XS_XS__APItest__XSUB_XS_APIVERSION_invalid);
+
+XS_EXTERNAL(XS_XS__APItest__XSUB_XS_VERSION_undef);
+XS_EXTERNAL(XS_XS__APItest__XSUB_XS_VERSION_empty);
+XS_EXTERNAL(XS_XS__APItest__XSUB_XS_APIVERSION_invalid);
+
+static struct mro_alg mymro;
+
 
 #include "const-c.inc"
 
@@ -1517,9 +1529,35 @@ void
 ptr_table_clear(table)
 XS::APItest::PtrTable table
 
+MODULE = XS::APItest::AutoLoader	PACKAGE = XS::APItest::AutoLoader
+
+SV *
+AUTOLOAD()
+    CODE:
+	RETVAL = newSVpvn_flags(SvPVX(cv), SvCUR(cv), SvUTF8(cv));
+    OUTPUT:
+	RETVAL
+
+SV *
+AUTOLOADp(...)
+    PROTOTYPE: *$
+    CODE:
+	RETVAL = newSVpvn_flags(SvPVX(cv), SvCUR(cv), SvUTF8(cv));
+    OUTPUT:
+	RETVAL
+
+
 MODULE = XS::APItest		PACKAGE = XS::APItest
 
 PROTOTYPES: DISABLE
+
+BOOT:
+    mymro.resolve = myget_linear_isa;
+    mymro.name    = "justisa";
+    mymro.length  = 7;
+    mymro.kflags  = 0;
+    mymro.hash    = 0;
+    Perl_mro_register(aTHX_ &mymro);
 
 HV *
 xop_custom_ops ()
@@ -1840,6 +1878,199 @@ call_method(methname, flags, ...)
 	PUSHs(sv_2mortal(newSViv(i)));
 
 void
+newCONSTSUB_type(stash, name, flags, type, sv)
+    HV* stash
+    SV* name
+    I32 flags
+    int type
+    SV* sv
+    PREINIT:
+	CV* cv;
+	STRLEN len;
+	const char *pv = SvPV(name, len);
+    PPCODE:
+        switch (type) {
+           case 0:
+	       cv = newCONSTSUB(stash, pv, SvOK(sv) ? sv : NULL);
+               break;
+           case 1:
+               cv = newCONSTSUB_flags(
+                 stash, pv, len, flags | SvUTF8(name), SvOK(sv) ? sv : NULL
+               );
+               break;
+        }
+        EXTEND(SP, 2);
+        PUSHs( CvCONST(cv) ? &PL_sv_yes : &PL_sv_no );
+	PUSHs((SV*)CvGV(cv));
+
+void
+gv_init_type(namesv, multi, flags, type)
+    SV* namesv
+    int multi
+    I32 flags
+    int type
+    PREINIT:
+        STRLEN len;
+        const char * const name = SvPV_const(namesv, len);
+        GV *gv = *(GV**)hv_fetch(PL_defstash, name, len, TRUE);
+    PPCODE:
+        if (SvTYPE(gv) == SVt_PVGV)
+            Perl_croak(aTHX_ "GV is already a PVGV");
+        if (multi) flags |= GV_ADDMULTI;
+        switch (type) {
+           case 0:
+	       gv_init(gv, PL_defstash, name, len, multi);
+               break;
+           case 1:
+               gv_init_sv(gv, PL_defstash, namesv, flags);
+               break;
+           case 2:
+               gv_init_pv(gv, PL_defstash, name, flags | SvUTF8(namesv));
+               break;
+           case 3:
+               gv_init_pvn(gv, PL_defstash, name, len, flags | SvUTF8(namesv));
+               break;
+        }
+	XPUSHs( gv ? (SV*)gv : &PL_sv_undef);
+
+void
+gv_fetchmeth_type(stash, methname, type, level, flags)
+    HV* stash
+    SV* methname
+    int type
+    I32 level
+    I32 flags
+    PREINIT:
+        STRLEN len;
+        const char * const name = SvPV_const(methname, len);
+	GV* gv;
+    PPCODE:
+        switch (type) {
+           case 0:
+	       gv = gv_fetchmeth(stash, name, len, level);
+               break;
+           case 1:
+               gv = gv_fetchmeth_sv(stash, methname, level, flags);
+               break;
+           case 2:
+               gv = gv_fetchmeth_pv(stash, name, level, flags | SvUTF8(methname));
+               break;
+           case 3:
+               gv = gv_fetchmeth_pvn(stash, name, len, level, flags | SvUTF8(methname));
+               break;
+        }
+	XPUSHs( gv ? MUTABLE_SV(gv) : &PL_sv_undef );
+
+void
+gv_fetchmeth_autoload_type(stash, methname, type, level, flags)
+    HV* stash
+    SV* methname
+    int type
+    I32 level
+    I32 flags
+    PREINIT:
+        STRLEN len;
+        const char * const name = SvPV_const(methname, len);
+	GV* gv;
+    PPCODE:
+        switch (type) {
+           case 0:
+	       gv = gv_fetchmeth_autoload(stash, name, len, level);
+               break;
+           case 1:
+               gv = gv_fetchmeth_sv_autoload(stash, methname, level, flags);
+               break;
+           case 2:
+               gv = gv_fetchmeth_pv_autoload(stash, name, level, flags | SvUTF8(methname));
+               break;
+           case 3:
+               gv = gv_fetchmeth_pvn_autoload(stash, name, len, level, flags | SvUTF8(methname));
+               break;
+        }
+	XPUSHs( gv ? MUTABLE_SV(gv) : &PL_sv_undef );
+
+void
+gv_fetchmethod_flags_type(stash, methname, type, flags)
+    HV* stash
+    SV* methname
+    int type
+    I32 flags
+    PREINIT:
+	GV* gv;
+    PPCODE:
+        switch (type) {
+           case 0:
+	       gv = gv_fetchmethod_flags(stash, SvPVX_const(methname), flags);
+               break;
+           case 1:
+               gv = gv_fetchmethod_sv_flags(stash, methname, flags);
+               break;
+           case 2:
+               gv = gv_fetchmethod_pv_flags(stash, SvPV_nolen(methname), flags | SvUTF8(methname));
+               break;
+           case 3: {
+               STRLEN len;
+               const char * const name = SvPV_const(methname, len);
+               gv = gv_fetchmethod_pvn_flags(stash, name, len, flags | SvUTF8(methname));
+               break;
+            }
+        }
+	XPUSHs( gv ? (SV*)gv : &PL_sv_undef);
+
+void
+gv_autoload_type(stash, methname, type, method)
+    HV* stash
+    SV* methname
+    int type
+    I32 method
+    PREINIT:
+        STRLEN len;
+        const char * const name = SvPV_const(methname, len);
+	GV* gv;
+	I32 flags = method ? GV_AUTOLOAD_ISMETHOD : 0;
+    PPCODE:
+        switch (type) {
+           case 0:
+	       gv = gv_autoload4(stash, name, len, method);
+               break;
+           case 1:
+               gv = gv_autoload_sv(stash, methname, flags);
+               break;
+           case 2:
+               gv = gv_autoload_pv(stash, name, flags | SvUTF8(methname));
+               break;
+           case 3:
+               gv = gv_autoload_pvn(stash, name, len, flags | SvUTF8(methname));
+               break;
+        }
+	XPUSHs( gv ? (SV*)gv : &PL_sv_undef);
+
+void
+whichsig_type(namesv, type)
+    SV* namesv
+    int type
+    PREINIT:
+        STRLEN len;
+        const char * const name = SvPV_const(namesv, len);
+        I32 i;
+    PPCODE:
+        switch (type) {
+           case 0:
+              i = whichsig(name);
+               break;
+           case 1:
+               i = whichsig_sv(namesv);
+               break;
+           case 2:
+               i = whichsig_pv(name);
+               break;
+           case 3:
+               i = whichsig_pvn(name, len);
+               break;
+        }
+        XPUSHs(sv_2mortal(newSViv(i)));
+
+void
 eval_sv(sv, flags)
     SV* sv
     I32 flags
@@ -1929,6 +2160,21 @@ sv_setsv_cow_hashkey_core()
 
 bool
 sv_setsv_cow_hashkey_notcore()
+
+void
+sv_set_deref(SV *sv, SV *sv2, int which)
+    CODE:
+    {
+	STRLEN len;
+	const char *pv = SvPV(sv2,len);
+	if (!SvROK(sv)) croak("Not a ref");
+	sv = SvRV(sv);
+	switch (which) {
+	    case 0: sv_setsv(sv,sv2); break;
+	    case 1: sv_setpv(sv,pv); break;
+	    case 2: sv_setpvn(sv,pv,len); break;
+	}
+    }
 
 void
 rmagical_cast(sv, type)
@@ -2411,9 +2657,9 @@ test_coplabel()
         if (len != 3) croak("fail # cop_fetch_label len");
         if (utf8) croak("fail # cop_fetch_label utf8");
         /* SMALL GERMAN UMLAUT A */
-        Perl_cop_store_label(aTHX_ cop, "foä", 4, SVf_UTF8);
+        Perl_cop_store_label(aTHX_ cop, "fo\xc3\xa4", 4, SVf_UTF8);
         label = Perl_cop_fetch_label(aTHX_ cop, &len, &utf8);
-        if (strcmp(label,"foä")) croak("fail # cop_fetch_label label");
+        if (strcmp(label,"fo\xc3\xa4")) croak("fail # cop_fetch_label label");
         if (len != 4) croak("fail # cop_fetch_label len");
         if (!utf8) croak("fail # cop_fetch_label utf8");
 
@@ -2928,6 +3174,13 @@ CODE:
 	HeVAL(entry) = NULL;
     }
 
+HV *
+newHVhv(HV *hv)
+CODE:
+    RETVAL = newHVhv(hv);
+OUTPUT:
+    RETVAL
+
 bool
 SvIsCOW(SV *sv)
 CODE:
@@ -2982,6 +3235,68 @@ CODE:
     RETVAL = SvUTF8(u) ? utf8_length(pv, pv+bytelen) : bytelen;
 OUTPUT:
     RETVAL
+
+void
+stringify(SV *sv)
+PREINIT:
+    const char *pv;
+CODE:
+    pv = SvPV_nolen(sv);
+
+SV *
+HvENAME(HV *hv)
+CODE:
+    RETVAL = hv && HvENAME(hv)
+	      ? newSVpvn_flags(
+		  HvENAME(hv),HvENAMELEN(hv),
+		  (HvENAMEUTF8(hv) ? SVf_UTF8 : 0)
+		)
+	      : NULL;
+OUTPUT:
+    RETVAL
+
+int
+xs_cmp(int a, int b)
+CODE:
+    /* Odd sorting (odd numbers first), to make sure we are actually
+       being called */
+    RETVAL = a % 2 != b % 2
+	       ? a % 2 ? -1 : 1
+	       : a < b ? -1 : a == b ? 0 : 1;
+OUTPUT:
+    RETVAL
+
+SV *
+xs_cmp_undef(SV *a, SV *b)
+CODE:
+    RETVAL = &PL_sv_undef;
+OUTPUT:
+    RETVAL
+
+
+MODULE = XS::APItest PACKAGE = XS::APItest::AUTOLOADtest
+
+int
+AUTOLOAD(...)
+  INIT:
+    SV* comms;
+    SV* class_and_method;
+    SV* tmp;
+  CODE:
+    class_and_method = GvSV(CvGV(cv));
+    comms = get_sv("main::the_method", 1);
+    if (class_and_method == NULL) {
+      RETVAL = 1;
+    } else if (!SvOK(class_and_method)) {
+      RETVAL = 2;
+    } else if (!SvPOK(class_and_method)) {
+      RETVAL = 3;
+    } else {
+      sv_setsv(comms, class_and_method);
+      RETVAL = 0;
+    }
+  OUTPUT: RETVAL
+
 
 MODULE = XS::APItest		PACKAGE = XS::APItest::Magic
 

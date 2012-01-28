@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan(tests => 118);
+plan(tests => 125);
 
 eval 'pass();';
 
@@ -24,6 +24,11 @@ like($@, qr/line 2/);
 
 print eval '$foo = /';	# this tests for a call through fatal()
 like($@, qr/Search/);
+
+is scalar(eval '++'), undef, 'eval syntax error in scalar context';
+is scalar(eval 'die'), undef, 'eval run-time error in scalar context';
+is +()=eval '++', 0, 'eval syntax error in list context';
+is +()=eval 'die', 0, 'eval run-time error in list context';
 
 is(eval '"ok 7\n";', "ok 7\n");
 
@@ -436,9 +441,9 @@ is($got, "ok\n", 'eval and last');
     like($@, qr/^syntax error/, 'eval syntax error, no warnings');
 }
 
-# a syntax error in an eval called magically 9eg vie tie or overload)
+# a syntax error in an eval called magically (eg via tie or overload)
 # resulted in an assertion failure in S_docatch, since doeval had already
-# poppedthe EVAL context due to the failure, but S_docatch expected the
+# popped the EVAL context due to the failure, but S_docatch expected the
 # context to still be there.
 
 {
@@ -567,3 +572,27 @@ for my $k (!0) {
   is "a" =~ /a/, "1",
     "string eval leaves readonly lexicals readonly [perl #19135]";
 }
+
+# [perl #68750]
+fresh_perl_is(<<'EOP', "ok\nok\nok\n", undef, 'eval clears %^H');
+  BEGIN {
+    require re; re->import('/x'); # should only affect surrounding scope
+    eval '
+      print "a b" =~ /a b/ ? "ok\n" : "nokay\n";
+      use re "/m";
+      print "a b" =~ /a b/ ? "ok\n" : "nokay\n";
+   ';
+  }
+  print "ab" =~ /a b/ ? "ok\n" : "nokay\n";
+EOP
+
+# [perl #70151]
+{
+    BEGIN { eval 'require re; import re "/x"' }
+    ok "ab" =~ /a b/, 'eval does not localise %^H at run time';
+}
+
+# The fix for perl #70151 caused an assertion failure that broke
+# SNMP::Trapinfo, when toke.c finds no syntax errors but perly.y fails.
+eval(q|""!=!~//|);
+pass("phew! dodged the assertion after a parsing (not lexing) error");

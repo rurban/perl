@@ -9,7 +9,7 @@ BEGIN { require "./test.pl"; }
 
 # This test depends on t/lib/Devel/switchd*.pm.
 
-plan(tests => 5);
+plan(tests => 7);
 
 my $r;
 
@@ -77,4 +77,36 @@ like(
   ),
   qr "1\r?\n2\r?\n",
  'Subroutine redefinition works in the debugger [perl #48332]',
+);
+
+# [rt.cpan.org #69862]
+like(
+  runperl(
+   switches => [ '-Ilib', '-d:switchd_empty' ],
+   progs    => [
+    'sub DB::sub { goto &$DB::sub }',
+    'sub foo { print qq _1\n_ }',
+    'sub bar { print qq _2\n_ }',
+    'delete $::{foo}; eval { foo() };',
+    'my $bar = *bar; undef *bar; eval { &$bar };',
+   ],
+  ),
+  qr "1\r?\n2\r?\n",
+ 'Subroutines no longer found under their names can be called',
+);
+
+# [rt.cpan.org #69862]
+like(
+  runperl(
+   switches => [ '-Ilib', '-d:switchd_empty' ],
+   progs    => [
+    'sub DB::sub { goto &$DB::sub }',
+    'sub foo { goto &bar::baz; }',
+    'sub bar::baz { print qq _ok\n_ }',
+    'delete $::{bar::::};',
+    'foo();',
+   ],
+  ),
+  qr "ok\r?\n",
+ 'No crash when calling orphaned subroutine via goto &',
 );

@@ -4,7 +4,7 @@ use Text::Balanced ':ALL';
 
 use vars qw{ $VERSION @EXPORT };
 
-$VERSION = '0.87';
+$VERSION = '0.88';
 
 use Filter::Util::Call;
 use Carp;
@@ -36,22 +36,31 @@ my $CUT = qr/\n=cut.*$EOP/;
 my $pod_or_DATA = qr/
               ^=(?:head[1-4]|item) .*? $CUT
             | ^=pod .*? $CUT
-            | ^=for .*? $EOP
-            | ^=begin \s* (\S+) .*? \n=end \s* \1 .*? $EOP
+            | ^=for .*? $CUT
+            | ^=begin .*? $CUT
             | ^__(DATA|END)__\r?\n.*
             /smx;
+my $variable = qr{
+        [\$*\@%]\s*
+            \{\s*(?!::)(?:\d+|[][&`'#+*./|,";%=~:?!\@<>()-]|\^[A-Z]?)\}
+      | (?:\$#?|[*\@\%]|\\&)\$*\s*
+               (?:  \{\s*(?:\^(?=[A-Z_]))?(?:\w|::|'\w)*\s*\}
+                  |      (?:\^(?=[A-Z_]))?(?:\w|::|'\w)*
+                  | (?=\{)  # ${ block }
+               )
+        )
+      | \$\s*(?!::)(?:\d+|[][&`'#+*./|,";%=~:?!\@<>()-]|\^[A-Z]?)
+   }x;
 
 my %extractor_for = (
-    quotelike  => [ $ws,  \&extract_variable, $id, { MATCH  => \&extract_quotelike } ],
+    quotelike  => [ $ws,  $variable, $id, { MATCH  => \&extract_quotelike } ],
     regex      => [ $ws,  $pod_or_DATA, $id, $exql           ],
     string     => [ $ws,  $pod_or_DATA, $id, $exql           ],
-    code       => [ $ws, { DONT_MATCH => $pod_or_DATA },
-    		        \&extract_variable,
+    code       => [ $ws, { DONT_MATCH => $pod_or_DATA }, $variable,
                     $id, { DONT_MATCH => \&extract_quotelike }   ],
     code_no_comments
                => [ { DONT_MATCH => $comment },
-                    $ncws, { DONT_MATCH => $pod_or_DATA },
-    		        \&extract_variable,
+                    $ncws, { DONT_MATCH => $pod_or_DATA }, $variable,
                     $id, { DONT_MATCH => \&extract_quotelike }   ],
     executable => [ $ws, { DONT_MATCH => $pod_or_DATA }      ],
     executable_no_comments

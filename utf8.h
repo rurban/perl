@@ -1,6 +1,7 @@
 /*    utf8.h
  *
- *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009 by Larry Wall and others
+ *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009,
+ *    2010, 2011 by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
@@ -16,8 +17,16 @@
 #    define USE_UTF8_IN_NAMES (PL_hints & HINT_UTF8)
 #endif
 
+/* For to_utf8_fold_flags, q.v. */
+#define FOLD_FLAGS_LOCALE 0x1
+#define FOLD_FLAGS_FULL   0x2
+
 #define to_uni_fold(c, p, lenp) _to_uni_fold_flags(c, p, lenp, 1)
-#define to_utf8_fold(c, p, lenp) _to_utf8_fold_flags(c, p, lenp, 1)
+#define to_utf8_fold(c, p, lenp) _to_utf8_fold_flags(c, p, lenp, \
+	             FOLD_FLAGS_FULL, NULL)
+#define to_utf8_lower(a,b,c) _to_utf8_lower_flags(a,b,c,0, NULL)
+#define to_utf8_upper(a,b,c) _to_utf8_upper_flags(a,b,c,0, NULL)
+#define to_utf8_title(a,b,c) _to_utf8_title_flags(a,b,c,0, NULL)
 
 /* Source backward compatibility. */
 #define uvuni_to_utf8(d, uv)		uvuni_to_utf8_flags(d, uv, 0)
@@ -27,6 +36,8 @@
 		    foldEQ_utf8_flags(s1, pe1, l1, u1, s2, pe2, l2, u2, 0)
 #define FOLDEQ_UTF8_NOMIX_ASCII (1 << 0)
 #define FOLDEQ_UTF8_LOCALE      (1 << 1)
+#define FOLDEQ_S1_ALREADY_FOLDED  (1 << 2)
+#define FOLDEQ_S2_ALREADY_FOLDED  (1 << 3)
 
 /*
 =for apidoc ibcmp_utf8
@@ -58,7 +69,8 @@ EXTCONST unsigned char PL_utf8skip[] = {
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* bogus */
 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* scripts */
 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,	 /* cjk etc. */
-7,13, /* Perl extended (not UTF-8).  Up to 72bit allowed (64-bit + reserved). */
+7,13, /* Perl extended (not official UTF-8).  Up to 72bit allowed (64-bit +
+	 reserved). */
 };
 #else
 EXTCONST unsigned char PL_utf8skip[];
@@ -201,17 +213,18 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #define UTF8_EIGHT_BIT_LO(c)	UTF8_TWO_BYTE_LO((U8)(c))
 
 /*
- * Note: we try to be careful never to call the isXXX_utf8() functions
- * unless we're pretty sure we've seen the beginning of a UTF-8 or UTFEBCDIC
- * character.  Otherwise we risk loading in the heavy-duty swash_init and
- * swash_fetch routines unnecessarily.
+ * 'UTF' is whether or not p is encoded in UTF8.  The names 'foo_lazy_if' stem
+ * from an earlier version of these macros in which they didn't call the
+ * foo_utf8() macros (i.e. were 'lazy') unless they decided that *p is the
+ * beginning of a utf8 character.  Now that foo_utf8() determines that itself,
+ * no need to do it again here
  */
-#define isIDFIRST_lazy_if(p,c) ((IN_BYTES || (!c || ! UTF8_IS_START(*((const U8*)p)))) \
-				? isIDFIRST(*(p)) \
-				: isIDFIRST_utf8((const U8*)p))
-#define isALNUM_lazy_if(p,c)   ((IN_BYTES || (!c || ! UTF8_IS_START(*((const U8*)p)))) \
-				? isALNUM(*(p)) \
-				: isALNUM_utf8((const U8*)p))
+#define isIDFIRST_lazy_if(p,UTF) ((IN_BYTES || !UTF ) \
+				 ? isIDFIRST(*(p)) \
+				 : isIDFIRST_utf8((const U8*)p))
+#define isALNUM_lazy_if(p,UTF)   ((IN_BYTES || (!UTF )) \
+				 ? isALNUM(*(p)) \
+				 : isALNUM_utf8((const U8*)p))
 
 #define isIDFIRST_lazy(p)	isIDFIRST_lazy_if(p,1)
 #define isALNUM_lazy(p)		isALNUM_lazy_if(p,1)
@@ -238,8 +251,8 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 
 #define IN_BYTES (CopHINTS_get(PL_curcop) & HINT_BYTES)
 #define DO_UTF8(sv) (SvUTF8(sv) && !IN_BYTES)
-#define IN_UNI_8_BIT ( (CopHINTS_get(PL_curcop) & HINT_UNI_8_BIT) \
-			&& ! IN_LOCALE_RUNTIME && ! IN_BYTES)
+#define IN_UNI_8_BIT \
+	    (CopHINTS_get(PL_curcop) & (HINT_UNI_8_BIT|HINT_LOCALE_NOT_CHARS))
 
 #define UTF8_ALLOW_EMPTY		0x0001	/* Allow a zero length string */
 
@@ -306,7 +319,7 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  */
 #ifdef EBCDIC /* Both versions assume well-formed UTF8 */
 #   define UTF8_IS_SURROGATE(s)  (*(s) == UTF_TO_NATIVE(0xF1)                   \
-      && (*((s) +1) == UTF_TO_NATIVE(0xB6)) || *((s) + 1) == UTF_TO_NATIVE(0xB7))
+    && ((*((s) +1) == UTF_TO_NATIVE(0xB6)) || *((s) + 1) == UTF_TO_NATIVE(0xB7)))
 #else
 #   define UTF8_IS_SURROGATE(s) (*(s) == 0xED && *((s) + 1) >= 0xA0)
 #endif
@@ -454,39 +467,37 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 	 toLOWER((input)[1]) == 's')
 #define SHARP_S_SKIP 2
 
-#ifdef EBCDIC
-/* IS_UTF8_CHAR() is not ported to EBCDIC */
-#else
-#define IS_UTF8_CHAR_1(p)	\
+#ifndef EBCDIC
+#   define IS_UTF8_CHAR_1(p)	\
 	((p)[0] <= 0x7F)
-#define IS_UTF8_CHAR_2(p)	\
+#   define IS_UTF8_CHAR_2(p)	\
 	((p)[0] >= 0xC2 && (p)[0] <= 0xDF && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF)
-#define IS_UTF8_CHAR_3a(p)	\
+#   define IS_UTF8_CHAR_3a(p)	\
 	((p)[0] == 0xE0 && \
 	 (p)[1] >= 0xA0 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF)
-#define IS_UTF8_CHAR_3b(p)	\
+#   define IS_UTF8_CHAR_3b(p)	\
 	((p)[0] >= 0xE1 && (p)[0] <= 0xEC && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF)
-#define IS_UTF8_CHAR_3c(p)	\
+#   define IS_UTF8_CHAR_3c(p)	\
 	((p)[0] == 0xED && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF)
-/* In IS_UTF8_CHAR_3c(p) one could use
- * (p)[1] >= 0x80 && (p)[1] <= 0x9F
- * if one wanted to exclude surrogates. */
-#define IS_UTF8_CHAR_3d(p)	\
+    /* In IS_UTF8_CHAR_3c(p) one could use
+     * (p)[1] >= 0x80 && (p)[1] <= 0x9F
+     * if one wanted to exclude surrogates. */
+#   define IS_UTF8_CHAR_3d(p)	\
 	((p)[0] >= 0xEE && (p)[0] <= 0xEF && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF)
-#define IS_UTF8_CHAR_4a(p)	\
+#   define IS_UTF8_CHAR_4a(p)	\
 	((p)[0] == 0xF0 && \
 	 (p)[1] >= 0x90 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF && \
 	 (p)[3] >= 0x80 && (p)[3] <= 0xBF)
-#define IS_UTF8_CHAR_4b(p)	\
+#   define IS_UTF8_CHAR_4b(p)	\
 	((p)[0] >= 0xF1 && (p)[0] <= 0xF3 && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF && \
@@ -499,18 +510,18 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  * since that is not needed (and that would not be strict
  * UTF-8, anyway).  The "slow path" in Perl_is_utf8_char()
  * will take care of the "extended UTF-8". */
-#define IS_UTF8_CHAR_4c(p)	\
+#   define IS_UTF8_CHAR_4c(p)	\
 	((p)[0] >= 0xF4 && (p)[0] <= 0xF7 && \
 	 (p)[1] >= 0x80 && (p)[1] <= 0xBF && \
 	 (p)[2] >= 0x80 && (p)[2] <= 0xBF && \
 	 (p)[3] >= 0x80 && (p)[3] <= 0xBF)
 
-#define IS_UTF8_CHAR_3(p)	\
+#   define IS_UTF8_CHAR_3(p)	\
 	(IS_UTF8_CHAR_3a(p) || \
 	 IS_UTF8_CHAR_3b(p) || \
 	 IS_UTF8_CHAR_3c(p) || \
 	 IS_UTF8_CHAR_3d(p))
-#define IS_UTF8_CHAR_4(p)	\
+#   define IS_UTF8_CHAR_4(p)	\
 	(IS_UTF8_CHAR_4a(p) || \
 	 IS_UTF8_CHAR_4b(p) || \
 	 IS_UTF8_CHAR_4c(p))
@@ -520,13 +531,65 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
  * (2) it allows code points past U+10FFFF.
  * The Perl_is_utf8_char() full "slow" code will handle the Perl
  * "extended UTF-8". */
-#define IS_UTF8_CHAR(p, n)	\
+#   define IS_UTF8_CHAR(p, n)	\
 	((n) == 1 ? IS_UTF8_CHAR_1(p) : \
  	 (n) == 2 ? IS_UTF8_CHAR_2(p) : \
 	 (n) == 3 ? IS_UTF8_CHAR_3(p) : \
 	 (n) == 4 ? IS_UTF8_CHAR_4(p) : 0)
 
-#define IS_UTF8_CHAR_FAST(n) ((n) <= 4)
+#   define IS_UTF8_CHAR_FAST(n) ((n) <= 4)
+
+#else	/* EBCDIC */
+
+/* This is an attempt to port IS_UTF8_CHAR to EBCDIC based on eyeballing.
+ * untested.  If want to exclude surrogates and above-Unicode, see the
+ * definitions for UTF8_IS_SURROGATE  and UTF8_IS_SUPER */
+#   define IS_UTF8_CHAR_1(p)	\
+	(NATIVE_TO_ASCII((p)[0]) <= 0x9F)
+#   define IS_UTF8_CHAR_2(p)	\
+	(NATIVE_TO_I8((p)[0]) >= 0xC5 && NATIVE_TO_I8((p)[0]) <= 0xDF && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF)
+#   define IS_UTF8_CHAR_3(p)	\
+	(NATIVE_TO_I8((p)[0]) == 0xE1 && NATIVE_TO_I8((p)[1]) <= 0xEF && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[2]) >= 0xA0 && NATIVE_TO_I8((p)[2]) <= 0xBF)
+#   define IS_UTF8_CHAR_4a(p)	\
+	(NATIVE_TO_I8((p)[0]) == 0xF0 && \
+	 NATIVE_TO_I8((p)[1]) >= 0xB0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[2]) >= 0xA0 && NATIVE_TO_I8((p)[2]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[3]) >= 0xA0 && NATIVE_TO_I8((p)[3]) <= 0xBF)
+#   define IS_UTF8_CHAR_4b(p)	\
+	(NATIVE_TO_I8((p)[0]) >= 0xF1 && NATIVE_TO_I8((p)[0]) <= 0xF7 && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[2]) >= 0xA0 && NATIVE_TO_I8((p)[2]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[3]) >= 0xA0 && NATIVE_TO_I8((p)[3]) <= 0xBF)
+#   define IS_UTF8_CHAR_5a(p)	\
+	(NATIVE_TO_I8((p)[0]) == 0xF8 && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA8 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[2]) >= 0xA0 && NATIVE_TO_I8((p)[2]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[3]) >= 0xA0 && NATIVE_TO_I8((p)[3]) <= 0xBF)
+#   define IS_UTF8_CHAR_5b(p)	\
+	 (NATIVE_TO_I8((p)[0]) >= 0xF9 && NATIVE_TO_I8((p)[1]) <= 0xFB && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[1]) >= 0xA0 && NATIVE_TO_I8((p)[1]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[2]) >= 0xA0 && NATIVE_TO_I8((p)[2]) <= 0xBF && \
+	 NATIVE_TO_I8((p)[3]) >= 0xA0 && NATIVE_TO_I8((p)[3]) <= 0xBF)
+
+#   define IS_UTF8_CHAR_4(p)	\
+	(IS_UTF8_CHAR_4a(p) || \
+	 IS_UTF8_CHAR_4b(p))
+#   define IS_UTF8_CHAR_5(p)	\
+	(IS_UTF8_CHAR_5a(p) || \
+	 IS_UTF8_CHAR_5b(p))
+#   define IS_UTF8_CHAR(p, n)	\
+	((n) == 1 ? IS_UTF8_CHAR_1(p) : \
+	 (n) == 2 ? IS_UTF8_CHAR_2(p) : \
+	 (n) == 3 ? IS_UTF8_CHAR_3(p) : \
+	 (n) == 4 ? IS_UTF8_CHAR_4(p) : \
+	 (n) == 5 ? IS_UTF8_CHAR_5(p) : 0)
+
+#   define IS_UTF8_CHAR_FAST(n) ((n) <= 5)
 
 #endif /* IS_UTF8_CHAR() for UTF-8 */
 

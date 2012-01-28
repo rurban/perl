@@ -317,10 +317,19 @@ able to write:
 But due to an unfixable bug (fixing it would break lots of existing
 CPAN modules) in the typemap file, the reference count of the C<AV *>
 is not properly decremented. Thus, the above XSUB would leak memory
-whenever it is being called. The same problem exists for C<HV *>.
+whenever it is being called. The same problem exists for C<HV *>,
+C<CV *>, and C<SVREF> (which indicates a scalar reference, not
+a general C<SV *>).
+In XS code on perls starting with perl 5.16, you can override the
+typemaps for any of these types with a version that has proper
+handling of refcounts. In your C<TYPEMAP> section, do
 
-When you're returning an C<AV *> or a C<HV *>, you have to make sure
-their reference count is decremented by making the AV or HV mortal:
+  AV*	T_AVREF_REFCOUNT_FIXED
+
+to get the repaired variant. For backward compatibility with older
+versions of perl, you can instead decrement the reference count
+manually when you're returning one of the aforementioned
+types using C<sv_2mortal>:
 
   AV *
   array()
@@ -331,7 +340,7 @@ their reference count is decremented by making the AV or HV mortal:
       OUTPUT:
           RETVAL
 
-And also remember that you don't have to do this for an C<SV *>.
+Remember that you don't have to do this for an C<SV *>.
 
 =head2 The MODULE Keyword
 
@@ -1519,6 +1528,24 @@ the different argument lists.
 	$status = rpcb_gettime( $host, $timep );
 
 	$status = x_gettime( $timep, $host );
+
+=head2 The EXPORT_XSUB_SYMBOLS: Keyword
+
+The EXPORT_XSUB_SYMBOLS: keyword is likely something you will never need.
+In perl versions earlier than 5.16.0, this keyword does nothing. Starting
+with 5.16, XSUB symbols are no longer exported by default. That is, they
+are C<static> functions. If you include
+
+  EXPORT_XSUB_SYMBOLS: ENABLE
+
+in your XS code, the XSUBs following this line will not be declared C<static>.
+You can later disable this with
+
+  EXPORT_XSUB_SYMBOLS: DISABLE
+
+which, again, is the default that you should probably never change.
+You cannot use this keyword on versions of perl before 5.16 to make
+XSUBs C<static>.
 
 =head2 The & Unary Operator
 

@@ -519,7 +519,7 @@ BEGIN {
 }
 
 # Debugger for Perl 5.00x; perl5db.pl patch level:
-$VERSION = '1.34';
+$VERSION = '1.36';
 
 $header = "perl5db.pl version $VERSION";
 
@@ -722,7 +722,7 @@ sub eval {
 # Changes: 0.94
 #   + A lot of things changed after 0.94. First of all, core now informs
 #     debugger about entry into XSUBs, overloaded operators, tied operations,
-#     BEGIN and END. Handy with `O f=2'.
+#     BEGIN and END. Handy with 'O f=2'.
 #   + This can make debugger a little bit too verbose, please be patient
 #     and report your problems promptly.
 #   + Now the option frame has 3 values: 0,1,2. XXX Document!
@@ -731,24 +731,24 @@ sub eval {
 #     due to the need to examine the return value.
 #
 # Changes: 0.95
-#   + `v' command shows versions.
+#   + 'v' command shows versions.
 #
 # Changes: 0.96
-#   + `v' command shows version of readline.
-#     primitive completion works (dynamic variables, subs for `b' and `l',
-#     options). Can `p %var'
-#   + Better help (`h <' now works). New commands <<, >>, {, {{.
+#   + 'v' command shows version of readline.
+#     primitive completion works (dynamic variables, subs for 'b' and 'l',
+#     options). Can 'p %var'
+#   + Better help ('h <' now works). New commands <<, >>, {, {{.
 #     {dump|print}_trace() coded (to be able to do it from <<cmd).
-#   + `c sub' documented.
+#   + 'c sub' documented.
 #   + At last enough magic combined to stop after the end of debuggee.
 #   + !! should work now (thanks to Emacs bracket matching an extra
-#     `]' in a regexp is caught).
-#   + `L', `D' and `A' span files now (as documented).
-#   + Breakpoints in `require'd code are possible (used in `R').
+#     ']' in a regexp is caught).
+#   + 'L', 'D' and 'A' span files now (as documented).
+#   + Breakpoints in 'require'd code are possible (used in 'R').
 #   +  Some additional words on internal work of debugger.
-#   + `b load filename' implemented.
-#   + `b postpone subr' implemented.
-#   + now only `q' exits debugger (overwritable on $inhibit_exit).
+#   + 'b load filename' implemented.
+#   + 'b postpone subr' implemented.
+#   + now only 'q' exits debugger (overwritable on $inhibit_exit).
 #   + When restarting debugger breakpoints/actions persist.
 #   + Buglet: When restarting debugger only one breakpoint/action per
 #             autoloaded function persists.
@@ -756,25 +756,25 @@ sub eval {
 # Changes: 0.97: NonStop will not stop in at_exit().
 #   + Option AutoTrace implemented.
 #   + Trace printed differently if frames are printed too.
-#   + new `inhibitExit' option.
+#   + new 'inhibitExit' option.
 #   + printing of a very long statement interruptible.
-# Changes: 0.98: New command `m' for printing possible methods
-#   + 'l -' is a synonym for `-'.
+# Changes: 0.98: New command 'm' for printing possible methods
+#   + 'l -' is a synonym for '-'.
 #   + Cosmetic bugs in printing stack trace.
-#   +  `frame' & 8 to print "expanded args" in stack trace.
+#   +  'frame' & 8 to print "expanded args" in stack trace.
 #   + Can list/break in imported subs.
-#   + new `maxTraceLen' option.
+#   + new 'maxTraceLen' option.
 #   + frame & 4 and frame & 8 granted.
-#   + new command `m'
-#   + nonstoppable lines do not have `:' near the line number.
-#   + `b compile subname' implemented.
+#   + new command 'm'
+#   + nonstoppable lines do not have ':' near the line number.
+#   + 'b compile subname' implemented.
 #   + Will not use $` any more.
-#   + `-' behaves sane now.
-# Changes: 0.99: Completion for `f', `m'.
-#   +  `m' will remove duplicate names instead of duplicate functions.
-#   + `b load' strips trailing whitespace.
-#     completion ignores leading `|'; takes into account current package
-#     when completing a subroutine name (same for `l').
+#   + '-' behaves sane now.
+# Changes: 0.99: Completion for 'f', 'm'.
+#   +  'm' will remove duplicate names instead of duplicate functions.
+#   + 'b load' strips trailing whitespace.
+#     completion ignores leading '|'; takes into account current package
+#     when completing a subroutine name (same for 'l').
 # Changes: 1.07: Many fixed by tchrist 13-March-2000
 #   BUG FIXES:
 #   + Added bare minimal security checks on perldb rc files, plus
@@ -829,7 +829,7 @@ sub eval {
 #   Minor bugs corrected;
 #   + Support for auto-creation of new TTY window on startup, either
 #     unconditionally, or if started as a kid of another debugger session;
-#   + New `O'ption CreateTTY
+#   + New 'O'ption CreateTTY
 #       I<CreateTTY>      bits control attempts to create a new TTY on events:
 #                         1: on fork()
 #                         2: debugger is started inside debugger
@@ -844,7 +844,7 @@ sub eval {
 #     function;
 #   + Consistent support for TTY names of the form "TTYin,TTYout";
 #   + Switch line-tracing output too to the created TTY window;
-#   + make `b fork' DWIM with CORE::GLOBAL::fork;
+#   + make 'b fork' DWIM with CORE::GLOBAL::fork;
 #   + High-level debugger API cmd_*():
 #      cmd_b_load($filenamepart)            # b load filenamepart
 #      cmd_b_line($lineno [, $cond])        # b lineno [cond]
@@ -1097,6 +1097,9 @@ $trace = $signal = $single = 0;    # Uninitialized warning suppression
 # Default to not exiting when program finishes; print the return
 # value when the 'r' command is used to return from a subroutine.
 $inhibit_exit = $option{PrintRet} = 1;
+
+# Default to 1 so the prompt will display the first line.
+$trace_to_depth = 1;
 
 =head1 OPTION PROCESSING
 
@@ -1567,9 +1570,19 @@ if ( exists $ENV{PERLDB_RESTART} ) {
 
     # restore breakpoints/actions
     my @had_breakpoints = get_list("PERLDB_VISITED");
-    for ( 0 .. $#had_breakpoints ) {
-        my %pf = get_list("PERLDB_FILE_$_");
-        $postponed_file{ $had_breakpoints[$_] } = \%pf if %pf;
+    for my $file_idx ( 0 .. $#had_breakpoints ) {
+        my $filename = $had_breakpoints[$file_idx];
+        my %pf = get_list("PERLDB_FILE_$file_idx");
+        $postponed_file{ $filename } = \%pf if %pf;
+        my @lines = sort {$a <=> $b} keys(%pf);
+        my @enabled_statuses = get_list("PERLDB_FILE_ENABLED_$file_idx");
+        for my $line_idx (0 .. $#lines) {
+            _set_breakpoint_enabled_status(
+                $filename,
+                $lines[$line_idx],
+                ($enabled_statuses[$line_idx] ? 1 : ''),
+            );
+        }
     }
 
     # restore options
@@ -1818,7 +1831,7 @@ and then call the C<afterinit()> subroutine if there is one.
                 $slave_editor ? "enabled" : "available", ".\n"
             );
             print $OUT
-"\nEnter h or `h h' for help, or `$doccmd perldebug' for more help.\n\n";
+"\nEnter h or 'h h' for help, or '$doccmd perldebug' for more help.\n\n";
         } ## end else [ if ($term_pid eq '-1')
     } ## end unless ($runnonstop)
 } ## end else [ if ($notty)
@@ -1929,6 +1942,7 @@ sub DB {
 
     # if we have something here, see if we should break.
     if ( $dbline{$line}
+        && _is_breakpoint_enabled($filename, $line)
         && ( ( $stop, $action ) = split( /\0/, $dbline{$line} ) ) )
     {
 
@@ -1942,7 +1956,10 @@ sub DB {
         elsif ($stop) {
             $evalarg = "\$DB::signal |= 1 if do {$stop}";
             &eval;
-            $dbline{$line} =~ s/;9($|\0)/$1/;
+            # If the breakpoint is temporary, then delete its enabled status.
+            if ($dbline{$line} =~ s/;9($|\0)/$1/) {
+                _cancel_breakpoint_temp_enabled_status($filename, $line);
+            }
         }
     } ## end if ($dbline{$line} && ...
 
@@ -2040,9 +2057,13 @@ won't cause trouble, and we say that the program is over.
 
 =cut
 
+    # Make sure that we always print if asked for explicitly regardless
+    # of $trace_to_depth .
+    my $explicit_stop = ($single || $was_signal);
+
     # Check to see if we should grab control ($single true,
     # trace set appropriately, or we got a signal).
-    if ( $single || ( $trace & 1 ) || $was_signal ) {
+    if ( $explicit_stop || ( $trace & 1 ) ) {
 
         # Yes, grab control.
         if ($slave_editor) {
@@ -2087,6 +2108,7 @@ number information, and print that.
 
         else {
 
+
             # Still somewhere in the midst of execution. Set up the
             #  debugger prompt.
             $sub =~ s/\'/::/;    # Swap Perl 4 package separators (') to
@@ -2114,7 +2136,7 @@ number information, and print that.
                     "$line:\t$dbline[$line]$after" );
             }
             else {
-                print_lineinfo($position);
+                depth_print_lineinfo($explicit_stop, $position);
             }
 
             # Scan forward, stopping at either the end or the next
@@ -2142,7 +2164,7 @@ number information, and print that.
                         "$i:\t$dbline[$i]$after" );
                 }
                 else {
-                    print_lineinfo($incr_pos);
+                    depth_print_lineinfo($explicit_stop, $incr_pos);
                 }
             } ## end for ($i = $line + 1 ; $i...
         } ## end else [ if ($slave_editor)
@@ -2318,7 +2340,7 @@ completely replacing it.
                     eval "\$cmd =~ $alias{$i}";
                     if ($@) {
                         local $\ = '';
-                        print $OUT "Couldn't evaluate `$i' alias: $@";
+                        print $OUT "Couldn't evaluate '$i' alias: $@";
                         next CMD;
                     }
                 } ## end if ($alias{$i})
@@ -2342,17 +2364,22 @@ environment, and executing with the last value of C<$?>.
                     exit $?;
                 };
 
-=head4 C<t> - trace
+=head4 C<t> - trace [n]
 
 Turn tracing on or off. Inverts the appropriate bit in C<$trace> (q.v.).
+If level is specified, set C<$trace_to_depth>.
 
 =cut
 
-                $cmd =~ /^t$/ && do {
+                $cmd =~ /^t(?:\s+(\d+))?$/ && do {
+                    my $levels = $1;
                     $trace ^= 1;
                     local $\ = '';
+                    $trace_to_depth = $levels ? $stack_depth + $levels : 1E9;
                     print $OUT "Trace = "
-                      . ( ( $trace & 1 ) ? "on" : "off" ) . "\n";
+                      . ( ( $trace & 1 )
+                      ? ( $levels ? "on (to level $trace_to_depth)" : "on" )
+                      : "off" ) . "\n";
                     next CMD;
                 };
 
@@ -2509,7 +2536,7 @@ Just uses C<DB::methods> to determine what methods are available.
                         if ( ($try) = grep( m#^_<.*$file#, keys %main:: ) ) {
                             {
                                 $try = substr( $try, 2 );
-                                print $OUT "Choosing $try matching `$file':\n";
+                                print $OUT "Choosing $try matching '$file':\n";
                                 $file = $try;
                             }
                         } ## end if (($try) = grep(m#^_<.*$file#...
@@ -2517,7 +2544,7 @@ Just uses C<DB::methods> to determine what methods are available.
 
                     # If not successfully switched now, we failed.
                     if ( !defined $main::{ '_<' . $file } ) {
-                        print $OUT "No file matching `$file' is loaded.\n";
+                        print $OUT "No file matching '$file' is loaded.\n";
                         next CMD;
                     }
 
@@ -2793,6 +2820,7 @@ in this and all call levels above this one.
 
                         # Yes. Set up the one-time-break sigil.
                         $dbline{$i} =~ s/($|\0)/;9$1/;  # add one-time-only b.p.
+                        _enable_breakpoint_temp_enabled_status($filename, $i);
                     } ## end if ($i)
 
                     # Turn off stack tracing from here up.
@@ -3270,8 +3298,40 @@ pick it up.
                     else {
 
                         # Couldn't open it.
-                        &warn("Can't execute `$1': $!\n");
+                        &warn("Can't execute '$1': $!\n");
                     }
+                    next CMD;
+                };
+
+                $cmd =~ /^(enable|disable)\s+(\S+)\s*$/ && do {
+                    my ($cmd, $position) = ($1, $2);
+
+                    my ($fn, $line_num);
+                    if ($position =~ m{\A\d+\z})
+                    {
+                        $fn = $filename;
+                        $line_num = $position;
+                    }
+                    elsif ($position =~ m{\A(.*):(\d+)\z})
+                    {
+                        ($fn, $line_num) = ($1, $2);
+                    }
+                    else
+                    {
+                        &warn("Wrong spec for enable/disable argument.\n");
+                    }
+
+                    if (defined($fn)) {
+                        if (_has_breakpoint_data_ref($fn, $line_num)) {
+                            _set_breakpoint_enabled_status($fn, $line_num,
+                                ($cmd eq 'enable' ? 1 : '')
+                            );
+                        }
+                        else {
+                            &warn("No breakpoint set at ${fn}:${line_num}\n");
+                        }
+                    }
+
                     next CMD;
                 };
 
@@ -3378,7 +3438,7 @@ reading another.
                     unless ( $piped = open( OUT, $pager ) ) {
 
                         # Couldn't open pipe to pager.
-                        &warn("Can't pipe output to `$pager'");
+                        &warn("Can't pipe output to '$pager'");
                         if ( $pager =~ /^\|/ ) {
 
                             # Redirect I/O back again.
@@ -3423,7 +3483,9 @@ any variables we might want to address in the C<DB> package.
 =cut
 
                 # t - turn trace on.
-                $cmd =~ s/^t\s/\$DB::trace |= 1;\n/;
+                $cmd =~ s/^t\s+(\d+)?/\$DB::trace |= 1;\n/ && do {
+                    $trace_to_depth = $1 ? $stack_depth||0 + $1 : 1E9;
+                };
 
                 # s - single-step. Remember the last command was 's'.
                 $cmd =~ s/^s\s/\$DB::single = 1;\n/ && do { $laststep = 's' };
@@ -3482,7 +3544,7 @@ our standard filehandles for input and output.
                     # most of the $? crud was coping with broken cshisms
                     # $? is explicitly set to 0, so this never runs.
                     if ($?) {
-                        print SAVEOUT "Pager `$pager' failed: ";
+                        print SAVEOUT "Pager '$pager' failed: ";
                         if ( $? == -1 ) {
                             print SAVEOUT "shell returned -1\n";
                         }
@@ -3536,7 +3598,7 @@ again.
 =cut
 
         # No more commands? Quit.
-        $fall_off_end = 1 unless defined $cmd;    # Emulate `q' on EOF
+        $fall_off_end = 1 unless defined $cmd;    # Emulate 'q' on EOF
 
         # Evaluate post-prompt commands.
         foreach $evalarg (@$post) {
@@ -3847,6 +3909,13 @@ sub lsub : lvalue {
     &$sub;
 }
 
+# Abstracting common code from multiple places elsewhere:
+sub depth_print_lineinfo {
+    my $always_print = shift;
+
+    print_lineinfo( @_ ) if ($always_print or $stack_depth < $trace_to_depth);
+}
+
 =head1 EXTENDED COMMAND HANDLING AND THE COMMAND API
 
 In Perl 5.8.0, there was a major realignment of the commands and what they did,
@@ -3904,6 +3973,74 @@ my %set = (    #
         '{{' => 'pre590_prepost',
     },
 );
+
+my %breakpoints_data;
+
+sub _has_breakpoint_data_ref {
+    my ($filename, $line) = @_;
+
+    return (
+        exists( $breakpoints_data{$filename} )
+            and
+        exists( $breakpoints_data{$filename}{$line} )
+    );
+}
+
+sub _get_breakpoint_data_ref {
+    my ($filename, $line) = @_;
+
+    return ($breakpoints_data{$filename}{$line} ||= +{});
+}
+
+sub _delete_breakpoint_data_ref {
+    my ($filename, $line) = @_;
+
+    delete($breakpoints_data{$filename}{$line});
+    if (! scalar(keys( %{$breakpoints_data{$filename}} )) ) {
+        delete($breakpoints_data{$filename});
+    }
+
+    return;
+}
+
+sub _set_breakpoint_enabled_status {
+    my ($filename, $line, $status) = @_;
+
+    _get_breakpoint_data_ref($filename, $line)->{'enabled'} =
+        ($status ? 1 : '')
+        ;
+
+    return;
+}
+
+sub _enable_breakpoint_temp_enabled_status {
+    my ($filename, $line) = @_;
+
+    _get_breakpoint_data_ref($filename, $line)->{'temp_enabled'} = 1;
+
+    return;
+}
+
+sub _cancel_breakpoint_temp_enabled_status {
+    my ($filename, $line) = @_;
+
+    my $ref = _get_breakpoint_data_ref($filename, $line);
+    
+    delete ($ref->{'temp_enabled'});
+
+    if (! %$ref) {
+        _delete_breakpoint_data_ref($filename, $line);
+    }
+
+    return;
+}
+
+sub _is_breakpoint_enabled {
+    my ($filename, $line) = @_;
+
+    my $data_ref = _get_breakpoint_data_ref($filename, $line);
+    return ($data_ref->{'enabled'} || $data_ref->{'temp_enabled'});
+}
 
 =head2 C<cmd_wrapper()> (API)
 
@@ -4077,7 +4214,7 @@ sub cmd_b {
     my $dbline = shift;
 
     # Make . the current line number if it's there..
-    $line =~ s/^\.\b/$dbline/;
+    $line =~ s/^\.(\s|\z)/$dbline$1/;
 
     # No line number, no condition. Simple break on current line.
     if ( $line =~ /^\s*$/ ) {
@@ -4212,7 +4349,7 @@ sub cmd_b_load {
     # Normalize for the purposes of our printing this.
     local $\ = '';
     local $" = ' ';
-    print $OUT "Will stop on load of `@files'.\n";
+    print $OUT "Will stop on load of '@files'.\n";
 } ## end sub cmd_b_load
 
 =head3 C<$filename_error> (API package global)
@@ -4357,7 +4494,7 @@ sub breakable_line_in_filename {
     local *dbline = $main::{ '_<' . $f };
 
     # If there's an error, it's in this other file.
-    local $filename_error = " of `$f'";
+    local $filename_error = " of '$f'";
 
     # Find the breakable line.
     breakable_line(@_);
@@ -4400,6 +4537,8 @@ sub break_on_line {
 
         # Nothing here - just add the condition.
         $dbline{$i} = $cond;
+
+        _set_breakpoint_enabled_status($filename, $i, 1);
     }
 } ## end sub break_on_line
 
@@ -4448,7 +4587,7 @@ sub break_on_filename_line {
     local *dbline = $main::{ '_<' . $f };
 
     # Localize the variables that break_on_line uses to make its message.
-    local $filename_error = " of `$f'";
+    local $filename_error = " of '$f'";
     local $filename       = $f;
 
     # Add the breakpoint.
@@ -4644,6 +4783,8 @@ are no magical debugger structures associated with them.
 sub delete_breakpoint {
     my $i = shift;
 
+    my $fn = $filename;
+
     # If we got a line, delete just that one.
     if ( defined($i) ) {
 
@@ -4654,7 +4795,10 @@ sub delete_breakpoint {
         $dbline{$i} =~ s/^[^\0]*//;
 
         # Remove the entry entirely if there's no action left.
-        delete $dbline{$i} if $dbline{$i} eq '';
+        if ($dbline{$i} eq '') {
+            delete $dbline{$i};
+            _delete_breakpoint_data_ref($fn, $i);
+        }
     }
 
     # No line; delete them all.
@@ -4683,6 +4827,7 @@ sub delete_breakpoint {
 
                         # Remove the entry altogether if no action is there.
                         delete $dbline{$i};
+                        _delete_breakpoint_data_ref($file, $i);
                     }
                 } ## end if (defined $dbline{$i...
             } ## end for ($i = 1 ; $i <= $max...
@@ -5493,7 +5638,7 @@ sub postponed_sub {
     } ## end if ($postponed{$subname...
     elsif ( $postponed{$subname} eq 'compile' ) { $signal = 1 }
 
-    #print $OUT "In postponed_sub for `$subname'.\n";
+    #print $OUT "In postponed_sub for '$subname'.\n";
 } ## end sub postponed_sub
 
 =head2 C<postponed>
@@ -5723,7 +5868,7 @@ sub print_trace {
         my $file = $sub[$i]{file};
 
         # Put in a filename header if short is off.
-        $file = $file eq '-e' ? $file : "file `$file'" unless $short;
+        $file = $file eq '-e' ? $file : "file '$file'" unless $short;
 
         # Get the actual sub's name, and shorten to $maxtrace's requirement.
         $s = $sub[$i]{sub};
@@ -6045,8 +6190,8 @@ sub setterm {
         if ($tty) {
             my ( $i, $o ) = split $tty, /,/;
             $o = $i unless defined $o;
-            open( IN,  "<$i" ) or die "Cannot open TTY `$i' for read: $!";
-            open( OUT, ">$o" ) or die "Cannot open TTY `$o' for write: $!";
+            open( IN,  "<$i" ) or die "Cannot open TTY '$i' for read: $!";
+            open( OUT, ">$o" ) or die "Cannot open TTY '$o' for write: $!";
             $IN  = \*IN;
             $OUT = \*OUT;
             my $sel = select($OUT);
@@ -6653,20 +6798,20 @@ sub parse_options {
 
         # Options are always all word characters, followed by a non-word
         # separator.
-        s/^(\w+)(\W?)// or print( $OUT "Invalid option `$_'\n" ), last;
+        s/^(\w+)(\W?)// or print( $OUT "Invalid option '$_'\n" ), last;
         my ( $opt, $sep ) = ( $1, $2 );
 
         # Make sure that such an option exists.
         my $matches = grep( /^\Q$opt/ && ( $option = $_ ), @options )
           || grep( /^\Q$opt/i && ( $option = $_ ), @options );
 
-        print( $OUT "Unknown option `$opt'\n" ), next unless $matches;
-        print( $OUT "Ambiguous option `$opt'\n" ), next if $matches > 1;
+        print( $OUT "Unknown option '$opt'\n" ), next unless $matches;
+        print( $OUT "Ambiguous option '$opt'\n" ), next if $matches > 1;
         my $val;
 
         # '?' as separator means query, but must have whitespace after it.
         if ( "?" eq $sep ) {
-            print( $OUT "Option query `$opt?' followed by non-space `$_'\n" ),
+            print( $OUT "Option query '$opt?' followed by non-space '$_'\n" ),
               last
               if /^\S/;
 
@@ -6704,7 +6849,7 @@ sub parse_options {
             my ($end) =
               "\\" . substr( ")]>}$sep", index( "([<{", $sep ), 1 );    #}
             s/^(([^\\$end]|\\[\\$end])*)$end($|\s+)//
-              or print( $OUT "Unclosed option value `$opt$sep$_'\n" ), last;
+              or print( $OUT "Unclosed option value '$opt$sep$_'\n" ), last;
             ( $val = $1 ) =~ s/\\([\\$end])/$1/g;
         } ## end else [ if ("?" eq $sep)
 
@@ -6712,7 +6857,7 @@ sub parse_options {
         if ( $opt_needs_val{$option} && $val_defaulted ) {
             my $cmd = ( $CommandSet eq '580' ) ? 'o' : 'O';
             print $OUT
-"Option `$opt' is non-boolean.  Use `$cmd $option=VAL' to set, `$cmd $option?' to query\n";
+"Option '$opt' is non-boolean.  Use '$cmd $option=VAL' to set, '$cmd $option?' to query\n";
             next;
         } ## end if ($opt_needs_val{$option...
 
@@ -6853,7 +6998,7 @@ sub reset_IN_OUT {
 
     # This term can't get a new tty now. Better luck later.
     elsif ($term) {
-        &warn("Too late to set IN/OUT filehandles, enabled on next `R'!\n");
+        &warn("Too late to set IN/OUT filehandles, enabled on next 'R'!\n");
     }
 
     # Set the filehndles up as they were.
@@ -6908,8 +7053,8 @@ sub TTY {
         }
 
         # Open file onto the debugger's filehandles, if you can.
-        open IN,  $in     or die "cannot open `$in' for read: $!";
-        open OUT, ">$out" or die "cannot open `$out' for write: $!";
+        open IN,  $in     or die "cannot open '$in' for read: $!";
+        open OUT, ">$out" or die "cannot open '$out' for write: $!";
 
         # Swap to the new filehandles.
         reset_IN_OUT( \*IN, \*OUT );
@@ -6920,7 +7065,7 @@ sub TTY {
 
     # Terminal doesn't support new TTY, or doesn't support readline.
     # Can't do it now, try restarting.
-    &warn("Too late to set TTY, enabled on next `R'!\n") if $term and @_;
+    &warn("Too late to set TTY, enabled on next 'R'!\n") if $term and @_;
 
     # Useful if done through PERLDB_OPTS:
     $console = $tty = shift if @_;
@@ -6939,7 +7084,7 @@ we save the value to use it if we're restarted.
 
 sub noTTY {
     if ($term) {
-        &warn("Too late to set noTTY, enabled on next `R'!\n") if @_;
+        &warn("Too late to set noTTY, enabled on next 'R'!\n") if @_;
     }
     $notty = shift if @_;
     $notty;
@@ -6956,7 +7101,7 @@ the value in case a restart is done so we can change it then.
 
 sub ReadLine {
     if ($term) {
-        &warn("Too late to set ReadLine, enabled on next `R'!\n") if @_;
+        &warn("Too late to set ReadLine, enabled on next 'R'!\n") if @_;
     }
     $rl = shift if @_;
     $rl;
@@ -7005,7 +7150,7 @@ debugger remembers the setting in case you restart, though.
 
 sub NonStop {
     if ($term) {
-        &warn("Too late to set up NonStop mode, enabled on next `R'!\n")
+        &warn("Too late to set up NonStop mode, enabled on next 'R'!\n")
           if @_;
     }
     $runnonstop = shift if @_;
@@ -7129,7 +7274,7 @@ sub LineInfo {
     $slave_editor = ( $stream =~ /^\|/ );
 
     # Open it up and unbuffer it.
-    open( LINEINFO, "$stream" ) || &warn("Cannot open `$stream' for write");
+    open( LINEINFO, "$stream" ) || &warn("Cannot open '$stream' for write");
     $LINEINFO = \*LINEINFO;
     my $save = select($LINEINFO);
     $| = 1;
@@ -7241,8 +7386,8 @@ B</>I<pattern>B</>    Search forwards for I<pattern>; final B</> is optional.
 B<?>I<pattern>B<?>    Search backwards for I<pattern>; final B<?> is optional.
 B<L> [I<a|b|w>]        List actions and or breakpoints and or watch-expressions.
 B<S> [[B<!>]I<pattern>]    List subroutine names [not] matching I<pattern>.
-B<t>        Toggle trace mode.
-B<t> I<expr>        Trace through execution of I<expr>.
+B<t> [I<n>]       Toggle trace mode (to max I<n> levels below current stack depth).
+B<t> [I<n>] I<expr>        Trace through execution of I<expr>.
 B<b>        Sets breakpoint on current line)
 B<b> [I<line>] [I<condition>]
         Set breakpoint; I<line> defaults to the current execution line;
@@ -7358,7 +7503,7 @@ B<o> [I<opt>B<=>I<val>] [I<opt>=B<\">I<val>B<\">] ...
     During startup options are initialized from \$ENV{PERLDB_OPTS}.
     You can put additional initialization options I<TTY>, I<noTTY>,
     I<ReadLine>, I<NonStop>, and I<RemotePort> there (or use
-    `B<R>' after you set them).
+    B<R> after you set them).
 
 B<q> or B<^D>        Quit. Set B<\$DB::finished = 0> to debug global destruction.
 B<h>        Summary of debugger commands.
@@ -7368,7 +7513,7 @@ B<$doccmd> I<manpage>    Runs the external doc viewer B<$doccmd> command on the
         named Perl I<manpage>, or on B<$doccmd> itself if omitted.
         Set B<\$DB::doccmd> to change viewer.
 
-Type `|h h' for a paged display if this was too hard to read.
+Type '|h h' for a paged display if this was too hard to read.
 
 ";    # Fix balance of vi % matching: }}}}
 
@@ -7382,7 +7527,7 @@ I<List/search source lines:>               I<Control script execution:>
   B</>I<pattern>B</> B<?>I<patt>B<?>   Search forw/backw    B<r>           Return from subroutine
   B<M>           Show module versions        B<c> [I<ln>|I<sub>]  Continue until position
 I<Debugger controls:>                        B<L>           List break/watch/actions
-  B<o> [...]     Set debugger options        B<t> [I<expr>]    Toggle trace [trace expr]
+  B<o> [...]     Set debugger options        B<t> [I<n>] [I<expr>] Toggle trace [max depth] ][trace expr]
   B<<>[B<<>]|B<{>[B<{>]|B<>>[B<>>] [I<cmd>] Do pre/post-prompt B<b> [I<ln>|I<event>|I<sub>] [I<cnd>] Set breakpoint
   B<$prc> [I<N>|I<pat>]   Redo a previous command     B<B> I<ln|*>      Delete a/all breakpoints
   B<H> [I<-num>]    Display last num commands   B<a> [I<ln>] I<cmd>  Do cmd before line
@@ -7433,15 +7578,15 @@ B</>I<pattern>B</>    Search forwards for I<pattern>; final B</> is optional.
 B<?>I<pattern>B<?>    Search backwards for I<pattern>; final B<?> is optional.
 B<L>        List all breakpoints and actions.
 B<S> [[B<!>]I<pattern>]    List subroutine names [not] matching I<pattern>.
-B<t>        Toggle trace mode.
-B<t> I<expr>        Trace through execution of I<expr>.
+B<t> [I<n>]       Toggle trace mode (to max I<n> levels below current stack depth) .
+B<t> [I<n>] I<expr>        Trace through execution of I<expr>.
 B<b> [I<line>] [I<condition>]
         Set breakpoint; I<line> defaults to the current execution line;
         I<condition> breaks if it evaluates to true, defaults to '1'.
 B<b> I<subname> [I<condition>]
         Set breakpoint at first line of subroutine.
 B<b> I<\$var>        Set breakpoint at first line of subroutine referenced by I<\$var>.
-B<b> B<load> I<filename> Set breakpoint on `require'ing the given file.
+B<b> B<load> I<filename> Set breakpoint on 'require'ing the given file.
 B<b> B<postpone> I<subname> [I<condition>]
         Set breakpoint at first line of subroutine after 
         it is compiled.
@@ -7534,7 +7679,7 @@ B<O> [I<opt>B<=>I<val>] [I<opt>=B<\">I<val>B<\">] ...
     During startup options are initialized from \$ENV{PERLDB_OPTS}.
     You can put additional initialization options I<TTY>, I<noTTY>,
     I<ReadLine>, I<NonStop>, and I<RemotePort> there (or use
-    `B<R>' after you set them).
+    B<R> after you set them).
 
 B<q> or B<^D>        Quit. Set B<\$DB::finished = 0> to debug global destruction.
 B<h> [I<db_command>]    Get help [on a specific debugger command], enter B<|h> to page.
@@ -7543,7 +7688,7 @@ B<$doccmd> I<manpage>    Runs the external doc viewer B<$doccmd> command on the
         named Perl I<manpage>, or on B<$doccmd> itself if omitted.
         Set B<\$DB::doccmd> to change viewer.
 
-Type `|h' for a paged display if this was too hard to read.
+Type '|h' for a paged display if this was too hard to read.
 
 ";    # Fix balance of vi % matching: }}}}
 
@@ -8803,7 +8948,7 @@ Say we're done.
 
 sub end_report {
     local $\ = '';
-    print $OUT "Use `q' to quit or `R' to restart.  `h q' for details.\n";
+    print $OUT "Use 'q' to quit or 'R' to restart.  'h q' for details.\n";
 }
 
 =head2 clean_ENV
@@ -9046,6 +9191,13 @@ variable via C<DB::set_list>.
 
         # Save the list of all the breakpoints for this file.
         set_list( "PERLDB_FILE_$_", %dbline, @add );
+
+        # Serialize the extra data %breakpoints_data hash.
+        # That's a bug fix.
+        set_list( "PERLDB_FILE_ENABLED_$_", 
+            map { _is_breakpoint_enabled($file, $_) ? 1 : 0 }
+            sort { $a <=> $b } keys(%dbline)
+        )
     } ## end for (0 .. $#had_breakpoints)
 
     # The breakpoint was inside an eval. This is a little
@@ -9513,7 +9665,7 @@ sub cmd_prepost {
     elsif ( $cmd =~ /^\{/o ) {
         if ( $cmd =~ /^\{.*\}$/o && unbalanced( substr( $cmd, 1 ) ) ) {
             print $OUT
-"$cmd is now a debugger command\nuse `;$cmd' if you mean Perl code\n";
+"$cmd is now a debugger command\nuse ';$cmd' if you mean Perl code\n";
         }
 
         # Properly balanced. Pre-prompt debugger actions.
@@ -9590,7 +9742,7 @@ the C<END> block documentation for more details.
 package DB::fake;
 
 sub at_exit {
-    "Debugged program terminated.  Use `q' to quit or `R' to restart.";
+    "Debugged program terminated.  Use 'q' to quit or 'R' to restart.";
 }
 
 package DB;    # Do not trace this 1; below!

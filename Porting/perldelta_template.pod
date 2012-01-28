@@ -5,16 +5,16 @@
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.XXX.XXX
+perldelta - what is new for perl v5.tXXX.cXXX
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.XXX.XXX release and
-the 5.XXX.XXX release.
+This document describes differences between the 5.sXXX.bXXX release and
+the 5.tXXX.cXXX release.
 
-If you are upgrading from an earlier release such as 5.YYY.YYY, first read
-L<perl5YYYdelta>, which describes differences between 5.ZZZ.ZZZ and
-5.YYY.YYY.
+If you are upgrading from an earlier release such as 5.rXXX.aXXX, first read
+L<perl5XXXdelta>, which describes differences between 5.rXXX.aXXX and
+5.sXXX.bXXX.
 
 =head1 Notice
 
@@ -41,7 +41,8 @@ L</Selected Bug Fixes> section.
 XXX For a release on a stable branch, this section aspires to be:
 
     There are no changes intentionally incompatible with 5.XXX.XXX
-    If any exist, they are bugs and reports are welcome.
+    If any exist, they are bugs, and we request that you submit a
+    report.  See L</Reporting Bugs> below.
 
 [ List each incompatible change as a =head2 entry ]
 
@@ -355,7 +356,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.1..HEAD
+  perl Porting/acknowledgements.pl v5.15.7..HEAD
 
 =head1 Reporting Bugs
 

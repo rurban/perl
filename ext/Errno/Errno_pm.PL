@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 use Config;
 use strict;
 
-our $VERSION = "1.13";
+our $VERSION = "1.15";
 
 my %err = ();
 my %wsa = ();
@@ -184,13 +184,7 @@ sub get_files {
 		die "Cannot exec $cpp";
 	}
 
-	my $pat;
-	if (($IsMSWin32 || $^O eq 'NetWare') and $Config{cc} =~ /^bcc/i) {
-	    $pat = '^/\*\s+(.+)\s+\d+\s*:\s+\*/';
-	}
-	else {
-	    $pat = '^#\s*(?:line)?\s*\d+\s+"([^"]+)"';
-	}
+	my $pat = '^#\s*(?:line)?\s*\d+\s+"([^"]+)"';
 	while(<CPPO>) {
 	    if ($^O eq 'os2' or $IsMSWin32 or $^O eq 'NetWare') {
 		if (/$pat/o) {
@@ -322,6 +316,10 @@ EOF
 	}
     }
 
+    # escape $Config{'archname'}
+    my $archname = $Config{'archname'};
+    $archname =~ s/([@%\$])/\\\1/g;
+
     # Write Errno.pm
 
     print <<"EDQ";
@@ -336,8 +334,8 @@ use Config;
 use strict;
 
 "\$Config{'archname'}-\$Config{'osvers'}" eq
-"$Config{'archname'}-$Config{'osvers'}" or
-	die "Errno architecture ($Config{'archname'}-$Config{'osvers'}) does not match executable architecture (\$Config{'archname'}-\$Config{'osvers'})";
+"$archname-$Config{'osvers'}" or
+	die "Errno architecture ($archname-$Config{'osvers'}) does not match executable architecture (\$Config{'archname'}-\$Config{'osvers'})";
 
 our \$VERSION = "$VERSION";
 \$VERSION = eval \$VERSION;

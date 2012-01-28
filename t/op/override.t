@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan tests => 26;
+plan tests => 28;
 
 #
 # This file tries to test builtin override using CORE::GLOBAL
@@ -49,8 +49,25 @@ is( $r, "Foo.pm" );
 eval "use Foo::Bar";
 is( $r, join($dirsep, "Foo", "Bar.pm") );
 
-eval "use 5.006";
-is( $r, "5.006" );
+# use VERSION also loads feature.pm.
+{
+    my @r;
+    local *CORE::GLOBAL::require = sub { push @r, shift; 1; };
+    eval "use 5.006";
+    like( " @r ", qr " 5\.006 " );
+}
+
+{
+    local $_ = 'foo.pm';
+    require;
+    is( $r, 'foo.pm' );
+}
+
+{
+    my $_ = 'bar.pm';
+    require;
+    is( $r, 'bar.pm' );
+}
 
 # localizing *CORE::GLOBAL::foo should revert to finding CORE::foo
 {

@@ -8,12 +8,12 @@ use warnings;
 use bytes;
 
 
-use IO::Compress::RawDeflate 2.037 ;
+use IO::Compress::RawDeflate 2.045 ;
 
-use Compress::Raw::Zlib  2.037 ;
-use IO::Compress::Base::Common  2.037 qw(:Status :Parse createSelfTiedObject);
-use IO::Compress::Gzip::Constants 2.037 ;
-use IO::Compress::Zlib::Extra 2.037 ;
+use Compress::Raw::Zlib  2.045 ;
+use IO::Compress::Base::Common  2.045 qw(:Status :Parse isaScalar createSelfTiedObject);
+use IO::Compress::Gzip::Constants 2.045 ;
+use IO::Compress::Zlib::Extra 2.045 ;
 
 BEGIN
 {
@@ -27,7 +27,7 @@ require Exporter ;
 
 our ($VERSION, @ISA, @EXPORT_OK, %EXPORT_TAGS, $GzipError);
 
-$VERSION = '2.037';
+$VERSION = '2.045';
 $GzipError = '' ;
 
 @ISA    = qw(Exporter IO::Compress::RawDeflate);
@@ -177,6 +177,8 @@ sub getFileInfo
     my $self = shift ;
     my $params = shift;
     my $filename = shift ;
+
+    return if isaScalar($filename);
 
     my $defaultTime = (stat($filename))[9] ;
 
@@ -1196,8 +1198,6 @@ These symbolic constants are used by the C<Strategy> option in the constructor.
 
 See L<IO::Compress::FAQ|IO::Compress::FAQ/"Apache::GZip Revisited">
 
-    
-
 =head2 Working with Net::FTP
 
 See L<IO::Compress::FAQ|IO::Compress::FAQ/"Compressed files and Net::FTP">
@@ -1206,7 +1206,7 @@ See L<IO::Compress::FAQ|IO::Compress::FAQ/"Compressed files and Net::FTP">
 
 L<Compress::Zlib>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Compress::RawDeflate>, L<IO::Uncompress::RawInflate>, L<IO::Compress::Bzip2>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
 
-L<Compress::Zlib::FAQ|Compress::Zlib::FAQ>
+L<IO::Compress::FAQ|IO::Compress::FAQ>
 
 L<File::GlobMapper|File::GlobMapper>, L<Archive::Zip|Archive::Zip>,
 L<Archive::Tar|Archive::Tar>,

@@ -18,7 +18,7 @@ our @Overridable;
 my @Prepend_parent;
 my %Recognized_Att_Keys;
 
-our $VERSION = '6.58';
+our $VERSION = '6.63_02';
 $VERSION = eval $VERSION;
 
 # Emulate something resembling CVS $Revision$
@@ -613,6 +613,7 @@ END
         $self->catfile($Config{'archlibexp'}, "Config.pm")
     );
 
+    $self->init_tools();
     $self->init_others();
     $self->init_platform();
     $self->init_PERM();
@@ -2869,7 +2870,7 @@ generated Makefile along with your report.
 
 For more up-to-date information, see L<http://www.makemaker.org>.
 
-Repository available at L<http://github.com/schwern/extutils-makemaker>.
+Repository available at L<https://github.com/Perl-Toolchain-Gang/ExtUtils-MakeMaker>.
 
 =head1 LICENSE
 

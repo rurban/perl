@@ -9,7 +9,7 @@
 
 package File::DosGlob;
 
-our $VERSION = '1.04';
+our $VERSION = '1.06';
 use strict;
 use warnings;
 
@@ -106,7 +106,6 @@ sub doglob {
 #
 
 # context (keyed by second cxix arg provided by core)
-my %iter;
 my %entries;
 
 sub glob {
@@ -116,20 +115,25 @@ sub glob {
     # glob without args defaults to $_
     $pat = $_ unless defined $pat;
 
-    # extract patterns
-    if ($pat =~ /\s/) {
+    # assume global context if not provided one
+    $cxix = '_G_' unless defined $cxix;
+
+    # if we're just beginning, do it all first
+    if (!$entries{$cxix}) {
+      # extract patterns
+      if ($pat =~ /\s/) {
 	require Text::ParseWords;
 	@pat = Text::ParseWords::parse_line('\s+',0,$pat);
-    }
-    else {
+      }
+      else {
 	push @pat, $pat;
-    }
+      }
 
-    # Mike Mestnik: made to do abc{1,2,3} == abc1 abc2 abc3.
-    #   abc3 will be the original {3} (and drop the {}).
-    #   abc1 abc2 will be put in @appendpat.
-    # This was just the esiest way, not nearly the best.
-    REHASH: {
+      # Mike Mestnik: made to do abc{1,2,3} == abc1 abc2 abc3.
+      #   abc3 will be the original {3} (and drop the {}).
+      #   abc1 abc2 will be put in @appendpat.
+      # This was just the easiest way, not nearly the best.
+      REHASH: {
 	my @appendpat = ();
 	for (@pat) {
 	    # There must be a "," I.E. abc{efg} is not what we want.
@@ -139,7 +143,7 @@ sub glob {
 		my $tmp = "$start$match$end";
 		while ( $tmp =~ s/^(.*?)(?<!\\)\{(?:.*(?<!\\)\,)?(.*\Q$match\E.*?)(?:(?<!\\)\,.*)?(?<!\\)\}(.*)$/$1$2$3/ ) {
 		    #print "Striped: $tmp\n";
-		    #  these expansions will be preformed by the original,
+		    #  these expansions will be performed by the original,
 		    #  when we call REHASH.
 		}
 		push @appendpat, ("$tmp");
@@ -163,35 +167,27 @@ sub glob {
 	    }
 	    goto REHASH;
 	}
-    }
-    for ( @pat ) {
+      }
+      for ( @pat ) {
 	s/\\{/{/g;
 	s/\\}/}/g;
 	s/\\,/,/g;
-    }
-    #print join ("\n", @pat). "\n";
+      }
+      #print join ("\n", @pat). "\n";
  
-    # assume global context if not provided one
-    $cxix = '_G_' unless defined $cxix;
-    $iter{$cxix} = 0 unless exists $iter{$cxix};
-
-    # if we're just beginning, do it all first
-    if ($iter{$cxix} == 0) {
-	    $entries{$cxix} = [doglob(1,@pat)];
-	}
+      $entries{$cxix} = [doglob(1,@pat)];
+    }
 
     # chuck it all out, quick or slow
     if (wantarray) {
-	delete $iter{$cxix};
 	return @{delete $entries{$cxix}};
     }
     else {
-	if ($iter{$cxix} = scalar @{$entries{$cxix}}) {
+	if (scalar @{$entries{$cxix}}) {
 	    return shift @{$entries{$cxix}};
 	}
 	else {
 	    # return undef for EOL
-	    delete $iter{$cxix};
 	    delete $entries{$cxix};
 	    return undef;
 	}

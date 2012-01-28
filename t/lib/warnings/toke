@@ -80,6 +80,9 @@ toke.c	AOK
     Unrecognized escape \\%c passed through
         $a = "\m" ;
 
+    Useless use of \\E.
+        $a = "abcd\E" ;
+
     %s number > %s non-portable
         my $a =  0b011111111111111111111111111111110 ;
         $a =  0b011111111111111111111111111111111 ;
@@ -607,6 +610,14 @@ Warning: Use of "rand" without parentheses is ambiguous at - line 3.
 Warning: Use of "rand" without parentheses is ambiguous at - line 8.
 Warning: Use of "rand" without parentheses is ambiguous at - line 10.
 ########
+# [perl #97110]
+sub myrand(;$) { }
+sub whatever($) { }
+my $a = myrand + 4 ;
+my $b = whatever + 4 ;
+EXPECT
+Warning: Use of "myrand" without parentheses is ambiguous at - line 4.
+########
 # toke.c
 use warnings "ambiguous";
 print for keys %+; # should not warn
@@ -636,6 +647,7 @@ Ambiguous use of -fred resolved as -&fred() at - line 11.
 ########
 # toke.c
 open FOO || time;
+open local *FOO; # should be ok
 EXPECT
 Precedence problem: open FOO should be open(FOO) at - line 2.
 ########
@@ -653,6 +665,7 @@ open FOO || time;
     open FOO || time;
 }
 open FOO || time;
+open Foo::BAR; # this should not warn
 EXPECT
 Precedence problem: open FOO should be open(FOO) at - line 3.
 Precedence problem: open FOO should be open(FOO) at - line 8.
@@ -683,6 +696,14 @@ no warnings 'misc' ;
 $a = "\m" ;
 EXPECT
 Unrecognized escape \m passed through at - line 3.
+########
+# toke.c
+use warnings 'misc' ;
+my $a = "abcd\E" ;
+no warnings 'misc' ;
+$a = "abcd\E" ;
+EXPECT
+Useless use of \E at - line 3.
 ########
 # toke.c
 use warnings 'portable' ;

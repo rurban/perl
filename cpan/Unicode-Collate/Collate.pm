@@ -14,7 +14,7 @@ use File::Spec;
 
 no warnings 'utf8';
 
-our $VERSION = '0.77';
+our $VERSION = '0.87';
 our $PACKAGE = __PACKAGE__;
 
 ### begin XS only ###
@@ -269,7 +269,7 @@ sub new
 
     if ($self->{entry}) {
 	while ($self->{entry} =~ /([^\n]+)/g) {
-	    $self->parseEntry($1);
+	    $self->parseEntry($1, TRUE);
 	}
     }
 
@@ -367,6 +367,7 @@ sub parseEntry
 {
     my $self = shift;
     my $line = shift;
+    my $tailoring = shift;
     my($name, $entry, @uv, @key);
 
     if (defined $self->{rewrite}) {
@@ -387,7 +388,7 @@ sub parseEntry
 
     @uv = _getHexArray($e);
     return if !@uv;
-    return if @uv > 1 && $self->{suppressHash} &&
+    return if @uv > 1 && $self->{suppressHash} && !$tailoring &&
 		  exists $self->{suppressHash}{$uv[0]};
     $entry = join(CODE_SEP, @uv); # in JCPS
 
@@ -789,9 +790,9 @@ sub _eqArray($$$)
 
 ##
 ## (int position, int length)
-## int position = index(string, substring, position, [undoc'ed grobal])
+## int position = index(string, substring, position, [undoc'ed global])
 ##
-## With "grobal" (only for the list context),
+## With "global" (only for the list context),
 ##  returns list of arrayref[position, length].
 ##
 sub index
@@ -802,7 +803,7 @@ sub index
     my $subE = $self->splitEnt(shift);
     my $pos  = @_ ? shift : 0;
        $pos  = 0 if $pos < 0;
-    my $grob = shift;
+    my $glob = shift;
 
     my $lev  = $self->{level};
     my $v2i  = $self->{UCA_Version} >= 9 &&
@@ -810,7 +811,7 @@ sub index
 
     if (! @$subE) {
 	my $temp = $pos <= 0 ? 0 : $len <= $pos ? $len : $pos;
-	return $grob
+	return $glob
 	    ? map([$_, 0], $temp..$len)
 	    : wantarray ? ($temp,0) : $temp;
     }
@@ -896,7 +897,7 @@ sub index
 			_eqArray(\@strWt, \@subWt, $lev)) {
 		my $temp = $iniPos[0] + $pos;
 
-		if ($grob) {
+		if ($glob) {
 		    push @g_ret, [$temp, $finPos[$#subWt] - $iniPos[0]];
 		    splice @strWt,  0, $#subWt;
 		    splice @iniPos, 0, $#subWt;
@@ -914,7 +915,7 @@ sub index
 	}
     }
 
-    return $grob
+    return $glob
 	? @g_ret
 	: wantarray ? () : NOMATCHPOS;
 }
@@ -1443,13 +1444,15 @@ rewriting lines on reading an unmodified table every time.
 UTS #35 (LDML).
 
 Contractions beginning with the specified characters are suppressed,
-even if those contractions are defined in C<table> or C<entry>.
+even if those contractions are defined in C<table>.
 
 An example for Russian and some languages using the Cyrillic script:
 
     suppress => [0x0400..0x0417, 0x041A..0x0437, 0x043A..0x045F],
 
 where 0x0400 stands for C<U+0400>, CYRILLIC CAPITAL LETTER IE WITH GRAVE.
+
+B<NOTE>: Contractions via C<entry> are not be suppressed.
 
 =item table
 
@@ -1534,7 +1537,7 @@ this parameter doesn't work validly.
 
 -- see 3.2.2 Variable Weighting, UTS #10.
 
-This key allows to variable weighting for variable collation elements,
+This key allows for variable weighting of variable collation elements,
 which are marked with an ASTERISK in the table
 (NOTE: Many punctuation marks and symbols are variable in F<allkeys.txt>).
 

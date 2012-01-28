@@ -186,14 +186,23 @@ chr(0x10FFFE) =~ /\p{Any}/;
 chr(0x10FFFF) =~ /\p{Any}/;
 chr(0x110000) =~ /\p{Any}/;
 EXPECT
-Code point 0x110000 is not Unicode, no properties match it; all inverse properties do at - line 14.
+Code point 0x110000 is not Unicode, all \p{} matches fail; all \P{} matches succeed at - line 14.
 ########
 use warnings 'utf8';
 chr(0x110000) =~ /\p{Any}/;
 no warnings 'non_unicode';
 chr(0x110000) =~ /\p{Any}/;
 EXPECT
-Code point 0x110000 is not Unicode, no properties match it; all inverse properties do at - line 2.
+Code point 0x110000 is not Unicode, all \p{} matches fail; all \P{} matches succeed at - line 2.
+########
+require "../test.pl";
+use warnings 'utf8';
+sub Is_Super { return '!utf8::Any' }
+# The extra char is to avoid an optimization that avoids the problem when the
+# property is the only non-latin1 char in a class
+print "\x{1100000}" =~ /^[\p{Is_Super}\x{100}]$/, "\n";
+EXPECT
+1
 ########
 require "../test.pl";
 use warnings 'utf8';

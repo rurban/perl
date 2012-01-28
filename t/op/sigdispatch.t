@@ -9,7 +9,7 @@ BEGIN {
 use strict;
 use Config;
 
-plan tests => 17;
+plan tests => 26;
 
 watchdog(15);
 
@@ -39,26 +39,33 @@ eval {
 is($@, "Alarm!\n", 'after the second loop');
 
 SKIP: {
-    skip('We can\'t test blocking without sigprocmask', 11)
+    skip('We can\'t test blocking without sigprocmask', 17)
 	if is_miniperl() || !$Config{d_sigprocmask};
-    skip('This doesn\'t work on OpenBSD threaded builds RT#88814', 11)
+    skip('This doesn\'t work on OpenBSD threaded builds RT#88814', 17)
         if $^O eq 'openbsd' && $Config{useithreads};
 
     require POSIX;
+    my $pending = POSIX::SigSet->new();
+    is POSIX::sigpending($pending), '0 but true', 'sigpending';
+    is $pending->ismember(&POSIX::SIGUSR1), 0, 'SIGUSR1 is not pending';
     my $new = POSIX::SigSet->new(&POSIX::SIGUSR1);
     POSIX::sigprocmask(&POSIX::SIG_BLOCK, $new);
     
     my $gotit = 0;
     $SIG{USR1} = sub { $gotit++ };
-    kill SIGUSR1, $$;
+    kill 'SIGUSR1', $$;
     is $gotit, 0, 'Haven\'t received third signal yet';
+    is POSIX::sigpending($pending), '0 but true', 'sigpending';
+    is $pending->ismember(&POSIX::SIGUSR1), 1, 'SIGUSR1 is pending';
     
     my $old = POSIX::SigSet->new();
     POSIX::sigsuspend($old);
     is $gotit, 1, 'Received third signal';
+    is POSIX::sigpending($pending), '0 but true', 'sigpending';
+    is $pending->ismember(&POSIX::SIGUSR1), 0, 'SIGUSR1 is no longer pending';
     
 	{
-		kill SIGUSR1, $$;
+		kill 'SIGUSR1', $$;
 		local $SIG{USR1} = sub { die "FAIL\n" };
 		POSIX::sigprocmask(&POSIX::SIG_BLOCK, undef, $old);
 		ok $old->ismember(&POSIX::SIGUSR1), 'SIGUSR1 is blocked';
@@ -73,7 +80,7 @@ TODO:
 	}
 
     POSIX::sigprocmask(&POSIX::SIG_BLOCK, $new);
-    kill SIGUSR1, $$;
+    kill 'SIGUSR1', $$;
     is $gotit, 1, 'Haven\'t received fifth signal yet';
     POSIX::sigprocmask(&POSIX::SIG_UNBLOCK, $new, $old);
     ok $old->ismember(&POSIX::SIGUSR1), 'SIGUSR1 was still blocked';
@@ -114,4 +121,19 @@ SKIP: {
     };
     alarm(0);
     is($@, "HANDLER CALLED\n", 'string eval');
+}
+
+eval { $SIG{"__WARN__\0"} = sub { 1 } };
+like $@, qr/No such hook: __WARN__\\0 at/, q!Fetching %SIG hooks with an extra trailing nul is nul-clean!;
+
+eval { $SIG{"__DIE__\0whoops"} = sub { 1 } };
+like $@, qr/No such hook: __DIE__\\0whoops at/;
+
+{
+    use warnings;
+    my $w;
+    local $SIG{__WARN__} = sub { $w = shift };
+
+    $SIG{"KILL\0"} = sub { 1 };
+    like $w, qr/No such signal: SIGKILL\\0 at/, 'Arbitrary signal lookup through %SIG is clean';
 }

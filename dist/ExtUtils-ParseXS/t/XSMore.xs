@@ -6,6 +6,7 @@ typedef IV MyType;
 typedef IV MyType2;
 typedef IV MyType3;
 typedef IV MyType4;
+typedef IV MyType5;
 
 
 =for testing
@@ -13,6 +14,22 @@ typedef IV MyType4;
 This parts are ignored.
 
 =cut
+
+/* Old perls (pre 5.8.9 or so) did not have PERL_UNUSED_ARG in XSUB.h.
+ * This is normally covered by ppport.h. */
+#ifndef PERL_UNUSED_ARG
+#  if defined(lint) && defined(S_SPLINT_S) /* www.splint.org */
+#    include <note.h>
+#    define PERL_UNUSED_ARG(x) NOTE(ARGUNUSED(x))
+#  else
+#    define PERL_UNUSED_ARG(x) ((void)x)
+#  endif
+#endif
+#ifndef PERL_UNUSED_VAR
+#  define PERL_UNUSED_VAR(x) ((void)x)
+#endif
+
+
 
 STATIC void
 outlist(int* a, int* b){
@@ -73,6 +90,15 @@ T_BAAR
 	$var = ($type)SvIV($arg)
 END
 
+TYPEMAP: <<END
+MyType5 T_WITHSEMICOLON
+
+INPUT
+
+T_WITHSEMICOLON
+    $var = ($type)SvIV($arg); 
+END
+
 
 MyType
 typemaptest1()
@@ -89,8 +115,13 @@ typemaptest2()
     RETVAL
 
 MyType3
-typemaptest3(MyType4 foo)
+typemaptest3(foo, bar, baz)
+    MyType4 foo
+    MyType5 bar
+    MyType5 baz
   CODE:
+    PERL_UNUSED_VAR(bar);
+    PERL_UNUSED_VAR(baz);
     RETVAL = foo;
   OUTPUT:
     RETVAL

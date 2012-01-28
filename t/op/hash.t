@@ -8,7 +8,7 @@ BEGIN {
 
 use strict;
 
-plan tests => 9;
+plan tests => 15;
 
 my %h;
 
@@ -158,3 +158,62 @@ is($destroyed, 1, 'Timely hash destruction with lvalue keys');
     delete $a{a};
     ok $gone, 'deleting the current iterator in void context frees the val'
 }
+
+# [perl #99660] Deleted hash element visible to destructor
+{
+    my %h;
+    $h{k} = bless [];
+    my $normal_exit;
+    local *::DESTROY = sub { my $x = $h{k}; ++$normal_exit };
+    delete $h{k}; # must be in void context to trigger the bug
+    ok $normal_exit, 'freed hash elems are not visible to DESTROY';
+}
+
+# [perl #100340] Similar bug: freeing a hash elem during a delete
+sub guard::DESTROY {
+   ${$_[0]}->();
+};
+*guard = sub (&) {
+   my $callback = shift;
+   return bless \$callback, "guard"
+};
+{
+  my $ok;
+  my %t; %t = (
+    stash => {
+        guard => guard(sub{
+            $ok++;
+            delete $t{stash};
+        }),
+        foo => "bar",
+        bar => "baz",
+    },
+  );
+  ok eval { delete $t{stash}{guard}; # must be in void context
+            1 },
+    'freeing a hash elem from destructor called by delete does not die';
+  diag $@ if $@; # panic: free from wrong pool
+  is $ok, 1, 'the destructor was called';
+}
+
+# Weak references to pad hashes
+SKIP: {
+    skip_if_miniperl("No Scalar::Util::weaken under miniperl", 1);
+    my $ref;
+    require Scalar::Util;
+    {
+        my %hash;
+        Scalar::Util::weaken($ref = \%hash);
+        1;  # the previous statement must not be the last
+    }
+    is $ref, undef, 'weak refs to pad hashes go stale on scope exit';
+}
+
+# [perl #107440]
+sub A::DESTROY { $::ra = 0 }
+$::ra = {a=>bless [], 'A'};
+undef %$::ra;
+pass 'no crash when freeing hash that is being undeffed';
+$::ra = {a=>bless [], 'A'};
+%$::ra = ('a'..'z');
+pass 'no crash when freeing hash that is being exonerated, ahem, cleared';

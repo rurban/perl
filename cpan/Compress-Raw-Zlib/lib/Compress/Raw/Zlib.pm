@@ -13,7 +13,7 @@ use warnings ;
 use bytes ;
 our ($VERSION, $XS_VERSION, @ISA, @EXPORT, $AUTOLOAD);
 
-$VERSION = '2.037';
+$VERSION = '2.045';
 $XS_VERSION = $VERSION; 
 $VERSION = eval $VERSION;
 
@@ -383,6 +383,19 @@ sub Compress::Raw::Zlib::Deflate::new
 
 }
 
+sub Compress::Raw::Zlib::deflateStream::STORABLE_freeze
+{
+    my $type = ref shift;
+    croak "Cannot freeze $type object\n";
+}
+
+sub Compress::Raw::Zlib::deflateStream::STORABLE_thaw
+{
+    my $type = ref shift;
+    croak "Cannot thaw $type object\n";
+}
+
+
 sub Compress::Raw::Zlib::Inflate::new
 {
     my $pkg = shift ;
@@ -418,6 +431,18 @@ sub Compress::Raw::Zlib::Inflate::new
 
     _inflateInit($flags, $windowBits, $got->value('Bufsize'), 
                  $got->value('Dictionary')) ;
+}
+
+sub Compress::Raw::Zlib::inflateStream::STORABLE_freeze
+{
+    my $type = ref shift;
+    croak "Cannot freeze $type object\n";
+}
+
+sub Compress::Raw::Zlib::inflateStream::STORABLE_thaw
+{
+    my $type = ref shift;
+    croak "Cannot thaw $type object\n";
 }
 
 sub Compress::Raw::Zlib::InflateScan::new
@@ -1384,6 +1409,101 @@ to access .zip files, there are other perl modules available that will
 do all the hard work for you. Check out C<Archive::Zip>,
 C<IO::Compress::Zip> and C<IO::Uncompress::Unzip>.
 
+=head1 FAQ
+
+=head2 Compatibility with Unix compress/uncompress.
+
+This module is not compatible with Unix C<compress>.
+
+If you have the C<uncompress> program available, you can use this to read
+compressed files
+
+    open F, "uncompress -c $filename |";
+    while (<F>)
+    {
+        ...
+
+Alternatively, if you have the C<gunzip> program available, you can use
+this to read compressed files
+
+    open F, "gunzip -c $filename |";
+    while (<F>)
+    {
+        ...
+
+and this to write compress files, if you have the C<compress> program
+available
+
+    open F, "| compress -c $filename ";
+    print F "data";
+    ...
+    close F ;
+
+=head2 Accessing .tar.Z files
+
+See previous FAQ item.
+
+If the C<Archive::Tar> module is installed and either the C<uncompress> or
+C<gunzip> programs are available, you can use one of these workarounds to
+read C<.tar.Z> files.
+
+Firstly with C<uncompress>
+
+    use strict;
+    use warnings;
+    use Archive::Tar;
+
+    open F, "uncompress -c $filename |";
+    my $tar = Archive::Tar->new(*F);
+    ...
+
+and this with C<gunzip>
+
+    use strict;
+    use warnings;
+    use Archive::Tar;
+
+    open F, "gunzip -c $filename |";
+    my $tar = Archive::Tar->new(*F);
+    ...
+
+Similarly, if the C<compress> program is available, you can use this to
+write a C<.tar.Z> file
+
+    use strict;
+    use warnings;
+    use Archive::Tar;
+    use IO::File;
+
+    my $fh = new IO::File "| compress -c >$filename";
+    my $tar = Archive::Tar->new();
+    ...
+    $tar->write($fh);
+    $fh->close ;
+
+=head2 Zlib Library Version Support
+
+By default C<Compress::Raw::Zlib> will build with a private copy of version
+1.2.5 of the zlib library. (See the F<README> file for details of
+how to override this behaviour)
+
+If you decide to use a different version of the zlib library, you need to be
+aware of the following issues
+
+=over 5
+
+=item *
+
+First off, you must have zlib 1.0.5 or better.
+
+=item *
+
+You need to have zlib 1.2.1 or better if you want to use the C<-Merge>
+option with C<IO::Compress::Gzip>, C<IO::Compress::Deflate> and
+C<IO::Compress::RawDeflate>.
+
+=back
+
 =head1 CONSTANTS
 
 All the I<zlib> constants are automatically imported when you make use
@@ -1393,7 +1513,7 @@ of I<Compress::Raw::Zlib>.
 
 L<Compress::Zlib>, L<IO::Compress::Gzip>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Compress::RawDeflate>, L<IO::Uncompress::RawInflate>, L<IO::Compress::Bzip2>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
 
-L<Compress::Zlib::FAQ|Compress::Zlib::FAQ>
+L<IO::Compress::FAQ|IO::Compress::FAQ>
 
 L<File::GlobMapper|File::GlobMapper>, L<Archive::Zip|Archive::Zip>,
 L<Archive::Tar|Archive::Tar>,

@@ -28,6 +28,24 @@ perldoc> to learn more things you can do with F<perldoc>.
 
 For ease of access, the Perl manual has been split up into several sections.
 
+=begin buildtoc
+
+# This section is parsed by Porting/pod_lib.pl for use by pod/buildtoc etc
+
+flag =g  perluniprops perlmodlib perlapi perlintern
+flag =go perltoc
+flag =ro perlcn perljp perlko perltw
+flag =   perlvms
+
+path perlfaq.*          cpan/perlfaq/lib/
+path perlglossary       cpan/perlfaq/lib/
+path perlxs(?:tut)?     dist/ExtUtils-ParseXS/lib/
+path perldoc            dist/Pod-Perldoc/lib/
+
+aux a2p c2ph h2ph h2xs perlbug pl2pm pod2html pod2man s2p splain xsubpp
+
+=end buildtoc
+
 =head2 Overview
 
     perl		Perl overview (this section)
@@ -43,10 +61,7 @@ For ease of access, the Perl manual has been split up into several sections.
     perlrequick 	Perl regular expressions quick start
     perlretut		Perl regular expressions tutorial
 
-    perlboot		Perl OO tutorial for beginners
-    perltoot		Perl OO tutorial, part 1
-    perltooc		Perl OO tutorial, part 2
-    perlbot		Perl OO tricks and examples
+    perlootut		Perl OO tutorial for beginners
 
     perlperf		Perl Performance and Optimization Techniques
 
@@ -120,8 +135,6 @@ For ease of access, the Perl manual has been split up into several sections.
 
     perlutil		utilities packaged with the Perl distribution
 
-    perlcompile 	Perl compiler suite intro
-
     perlfilter		Perl source filters
 
     perldtrace		Perl's support for DTrace
@@ -164,41 +177,24 @@ For ease of access, the Perl manual has been split up into several sections.
 
     perlhist		Perl history records
     perldelta		Perl changes since previous version
+    perl5157delta	Perl changes in version 5.15.7
+    perl5156delta	Perl changes in version 5.15.6
+    perl5155delta	Perl changes in version 5.15.5
+    perl5154delta	Perl changes in version 5.15.4
+    perl5153delta	Perl changes in version 5.15.3
+    perl5152delta	Perl changes in version 5.15.2
     perl5151delta	Perl changes in version 5.15.1
     perl5150delta	Perl changes in version 5.15.0
+    perl5142delta	Perl changes in version 5.14.2
     perl5141delta	Perl changes in version 5.14.1
     perl5140delta	Perl changes in version 5.14.0
-    perl51311delta	Perl changes in version 5.13.11
-    perl51310delta	Perl changes in version 5.13.10
-    perl5139delta	Perl changes in version 5.13.9
-    perl5138delta	Perl changes in version 5.13.8
-    perl5137delta	Perl changes in version 5.13.7
-    perl5136delta	Perl changes in version 5.13.6
-    perl5135delta	Perl changes in version 5.13.5
-    perl5134delta	Perl changes in version 5.13.4
-    perl5133delta	Perl changes in version 5.13.3
-    perl5132delta	Perl changes in version 5.13.2
-    perl5131delta	Perl changes in version 5.13.1
-    perl5130delta	Perl changes in version 5.13.0
     perl5124delta	Perl changes in version 5.12.4
     perl5123delta	Perl changes in version 5.12.3
     perl5122delta	Perl changes in version 5.12.2
     perl5121delta	Perl changes in version 5.12.1
     perl5120delta	Perl changes in version 5.12.0
-    perl5115delta	Perl changes in version 5.11.5
-    perl5114delta	Perl changes in version 5.11.4
-    perl5113delta	Perl changes in version 5.11.3
-    perl5112delta	Perl changes in version 5.11.2
-    perl5111delta	Perl changes in version 5.11.1
-    perl5110delta	Perl changes in version 5.11.0
     perl5101delta	Perl changes in version 5.10.1
     perl5100delta	Perl changes in version 5.10.0
-    perl595delta	Perl changes in version 5.9.5
-    perl594delta	Perl changes in version 5.9.4
-    perl593delta	Perl changes in version 5.9.3
-    perl592delta	Perl changes in version 5.9.2
-    perl591delta	Perl changes in version 5.9.1
-    perl590delta	Perl changes in version 5.9.0
     perl589delta	Perl changes in version 5.8.9
     perl588delta	Perl changes in version 5.8.8
     perl587delta	Perl changes in version 5.8.7
@@ -209,19 +205,19 @@ For ease of access, the Perl manual has been split up into several sections.
     perl582delta	Perl changes in version 5.8.2
     perl581delta	Perl changes in version 5.8.1
     perl58delta 	Perl changes in version 5.8.0
-    perl573delta	Perl changes in version 5.7.3
-    perl572delta	Perl changes in version 5.7.2
-    perl571delta	Perl changes in version 5.7.1
-    perl570delta	Perl changes in version 5.7.0
     perl561delta	Perl changes in version 5.6.1
     perl56delta 	Perl changes in version 5.6
     perl5005delta	Perl changes in version 5.005
     perl5004delta	Perl changes in version 5.004
 
+    perlexperiment	A listing of experimental features in Perl
+
     perlartistic	Perl Artistic License
     perlgpl		GNU General Public License
 
 =head2 Language-Specific
+
+=for buildtoc flag +r
 
     perlcn		Perl for Simplified Chinese (in EUC-CN)
     perljp		Perl for Japanese (in EUC-JP)
@@ -265,6 +261,16 @@ For ease of access, the Perl manual has been split up into several sections.
     perlvos		Perl notes for Stratus VOS
     perlwin32		Perl notes for Windows
 
+=for buildtoc flag -r
+
+=head2 Stubs for Deleted Documents
+
+    perlboot		
+    perlbot		
+    perltooc		
+    perltoot		
+
+=for buildtoc __END__
 
 On a Unix-like system, these documentation files will usually also be
 available as manpages for use with the F<man> program.
@@ -346,8 +352,7 @@ Described in L<perlreftut>, L<perlref>, L<perldsc>, and L<perllol>.
 
 object-oriented programming
 
-Described in L<perlobj>, L<perlboot>, L<perltoot>, L<perltooc>,
-and L<perlbot>.
+Described in L<perlobj> and L<perlootut>.
 
 =item *
 

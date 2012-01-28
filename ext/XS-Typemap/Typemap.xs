@@ -44,6 +44,13 @@ static intObj xst_anintobj;
 static intRefIv xst_anintrefiv;
 static intOpq xst_anintopq;
 
+/* A different type to refer to for testing the different
+ * AV*, HV*, etc typemaps */
+typedef AV AV_FIXED;
+typedef HV HV_FIXED;
+typedef CV CV_FIXED;
+typedef SVREF SVREF_FIXED;
+
 /* Helper functions */
 
 /* T_ARRAY - allocate some memory */
@@ -93,6 +100,10 @@ T_SV( sv )
 
 Used to pass in and return a reference to an SV.
 
+Note that this typemap does not decrement the reference count
+when returning the reference to an SV*.
+See also: T_SVREF_REFCOUNT_FIXED
+
 =cut
 
 SVREF
@@ -103,10 +114,31 @@ T_SVREF( svref )
  OUTPUT:
   RETVAL
 
+=item T_SVREF_FIXED
+
+Used to pass in and return a reference to an SV.
+This is a fixed
+variant of T_SVREF that decrements the refcount appropriately
+when returning a reference to an SV*. Introduced in perl 5.15.4.
+
+=cut
+
+SVREF_FIXED
+T_SVREF_REFCOUNT_FIXED( svref )
+  SVREF_FIXED svref
+ CODE:
+  SvREFCNT_inc(svref);
+  RETVAL = svref;
+ OUTPUT:
+  RETVAL
+
 =item T_AVREF
 
 From the perl level this is a reference to a perl array.
 From the C level this is a pointer to an AV.
+
+Note that this typemap does not decrement the reference count
+when returning an AV*. See also: T_AVREF_REFCOUNT_FIXED
 
 =cut
 
@@ -118,10 +150,31 @@ T_AVREF( av )
  OUTPUT:
   RETVAL
 
+=item T_AVREF_REFCOUNT_FIXED
+
+From the perl level this is a reference to a perl array.
+From the C level this is a pointer to an AV. This is a fixed
+variant of T_AVREF that decrements the refcount appropriately
+when returning an AV*. Introduced in perl 5.15.4.
+
+=cut
+
+AV_FIXED*
+T_AVREF_REFCOUNT_FIXED( av )
+  AV_FIXED * av
+ CODE:
+  SvREFCNT_inc(av);
+  RETVAL = av;
+ OUTPUT:
+  RETVAL
+
 =item T_HVREF
 
 From the perl level this is a reference to a perl hash.
 From the C level this is a pointer to an HV.
+
+Note that this typemap does not decrement the reference count
+when returning an HV*. See also: T_HVREF_REFCOUNT_FIXED
 
 =cut
 
@@ -133,11 +186,33 @@ T_HVREF( hv )
  OUTPUT:
   RETVAL
 
+=item T_HVREF_REFCOUNT_FIXED
+
+From the perl level this is a reference to a perl hash.
+From the C level this is a pointer to an HV. This is a fixed
+variant of T_HVREF that decrements the refcount appropriately
+when returning an HV*. Introduced in perl 5.15.4.
+
+=cut
+
+HV_FIXED*
+T_HVREF_REFCOUNT_FIXED( hv )
+  HV_FIXED * hv
+ CODE:
+  SvREFCNT_inc(hv);
+  RETVAL = hv;
+ OUTPUT:
+  RETVAL
+
+
 =item T_CVREF
 
 From the perl level this is a reference to a perl subroutine
 (e.g. $sub = sub { 1 };). From the C level this is a pointer
 to a CV.
+
+Note that this typemap does not decrement the reference count
+when returning an HV*. See also: T_HVREF_REFCOUNT_FIXED
 
 =cut
 
@@ -149,6 +224,26 @@ T_CVREF( cv )
  OUTPUT:
   RETVAL
 
+=item T_CVREF_REFCOUNT_FIXED
+
+From the perl level this is a reference to a perl subroutine
+(e.g. $sub = sub { 1 };). From the C level this is a pointer
+to a CV.
+
+This is a fixed
+variant of T_HVREF that decrements the refcount appropriately
+when returning an HV*. Introduced in perl 5.15.4.
+
+=cut
+
+CV_FIXED *
+T_CVREF_REFCOUNT_FIXED( cv )
+  CV_FIXED * cv
+ CODE:
+  SvREFCNT_inc(cv);
+  RETVAL = cv;
+ OUTPUT:
+  RETVAL
 
 =item T_SYSRET
 

@@ -25,13 +25,15 @@ BEGIN {
 my %modules = (
     # ModuleName  => q|code to check that it was loaded|,
     'Cwd'        => q| ::can_ok( 'Cwd' => 'fastcwd'         ) |,  # 5.7 ?
-    'File::Glob' => q| ::can_ok( 'File::Glob' => 'doglob'   ) |,  # 5.6
+    'File::Glob' => q| ::can_ok( 'File::Glob' =>                  # 5.6
+                                   $] > 5.014
+                                     ? 'bsd_glob' : 'doglob') |,
     $db_file     => q| ::can_ok( $db_file => 'TIEHASH'      ) |,  # 5.0
     'Socket'     => q| ::can_ok( 'Socket' => 'inet_aton'    ) |,  # 5.0
     'Time::HiRes'=> q| ::can_ok( 'Time::HiRes' => 'usleep'  ) |,  # 5.7.3
 );
 
-plan tests => keys(%modules) * 3 + 7;
+plan tests => keys(%modules) * 3 + 8;
 
 # Try to load the module
 use_ok( 'XSLoader' );
@@ -73,9 +75,6 @@ my $extensions = $Config{'extensions'};
 $extensions =~ s|/|::|g;
 
 for my $module (sort keys %modules) {
-    my $warnings = "";
-    local $SIG{__WARN__} = sub { $warnings = $_[0] };
-
     SKIP: {
         skip "$module not available", 3 if $extensions !~ /\b$module\b/;
 
@@ -90,3 +89,10 @@ for my $module (sort keys %modules) {
     }
 }
 
+SKIP: {
+    skip "Needs 5.15.6", 1 unless $] > 5.0150051;
+    skip "List::Util not available", 1 if $extensions !~ /\bList::Util\b/;
+    eval 'package List::Util; XSLoader::load(__PACKAGE__, "version")';
+    like $@, "/^Invalid version format/",
+        'correct error msg for invalid versions';
+}

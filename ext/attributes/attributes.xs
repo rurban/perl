@@ -12,7 +12,7 @@
  * 'Perilous to us all are the devices of an art deeper than we possess
  *  ourselves.'                                            --Gandalf
  *
- *     [p.597 of _The Lord of the Rings_, III/xi: "The Palantír"]
+ *     [p.597 of _The Lord of the Rings_, III/xi: "The PalantÃ­r"]
  */
 
 #define PERL_NO_GET_CONTEXT
@@ -161,7 +161,7 @@ usage:
     sv = SvRV(rv);
 
     if (SvOBJECT(sv))
-	sv_setpvn(TARG, HvNAME_get(SvSTASH(sv)), HvNAMELEN_get(SvSTASH(sv)));
+	Perl_sv_sethek(aTHX_ TARG, HvNAME_HEK(SvSTASH(sv)));
 #if 0	/* this was probably a bad idea */
     else if (SvPADMY(sv))
 	sv_setsv(TARG, &PL_sv_no);	/* unblessed lexical */
@@ -183,7 +183,7 @@ usage:
 	    break;
 	}
 	if (stash)
-	    sv_setpvn(TARG, HvNAME_get(stash), HvNAMELEN_get(stash));
+	    Perl_sv_sethek(aTHX_ TARG, HvNAME_HEK(stash));
     }
 
     SvSETMAGIC(TARG);

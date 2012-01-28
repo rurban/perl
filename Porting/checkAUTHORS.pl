@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
-my ($committer, $patch, $author, $date);
+my ($committer, $patch, $author);
+use utf8;
 use Getopt::Long;
 use Text::Wrap;
 $Text::Wrap::columns = 80;
@@ -93,10 +94,10 @@ sub parse_commits_from_stdin {
     for (@lines) {
         next if m/^$/;
         next if m/^(\S*?)^Merge:/ism;    # skip merge commits
-        if (m/^(.*?)^Author:\s*(.*?)^AuthorDate:\s*(.*?)^Commit:\s*(.*?)^(.*)$/gism) {
+        if (m/^(.*?)^Author:\s*(.*?)^AuthorDate:\s*.*?^Commit:\s*(.*?)^(.*)$/gism) {
 
             # new patch
-            ( $patch, $author, $date, $committer ) = ( $1, $2, $3, $4 );
+            ( $patch, $author, $committer ) = ( $1, $2, $3 );
             chomp($author);
             unless ($author) { die $_ }
             chomp($committer);
@@ -212,7 +213,7 @@ sub read_authors_files {
     my (%count, %raw);
     foreach my $filename (@authors) {
         open FH, "<$filename" or die "Can't open $filename: $!";
-        binmode FH, ':encoding(ISO-8859-1)';
+        binmode FH, ':encoding(UTF-8)';
         while (<FH>) {
             next if /^\#/;
             next if /^-- /;
@@ -222,7 +223,7 @@ sub read_authors_files {
                 $name =~ s/\s*\z//;
                 $raw{$email} = $name;
                 $count{$email}++;
-            } elsif (/^([-A-Za-z0-9 .\'À-ÖØöø-ÿ]+)[\t\n]/) {
+            } elsif (/^([-A-Za-z0-9 .\'Ã€-Ã–Ã˜Ã¶Ã¸-Ã¿]+)[\t\n]/) {
 
                 # Name only
                 $untraced{$1}++;
@@ -449,6 +450,16 @@ rgs                                     rgarciasuarez\100free.fr
 sky                                     sky\100nanisky.com
 +                                       artur\100contiller.se
 +                                       arthur\100contiller.se
+smueller                                7k8lrvf02\100sneakemail.com
++                                       kjx9zthh3001\100sneakemail.com
++                                       dtr8sin02\100sneakemail.com
++                                       rt8363b02\100sneakemail.com
++                                       o6hhmk002\100sneakemail.com
++                                       smueller\100cpan.org
++                                       l2ot9pa02\100sneakemail.com
++                                       wyp3rlx02\100sneakemail.com
++                                       0mgwtfbbq\100sneakemail.com
++                                       xyey9001\100sneakemail.com
 steveh                                  steve.m.hay\100googlemail.com
 +                                       stevehay\100planit.com
 +                                       steve.hay\100uk.radan.com
@@ -465,15 +476,6 @@ tonyc                                   tony\100develop-help.com
 #
 \043####\100juerd.nl                    juerd\100cpan.org
 +                                       juerd\100convolution.nl
-7k8lrvf02\100sneakemail.com             kjx9zthh3001\100sneakemail.com
-+                                       dtr8sin02\100sneakemail.com
-+                                       rt8363b02\100sneakemail.com
-+                                       o6hhmk002\100sneakemail.com
-+                                       smueller\100cpan.org
-+                                       l2ot9pa02\100sneakemail.com
-+                                       wyp3rlx02\100sneakemail.com
-+                                       0mgwtfbbq\100sneakemail.com
-+                                       xyey9001\100sneakemail.com
 a.r.ferreira\100gmail.com               aferreira\100shopzilla.com
 abe\100ztreet.demon.nl                  abeltje\100cpan.org
 abela\100hsc.fr                         abela\100geneanet.org
@@ -532,6 +534,7 @@ bepi\100perl.it                         enrico.sorcinelli\100gmail.com
 bert\100alum.mit.edu                    bert\100genscan.com
 bigbang7\100gmail.com                   ddascalescu+github\100gmail.com
 blgl\100stacken.kth.se                  blgl\100hagernas.com
++                                       2bfjdsla52kztwejndzdstsxl9athp\100gmail.com
 brian.d.foy\100gmail.com                bdfoy\100cpan.org
 BQW10602\100nifty.com                   sadahiro\100cpan.org
 
@@ -561,6 +564,7 @@ david.dyck\100fluke.com                 dcd\100tc.fluke.com
 david\100kineticode.com                 david\100wheeler.com
 +                                       david\100wheeler.net
 dennis\100booking.com                   dennis\100camel.ams6.corp.booking.com
++					dennis.kaarsemaker\100booking.com
 +                                       dennis\100kaarsemaker.net
 dev-perl\100pimb.org                    knew-p5p\100pimb.org
 +                                       lists-p5p\100pimb.org
@@ -635,11 +639,12 @@ john\100johnwright.org                  john.wright\100hp.com
 joseph\100cscaper.com                   joseph\1005sigma.com
 joshua\100rodd.us                       jrodd\100pbs.org
 jtobey\100john-edwin-tobey.org          jtobey\100user1.channel1.com
-jpeacock\100rowman.com                  john.peacock\100havurah-software.org
+jpeacock\100messagesystems.com          john.peacock\100havurah-software.org
 +                                       jpeacock\100havurah-software.org
 +                                       jpeacock\100dsl092-147-156.wdc1.dsl.speakeasy.net
 +                                       jpeacock\100jpeacock-hp.doesntexist.org
 +                                       jpeacock\100cpan.org
++                                       jpeacock\100rowman.com
 jql\100accessone.com                    jql\100jql.accessone.com
 jsm28\100hermes.cam.ac.uk               jsm28\100cam.ac.uk
 
@@ -648,6 +653,7 @@ kane\100dwim.org                        kane\100xs4all.net
 +                                       kane\100xs4all.nl
 +                                       jos\100dwim.org
 +                                       jib\100ripe.net
+keith.s.thompson\100gmail.com           kst\100mib.org
 ken\100mathforum.org                    kenahoo\100gmail.com
 +                                       ken.williams\100thomsonreuters.com
 kroepke\100dolphin-services.de          kay\100dolphin-services.de
@@ -715,6 +721,10 @@ ilya\100math.berkeley.edu               ilya\100math.ohio-state.edu
 ilya\100martynov.org                    ilya\100juil.nonet
 
 joshua.pritikin\100db.com               joshua\100paloalto.com
+
+litt\100acm.org                         tlhackque\100yahoo.com
+
+meyering@asic.sc.ti.com                 jim\100meyering.net
 
 okamoto\100corp.hp.com                  okamoto\100hpcc123.corp.hp.com
 orwant\100oreilly.com                   orwant\100media.mit.edu

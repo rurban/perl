@@ -1,7 +1,7 @@
 /*
  * perlio.c
  * Copyright (c) 1996-2006, Nick Ing-Simmons
- * Copyright (c) 2006, 2007, 2008 Larry Wall and others
+ * Copyright (c) 2006, 2007, 2008, 2009, 2010, 2011 Larry Wall and others
  *
  * You may distribute under the terms of either the GNU General Public License
  * or the Artistic License, as specified in the README file.
@@ -155,23 +155,6 @@ perlsio_binmode(FILE *fp, int iotype, int mode)
 #else
     if (PerlLIO_setmode(fileno(fp), mode) != -1) {
 #endif
-#    if defined(WIN32) && defined(__BORLANDC__)
-        /*
-         * The translation mode of the stream is maintained independent 
-of
-         * the translation mode of the fd in the Borland RTL (heavy
-         * digging through their runtime sources reveal).  User has to 
-set
-         * the mode explicitly for the stream (though they don't 
-document
-         * this anywhere). GSAR 97-5-24
-         */
-        fseek(fp, 0L, 0);
-        if (mode & O_BINARY)
-            fp->flags |= _F_BIN;
-        else
-            fp->flags &= ~_F_BIN;
-#    endif
         return 1;
     }
     else
@@ -468,13 +451,6 @@ PerlIO_findFILE(PerlIO *pio)
 
 #include "perliol.h"
 
-/*
- * We _MUST_ have <unistd.h> if we are using lseek() and may have large
- * files
- */
-#ifdef I_UNISTD
-#include <unistd.h>
-#endif
 #ifdef HAS_MMAP
 #include <sys/mman.h>
 #endif
@@ -1543,6 +1519,7 @@ PerlIO_layer_from_ref(pTHX_ SV *sv)
 	/* This isn't supposed to happen, since PerlIO::scalar is core,
 	 * but could happen anyway in smaller installs or with PAR */
 	if (!f)
+	    /* diag_listed_as: Unknown PerlIO layer "%s" */
 	    Perl_ck_warner(aTHX_ packWARN(WARN_LAYER), "Unknown PerlIO layer \"scalar\"");
 	return f;
     }
@@ -2587,8 +2564,10 @@ S_perlio_async_run(pTHX_ PerlIO* f) {
     SAVEDESTRUCTOR_X(S_lockcnt_dec, (void*)f);
     PerlIO_lockcnt(f)++;
     PERL_ASYNC_CHECK();
-    if ( !(PerlIOBase(f)->flags & PERLIO_F_CLEARED) )
+    if ( !(PerlIOBase(f)->flags & PERLIO_F_CLEARED) ) {
+	LEAVE;
 	return 0;
+    }
     /* we've just run some perl-level code that could have done
      * anything, including closing the file or clearing this layer.
      * If so, free any lower layers that have already been
@@ -2600,6 +2579,7 @@ S_perlio_async_run(pTHX_ PerlIO* f) {
 	*f = l->next;
 	Safefree(l);
     }
+    LEAVE;
     return 1;
 }
 
@@ -3241,9 +3221,7 @@ PerlIOStdio_invalidate_fileno(pTHX_ FILE *f)
     f->_file = -1;
     return 1;
 #  elif defined(WIN32)
-#    if defined(__BORLANDC__)
-    f->fd = PerlLIO_dup(fileno(f));
-#    elif defined(UNDER_CE)
+#    if defined(UNDER_CE)
     /* WIN_CE does not have access to FILE internals, it hardly has FILE
        structure at all
      */

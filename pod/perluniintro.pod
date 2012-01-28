@@ -270,10 +270,9 @@ always produced. If you want to force the production of Unicode
 characters regardless of the numeric value, use C<pack("U", ...)>
 instead of C<\x..>, C<\x{...}>, or C<chr()>.
 
-You can also use the C<charnames> pragma to invoke characters
+You can invoke characters
 by name in double-quoted strings:
 
-    use charnames ':full';
     my $arabic_alef = "\N{ARABIC LETTER ALEF}";
 
 And, as mentioned above, you can also C<pack()> numbers into Unicode
@@ -304,8 +303,8 @@ will work on the Unicode characters (see L<perlunicode> and L<perlretut>).
 Note that Perl considers grapheme clusters to be separate characters, so for
 example
 
-    use charnames ':full';
-    print length("\N{LATIN CAPITAL LETTER A}\N{COMBINING ACUTE ACCENT}"), "\n";
+ print length("\N{LATIN CAPITAL LETTER A}\N{COMBINING ACUTE ACCENT}"),
+       "\n";
 
 will print 2, not 1.  The only exception is that regular expressions
 have C<\X> for matching an extended grapheme cluster.  (Thus C<\X> in a
@@ -476,7 +475,7 @@ displayed as C<\x..>, and the rest of the characters as themselves:
      join("",
        map { $_ > 255 ?                  # if wide character...
               sprintf("\\x{%04X}", $_) :  # \x{...}
-              chr($_) =~ /[[:cntrl:]]/ ?  # else if control character ...
+              chr($_) =~ /[[:cntrl:]]/ ?  # else if control character...
               sprintf("\\x%02X", $_) :    # \x..
               quotemeta(chr($_))          # else quoted or as themselves
          } unpack("W*", $_[0]));           # unpack Unicode characters
@@ -617,7 +616,7 @@ besides the familiar 0 to 9, such as the Arabic and Indic digits.
 Perl does not support string-to-number conversion for digits other
 than ASCII 0 to 9 (and ASCII a to f for hexadecimal).
 To get safe conversions from any Unicode string, use
-L<Unicode::UCDE<sol>num()|Unicode::UCD/num>.
+L<Unicode::UCD/num()>.
 
 =back
 
@@ -692,7 +691,7 @@ and the C<length()> function:
     my $unicode = chr(0x100);
     print length($unicode), "\n"; # will print 1
     require Encode;
-    print length(Encode::encode_utf8($unicode)), "\n"; # will print 2
+    print length(Encode::encode_utf8($unicode)),"\n"; # will print 2
     use bytes;
     print length($unicode), "\n"; # will also print 2
                                   # (the 0xC4 0x80 of the UTF-8)
@@ -802,17 +801,19 @@ L<http://www.cl.cam.ac.uk/~mgk25/unicode.html>
 
 How Does Unicode Work With Traditional Locales?
 
-Perl tries to keep the two separated.  Code points that are above 255
-are treated as Unicode; those below 256, generally as locale.  This
-works reasonably well except in some case-insensitive regular expression
-pattern matches that in Unicode would cross the 255/256 boundary.  These
-are disallowed.
-Also, the C<\p{}> and C<\N{}> constructs silently assume Unicode values
-even for code points below 256.
-See also L<perlrun> for the
-description of the C<-C> switch and its environment counterpart,
-C<$ENV{PERL_UNICODE}> to see how to enable various Unicode features,
-for example by using locale settings.
+Starting in Perl 5.16, you can specify
+
+    use locale ':not_characters';
+
+to get Perl to work well with tradtional locales.  The catch is that you
+have to translate from the locale character set to/from Unicode
+yourself.  See L</Unicode IE<sol>O> above for how to
+
+    use open ':locale';
+
+to accomplish this, but full details are in L<perllocale/Unicode and
+UTF-8>, including gotchas that happen if you don't specifiy
+C<:not_characters>.
 
 =back
 

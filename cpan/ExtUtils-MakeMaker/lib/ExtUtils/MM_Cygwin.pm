@@ -9,8 +9,12 @@ require ExtUtils::MM_Unix;
 require ExtUtils::MM_Win32;
 our @ISA = qw( ExtUtils::MM_Unix );
 
+<<<<<<< HEAD
 our $VERSION = '6.57_06';
 our $VERSION = '6.58_06';
+=======
+our $VERSION = '6.63_02';
+>>>>>>> blead
 
 
 =head1 NAME

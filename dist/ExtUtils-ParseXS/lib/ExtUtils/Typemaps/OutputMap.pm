@@ -2,7 +2,6 @@ package ExtUtils::Typemaps::OutputMap;
 use 5.006001;
 use strict;
 use warnings;
-#use Carp qw(croak);
 
 =head1 NAME
 
@@ -109,10 +108,11 @@ If the optimization can not be applied, this returns undef.
 If it can be applied, this method returns a hash reference containing
 the following information:
 
-  type: Any of the characters i, u, n, p
+  type:      Any of the characters i, u, n, p
   with_size: Bool indicating whether this is the sv_setpvn variant
-  what: The code that actually evaluates to the output scalar
-  what_size: If "with_size", this has the string length (as code, not constant)
+  what:      The code that actually evaluates to the output scalar
+  what_size: If "with_size", this has the string length (as code,
+             not constant)
 
 =cut
 
@@ -183,7 +183,7 @@ Steffen Mueller C<<smueller@cpan.org>>
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2011 Steffen Mueller
+Copyright 2009, 2010, 2011, 2012 Steffen Mueller
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

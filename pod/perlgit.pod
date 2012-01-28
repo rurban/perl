@@ -51,7 +51,7 @@ branches in the repository:
 
 The branches that begin with "origin" correspond to the "git remote"
 that you cloned from (which is named "origin"). Each branch on the
-remote will be exactly tracked by theses branches. You should NEVER do
+remote will be exactly tracked by these branches. You should NEVER do
 work on these remote tracking branches. You only ever do work in a
 local branch. Local branches can be configured to automerge (on pull)
 from a designated remote tracking branch. This is the case with the
@@ -258,7 +258,7 @@ Now you should create a patch file for all your local changes:
   % git format-patch -M origin..
   0001-Rename-Leon-Brocard-to-Orange-Brocard.patch
 
-You should now send an email to to
+You should now send an email to
 L<perlbug@perl.org|mailto:perlbug@perl.org> with a description of your
 changes, and include this patch file as an attachment. In addition to
 being tracked by RT, mail to perlbug will automatically be forwarded to
@@ -400,7 +400,7 @@ testcase:
   # If you get './makedepend: 1: Syntax error: Unterminated quoted
   # string' when bisecting versions of perl older than 5.9.5 this hack
   # will work around the bug in makedepend.SH which was fixed in
-  # version 96a8704c. Make sure to comment out `git checkout makedepend.SH'
+  # version 96a8704c. Make sure to comment out 'git checkout makedepend.SH'
   # below too.
   git show blead:makedepend.SH > makedepend.SH
 
@@ -720,7 +720,7 @@ repository is "p5p"):
   $ git rebase p5p/blead
 
 You will see your commits being re-applied, and you will then be able to
-push safetly.  More information about rebasing can be found in the
+push safely.  More information about rebasing can be found in the
 documentation for the git-rebase(1) command.
 
 For larger sets of commits that only make sense together, or that would

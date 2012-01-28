@@ -18,13 +18,14 @@ use File::Basename              qw[dirname];
 use IPC::Cmd                    qw[can_run];
 use Locale::Maketext::Simple    Class => 'CPANPLUS', Style => 'gettext';
 use Module::Load::Conditional   qw[check_install];
+use version;
 
 
 =pod
 
 =head1 NAME
 
-CPANPLUS::Config
+CPANPLUS::Config - configuration defaults and heuristics for CPANPLUS
 
 =head1 SYNOPSIS
 
@@ -148,6 +149,19 @@ are run interactively or not. Defaults to 'true'.
 =cut
 
         $Conf->{'conf'}->{'allow_build_interactivity'} = 1;
+
+=item allow_unknown_prereqs
+
+Boolean flag to indicate that unresolvable prereqs are acceptable.
+If C<true> then only warnings will be issued (the behaviour before 0.9114)
+when a module is unresolvable from any our sources (CPAN and/or
+C<custom_sources>). If C<false> then an unresolvable prereq will fail
+during the C<prepare> stage of distribution installation.
+Defaults to C<true>.
+
+=cut
+
+        $Conf->{'conf'}->{'allow_unknown_prereqs'} = 1;
 
 =item base
 
@@ -350,7 +364,7 @@ and L<CPANPLUS::Dist::Build> are available.
         $Conf->{'conf'}->{'prefer_makefile'} =
             ( $] >= 5.010001 or
               ( check_install( module => 'Module::Build', version => '0.32' ) and
-                check_install( module => INSTALLER_BUILD, version => '0.24' ) )
+                check_install( module => INSTALLER_BUILD, version => '0.60' ) )
               ? 0 : 1 );
 
 =item prereqs
@@ -589,6 +603,8 @@ remains empty if you do not require super user permissions to install.
 
 =item perlwrapper
 
+B<DEPRECATED>
+
 A string holding the path to the C<cpanp-run-perl> utility bundled
 with CPANPLUS, which is used to enable autoflushing in spawned processes.
 
@@ -674,6 +690,12 @@ with CPANPLUS, which is used to enable autoflushing in spawned processes.
 
             ### we should have a $path by now ideally, if so return it
             return $path if defined $path;
+
+            ### CPANPLUS::Dist::MM doesn't require this anymore
+            ### but CPANPLUS::Dist::Build might if it is less than 0.60
+            my $cpdb = check_install( module => INSTALLER_BUILD );
+            return '' unless
+              $cpdb and eval { version->parse($cpdb->{version}) < version->parse('0.60') };
 
             ### if not, warn about it and give sensible default.
             ### XXX try to be a no-op instead then..

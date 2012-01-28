@@ -23,7 +23,7 @@ local $Params::Check::VERBOSE = 1;
 
 =head1 NAME
 
-CPANPLUS::Dist::MM
+CPANPLUS::Dist::MM - distribution class for MakeMaker related modules
 
 =head1 SYNOPSIS
 
@@ -353,20 +353,8 @@ sub prepare {
             ### in @INC, stopping us from resolving dependencies on CPANPLUS
             ### at bootstrap time properly.
 
-            ### XXX this fails under ipc::run due to the extra quotes,
-            ### but it works in ipc::open3. however, ipc::open3 doesn't work
-            ### on win32/cygwin. XXX TODO get a windows box and sort this out
-            # my $cmd =  qq[$perl -MEnglish -le ] .
-            #            QUOTE_PERL_ONE_LINER->(
-            #                qq[\$OUTPUT_AUTOFLUSH++,do(q($makefile_pl))]
-            #            )
-            #            . $mmflags;
-
-            # my $flush = OPT_AUTOFLUSH;
-            # my $cmd     = "$perl $flush $makefile_pl $mmflags";
-
-            my $run_perl    = $conf->get_program('perlwrapper');
-            my $cmd         = [$perl, $run_perl, $makefile_pl, @mmflags];
+            my @run_perl    = ( '-e', PERL_WRAPPER );
+            my $cmd         = [$perl, @run_perl, $makefile_pl, @mmflags];
 
             ### set ENV var to tell underlying code this is what we're
             ### executing.
@@ -414,6 +402,17 @@ sub prepare {
 
         ### if we got here, we managed to make a 'makefile' ###
         $dist->status->makefile( MAKEFILE->($dir) );
+
+        ### Make (haha) sure that Makefile.PL is older than the Makefile
+        ### we just generated.
+        eval {
+          my $makestat = ( stat MAKEFILE->( $dir ) )[9];
+          my $mplstat = ( stat MAKEFILE_PL->( $cb->_safe_path( path => $dir ) ) )[9];
+          if ( $makestat < $mplstat ) {
+            my $ftime = $makestat - 60;
+            utime $ftime, $ftime, MAKEFILE_PL->( $cb->_safe_path( path => $dir ) );
+          }
+        };
 
         ### start resolving prereqs ###
         my $prereqs = $self->status->prereqs;

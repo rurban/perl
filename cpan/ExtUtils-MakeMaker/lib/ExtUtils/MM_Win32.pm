@@ -27,7 +27,7 @@ use ExtUtils::MakeMaker qw( neatvalue );
 require ExtUtils::MM_Any;
 require ExtUtils::MM_Unix;
 our @ISA = qw( ExtUtils::MM_Any ExtUtils::MM_Unix );
-our $VERSION = '6.58';
+our $VERSION = '6.63_02';
 
 $ENV{EMXSHELL} = 'sh'; # to run `commands`
 
@@ -141,21 +141,13 @@ sub init_DIRFILESEP {
                                                        : '\\';
 }
 
-=item B<init_others>
+=item init_tools
 
-Override some of the Unix specific commands with portable
-ExtUtils::Command ones.
-
-Also provide defaults for LD and AR in case the %Config values aren't
-set.
-
-LDLOADLIBS's default is changed to $Config{libs}.
-
-Adjustments are made for Borland's quirks needing -L to come first.
+Override some of the slower, portable commands with Windows specific ones.
 
 =cut
 
-sub init_others {
+sub init_tools {
     my ($self) = @_;
 
     $self->{NOOP}     ||= 'rem';
@@ -165,13 +157,32 @@ sub init_others {
       "\$(PERLRUN) $self->{PERL_SRC}/win32/bin/pl2bat.pl" : 
       'pl2bat.bat';
 
+    $self->SUPER::init_tools;
+
+    # Setting SHELL from $Config{sh} can break dmake.  Its ok without it.
+    delete $self->{SHELL};
+
+    return;
+}
+
+
+=item init_others
+
+Override the default link and compile tools.
+
+LDLOADLIBS's default is changed to $Config{libs}.
+
+Adjustments are made for Borland's quirks needing -L to come first.
+
+=cut
+
+sub init_others {
+    my $self = shift;
+
     $self->{LD}     ||= 'link';
     $self->{AR}     ||= 'lib';
 
     $self->SUPER::init_others;
-
-    # Setting SHELL from $Config{sh} can break dmake.  Its ok without it.
-    delete $self->{SHELL};
 
     $self->{LDLOADLIBS} ||= $Config{libs};
     # -Lfoo must come first for Borland, so we put it in LDDLFLAGS
@@ -187,7 +198,7 @@ sub init_others {
         $self->{LDDLFLAGS} .= " $libpath";
     }
 
-    return 1;
+    return;
 }
 
 
@@ -485,44 +496,34 @@ sub oneliner {
 
 
 sub quote_literal {
-    my($self, $text) = @_;
+    my($self, $text, $opts) = @_;
+    $opts->{allow_variables} = 1 unless defined $opts->{allow_variables};
 
-    # DOS batch processing is hilarious:
-    # Quotes need to be converted into triple quotes.
-    # Certain special characters need to be escaped with a caret if an odd
-    # number of quotes came before them.
-    my @text        = split '', $text;
-    my $quote_count = 0;
-    my %caret_chars = map { $_ => 1 } qw( < > | );
-    for my $char ( @text ) {
-        if ( $char eq '"' ) {
-            $quote_count++;
-            $char = '"""';
-        }
-        elsif ( $caret_chars{$char} and $quote_count % 2 ) {
-            $char = "^$char";
-        }
-        elsif ( $char eq "\\" ) {
-            $char = "\\\\";
-        }
-    }
-    $text = join '', @text;
+    # See: http://www.autohotkey.net/~deleyd/parameters/parameters.htm#CPP
+
+    # Apply the Microsoft C/C++ parsing rules
+    $text =~ s{\\\\"}{\\\\\\\\\\"}g;  # \\" -> \\\\\"
+    $text =~ s{(?<!\\)\\"}{\\\\\\"}g; # \"  -> \\\"
+    $text =~ s{(?<!\\)"}{\\"}g;       # "   -> \"
+    $text = qq{"$text"} if $text =~ /[ \t]/;
+
+    # Apply the Command Prompt parsing rules (cmd.exe)
+    my @text = split /("[^"]*")/, $text;
+    # We should also escape parentheses, but it breaks one-liners containing
+    # $(MACRO)s in makefiles.
+    s{([<>|&^@!])}{^$1}g foreach grep { !/^"[^"]*"$/ } @text;
+    $text = join('', @text);
     
-    # There is a terribly confusing edge case here, where this will do entirely the wrong thing:
-    # perl -e "use Data::Dumper; @ARGV = '%PATH%'; print Dumper( \@ARGV );print qq{@ARGV};" --
-    # I have no idea how to fix this manually, much less programmatically.
-    # However as it is such a rare edge case i'll just leave this documentation here and hope it never happens.
-
-    # dmake eats '{' inside double quotes and leaves alone { outside double
-    # quotes; however it transforms {{ into { either inside and outside double
-    # quotes.  It also translates }} into }.  The escaping below is not
-    # 100% correct.
+    # dmake expands {{ to { and }} to }.
     if( $self->is_make_type('dmake') ) {
         $text =~ s/{/{{/g;
-        $text =~ s/}}/}}}/g;
+        $text =~ s/}/}}/g;
     }
 
-    return qq{"$text"};
+    $text = $opts->{allow_variables}
+      ? $self->escape_dollarsigns($text) : $self->escape_all_dollarsigns($text);
+
+    return $text;
 }
 
 

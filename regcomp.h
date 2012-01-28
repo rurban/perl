@@ -311,6 +311,8 @@ struct regnode_charclass_class {
  * are done to share them, as described below.  If necessary, the ANYOF_LOCALE
  * and ANYOF_CLASS bits could be shared with a space penalty for locale nodes,
  * but this isn't quite so easy, as the optimizer also uses ANYOF_CLASS.
+ * Another option would be to push them into new nodes.  E.g. there could be an
+ * ANYOF_LOCALE node that would be in place of the flag of the same name.
  * Once the planned change to compile all the above-latin1 code points is done,
  * then the UNICODE_ALL bit can be freed up, with a small performance penalty.
  * If flags need to be added that are applicable to the synthetic start class
@@ -492,6 +494,7 @@ struct regnode_charclass_class {
 #define REG_SEEN_VERBARG        0x00000080
 #define REG_SEEN_CUTGROUP       0x00000100
 #define REG_SEEN_RUN_ON_COMMENT 0x00000200
+#define REG_SEEN_EXACTF_SHARP_S 0x00000400
 
 START_EXTERN_C
 
@@ -837,7 +840,7 @@ re.pm, especially to the documentation.
 #ifdef DEBUGGING
 
 #define GET_RE_DEBUG_FLAGS_DECL VOL IV re_debug_flags \
-	__attribute__unused__ = 0; GET_RE_DEBUG_FLAGS;
+	PERL_UNUSED_DECL = 0; GET_RE_DEBUG_FLAGS;
 
 #define RE_PV_COLOR_DECL(rpv,rlen,isuni,dsv,pv,l,m,c1,c2) \
     const char * const rpv =                          \

@@ -14,7 +14,7 @@ Currently, the following modules are included:
 
 =over 4
 
-=item B<Locale::Codes::Country>
+=item B<Locale::Codes::Country, Locale::Country>
 
 This includes support for country codes (such as those listed in ISO-3166)
 to specify the country.
@@ -22,7 +22,7 @@ to specify the country.
 Because this module was originally distributed as Locale::Country, it is
 also available under that name.
 
-=item B<Locale::Codes::Language>
+=item B<Locale::Codes::Language, Locale::Language>
 
 This includes support for language codes (such as those listed in ISO-639)
 to specify the language.
@@ -30,7 +30,7 @@ to specify the language.
 Because this module was originally distributed as Locale::Language, it is
 also available under that name.
 
-=item B<Locale::Codes::Currency>
+=item B<Locale::Codes::Currency, Locale::Currency>
 
 This includes support for currency codes (such as those listed in ISO-4217)
 to specify the currency.
@@ -38,7 +38,7 @@ to specify the currency.
 Because this module was originally distributed as Locale::Currency, it is
 also available under that name.
 
-=item B<Locale::Codes::Script>
+=item B<Locale::Codes::Script, Locale::Script>
 
 This includes support for script codes (such as those listed in ISO-15924)
 to specify the script.
@@ -55,6 +55,11 @@ in the IANA language registry) to specify the language extension.
 
 This includes support for language variation codes (such as those listed
 in the IANA language registry) to specify the language variation.
+
+=item B<Locale::Codes::LangFam>
+
+This includes support for language family codes (such as those listed
+in ISO 639-5) to specify families of languages.
 
 =back
 
@@ -96,6 +101,8 @@ in the distribution including:
 
 =item B<Locale::Codes::LangVar_codes>
 
+=item B<Locale::Codes::LangFam_codes>
+
 =back
 
 These modules are not intended to be used by programmers. They contain functions
@@ -124,11 +131,15 @@ Ideally, I'd only get data from an official source, but sometimes that
 is not possible. For example the ISO standards are not typically
 available for free, so I may have to get some of that data from
 alternate sources that I'm confident are getting their data from the
-official source.
+official source.  However, I will always be hesitant to accept a
+non-official source.
 
-As an example, I get some country data from the CIA World
+As an example, I used to get some country data from the CIA World
 Factbook. Given the nature of the source, I'm sure they're updating
 data from the official sources and I consider it "nearly" official.
+However, even in this case, I found that they were adding codes that
+were not part of the standard, so I have stopped using them as a
+source.
 
 There are many 3rd party sites which maintain lists (many of which are
 actually in a more convenient form than the official sites).
@@ -187,11 +198,26 @@ alias "North Korea" since that's a very common way to specify the
 country (please don't request this... I've already added it).
 
 On the other hand, a request to add Zaire as an alias for "Congo, The
-Democratic Republic of" may not be honored. The country's official
-name is not Zaire, so adding it as an alias violates the standard.
+Democratic Republic of" will not be honored. The country's official
+name is no longer Zaire, so adding it as an alias violates the standard.
 Zaire was kept as an alias in versions prior to 3.00, but it has been
 removed. Other aliases (if any) which no longer appear in any standard
+(and which are not common variations of the name in the standards)
 have also been removed.
+
+=head1 DEPRECATED CODES
+
+Occasionally, a code is deprecated, but it may still be desirable to
+have access to it.
+
+Although there is no way to see every code that has ever existed and
+been deprecated (since most codesets do not have that information
+available), as of version 3.20, every code which has ever been included
+in these modules can be referenced.
+
+For more information, refer to the documentation on the code2XXX, XXX2code,
+all_XXX_codes, and all_XXX_names function in the B<Locale::Codes::API>
+documentation.
 
 =head1 SEE ALSO
 

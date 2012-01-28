@@ -9,14 +9,14 @@ use warnings;
 use bytes;
 
 use IO::File;
-use IO::Uncompress::RawInflate  2.037 ;
-use IO::Compress::Base::Common  2.037 qw(:Status createSelfTiedObject);
-use IO::Uncompress::Adapter::Inflate  2.037 ;
-use IO::Uncompress::Adapter::Identity 2.037 ;
-use IO::Compress::Zlib::Extra 2.037 ;
-use IO::Compress::Zip::Constants 2.037 ;
+use IO::Uncompress::RawInflate  2.045 ;
+use IO::Compress::Base::Common  2.045 qw(:Status createSelfTiedObject);
+use IO::Uncompress::Adapter::Inflate  2.045 ;
+use IO::Uncompress::Adapter::Identity 2.045 ;
+use IO::Compress::Zlib::Extra 2.045 ;
+use IO::Compress::Zip::Constants 2.045 ;
 
-use Compress::Raw::Zlib  2.037 qw(crc32) ;
+use Compress::Raw::Zlib  2.045 qw(crc32) ;
 
 BEGIN
 {
@@ -31,7 +31,7 @@ require Exporter ;
 
 our ($VERSION, @ISA, @EXPORT_OK, %EXPORT_TAGS, $UnzipError, %headerLookup);
 
-$VERSION = '2.037';
+$VERSION = '2.046';
 $UnzipError = '';
 
 @ISA    = qw(Exporter IO::Uncompress::RawInflate);
@@ -64,7 +64,7 @@ sub unzip
 
 sub getExtraParams
 {
-    use IO::Compress::Base::Common  2.037 qw(:Parse);
+    use IO::Compress::Base::Common  2.045 qw(:Parse);
 
     
     return (
@@ -665,12 +665,6 @@ sub _readZipHeader($)
         my $LzmaPropertyData;
         $self->smartReadExact(\$LzmaPropertyData, $LzmaPropertiesSize)
                 or return $self->saveErrorString(undef, "Truncated file");
-        #my $LzmaInfo = unpack ("C", substr($LzmaPropertyData, 0, 1));    
-        #my $LzmaDictSize = unpack ("V", substr($LzmaPropertyData, 1, 4));    
-
-        # Create an LZMA_Alone header 
-        #$self->pushBack($LzmaPropertyData . 
-        #        $uncompressedLength->getPacked_V64());
 
         if (! $streamingMode) {
             *$self->{ZipData}{CompressedLen}->subtract(4 + $LzmaPropertiesSize) ;
@@ -685,8 +679,6 @@ sub _readZipHeader($)
     }
     elsif ($compressedMethod == ZIP_CM_STORE)
     {
-        # TODO -- add support for reading uncompressed
-
         *$self->{Type} = 'zip-stored';
         
         my $obj =
@@ -1791,7 +1783,7 @@ stream at a time.
         or die "Cannot open $zipfile: $UnzipError";
 
     my $status;
-    for ($status = 1; ! $u->eof(); $status = $u->nextStream())
+    for ($status = 1; $stream > 0; $status = $u->nextStream())
     {
  
         my $name = $u->getHeaderInfo()->{Name};
@@ -1820,7 +1812,7 @@ skipping to the next one.
 
 L<Compress::Zlib>, L<IO::Compress::Gzip>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Compress::RawDeflate>, L<IO::Uncompress::RawInflate>, L<IO::Compress::Bzip2>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
 
-L<Compress::Zlib::FAQ|Compress::Zlib::FAQ>
+L<IO::Compress::FAQ|IO::Compress::FAQ>
 
 L<File::GlobMapper|File::GlobMapper>, L<Archive::Zip|Archive::Zip>,
 L<Archive::Tar|Archive::Tar>,

@@ -359,7 +359,7 @@
 /* Rats: if dTHR is just blank then the subsequent ";" throws an error */
 /* Declaring a *function*, instead of a variable, ensures that we don't rely
    on being able to suppress "unused" warnings.  */
-#define dNOOP extern int Perl___notused()
+#define dNOOP extern int Perl___notused(void)
 
 #ifndef pTHX
 /* Don't bother defining tTHX and sTHX; using them outside
@@ -490,9 +490,6 @@ register struct op *Perl_op asm(stringify(OP_IN_REGISTER));
 #  endif
 # endif
 #endif
-
-#define WITH_THX(s) STMT_START { dTHX; s; } STMT_END
-#define WITH_THR(s) WITH_THX(s)
 
 #ifndef BYTEORDER  /* Should never happen -- byteorder is in config.h */
 #   define BYTEORDER 0x1234
@@ -977,17 +974,6 @@ EXTERN_C int usleep(unsigned int);
 #define PERL_DEFAULT_DO_EXEC3_IMPLEMENTATION
 #endif
 
-/* Cannot include embed.h here on Win32 as win32.h has not
-   yet been included and defines some config variables e.g. HAVE_INTERP_INTERN
- */
-#if !defined(PERL_FOR_X2P) && !(defined(WIN32)||defined(VMS))
-#  include "embed.h"
-#  ifndef PERL_MAD
-#    undef op_getmad
-#    define op_getmad(arg,pegop,slot) NOOP
-#  endif
-#endif
-
 #define MEM_SIZE Size_t
 
 /* Round all values passed to malloc up, by default to a multiple of
@@ -1243,7 +1229,7 @@ EXTERN_C int usleep(unsigned int);
 #   define _SOCKADDR_LEN
 #endif
 
-#if defined(HAS_SOCKET) && !defined(VMS) && !defined(WIN32) /* VMS/WIN32 handle sockets via vmsish.h/win32.h */
+#if defined(HAS_SOCKET) && !defined(WIN32) /* WIN32 handles sockets via win32.h */
 # include <sys/socket.h>
 # if defined(USE_SOCKS) && defined(I_SOCKS)
 #   if !defined(INCLUDE_PROTOTYPES)
@@ -1369,11 +1355,20 @@ EXTERN_C char *crypt(const char *, const char *);
 
 #ifdef PERL_CORE
 # define DEFSV (0 + GvSVn(PL_defgv))
+# define DEFSV_set(sv) \
+    (SvREFCNT_dec(GvSV(PL_defgv)), GvSV(PL_defgv) = SvREFCNT_inc(sv))
+# define SAVE_DEFSV                \
+    (                               \
+	save_gp(PL_defgv, 0),        \
+	GvINTRO_off(PL_defgv),        \
+	SAVEGENERICSV(GvSV(PL_defgv)), \
+	GvSV(PL_defgv) = NULL           \
+    )
 #else
 # define DEFSV GvSVn(PL_defgv)
+# define DEFSV_set(sv) (GvSV(PL_defgv) = (sv))
+# define SAVE_DEFSV SAVESPTR(GvSV(PL_defgv))
 #endif
-#define DEFSV_set(sv) (GvSV(PL_defgv) = (sv))
-#define SAVE_DEFSV SAVESPTR(GvSV(PL_defgv))
 
 #define ERRHV GvHV(PL_errgv)	/* XXX unused, here for compatibility */
 
@@ -2584,11 +2579,6 @@ typedef struct clone_params CLONE_PARAMS;
 
 #if defined(VMS)
 #   include "vmsish.h"
-#   include "embed.h"
-#  ifndef PERL_MAD
-#    undef op_getmad
-#    define op_getmad(arg,pegop,slot) NOOP
-#  endif
 #   define ISHISH "vms"
 #endif
 
@@ -2618,11 +2608,6 @@ typedef struct clone_params CLONE_PARAMS;
 
 #ifdef __SYMBIAN32__
 #   include "symbian/symbianish.h"
-#   include "embed.h"
-#  ifndef PERL_MAD
-#    undef op_getmad
-#    define op_getmad(arg,pegop,slot) NOOP
-#  endif
 #   define ISHISH "symbian"
 #endif
 
@@ -3210,6 +3195,18 @@ typedef pthread_key_t	perl_key;
 #endif
 
 #define SVfARG(p) ((void*)(p))
+
+#ifndef HEKf
+#  define HEKf "2p"
+#endif
+
+/* Not ideal, but we cannot easily include a number in an already-numeric
+ * format sequence. */
+#ifndef HEKf256
+#  define HEKf256 "3p"
+#endif
+
+#define HEKfARG(p) ((void*)(p))
 
 #ifdef PERL_CORE
 /* not used; but needed for backward compatibility with XS code? - RMB */
@@ -4218,6 +4215,8 @@ START_EXTERN_C
 /* handy constants */
 EXTCONST char PL_warn_uninit[]
   INIT("Use of uninitialized value%s%s%s");
+EXTCONST char PL_warn_uninit_sv[]
+  INIT("Use of uninitialized value%"SVf"%s%s");
 EXTCONST char PL_warn_nosemi[]
   INIT("Semicolon seems to be missing");
 EXTCONST char PL_warn_reserved[]
@@ -4292,10 +4291,18 @@ EXTCONST char PL_uuemap[65]
 
 #ifdef DOINIT
 EXTCONST char PL_uudmap[256] =
-#include "uudmap.h"
+#  ifdef PERL_MICRO
+#    include "uuudmap.h"
+#  else
+#    include "uudmap.h"
+#  endif
 ;
 EXTCONST char PL_bitcount[256] =
-#  include "bitcount.h"
+#  ifdef PERL_MICRO
+#    include "ubitcount.h"
+#else
+#    include "bitcount.h"
+#  endif
 ;
 EXTCONST char* const PL_sig_name[] = { SIG_NAME };
 EXTCONST int         PL_sig_num[]  = { SIG_NUM };
@@ -4817,7 +4824,7 @@ typedef enum {
 #define HINT_STRICT_REFS	0x00000002 /* strict pragma */
 #define HINT_LOCALE		0x00000004 /* locale pragma */
 #define HINT_BYTES		0x00000008 /* bytes pragma */
-#define HINT_ARYBASE		0x00000010 /* $[ is non-zero */
+#define HINT_LOCALE_NOT_CHARS	0x00000010 /* locale ':not_characters' pragma */
 				/* Note: 20,40,80 used for NATIVE_HINTS */
 				/* currently defined by vms/vmsish.h */
 
@@ -4845,6 +4852,8 @@ typedef enum {
 #define HINT_NO_AMAGIC		0x01000000 /* overloading pragma */
 
 #define HINT_RE_FLAGS		0x02000000 /* re '/xism' pragma */
+
+#define HINT_FEATURE_MASK	0x1c000000 /* 3 bits for feature bundles */
 
 /* The following are stored in $^H{sort}, not in PL_hints */
 #define HINT_SORT_SORT_BITS	0x000000FF /* allow 256 different ones */
@@ -4900,6 +4909,8 @@ typedef void(*Perl_ophook_t)(pTHX_ OP*);
 typedef int (*Perl_keyword_plugin_t)(pTHX_ char*, STRLEN, OP**);
 typedef void(*Perl_cpeep_t)(pTHX_ OP *, OP *);
 
+typedef void(*globhook_t)(pTHX);
+
 #define KEYWORD_PLUGIN_DECLINE 0
 #define KEYWORD_PLUGIN_STMT    1
 #define KEYWORD_PLUGIN_EXPR    2
@@ -4935,10 +4946,10 @@ struct interpreter {
 */
 
 /* Set up PERLVAR macros for populating structs */
-#  define PERLVAR(var,type) type var;
-#  define PERLVARA(var,n,type) type var[n];
-#  define PERLVARI(var,type,init) type var;
-#  define PERLVARIC(var,type,init) type var;
+#  define PERLVAR(prefix,var,type) type prefix##var;
+#  define PERLVARA(prefix,var,n,type) type prefix##var[n];
+#  define PERLVARI(prefix,var,type,init) type prefix##var;
+#  define PERLVARIC(prefix,var,type,init) type prefix##var;
 
 struct interpreter {
 #  include "intrpvar.h"
@@ -5037,10 +5048,10 @@ struct tempsym; /* defined in pp_pack.c */
  * these include variables that would have been their struct-s
  */
 
-#define PERLVAR(var,type) EXT type PL_##var;
-#define PERLVARA(var,n,type) EXT type PL_##var[n];
-#define PERLVARI(var,type,init) EXT type  PL_##var INIT(init);
-#define PERLVARIC(var,type,init) EXTCONST type PL_##var INIT(init);
+#define PERLVAR(prefix,var,type) EXT type PL_##var;
+#define PERLVARA(prefix,var,n,type) EXT type PL_##var[n];
+#define PERLVARI(prefix,var,type,init) EXT type  PL_##var INIT(init);
+#define PERLVARIC(prefix,var,type,init) EXTCONST type PL_##var INIT(init);
 
 #if !defined(MULTIPLICITY)
 START_EXTERN_C
@@ -5053,13 +5064,13 @@ END_EXTERN_C
 #  undef PL_na
 #endif
 
-#if defined(WIN32)
-/* Now all the config stuff is setup we can include embed.h */
-#  include "embed.h"
-#  ifndef PERL_MAD
-#    undef op_getmad
-#    define op_getmad(arg,pegop,slot) NOOP
-#  endif
+/* Now all the config stuff is setup we can include embed.h
+   In particular, need the relevant *ish file included already, as it may
+   define HAVE_INTERP_INTERN  */
+#include "embed.h"
+#ifndef PERL_MAD
+#  undef op_getmad
+#  define op_getmad(arg,pegop,slot) NOOP
 #endif
 
 #ifndef PERL_GLOBAL_STRUCT
@@ -5106,7 +5117,11 @@ EXTCONST runops_proc_t PL_runops_dbg
 
 #ifdef DOINIT
 EXTCONST U8 PL_magic_data[256] =
-#include "mg_data.h"
+#  ifdef PERL_MICRO
+#    include "umg_data.h"
+#  else
+#    include "mg_data.h"
+#  endif
 ;
 #else
 EXTCONST U8 PL_magic_data[256];
@@ -5250,11 +5265,23 @@ typedef struct am_table_short AMTS;
 #define SET_NUMERIC_LOCAL() \
 	set_numeric_local();
 
+/* Returns non-zero If the plain locale pragma without a parameter is in effect
+ */
 #define IN_LOCALE_RUNTIME	(CopHINTS_get(PL_curcop) & HINT_LOCALE)
+
+/* Returns non-zero If either form of the locale pragma is in effect */
+#define IN_SOME_LOCALE_FORM_RUNTIME   \
+		(CopHINTS_get(PL_curcop) & (HINT_LOCALE|HINT_LOCALE_NOT_CHARS))
+
 #define IN_LOCALE_COMPILETIME	(PL_hints & HINT_LOCALE)
+#define IN_SOME_LOCALE_FORM_COMPILETIME \
+			    (PL_hints & (HINT_LOCALE|HINT_LOCALE_NOT_CHARS))
 
 #define IN_LOCALE \
 	(IN_PERL_COMPILETIME ? IN_LOCALE_COMPILETIME : IN_LOCALE_RUNTIME)
+#define IN_SOME_LOCALE_FORM \
+	(IN_PERL_COMPILETIME ? IN_SOME_LOCALE_FORM_COMPILETIME \
+	                     : IN_SOME_LOCALE_FORM_RUNTIME)
 
 #define STORE_NUMERIC_LOCAL_SET_STANDARD() \
 	bool was_local = PL_numeric_local && IN_LOCALE; \
@@ -5741,14 +5768,6 @@ extern void moncontrol(int);
 /* used by pv_display in dump.c*/
 #define PERL_PV_PRETTY_DUMP  PERL_PV_PRETTY_ELLIPSES|PERL_PV_PRETTY_QUOTE
 #define PERL_PV_PRETTY_REGPROP PERL_PV_PRETTY_ELLIPSES|PERL_PV_PRETTY_LTGT|PERL_PV_ESCAPE_RE|PERL_PV_ESCAPE_NONASCII
-
-#ifdef PERL_CORE
-#  define FEATURE_IS_ENABLED(name)				        \
-	((0 != (PL_hints & HINT_LOCALIZE_HH))				\
-	    && Perl_feature_is_enabled(aTHX_ STR_WITH_LEN(name)))
-/* The longest string we pass in.  */
-#  define MAX_FEATURE_LEN (sizeof("unicode_strings")-1)
-#endif
 
 /*
 

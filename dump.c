@@ -87,7 +87,6 @@ S_append_flags(pTHX_ SV *sv, U32 flags, const struct flag_to_name *start,
     S_append_flags(aTHX_ (sv), (f), (flags), C_ARRAY_END(flags))
 
 
-#define Sequence PL_op_sequence
 
 void
 Perl_dump_indent(pTHX_ I32 level, PerlIO *file, const char* pat, ...)
@@ -675,104 +674,10 @@ Perl_pmop_dump(pTHX_ PMOP *pm)
     do_pmop_dump(0, Perl_debug_log, pm);
 }
 
-/* An op sequencer.  We visit the ops in the order they're to execute. */
-
-STATIC void
-S_sequence(pTHX_ register const OP *o)
-{
-    dVAR;
-    const OP *oldop = NULL;
-
-    if (!o)
-	return;
-
-#ifdef PERL_MAD
-    if (o->op_next == 0)
- 	return;
-#endif
-
-    if (!Sequence)
-	Sequence = newHV();
-
-    for (; o; o = o->op_next) {
-	STRLEN len;
-	SV * const op = newSVuv(PTR2UV(o));
-	const char * const key = SvPV_const(op, len);
-
-	if (hv_exists(Sequence, key, len))
-	    break;
-
-	switch (o->op_type) {
-	case OP_STUB:
-	    if ((o->op_flags & OPf_WANT) != OPf_WANT_LIST) {
-		(void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-		break;
-	    }
-	    goto nothin;
-	case OP_NULL:
-#ifdef PERL_MAD
-	    if (o == o->op_next)
-		return;
-#endif
-	    if (oldop && o->op_next)
-		continue;
-	    break;
-	case OP_SCALAR:
-	case OP_LINESEQ:
-	case OP_SCOPE:
-	  nothin:
-	    if (oldop && o->op_next)
-		continue;
-	    (void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-	    break;
-
-	case OP_MAPWHILE:
-	case OP_GREPWHILE:
-	case OP_AND:
-	case OP_OR:
-	case OP_DOR:
-	case OP_ANDASSIGN:
-	case OP_ORASSIGN:
-	case OP_DORASSIGN:
-	case OP_COND_EXPR:
-	case OP_RANGE:
-	    (void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-	    sequence_tail(cLOGOPo->op_other);
-	    break;
-
-	case OP_ENTERLOOP:
-	case OP_ENTERITER:
-	    (void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-	    sequence_tail(cLOOPo->op_redoop);
-	    sequence_tail(cLOOPo->op_nextop);
-	    sequence_tail(cLOOPo->op_lastop);
-	    break;
-
-	case OP_SUBST:
-	    (void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-	    sequence_tail(cPMOPo->op_pmstashstartu.op_pmreplstart);
-	    break;
-
-	case OP_QR:
-	case OP_MATCH:
-	case OP_HELEM:
-	    break;
-
-	default:
-	    (void)hv_store(Sequence, key, len, newSVuv(++PL_op_seq), 0);
-	    break;
-	}
-	oldop = o;
-    }
-}
-
-static void
-S_sequence_tail(pTHX_ const OP *o)
-{
-    while (o && (o->op_type == OP_NULL))
-	o = o->op_next;
-    sequence(o);
-}
+/* Return a unique integer to represent the address of op o.
+ * If it already exists in PL_op_sequence, just return it;
+ * otherwise add it.
+ *  *** Note that this isn't thread-safe */
 
 STATIC UV
 S_sequence_num(pTHX_ const OP *o)
@@ -782,11 +687,18 @@ S_sequence_num(pTHX_ const OP *o)
           **seq;
     const char *key;
     STRLEN  len;
-    if (!o) return 0;
+    if (!o)
+	return 0;
     op = newSVuv(PTR2UV(o));
+    sv_2mortal(op);
     key = SvPV_const(op, len);
-    seq = hv_fetch(Sequence, key, len, 0);
-    return seq ? SvUV(*seq): 0;
+    if (!PL_op_sequence)
+	PL_op_sequence = newHV();
+    seq = hv_fetch(PL_op_sequence, key, len, 0);
+    if (seq)
+	return SvUV(*seq);
+    (void)hv_store(PL_op_sequence, key, len, newSVuv(++PL_op_seq), 0);
+    return PL_op_seq;
 }
 
 const struct flag_to_name op_flags_names[] = {
@@ -811,7 +723,6 @@ const struct flag_to_name op_trans_names[] = {
 const struct flag_to_name op_entersub_names[] = {
     {OPpENTERSUB_DB, ",DB"},
     {OPpENTERSUB_HASTARG, ",HASTARG"},
-    {OPpENTERSUB_NOMOD, ",NOMOD"},
     {OPpENTERSUB_AMPER, ",AMPER"},
     {OPpENTERSUB_NOPAREN, ",NOPAREN"},
     {OPpENTERSUB_INARGS, ",INARGS"}
@@ -822,7 +733,6 @@ const struct flag_to_name op_const_names[] = {
     {OPpCONST_SHORTCIRCUIT, ",SHORTCIRCUIT"},
     {OPpCONST_STRICT, ",STRICT"},
     {OPpCONST_ENTERED, ",ENTERED"},
-    {OPpCONST_ARYBASE, ",ARYBASE"},
     {OPpCONST_BARE, ",BARE"},
     {OPpCONST_WARNING, ",WARNING"}
 };
@@ -924,22 +834,22 @@ Perl_do_op_dump(pTHX_ I32 level, PerlIO *file, const OP *o)
 
     PERL_ARGS_ASSERT_DO_OP_DUMP;
 
-    sequence(o);
     Perl_dump_indent(aTHX_ level, file, "{\n");
     level++;
     seq = sequence_num(o);
     if (seq)
 	PerlIO_printf(file, "%-4"UVuf, seq);
     else
-	PerlIO_printf(file, "    ");
+	PerlIO_printf(file, "????");
     PerlIO_printf(file,
 		  "%*sTYPE = %s  ===> ",
 		  (int)(PL_dumpindent*level-4), "", OP_NAME(o));
     if (o->op_next)
-	PerlIO_printf(file, seq ? "%"UVuf"\n" : "(%"UVuf")\n",
+	PerlIO_printf(file,
+			o->op_type == OP_NULL ? "(%"UVuf")\n" : "%"UVuf"\n",
 				sequence_num(o->op_next));
     else
-	PerlIO_printf(file, "DONE\n");
+	PerlIO_printf(file, "NULL\n");
     if (o->op_targ) {
 	if (optype == OP_NULL) {
 	    Perl_dump_indent(aTHX_ level, file, "  (was %s)\n", PL_op_name[o->op_targ]);
@@ -1020,10 +930,6 @@ Perl_do_op_dump(pTHX_ I32 level, PerlIO *file, const OP *o)
 		if (o->op_private & OPpMAYBE_LVSUB)
 		    sv_catpv(tmpsv, ",MAYBE_LVSUB");
 	    }
-
-	    if ((optype==OP_RV2SV || optype==OP_RV2AV || optype==OP_RV2HV)
-		    && (o->op_private & OPpDEREFed))
-		sv_catpv(tmpsv, ",DEREFed");
 
 	    if (optype == OP_AELEM || optype == OP_HELEM) {
 		if (o->op_private & OPpLVAL_DEFER)
@@ -1447,6 +1353,8 @@ const struct flag_to_name cv_flags_names[] = {
     {CVf_METHOD, "METHOD,"},
     {CVf_WEAKOUTSIDE, "WEAKOUTSIDE,"},
     {CVf_CVGV_RC, "CVGV_RC,"},
+    {CVf_DYNFILE, "DYNFILE,"},
+    {CVf_AUTOLOAD, "AUTOLOAD,"},
     {CVf_ISXSUB, "ISXSUB,"}
 };
 
@@ -1532,10 +1440,12 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 
     if (!((flags & SVpad_NAME) == SVpad_NAME
 	  && (type == SVt_PVMG || type == SVt_PVNV))) {
-	if (flags & SVs_PADSTALE)	sv_catpv(d, "PADSTALE,");
+	if ((flags & SVs_PADMY) && (flags & SVs_PADSTALE))
+	    sv_catpv(d, "PADSTALE,");
     }
     if (!((flags & SVpad_NAME) == SVpad_NAME && type == SVt_PVMG)) {
-	if (flags & SVs_PADTMP)	sv_catpv(d, "PADTMP,");
+	if (!(flags & SVs_PADMY) && (flags & SVs_PADTMP))
+	    sv_catpv(d, "PADTMP,");
 	if (flags & SVs_PADMY)	sv_catpv(d, "PADMY,");
     }
     append_flags(d, flags, first_sv_flags_names);
@@ -1957,11 +1867,15 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	break;
 
     case SVt_PVCV:
-	if (SvPOK(sv)) {
+	if (CvAUTOLOAD(sv)) {
 	    STRLEN len;
-	    const char *const proto =  SvPV_const(sv, len);
+	    const char *const name =  SvPV_const(sv, len);
+	    Perl_dump_indent(aTHX_ level, file, "  AUTOLOAD = \"%.*s\"\n",
+			     (int) len, name);
+	}
+	if (SvPOK(sv)) {
 	    Perl_dump_indent(aTHX_ level, file, "  PROTOTYPE = \"%.*s\"\n",
-			     (int) len, proto);
+			     (int) CvPROTOLEN(sv), CvPROTO(sv));
 	}
 	/* FALL THROUGH */
     case SVt_PVFM:
@@ -2027,6 +1941,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	    Perl_dump_indent(aTHX_ level, file, "  TARGOFF = %"IVdf"\n", (IV)LvTARGOFF(sv));
 	    Perl_dump_indent(aTHX_ level, file, "  TARGLEN = %"IVdf"\n", (IV)LvTARGLEN(sv));
 	    Perl_dump_indent(aTHX_ level, file, "  TARG = 0x%"UVxf"\n", PTR2UV(LvTARG(sv)));
+	    Perl_dump_indent(aTHX_ level, file, "  FLAGS = %"IVdf"\n", (IV)LvFLAGS(sv));
 	    if (LvTYPE(sv) != 't' && LvTYPE(sv) != 'T')
 		do_sv_dump(level+1, file, LvTARG(sv), nest+1, maxnest,
 		    dumpops, pvlim);
@@ -2281,7 +2196,7 @@ S_deb_curcv(pTHX_ const I32 ix)
     if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT)
         return cx->blk_sub.cv;
     else if (CxTYPE(cx) == CXt_EVAL && !CxTRYBLOCK(cx))
-        return PL_compcv;
+        return cx->blk_eval.cv;
     else if (ix == 0 && PL_curstackinfo->si_type == PERLSI_MAIN)
         return PL_main_cv;
     else if (ix <= 0)
@@ -2838,7 +2753,6 @@ Perl_do_op_xmldump(pTHX_ I32 level, PerlIO *file, const OP *o)
 
     if (!o)
 	return;
-    sequence(o);
     seq = sequence_num(o);
     Perl_xmldump_indent(aTHX_ level, file,
 	"<op_%s seq=\"%"UVuf" -> ",
@@ -2962,8 +2876,6 @@ Perl_do_op_xmldump(pTHX_ I32 level, PerlIO *file, const OP *o)
 		    sv_catpv(tmpsv, ",NOPAREN");
 		if (o->op_private & OPpENTERSUB_INARGS)
 		    sv_catpv(tmpsv, ",INARGS");
-		if (o->op_private & OPpENTERSUB_NOMOD)
-		    sv_catpv(tmpsv, ",NOMOD");
 	    }
 	    else {
 		switch (o->op_private & OPpDEREF) {
@@ -2996,8 +2908,6 @@ Perl_do_op_xmldump(pTHX_ I32 level, PerlIO *file, const OP *o)
 		sv_catpv(tmpsv, ",BARE");
 	    if (o->op_private & OPpCONST_STRICT)
 		sv_catpv(tmpsv, ",STRICT");
-	    if (o->op_private & OPpCONST_ARYBASE)
-		sv_catpv(tmpsv, ",ARYBASE");
 	    if (o->op_private & OPpCONST_WARNING)
 		sv_catpv(tmpsv, ",WARNING");
 	    if (o->op_private & OPpCONST_ENTERED)

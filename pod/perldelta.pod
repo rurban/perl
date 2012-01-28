@@ -5,16 +5,16 @@
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.15.2
+perldelta - what is new for perl v5.15.8
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.15.1 release and
-the 5.15.2 release.
+This document describes differences between the 5.15.7 release and
+the 5.15.8 release.
 
-If you are upgrading from an earlier release such as 5.15.0, first read
-L<perl5151delta>, which describes differences between 5.15.0 and
-5.15.1.
+If you are upgrading from an earlier release such as 5.15.6, first read
+L<perl5157delta>, which describes differences between 5.15.6 and
+5.15.7.
 
 =head1 Notice
 
@@ -28,6 +28,23 @@ here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
 
+=head2 Improved ability to mix locales and Unicode, including UTF-8 locales
+
+An optional parameter has been added to C<use locale>
+
+ use locale ':not_characters';
+
+which tells Perl to use all but the C<LC_CTYPE> and C<LC_COLLATE>
+portions of the current locale.  Instead, the character set is assumed
+to be Unicode.  This allows locales and Unicode to be seamlessly mixed,
+including the increasingly frequent UTF-8 locales.  When using this
+hybrid form of locales, the C<:locale> layer to the L<open> pragma can
+be used to interface with the file system, and there are CPAN modules
+available for ARGV and environment variable conversions.
+
+Full details are in L<perllocale>.
+
+>>>>>>> Add :not_characters parameter to 'use locale'
 =head1 Security
 
 XXX Any security-related notices go here.  In particular, any security
@@ -41,7 +58,8 @@ L</Selected Bug Fixes> section.
 XXX For a release on a stable branch, this section aspires to be:
 
     There are no changes intentionally incompatible with 5.XXX.XXX
-    If any exist, they are bugs and reports are welcome.
+    If any exist, they are bugs, and we request that you submit a
+    report.  See L</Reporting Bugs> below.
 
 [ List each incompatible change as a =head2 entry ]
 
@@ -96,33 +114,7 @@ XXX
 
 =item *
 
-L<ExtUtils::Install> has been upgraded from version 1.56 to version 1.57.
-
-There is no change to ExtUtils::Install other than the version number
-increase, but L<ExtUtils::Installed> has been upgraded from version 1.999_001
-to version 1.999002 and a new C<skip_cwd> attribute has been added.
-
-=item *
-
-L<Module::Build> has been upgraded from version 0.3800 to version 0.39_01.
-
-Pod to HTML internals changed to support revisions to Pod::Html in core.
-Also fixes some minor bugs. [rt.cpan.org #68585] [rt.cpan.org #67893]
-[rt.cpan.org #67008]
-
-=item *
-
-L<PerlIO::via> has been upgraded from version 0.11 to version 0.12.
-
-The only change is a correction in the documentation.
-
-=item *
-
-L<Term::ANSIColor> has been upgraded from version 3.00 to version 3.01
-
-Only interpret an initial array reference as a list of colors, not any initial
-reference, allowing the colored function to work properly on objects with
-stringification defined.
+L<XXX> has been upgraded from version 0.69 to version 0.70.
 
 =back
 
@@ -227,19 +219,13 @@ here. Most of these are built within the directories F<utils> and F<x2p>.
 entries for each change
 Use L<XXX> with program names to get proper documentation linking. ]
 
-=head3 L<perlivp>
+=head3 L<XXX>
 
 =over 4
 
 =item *
 
-Fixed a bug whereby other perls under the current directory could cause
-false positive failures.
-
-=item *
-
-Tests for .ph files have been removed, as these test have been optional since
-2005 and .ph files are no longer generated during installation.
+XXX
 
 =back
 
@@ -355,30 +341,7 @@ L</Modules and Pragmata>.
 
 =item *
 
-Locking an lvalue subroutine (via C<lock &lvsub>) now locks the return
-value, instead of trying to lock the sub (which has no effect).  It also no
-longer tries to return the sub as a scalar, resulting in strange side
-effects like C<ref \$_> returning "CODE" in some instances.
-
-=item *
-
-C<lock>'s prototype has been corrected to C<(\[$@%*])> from C<(\$)>, which
-was just wrong.
-
-=item *
-
-Most dereferencing operators (C<${}>, etc.) used to call C<FETCH> twice on
-a tied operand when doing a symbolic dereference (looking up a variable by
-name, which is not permitted under C<use strict 'refs'>).  Only C<&{}> did
-not have this problem.  This has been fixed.
-
-=item *
-
-A minor regression introduced in 5.15.0 has been fixed.  Dereferencing a
-magical mortal (e.g., the return value of C<delete> on a tied hash element)
-explicitly returned from a subroutine called recursively was not calling
-C<FETCH>.  This would affect code like C<@{ foo() }> where the C<foo> sub
-contains C<return delete $hash{elem}> and is calling itself.
+XXX
 
 =back
 
@@ -410,7 +373,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.1..HEAD
+  perl Porting/acknowledgements.pl v5.15.7..HEAD
 
 =head1 Reporting Bugs
 

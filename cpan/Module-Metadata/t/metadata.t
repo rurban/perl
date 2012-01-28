@@ -4,11 +4,21 @@
 
 use strict;
 use lib 't/lib';
+use IO::File;
 use MBTest;
+
+my $undef;
 
 # parse various module $VERSION lines
 # these will be reversed later to create %modules
 my @modules = (
+  $undef => <<'---', # no $VERSION line
+package Simple;
+---
+  $undef => <<'---', # undefined $VERSION
+package Simple;
+our $VERSION;
+---
   '1.23' => <<'---', # declared & defined on same line with 'our'
 package Simple;
 our $VERSION = '1.23';
@@ -170,10 +180,30 @@ our $VERSION = '1.23_00_00';
   our $VERSION;
   $VERSION = 'onetwothree';
 ---
+  $undef => <<'---', # package NAME BLOCK, undef $VERSION
+package Simple {
+  our $VERSION;
+}
+---
+  '1.23' => <<'---', # package NAME BLOCK, with $VERSION
+package Simple {
+  our $VERSION = '1.23';
+}
+---
+  '1.23' => <<'---', # package NAME VERSION BLOCK
+package Simple 1.23 {
+  1;
+}
+---
+  'v1.2.3_4' => <<'---', # package NAME VERSION BLOCK
+package Simple v1.2.3_4 {
+  1;
+}
+---
 );
 my %modules = reverse @modules;
 
-plan tests => 37 + 2 * keys( %modules );
+plan tests => 39 + 2 * keys( %modules );
 
 require_ok('Module::Metadata');
 
@@ -210,6 +240,14 @@ $file = File::Spec->catfile( 'lib', split( /::/, $dist->name ) ) . '.pm';
 $pm_info = Module::Metadata->new_from_file( $file );
 ok( defined( $pm_info ), 'new_from_file() succeeds' );
 
+# construct from filehandle
+my $handle = IO::File->new($file);
+$pm_info = Module::Metadata->new_from_handle( $handle, $file );
+ok( defined( $pm_info ), 'new_from_handle() succeeds' );
+$pm_info = Module::Metadata->new_from_handle( $handle );
+is( $pm_info, undef, "new_from_handle() without filename returns undef" );
+
+
 # construct from module name, using custom include path
 $pm_info = Module::Metadata->new_from_module(
 	     $dist->name, inc => [ 'lib', @INC ] );
@@ -233,11 +271,18 @@ foreach my $module ( sort keys %modules ) {
 
     # Test::Builder will prematurely numify objects, so use this form
     my $errs;
-    ok( $pm_info->version eq $expected,
-        "correct module version (expected '$expected')" )
-        or $errs++;
+    my $got = $pm_info->version;
+    if ( defined $expected ) {
+        ok( $got eq $expected,
+            "correct module version (expected '$expected')" )
+            or $errs++;
+    } else {
+        ok( !defined($got),
+            "correct module version (expected undef)" )
+            or $errs++;
+    }
     is( $warnings, '', 'no warnings from parsing' ) or $errs++;
-    diag "Got: '@{[$pm_info->version]}'\nModule contents:\n$module" if $errs;
+    diag "Got: '$got'\nModule contents:\n$module" if $errs;
   }
 }
 

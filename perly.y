@@ -1,7 +1,7 @@
 /*    perly.y
  *
  *    Copyright (c) 1991-2002, 2003, 2004, 2005, 2006 Larry Wall
- *    Copyright (c) 2007, 2008 by Larry Wall and others
+ *    Copyright (c) 2007, 2008, 2009, 2010, 2011 by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
@@ -74,7 +74,7 @@
 %token <i_tkval> '{' '}' '[' ']' '-' '+' '$' '@' '%' '*' '&' ';'
 
 %token <opval> WORD METHOD FUNCMETH THING PMFUNC PRIVATEREF QWLIST
-%token <opval> FUNC0SUB UNIOPSUB LSTOPSUB
+%token <opval> FUNC0OP FUNC0SUB UNIOPSUB LSTOPSUB
 %token <opval> PLUGEXPR PLUGSTMT
 %token <p_tkval> LABEL
 %token <i_tkval> FORMAT SUB ANONSUB PACKAGE USE
@@ -1229,6 +1229,13 @@ term	:	termbinop
 	|	FUNC0 '(' ')'
 			{ $$ = newOP(IVAL($1), 0);
 			  TOKEN_GETMAD($1,$$,'o');
+			  TOKEN_GETMAD($2,$$,'(');
+			  TOKEN_GETMAD($3,$$,')');
+			}
+	|	FUNC0OP       /* Same as above, but op created in toke.c */
+			{ $$ = $1; }
+	|	FUNC0OP '(' ')'
+			{ $$ = $1;
 			  TOKEN_GETMAD($2,$$,'(');
 			  TOKEN_GETMAD($3,$$,')');
 			}

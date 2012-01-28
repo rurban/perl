@@ -291,8 +291,8 @@ config_arg0 (Options.U):
 config_argc (Options.U):
 	This variable contains the number of command-line arguments
 	passed to Configure, as reported by the shell in the $# variable.
-	The individual arguments are stored as variables config_argc1,
-	config_argc2, etc.
+	The individual arguments are stored as variables config_arg1,
+	config_arg2, etc.
 
 config_args (Options.U):
 	This variable contains a single string giving the command-line
@@ -1274,6 +1274,10 @@ d_int64_t (d_int64_t.U):
 d_isascii (d_isascii.U):
 	This variable conditionally defines the HAS_ISASCII constant,
 	which indicates to the C program that isascii() is available.
+
+d_isblank (d_isblank.U):
+	This variable conditionally defines the HAS_ISBLANK constant,
+	which indicates to the C program that isblank() is available.
 
 d_isfinite (d_isfinite.U):
 	This variable conditionally defines the HAS_ISFINITE symbol, which
@@ -3164,6 +3168,11 @@ i_stdarg (i_varhdr.U):
 	indicates to the C program that <stdarg.h> exists and should
 	be included.
 
+i_stdbool (i_stdbool.U):
+	This variable conditionally defines the I_STDBOOL symbol, which
+	indicates to the C program that <stdbool.h> exists and should
+	be included.
+
 i_stddef (i_stddef.U):
 	This variable conditionally defines the I_STDDEF symbol, which
 	indicates to the C program that <stddef.h> exists and should
@@ -4750,6 +4759,13 @@ ssizetype (ssizetype.U):
 	of bytes or an error condition.  It must be a signed type.
 	We will pick a type such that sizeof(SSize_t) == sizeof(Size_t).
 
+st_ino_sign (st_ino_def.U):
+	This variable contains the signedness of struct stat's st_ino.
+	1 for unsigned, -1 for signed.
+
+st_ino_size (st_ino_def.U):
+	This variable contains the size of struct stat's st_ino in bytes.
+
 startperl (startperl.U):
 	This variable contains the string to put on the front of a perl
 	script to make sure (hopefully) that it runs with perl and not some
@@ -5003,6 +5019,11 @@ useithreads (usethreads.U):
 	and indicates that Perl should be built to use the interpreter-based
 	threading implementation.
 
+usekernprocpathname (usekernprocpathname.U):
+	This variable, indicates that we can use sysctl with
+	KERN_PROC_PATHNAME to get a full path for the executable, and hence
+	convert $^X to an absolute path.
+
 uselargefiles (uselfs.U):
 	This variable conditionally defines the USE_LARGE_FILES symbol,
 	and indicates that large file interfaces should be used when
@@ -5035,6 +5056,11 @@ usemymalloc (mallocsrc.U):
 usenm (usenm.U):
 	This variable contains 'true' or 'false' depending whether the
 	nm extraction is wanted or not.
+
+usensgetexecutablepath (usensgetexecutablepath.U):
+	This symbol, if defined, indicates that we can use _NSGetExecutablePath
+	and realpath to get a full path for the executable, and hence convert
+	$^X to an absolute path.
 
 useopcode (Extensions.U):
 	This variable holds either 'true' or 'false' to indicate

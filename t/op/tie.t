@@ -1008,6 +1008,27 @@ print "ok\n";
 EXPECT
 ok
 ########
+#
+# Nor should it be impossible to tie COW scalars that are already PVMGs.
+
+sub TIESCALAR { bless [] }
+$x = *foo;        # PVGV
+undef $x;         # downgrade to PVMG
+$x = __PACKAGE__; # PVMG + COW
+tie $x, "";       # bang!
+
+print STDERR "ok\n";
+
+# However, one should not be able to tie read-only glob copies, which look
+# a bit like kine internally (FAKE + READONLY).
+$y = *foo;
+Internals::SvREADONLY($y,1);
+tie $y, "";
+
+EXPECT
+ok
+Modification of a read-only value attempted at - line 16.
+########
 
 # tied() should still work on tied scalars after glob assignment
 sub TIESCALAR {bless[]}
@@ -1072,3 +1093,159 @@ tiehandle
 before print
 print()
 Can't find label FOO at - line 4.
+########
+
+# \&$tied with $tied holding a reference before the fetch (but not after)
+sub ::72 { 73 };
+sub TIESCALAR {bless[]}
+sub STORE{}
+sub FETCH { 72 }
+tie my $x, "main";
+$x = \$y;
+\&$x;
+print "ok\n";
+EXPECT
+ok
+########
+
+# \&$tied with $tied holding a PVLV glob before the fetch (but not after)
+sub ::72 { 73 };
+sub TIEARRAY {bless[]}
+sub STORE{}
+sub FETCH { 72 }
+tie my @x, "main";
+my $elem = \$x[0];
+$$elem = *bar;
+print &{\&$$elem}, "\n";
+EXPECT
+73
+########
+
+# \&$tied with $tied holding a PVGV glob before the fetch (but not after)
+local *72 = sub { 73 };
+sub TIESCALAR {bless[]}
+sub STORE{}
+sub FETCH { 72 }
+tie my $x, "main";
+$x = *bar;
+print &{\&$x}, "\n";
+EXPECT
+73
+########
+
+# Lexicals should not be visible to magic methods on scope exit
+BEGIN { unless (defined &DynaLoader::boot_DynaLoader) {
+    print "HASH\nHASH\nARRAY\nARRAY\n"; exit;
+}}
+use Scalar::Util 'weaken';
+{ package xoufghd;
+  sub TIEHASH { Scalar::Util::weaken($_[1]); bless \$_[1], xoufghd:: }
+  *TIEARRAY = *TIEHASH;
+  DESTROY {
+     bless ${$_[0]} || return, 0;
+} }
+for my $sub (
+    # hashes: ties before backrefs
+    sub {
+        my %hash;
+        $ref = ref \%hash;
+        tie %hash, xoufghd::, \%hash;
+        1;
+    },
+    # hashes: backrefs before ties
+    sub {
+        my %hash;
+        $ref = ref \%hash;
+        weaken(my $x = \%hash);
+        tie %hash, xoufghd::, \%hash;
+        1;
+    },
+    # arrays: ties before backrefs
+    sub {
+        my @array;
+        $ref = ref \@array;
+        tie @array, xoufghd::, \@array;
+        1;
+    },
+    # arrays: backrefs before ties
+    sub {
+        my @array;
+        $ref = ref \@array;
+        weaken(my $x = \@array);
+        tie @array, xoufghd::, \@array;
+        1;
+    },
+) {
+    &$sub;
+    &$sub;
+    print $ref, "\n";
+}
+EXPECT
+HASH
+HASH
+ARRAY
+ARRAY
+########
+
+# Localising a tied variable with a typeglob in it should copy magic
+sub TIESCALAR{bless[]}
+sub FETCH{warn "fetching\n"; *foo}
+sub STORE{}
+tie $x, "";
+local $x;
+warn "before";
+"$x";
+warn "after";
+EXPECT
+fetching
+before at - line 8.
+fetching
+after at - line 10.
+########
+
+# tied returns same value as tie
+sub TIESCALAR{bless[]}
+$tyre = \tie $tied, "";
+print "ok\n" if \tied $tied == $tyre;
+EXPECT
+ok
+########
+
+# tied arrays should always be AvREAL
+$^W=1;
+sub TIEARRAY{bless[]}
+sub {
+  tie @_, "";
+  \@_; # used to produce: av_reify called on tied array at - line 7.
+}->(1);
+EXPECT
+########
+
+# [perl #67490] scalar-tying elements of magic hashes
+sub TIESCALAR{bless[]}
+sub STORE{}
+tie $ENV{foo}, '';
+$ENV{foo} = 78;
+delete $ENV{foo};
+tie $^H{foo}, '';
+$^H{foo} = 78;
+delete $^H{foo};
+EXPECT
+########
+
+# [perl #35865, #43011] autovivification should call FETCH after STORE
+# because perl does not know that the FETCH would have returned the same
+# thing that was just stored.
+
+# This package never likes to take ownership of other people’s refs.  It
+# always makes its own copies.  (For simplicity, it only accepts hashes.)
+package copier {
+    sub TIEHASH { bless {} }
+    sub FETCH   { $_[0]{$_[1]} }
+    sub STORE   { $_[0]{$_[1]} = { %{ $_[2] } } }
+}
+tie my %h, copier::;
+$h{i}{j} = 'k';
+print $h{i}{j}, "\n";
+EXPECT
+k

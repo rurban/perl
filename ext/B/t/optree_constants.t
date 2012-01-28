@@ -109,12 +109,12 @@ for $func (sort keys %$want) {
 		  expect  => <<EOT_EOT, expect_nt => <<EONT_EONT);
 3  <1> leavesub[2 refs] K/REFC,1 ->(end)
 -     <\@> lineseq KP ->3
-1        <;> dbstate(main 833 (eval 44):1) v ->2
+1        <;> dbstate(main 833 (eval 44):1) v:% ->2
 2        <\$> const[$want->{$func}[0] $want->{$func}[1]] s* ->3
 EOT_EOT
 3  <1> leavesub[2 refs] K/REFC,1 ->(end)
 -     <\@> lineseq KP ->3
-1        <;> dbstate(main 833 (eval 44):1) v ->2
+1        <;> dbstate(main 833 (eval 44):1) v:% ->2
 2        <\$> const($want->{$func}[0] $want->{$func}[1]) s* ->3
 EONT_EONT
 
@@ -181,12 +181,12 @@ EONT_EONT
 my ($expect, $expect_nt) = (<<'EOT_EOT', <<'EONT_EONT');
 # 3  <1> leavesub[2 refs] K/REFC,1 ->(end)
 # -     <@> lineseq K ->3
-# 1        <;> nextstate(constant 61 constant.pm:118) v:*,& ->2
+# 1        <;> nextstate(constant 61 constant.pm:118) v:%,*,& ->2
 # 2        <0> padav[@list:FAKE:m:96] ->3
 EOT_EOT
 # 3  <1> leavesub[2 refs] K/REFC,1 ->(end)
 # -     <@> lineseq K ->3
-# 1        <;> nextstate(constant 61 constant.pm:118) v:*,& ->2
+# 1        <;> nextstate(constant 61 constant.pm:118) v:%,*,& ->2
 # 2        <0> padav[@list:FAKE:m:71] ->3
 EONT_EONT
 
@@ -211,25 +211,28 @@ my ($expect, $expect_nt) = (<<'EOT_EOT', <<'EONT_EONT');
 # -     <@> lineseq KP ->9
 # 1        <;> nextstate(main 635 optree_constants.t:163) v:>,<,% ->2
 # 8        <@> prtf sK ->9
-# 2           <0> pushmark s ->3
-# 3           <$> const[PV "myint %d mystr %s myfl %f pi %f\n"] s ->4
-# 4           <$> const[IV 42] s* ->5
-# 5           <$> const[PV "hithere"] s* ->6
-# 6           <$> const[NV 1.414213] s* ->7
-# 7           <$> const[NV 3.14159] s* ->8
+# 2           <0> pushmark sM ->3
+# 3           <$> const[PV "myint %d mystr %s myfl %f pi %f\n"] sM ->4
+# 4           <$> const[IV 42] sM* ->5
+# 5           <$> const[PV "hithere"] sM* ->6
+# 6           <$> const[NV 1.414213] sM* ->7
+# 7           <$> const[NV 3.14159] sM* ->8
 EOT_EOT
 # 9  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->9
 # 1        <;> nextstate(main 635 optree_constants.t:163) v:>,<,% ->2
 # 8        <@> prtf sK ->9
-# 2           <0> pushmark s ->3
-# 3           <$> const(PV "myint %d mystr %s myfl %f pi %f\n") s ->4
-# 4           <$> const(IV 42) s* ->5
-# 5           <$> const(PV "hithere") s* ->6
-# 6           <$> const(NV 1.414213) s* ->7
-# 7           <$> const(NV 3.14159) s* ->8
+# 2           <0> pushmark sM ->3
+# 3           <$> const(PV "myint %d mystr %s myfl %f pi %f\n") sM ->4
+# 4           <$> const(IV 42) sM* ->5
+# 5           <$> const(PV "hithere") sM* ->6
+# 6           <$> const(NV 1.414213) sM* ->7
+# 7           <$> const(NV 3.14159) sM* ->8
 EONT_EONT
 
+if($] < 5.015) {
+    s/M(?=\*? ->)//g for $expect, $expect_nt;
+}
 if($] < 5.009) {
     # 5.8.x's use constant has larger types
     foreach ($expect, $expect_nt) {
@@ -251,14 +254,14 @@ checkOptree ( name	=> 'arithmetic constant folding in print',
 	      expect => <<'EOT_EOT', expect_nt => <<'EONT_EONT');
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 937 (eval 53):1) v ->2
+# 1        <;> nextstate(main 937 (eval 53):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const[IV 6] s ->4
 EOT_EOT
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 937 (eval 53):1) v ->2
+# 1        <;> nextstate(main 937 (eval 53):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const(IV 6) s ->4
@@ -270,14 +273,14 @@ checkOptree ( name	=> 'string constant folding in print',
 	      expect => <<'EOT_EOT', expect_nt => <<'EONT_EONT');
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 942 (eval 55):1) v ->2
+# 1        <;> nextstate(main 942 (eval 55):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const[PV "foobar"] s ->4
 EOT_EOT
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 942 (eval 55):1) v ->2
+# 1        <;> nextstate(main 942 (eval 55):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const(PV "foobar") s ->4
@@ -289,14 +292,14 @@ checkOptree ( name	=> 'boolean or folding',
 	      expect => <<'EOT_EOT', expect_nt => <<'EONT_EONT');
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 942 (eval 55):1) v ->2
+# 1        <;> nextstate(main 942 (eval 55):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const[PV "foobar"] s ->4
 EOT_EOT
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 942 (eval 55):1) v ->2
+# 1        <;> nextstate(main 942 (eval 55):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const(PV "foobar") s ->4
@@ -381,14 +384,14 @@ checkOptree ( name	=> 'mixed constant folding, with explicit braces',
 	      expect => <<'EOT_EOT', expect_nt => <<'EONT_EONT');
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 977 (eval 28):1) v ->2
+# 1        <;> nextstate(main 977 (eval 28):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const[PV "foobar5"] s ->4
 EOT_EOT
 # 5  <1> leavesub[1 ref] K/REFC,1 ->(end)
 # -     <@> lineseq KP ->5
-# 1        <;> nextstate(main 977 (eval 28):1) v ->2
+# 1        <;> nextstate(main 977 (eval 28):1) v:% ->2
 # 4        <@> print sK ->5
 # 2           <0> pushmark s ->3
 # 3           <$> const(PV "foobar5") s ->4

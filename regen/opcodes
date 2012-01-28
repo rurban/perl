@@ -30,6 +30,7 @@
 # scalar      - S            list     - L            array     - A
 # hash        - H            sub (CV) - C            file      - F
 # socket      - Fs           filetest - F-           filetest_access - F-+
+# num-compare - S<           dirhandle - DF
 
 # reference - R
 # "?" denotes an optional operand.
@@ -137,20 +138,20 @@ stringify	string			ck_fun		fsT@	S
 left_shift	left bitshift (<<)	ck_bitop	fsT2	S S
 right_shift	right bitshift (>>)	ck_bitop	fsT2	S S
 
-lt		numeric lt (<)		ck_null		Iifs2	S S
-i_lt		integer lt (<)		ck_null		ifs2	S S
-gt		numeric gt (>)		ck_null		Iifs2	S S
-i_gt		integer gt (>)		ck_null		ifs2	S S
-le		numeric le (<=)		ck_null		Iifs2	S S
-i_le		integer le (<=)		ck_null		ifs2	S S
-ge		numeric ge (>=)		ck_null		Iifs2	S S
-i_ge		integer ge (>=)		ck_null		ifs2	S S
-eq		numeric eq (==)		ck_null		Iifs2	S S
-i_eq		integer eq (==)		ck_null		ifs2	S S
-ne		numeric ne (!=)		ck_null		Iifs2	S S
-i_ne		integer ne (!=)		ck_null		ifs2	S S
-ncmp		numeric comparison (<=>)	ck_null		Iifst2	S S
-i_ncmp		integer comparison (<=>)	ck_null		ifst2	S S
+lt		numeric lt (<)		ck_cmp		Iifs2	S S<
+i_lt		integer lt (<)		ck_cmp		ifs2	S S<
+gt		numeric gt (>)		ck_cmp		Iifs2	S S<
+i_gt		integer gt (>)		ck_cmp		ifs2	S S<
+le		numeric le (<=)		ck_cmp		Iifs2	S S<
+i_le		integer le (<=)		ck_cmp		ifs2	S S<
+ge		numeric ge (>=)		ck_cmp		Iifs2	S S<
+i_ge		integer ge (>=)		ck_cmp		ifs2	S S<
+eq		numeric eq (==)		ck_null		Iifs2	S S<
+i_eq		integer eq (==)		ck_null		ifs2	S S<
+ne		numeric ne (!=)		ck_null		Iifs2	S S<
+i_ne		integer ne (!=)		ck_null		ifs2	S S<
+ncmp		numeric comparison (<=>)	ck_null		Iifst2	S S<
+i_ncmp		integer comparison (<=>)	ck_null		ifst2	S S<
 
 slt		string lt		ck_null		ifs2	S S
 sgt		string gt		ck_null		ifs2	S S
@@ -191,14 +192,14 @@ abs		abs			ck_fun		fsTu%	S?
 
 # String stuff.
 
-length		length			ck_fun		ifsTu%	S?
+length		length			ck_length	ifsTu%	S?
 substr		substr			ck_substr	st@	S S S? S?
 vec		vec			ck_fun		ist@	S S S
 
 index		index			ck_index	isT@	S S S?
 rindex		rindex			ck_index	isT@	S S S?
 
-sprintf		sprintf			ck_fun		fmst@	S L
+sprintf		sprintf			ck_lfun		fmst@	S L
 formline	formline		ck_fun		ms@	S L
 ord		ord			ck_fun		ifsTu%	S?
 chr		chr			ck_fun		fsTu%	S?
@@ -235,7 +236,7 @@ boolkeys	boolkeys		ck_fun		%	H
 
 # Explosives and implosives.
 
-unpack		unpack			ck_unpack	@	S S?
+unpack		unpack			ck_fun		u@	S S?
 pack		pack			ck_fun		mst@	S L
 split		split			ck_split	t@	S S S
 join		join or string		ck_join		mst@	S L
@@ -348,8 +349,8 @@ sysread		sysread			ck_fun		imst@	F R S S?
 syswrite	syswrite		ck_fun		imst@	F S S? S?
 
 eof		eof			ck_eof		is%	F?
-tell		tell			ck_fun		st%	F?
-seek		seek			ck_fun		s@	F S S
+tell		tell			ck_tell		st%	F?
+seek		seek			ck_tell		s@	F S S
 # truncate really behaves as if it had both "S S" and "F S"
 truncate	truncate		ck_trunc	is@	S S
 
@@ -379,8 +380,8 @@ getpeername	getpeername		ck_fun		is%	Fs
 
 # Stat calls.  OP_IS_FILETEST wants them consecutive.
 
-lstat		lstat			ck_ftst		u-	F
-stat		stat			ck_ftst		u-	F
+lstat		lstat			ck_ftst		u-	F?
+stat		stat			ck_ftst		u-	F?
 ftrread		-R			ck_ftst		isu-	F-+
 ftrwrite	-W			ck_ftst		isu-	F-+
 ftrexec		-X			ck_ftst		isu-	F-+
@@ -428,11 +429,11 @@ rmdir		rmdir			ck_fun		isTu%	S?
 # Directory calls.
 
 open_dir	opendir			ck_fun		is@	F S
-readdir		readdir			ck_fun		%	F
-telldir		telldir			ck_fun		st%	F
-seekdir		seekdir			ck_fun		s@	F S
-rewinddir	rewinddir		ck_fun		s%	F
-closedir	closedir		ck_fun		is%	F
+readdir		readdir			ck_fun		%	DF
+telldir		telldir			ck_fun		st%	DF
+seekdir		seekdir			ck_fun		s@	DF S
+rewinddir	rewinddir		ck_fun		s%	DF
+closedir	closedir		ck_fun		is%	DF
 
 # Process control.
 
@@ -482,7 +483,7 @@ semctl		semctl			ck_fun		imst@	S S S S
 require		require			ck_require	du%	S?
 dofile		do "file"		ck_fun		d1	S
 hintseval	eval hints		ck_svconst	s$
-entereval	eval "string"		ck_eval		d%	S
+entereval	eval "string"		ck_eval		du%	S?
 leaveeval	eval "string" exit	ck_null		1	S
 #evalonce	eval constant string	ck_null		d1	S
 entertry	eval {block}		ck_eval		d|	
@@ -539,3 +540,8 @@ custom		unknown custom operator		ck_null		0
 reach		each on reference			ck_each		%	S
 rkeys		keys on reference			ck_each		t%	S
 rvalues		values on reference			ck_each		t%	S
+
+# For CORE:: subs
+coreargs	CORE:: subroutine	ck_null		$	
+
+runcv		__SUB__			ck_null		s0

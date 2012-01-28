@@ -86,7 +86,7 @@ NLM_VERSION    = 3,20,0
 
 
 # Here comes the CW tools - TO BE FILLED TO BUILD WITH CW -
-MODULE_DESC     = "Perl 5.15.1 for NetWare"
+MODULE_DESC     = "Perl 5.15.7 for NetWare"
 CCTYPE          = CodeWarrior
 C_COMPILER		= mwccnlm -c
 CPP_COMPILER	= mwccnlm
@@ -462,7 +462,7 @@ INST_NW_TOP2 = $(INST_NW_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-INST_VER	= \5.15.1
+INST_VER	= \5.15.7
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -864,8 +864,7 @@ all : .cleanoldfiles .\nwconfig.h $(CONFIGPM) $(NLM_NAME) $(EXTENSION_NLM) $(EXT
 	$(MINIPERL) -I..\lib config_sh.PL $(NW_CFG_VARS) config.nw5 > ..\config.sh
 
 # this target is for when changes to the main config.sh happen
-# edit config.{b,v,g,w}c and make this target once for each supported
-# compiler (e.g. `dmake CCTYPE=BORLAND regen_config_h`)
+# edit config.wc and make this target
 regen_config_h:
 	perl config_sh.PL $(NW_CFG_VARS) $(NW_CFGSH_TMPL) > ..\config.sh
 	cd ..
@@ -1061,7 +1060,7 @@ $(PERLIMPLIB): perllib.imp
 #	$(XCOPY) $(PERLIMPLIB) $(COREDIR)
 #	@echo $(PERLIMPLIB) Done
 
-perllib.imp : $(MINIPERL) $(CONFIGPM) ..\global.sym ..\makedef.pl
+perllib.imp : $(MINIPERL) $(CONFIGPM) ..\embed.fnc ..\makedef.pl
 #	$(MINIPERL) -w ..\makedef.pl PLATFORM=netware FILETYPE=def $(ADD_BUILDOPT) \
 #	    CCTYPE=$(CCTYPE) TARG_DIR=..\ > perllib.def
 	@echo (Perl) > perl.imp

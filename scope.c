@@ -181,7 +181,7 @@ S_save_scalar_at(pTHX_ SV **sptr, const U32 flags)
     osv = *sptr;
     sv  = (flags & SAVEf_KEEPOLDELEM) ? osv : (*sptr = newSV(0));
 
-    if (SvTYPE(osv) >= SVt_PVMG && SvMAGIC(osv) && SvTYPE(osv) != SVt_PVGV) {
+    if (SvTYPE(osv) >= SVt_PVMG && SvMAGIC(osv)) {
 	if (SvGMAGICAL(osv)) {
 	    SvFLAGS(osv) |= (SvFLAGS(osv) &
 	       (SVp_IOK|SVp_NOK|SVp_POK)) >> PRIVSHIFT;
@@ -317,7 +317,7 @@ Perl_save_ary(pTHX_ GV *gv)
 
     if (!AvREAL(oav) && AvREIFY(oav))
 	av_reify(oav);
-    save_pushptrptr(gv, oav, SAVEt_AV);
+    save_pushptrptr(SvREFCNT_inc_simple_NN(gv), oav, SAVEt_AV);
 
     GvAV(gv) = NULL;
     av = GvAVn(gv);
@@ -334,7 +334,9 @@ Perl_save_hash(pTHX_ GV *gv)
 
     PERL_ARGS_ASSERT_SAVE_HASH;
 
-    save_pushptrptr(gv, (ohv = GvHVn(gv)), SAVEt_HV);
+    save_pushptrptr(
+	SvREFCNT_inc_simple_NN(gv), (ohv = GvHVn(gv)), SAVEt_HV
+    );
 
     GvHV(gv) = NULL;
     hv = GvHVn(gv);
@@ -592,8 +594,10 @@ Perl_save_hints(pTHX)
     dVAR;
     COPHH *save_cophh = cophh_copy(CopHINTHASH_get(&PL_compiling));
     if (PL_hints & HINT_LOCALIZE_HH) {
-	save_pushptri32ptr(GvHV(PL_hintgv), PL_hints, save_cophh, SAVEt_HINTS);
-	GvHV(PL_hintgv) = hv_copy_hints_hv(GvHV(PL_hintgv));
+	HV *oldhh = GvHV(PL_hintgv);
+	save_pushptri32ptr(oldhh, PL_hints, save_cophh, SAVEt_HINTS);
+	GvHV(PL_hintgv) = NULL; /* in case copying dies */
+	GvHV(PL_hintgv) = hv_copy_hints_hv(oldhh);
     } else {
 	save_pushi32ptr(PL_hints, save_cophh, SAVEt_HINTS);
     }
@@ -707,10 +711,10 @@ Perl_leave_scope(pTHX_ I32 base)
     register char* str;
     I32 i;
     /* Localise the effects of the TAINT_NOT inside the loop.  */
-    const bool was = PL_tainted;
+    bool was = PL_tainted;
 
     if (base < -1)
-	Perl_croak(aTHX_ "panic: corrupt saved stack index");
+	Perl_croak(aTHX_ "panic: corrupt saved stack index %ld", (long) base);
     DEBUG_l(Perl_deb(aTHX_ "savestack: releasing items %ld -> %ld\n",
 			(long)PL_savestack_ix, (long)base));
     while (PL_savestack_ix > base) {
@@ -740,8 +744,7 @@ Perl_leave_scope(pTHX_ I32 base)
 	    SvSETMAGIC(value);
 	    PL_localizing = 0;
 	    SvREFCNT_dec(value);
-	    if (av) /* actually an av, hv or gv */
-		SvREFCNT_dec(av);
+	    SvREFCNT_dec(av); /* av may actually be an AV, HV or GV */
 	    break;
 	case SAVEt_GENERIC_PVREF:		/* generic pv */
 	    ptr = SSPOPPTR;
@@ -787,6 +790,7 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvSETMAGIC(MUTABLE_SV(av));
 		PL_localizing = 0;
 	    }
+	    SvREFCNT_dec(gv);
 	    break;
 	case SAVEt_HV:				/* hash reference */
 	    hv = MUTABLE_HV(SSPOPPTR);
@@ -798,6 +802,7 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvSETMAGIC(MUTABLE_SV(hv));
 		PL_localizing = 0;
 	    }
+	    SvREFCNT_dec(gv);
 	    break;
 	case SAVEt_INT_SMALL:
 	    ptr = SSPOPPTR;
@@ -810,6 +815,15 @@ Perl_leave_scope(pTHX_ I32 base)
 	case SAVEt_BOOL:			/* bool reference */
 	    ptr = SSPOPPTR;
 	    *(bool*)ptr = cBOOL(uv >> 8);
+
+	    if (ptr == &PL_tainted) {
+		/* If we don't update <was>, to reflect what was saved on the
+		 * stack for PL_tainted, then we will overwrite this attempt to
+		 * restore it when we exit this routine.  Note that this won't
+		 * work if this value was saved in a wider-than necessary type,
+		 * such as I32 */
+		was = *(bool*)ptr;
+	    }
 	    break;
 	case SAVEt_I32_SMALL:
 	    ptr = SSPOPPTR;
@@ -898,7 +912,10 @@ Perl_leave_scope(pTHX_ I32 base)
 
 		if (SvTHINKFIRST(sv))
 		    sv_force_normal_flags(sv, SV_IMMEDIATE_UNREF);
+		if (SvTYPE(sv) == SVt_PVHV)
+		    Perl_hv_kill_backrefs(aTHX_ MUTABLE_HV(sv));
 		if (SvMAGICAL(sv))
+		    sv_unmagic(sv, PERL_MAGIC_backref),
 		    mg_free(sv);
 
 		switch (SvTYPE(sv)) {
@@ -919,7 +936,8 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvPADSTALE_on(sv); /* mark as no longer live */
 	    }
 	    else {	/* Someone has a claim on this, so abandon it. */
-		const U32 padflags = SvFLAGS(sv) & (SVs_PADMY|SVs_PADTMP);
+		assert(  SvFLAGS(sv) & SVs_PADMY);
+		assert(!(SvFLAGS(sv) & SVs_PADTMP));
 		switch (SvTYPE(sv)) {	/* Console ourselves with a new value */
 		case SVt_PVAV:	*(SV**)ptr = MUTABLE_SV(newAV());	break;
 		case SVt_PVHV:	*(SV**)ptr = MUTABLE_SV(newHV());	break;
@@ -928,7 +946,7 @@ Perl_leave_scope(pTHX_ I32 base)
 		SvREFCNT_dec(sv);	/* Cast current value to the winds. */
 		/* preserve pad nature, but also mark as not live
 		 * for any closure capturing */
-		SvFLAGS(*(SV**)ptr) |= padflags | SVs_PADSTALE;
+		SvFLAGS(*(SV**)ptr) |= (SVs_PADMY|SVs_PADSTALE);
 	    }
 	    break;
 	case SAVEt_DELETE:
@@ -1112,11 +1130,6 @@ Perl_leave_scope(pTHX_ I32 base)
 	    ptr = SSPOPPTR;
 	    (*SSPOPDPTR)(ptr);
 	    break;
-	case SAVEt_COP_ARYBASE:
-	    ptr = SSPOPPTR;
-	    i = SSPOPINT;
-	    CopARYBASE_set((COP *)ptr, i);
-	    break;
 	case SAVEt_COMPILE_WARNINGS:
 	    ptr = SSPOPPTR;
 
@@ -1147,7 +1160,7 @@ Perl_leave_scope(pTHX_ I32 base)
 	    parser_free((yy_parser *) ptr);
 	    break;
 	default:
-	    Perl_croak(aTHX_ "panic: leave_scope inconsistency");
+	    Perl_croak(aTHX_ "panic: leave_scope inconsistency %u", type);
 	}
     }
 

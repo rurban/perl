@@ -30,7 +30,8 @@ Sarathy, Graham Barr, Jarkko Hietaniemi, Hugo van der Sanden,
 Michael Schwern, Rafael Garcia-Suarez, Nicholas Clark, Richard Clamp,
 Leon Brocard, Dave Mitchell, Jesse Vincent, Ricardo Signes, Steve Hay,
 Matt S Trout, David Golden, Florian Ragwitz, Tatsuhiko Miyagawa,
-Chris C<BinGOs> Williams, Zefram and Ævar Arnfjörð Bjarmason.
+Chris C<BinGOs> Williams, Zefram, Ævar Arnfjörð Bjarmason and Stevan
+Little.
 
 =head2 PUMPKIN?
 
@@ -431,7 +432,7 @@ the strings?).
 
  Jesse    5.12.1-RC2    2010-May-13     The 5.12 maintenance track
           5.12.1-RC1    2010-May-09
-          5.12.1        2010-May-16     
+          5.12.1        2010-May-16
           5.12.2-RC2    2010-Aug-31
           5.12.2        2010-Sep-06
  Ricardo  5.12.3-RC1    2011-Jan-09
@@ -457,11 +458,19 @@ the strings?).
  Jesse    5.14.0RC2     2011-May-04
  Jesse    5.14.0RC3     2011-May-11
 
- Jesse    5.14.0        2011-May-14
+ Jesse    5.14.0        2011-May-14     The 5.14 maintenance track
  Jesse    5.14.1        2011-Jun-16
+ Florian  5.14.2-RC1    2011-Sep-19
+          5.14.2        2011-Sep-26
 
- David G  5.15.0        2011-Jun-20
+ David G  5.15.0        2011-Jun-20     The 5.15 development track
  Zefram   5.15.1        2011-Jul-20
+ Ricardo  5.15.2        2011-Aug-20
+ Stevan   5.15.3        2011-Sep-20
+ Florian  5.15.4        2011-Oct-20
+ Steve    5.15.5        2011-Nov-20
+ Dave R   5.15.6        2011-Dec-20
+ BinGOs   5.15.7        2012-Jan-20
 
 =head2 SELECTED RELEASE SIZES
 
@@ -649,7 +658,7 @@ the Perl source distribution for somewhat more selected releases.
  apollo          -    -     -    -     -    -     -    -      0   1
  beos            1    1     1    1     1    1     1    1      1   1
  Configure     256    1   256    1   264    1   264    1    270   1
- cygwin32       24    5    24    5    24    5    24    5     24   5  
+ cygwin32       24    5    24    5    24    5    24    5     24   5
  djgpp          14    5    14    5    14    5    14    5     15   5
  eg             86   65    86   65    86   65    86   65     86  65
  emacs         262    2   262    2   262    2   262    2    274   2
@@ -912,7 +921,7 @@ context diff output format.
 In more modern times, named releases don't come as often, and as progress
 can be followed (nearly) instantly (with rsync, and since late 2008, git)
 patches between versions are no longer provided. However, that doesn't
-keep us from calculating how large a patch could have been. Which is 
+keep us from calculating how large a patch could have been. Which is
 shown in the table below. Unless noted otherwise, the size mentioned is
 the patch to bring version x.y.z to x.y.z+1.
 
@@ -946,7 +955,7 @@ the patch to bring version x.y.z to x.y.z+1.
 Jarkko Hietaniemi <F<jhi@iki.fi>>.
 
 Thanks to the collective memory of the Perlfolk.  In addition to the
-Keepers of the Pumpkin also Alan Champion, Mark Dominus, 
+Keepers of the Pumpkin also Alan Champion, Mark Dominus,
 Andreas KE<0xf6>nig, John Macdonald, Matthias Neeracher, Jeff Okamoto,
 Michael Peppler, Randal Schwartz, and Paul D. Smith sent corrections
 and additions. Abigail added file and patch size data for the 5.6.0 - 5.10

@@ -21,7 +21,7 @@ package Storable; @ISA = qw(Exporter);
 
 use vars qw($canonical $forgive_me $VERSION);
 
-$VERSION = '2.31';
+$VERSION = '2.34';
 
 BEGIN {
     if (eval { local $SIG{__DIE__}; require Log::Agent; 1 }) {
@@ -31,13 +31,14 @@ BEGIN {
     # Use of Log::Agent is optional. If it hasn't imported these subs then
     # provide a fallback implementation.
     #
-    else {
+    if (!exists &logcroak) {
         require Carp;
-
         *logcroak = sub {
             Carp::croak(@_);
         };
-
+    }
+    if (!exists &logcarp) {
+	require Carp;
         *logcarp = sub {
           Carp::carp(@_);
         };
@@ -69,7 +70,7 @@ sub CLONE {
 $Storable::downgrade_restricted = 1;
 $Storable::accept_future_minor = 1;
 
-XSLoader::load 'Storable', $Storable::VERSION;
+XSLoader::load('Storable', $Storable::VERSION);
 
 #
 # Determine whether locking is possible, but only when needed.

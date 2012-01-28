@@ -6,6 +6,7 @@ use strict;
 #
 # * Are all dual-life programs being generated in utils/?
 
+chdir 't';
 require './test.pl';
 
 plan('no_plan');
@@ -14,14 +15,13 @@ use File::Basename;
 use File::Find;
 use File::Spec::Functions;
 
-# Exceptions are found in dual-life bin dirs but aren't
-# installed by default
-my @not_installed = qw(
-  ../cpan/Encode/bin/ucm2table
-  ../cpan/Encode/bin/ucmlint
-  ../cpan/Encode/bin/ucmsort
-  ../cpan/Encode/bin/unidump
-);
+# Exceptions that are found in dual-life bin dirs but aren't
+# installed by default; some occur only during testing:
+my $not_installed = qr{^(?:
+  \.\./cpan/Encode/bin/u(?:cm(?:2table|lint|sort)|nidump)
+   |
+  \.\./cpan/Module-Build/MB-[\w\d]+/Simple/(?:test_install/)?bin/.*
+)\z}ix;
 
 my %dist_dir_exe;
 
@@ -39,7 +39,7 @@ find(
   sub {
     my $name = $File::Find::name;
     return if $name =~ /blib/;
-    return unless $name =~ m{/(?:bin|scripts?)/\S+\z};
+    return unless $name =~ m{/(?:bin|scripts?)/\S+\z} && $name !~ m{/t/};
 
     push @programs, $name;
   },
@@ -50,12 +50,12 @@ my $ext = $^O eq 'VMS' ? '.com' : '';
 
 for my $f ( @programs ) {
   $f =~ s/\.\z// if $^O eq 'VMS';
-  next if qr/(?i:$f)/ ~~ @not_installed;
-  $f = basename($f);
-  if(qr/\A(?i:$f)\z/ ~~ %dist_dir_exe) {
-    ok( -f "$dist_dir_exe{lc $f}$ext", "$f$ext");
+  next if $f =~ $not_installed;
+  my $bn = basename($f);
+  if(qr/\A(?i:$bn)\z/ ~~ %dist_dir_exe) {
+    ok( -f "$dist_dir_exe{lc $bn}$ext", "$f$ext");
   } else {
-    ok( -f catfile('..', 'utils', "$f$ext"), "$f$ext" );
+    ok( -f catfile('..', 'utils', "$bn$ext"), "$f$ext" );
   }
 }
 

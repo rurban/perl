@@ -9,7 +9,7 @@ BEGIN {
      skip_all_without_config('useithreads');
      skip_all_if_miniperl("no dynamic loading on miniperl, no threads");
 
-     plan(25);
+     plan(26);
 }
 
 use strict;
@@ -133,11 +133,17 @@ EOI
 # [perl #45053] Memory corruption with heavy module loading in threads
 #
 # run-time usage of newCONSTSUB (as done by the IO boot code) wasn't
+<<<<<<< HEAD
 # thread-safe - got occasional coredumps or malloc corruption.
 # On cygwin it even hangs.
 SKIP: {
     skip "[perl #45053] on cygwin", 1 if $^O eq 'cygwin';
 
+=======
+# thread-safe - got occasional coredumps or malloc corruption
+watchdog(60, "process");
+{
+>>>>>>> blead
     local $SIG{__WARN__} = sub {};   # Ignore any thread creation failure warnings
     my @t;
     for (1..100) {
@@ -357,12 +363,14 @@ EOI
 	$r = $x && $y;
 	$x &&= $y;
 	$r = $x ? $y : $z;
-	$r = $x ? "x" : $x ? "x" : $x ? "x" : $x ? "x" : $x ? "x" : $x ? "x"
-	   : $x ? "x" : $x ? "x" : $x ? "x" : $x ? "x" : $x ? "x" : "y";
 	@a = map $x+1, @a;
 	@a = grep $x+1, @a;
 	$r = /$x/../$y/;
-	while (1) { $x = 0 };
+
+	# this one will fail since we removed tail recursion optimisation
+	# with f11ca51e41e8
+	#while (1) { $x = 0 };
+
 	while (0) { $x = 0 };
 	for ($x=0; $y; $z=0) { $r = 0 };
 	for (1) { $x = 0 };
@@ -376,13 +384,18 @@ EOF
 
 
 # [perl #78494] Pipes shared between threads block when closed
-watchdog 10;
 {
   my $perl = which_perl;
   $perl = qq'"$perl"' if $perl =~ /\s/;
   open(my $OUT, "|$perl") || die("ERROR: $!");
   threads->create(sub { })->join;
   ok(1, "Pipes shared between threads do not block when closed");
+}
+
+# [perl #105208] Typeglob clones should not be cloned again during a join
+{
+  threads->create(sub { sub { $::hypogamma = 3 } })->join->();
+  is $::hypogamma, 3, 'globs cloned and joined are not recloned';
 }
 
 # EOF

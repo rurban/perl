@@ -27,7 +27,7 @@ $Params::Check::VERBOSE = 1;
 
 =head1 NAME
 
-CPANPLUS::Module
+CPANPLUS::Module - CPAN module objects for CPANPLUS
 
 =head1 SYNOPSIS
 
@@ -688,7 +688,7 @@ sub get_installer_type {
     if( $type and $type eq INSTALLER_BUILD and (
         not CPANPLUS::Dist->has_dist_type( INSTALLER_BUILD )
         or not $cb->module_tree( INSTALLER_BUILD )
-                    ->is_uptodate( version => '0.24' )
+                    ->is_uptodate( version => '0.60' )
     ) ) {
 
         ### XXX this is for recording purposes only. We *have* to install
@@ -696,7 +696,7 @@ sub get_installer_type {
         ### saying 'no such dist type';
         ### XXX duplicated from CPANPLUS::Selfupdate. fix somehow?
         my $href = $self->status->configure_requires || {};
-        my $deps = { INSTALLER_BUILD, '0.24', %$href };
+        my $deps = { INSTALLER_BUILD, '0.60', %$href };
 
         $self->status->configure_requires( $deps );
 
@@ -1290,6 +1290,10 @@ Returns a boolean indicating if this module is uptodate or not.
                             version => $self->version,
                             @_,
                         );
+
+            ### Don't trust modules which are the result of @INC hooks
+            ### FatPacker uses this trickery and it causes WTF moments
+            return $alt_rv if defined $href->{dir} && ref $href->{dir};
 
             return $href->{$key} || $alt_rv;
         }

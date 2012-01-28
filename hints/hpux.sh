@@ -157,7 +157,7 @@ case `$cc -v 2>&1`"" in
 		done
 	    [ -z "$cc_found" ] && cc_found=`which cc`
 	    what $cc_found >&4
-	    ccversion=`what $cc_found | awk '/Compiler/{print $2}/Itanium/{print $6,$7}/for Integrity/{print $6}'`
+	    ccversion=`what $cc_found | awk '/Compiler/{print $2}/Itanium/{print $6,$7}/for Integrity/{print $6,$7}'`
 	    case "$ccflags" in
                "-Ae "*) ;;
 		*)  ccflags="-Ae $cc_cppflags"
@@ -263,6 +263,16 @@ EOM
 
 	case "$ccisgcc" in
 	    $define|true|[Yy])
+		# The fixed socket.h header file is wrong for gcc-4.x
+		# on PA-RISC2.0W, so Sock_type_t is size_t which is
+		# unsigned long which is 64bit which is too long
+		case "$gccversion" in
+		    4*) case "$archname" in
+			    PA-RISC*) socksizetype=int ;;
+			    esac
+			;;
+		    esac
+
 		# For the moment, don't care that it ain't supported (yet)
 		# by gcc (up to and including 2.95.3), cause it'll crash
 		# anyway. Expect auto-detection of 64-bit enabled gcc on
@@ -404,7 +414,7 @@ case "$ccisgcc" in
 	    fi
 	;;
 
-    *)	# HP's compiler cannot combine -g and -O
+    *)
 	case "$optimize" in
 	    "")           optimize="+O2 +Onolimit" ;;
 	    *O[3456789]*) optimize=`echo "$optimize" | sed -e 's/O[3-9]/O2/'` ;;
@@ -426,6 +436,19 @@ case "$ccisgcc" in
 			# maint (5.8.8+) and blead (5.9.3+)
 			# -O1/+O1 passed all tests (m)'05 [ 10 Jan 2005 ]
 			optimize="$opt"			;;
+			B3910B*A.06.15)
+			# > cc --version
+			# cc: HP C/aC++ B3910B A.06.15 [May 16 2007]
+			# Has optimizing problems with +O2 for blead (5.15.7),
+			# see https://rt.perl.org:443/rt3/Ticket/Display.html?id=103668.
+			#
+			# +O2 +Onolimit +Onoprocelim  +Ostore_ordering \
+			# +Onolibcalls=strcmp
+			# passes all tests (with/without -DDEBUGGING) [Nov 17 2011]
+			case "$optimize" in
+				*O2*) optimize="$optimize +Onoprocelim +Ostore_ordering +Onolibcalls=strcmp" ;;
+				esac
+			;;
 		    *)  doop_cflags="optimize=\"$opt\""
 			op_cflags="optimize=\"$opt\""	;;
 		    esac

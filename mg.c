@@ -182,6 +182,8 @@ Perl_mg_get(pTHX_ SV *sv)
 
     PERL_ARGS_ASSERT_MG_GET;
 
+    if (PL_localizing == 1 && sv == DEFSV) return 0;
+
     save_magic(mgs_ix, sv);
 
     /* We must call svt_get(sv, mg) for each valid entry in the linked
@@ -251,6 +253,8 @@ Perl_mg_set(pTHX_ SV *sv)
 
     PERL_ARGS_ASSERT_MG_SET;
 
+    if (PL_localizing == 2 && sv == DEFSV) return 0;
+
     save_magic(mgs_ix, sv);
 
     for (mg = SvMAGIC(sv); mg; mg = nextmg) {
@@ -261,7 +265,7 @@ Perl_mg_set(pTHX_ SV *sv)
 	    (SSPTR(mgs_ix, MGS*))->mgs_magical = 0;
 	}
 	if (PL_localizing == 2
-	    && (PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type) || sv == DEFSV))
+	    && PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type))
 	    continue;
 	if (vtbl && vtbl->svt_set)
 	    vtbl->svt_set(aTHX_ sv, mg);
@@ -1032,9 +1036,7 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
 	}
 	break;
     case '^':
-	if (!isGV_with_GP(PL_defoutgv))
-	    s = "";
-	else if (GvIOp(PL_defoutgv))
+	if (GvIOp(PL_defoutgv))
 		s = IoTOP_NAME(GvIOp(PL_defoutgv));
 	if (s)
 	    sv_setpv(sv,s);
@@ -1044,9 +1046,7 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
 	}
 	break;
     case '~':
-	if (!isGV_with_GP(PL_defoutgv))
-	    s = "";
-	else if (GvIOp(PL_defoutgv))
+	if (GvIOp(PL_defoutgv))
 	    s = IoFMT_NAME(GvIOp(PL_defoutgv));
 	if (!s)
 	    s = GvENAME(PL_defoutgv);
@@ -1069,7 +1069,7 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
     case '/':
 	break;
     case '[':
-	sv_setiv(sv, (IV)CopARYBASE_get(PL_curcop));
+	sv_setiv(sv, 0);
 	break;
     case '|':
 	if (GvIO(PL_defoutgv))
@@ -1306,7 +1306,9 @@ Perl_magic_getsig(pTHX_ SV *sv, MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_GETSIG;
 
     if (!i) {
-	mg->mg_private = i = whichsig(MgPV_nolen_const(mg));
+        STRLEN siglen;
+        const char * sig = MgPV_const(mg, siglen);
+        mg->mg_private = i = whichsig_pvn(sig, siglen);
     }
 
     if (i > 0) {
@@ -1497,9 +1499,9 @@ Perl_magic_setsig(pTHX_ SV *sv, MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_SETSIG;
 
     if (*s == '_') {
-	if (strEQ(s,"__DIE__"))
+        if (memEQs(s, len, "__DIE__"))
 	    svp = &PL_diehook;
-	else if (strEQ(s,"__WARN__")
+	else if (memEQs(s, len, "__WARN__")
 		 && (sv ? 1 : PL_warnhook != PERL_WARNHOOK_FATAL)) {
 	    /* Merge the existing behaviours, which are as follows:
 	       magic_setsig, we always set svp to &PL_warnhook
@@ -1507,8 +1509,11 @@ Perl_magic_setsig(pTHX_ SV *sv, MAGIC *mg)
 	       For magic_clearsig, we don't change the warnings handler if it's
 	       set to the &PL_warnhook.  */
 	    svp = &PL_warnhook;
-	} else if (sv)
-	    Perl_croak(aTHX_ "No such hook: %s", s);
+        } else if (sv) {
+            SV *tmp = sv_newmortal();
+            Perl_croak(aTHX_ "No such hook: %s",
+                                pv_pretty(tmp, s, len, 0, NULL, NULL, 0));
+        }
 	i = 0;
 	if (svp && *svp) {
 	    if (*svp != PERL_WARNHOOK_FATAL)
@@ -1519,12 +1524,15 @@ Perl_magic_setsig(pTHX_ SV *sv, MAGIC *mg)
     else {
 	i = (I16)mg->mg_private;
 	if (!i) {
-	    i = whichsig(s);	/* ...no, a brick */
+	    i = whichsig_pvn(s, len);   /* ...no, a brick */
 	    mg->mg_private = (U16)i;
 	}
 	if (i <= 0) {
-	    if (sv)
-		Perl_ck_warner(aTHX_ packWARN(WARN_SIGNAL), "No such signal: SIG%s", s);
+	    if (sv) {
+                SV *tmp = sv_newmortal();
+		Perl_ck_warner(aTHX_ packWARN(WARN_SIGNAL), "No such signal: SIG%s",
+                                            pv_pretty(tmp, s, len, 0, NULL, NULL, 0));
+            }
 	    return 0;
 	}
 #ifdef HAS_SIGPROCMASK
@@ -1580,7 +1588,7 @@ Perl_magic_setsig(pTHX_ SV *sv, MAGIC *mg)
 	} else {
 	    sv = NULL;
 	}
-	if (sv && strEQ(s,"IGNORE")) {
+	if (sv && memEQs(s, len,"IGNORE")) {
 	    if (i) {
 #ifdef FAKE_PERSISTENT_SIGNAL_HANDLERS
 		PL_sig_ignoring[i] = 1;
@@ -1590,7 +1598,7 @@ Perl_magic_setsig(pTHX_ SV *sv, MAGIC *mg)
 #endif
 	    }
 	}
-	else if (!sv || strEQ(s,"DEFAULT") || !len) {
+	else if (!sv || memEQs(s, len,"DEFAULT") || !len) {
 	    if (i) {
 #ifdef FAKE_DEFAULT_SIGNAL_HANDLERS
 		PL_sig_defaulting[i] = 1;
@@ -1900,6 +1908,7 @@ Perl_magic_clearpack(pTHX_ SV *sv, MAGIC *mg)
 {
     PERL_ARGS_ASSERT_MAGIC_CLEARPACK;
 
+    if (mg->mg_type == PERL_MAGIC_tiedscalar) return 0;
     return magic_methpack(sv,mg,"DELETE");
 }
 
@@ -2018,7 +2027,7 @@ Perl_magic_getarylen(pTHX_ SV *sv, const MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_GETARYLEN;
 
     if (obj) {
-	sv_setiv(sv, AvFILL(obj) + CopARYBASE_get(PL_curcop));
+	sv_setiv(sv, AvFILL(obj));
     } else {
 	SvOK_off(sv);
     }
@@ -2034,7 +2043,7 @@ Perl_magic_setarylen(pTHX_ SV *sv, MAGIC *mg)
     PERL_ARGS_ASSERT_MAGIC_SETARYLEN;
 
     if (obj) {
-	av_fill(obj, SvIV(sv) - CopARYBASE_get(PL_curcop));
+	av_fill(obj, SvIV(sv));
     } else {
 	Perl_ck_warner(aTHX_ packWARN(WARN_MISC),
 		       "Attempt to set length of freed array");
@@ -2082,7 +2091,7 @@ Perl_magic_getpos(pTHX_ SV *sv, MAGIC *mg)
 	    I32 i = found->mg_len;
 	    if (DO_UTF8(lsv))
 		sv_pos_b2u(lsv, &i);
-	    sv_setiv(sv, i + CopARYBASE_get(PL_curcop));
+	    sv_setiv(sv, i);
 	    return 0;
 	}
     }
@@ -2123,7 +2132,7 @@ Perl_magic_setpos(pTHX_ SV *sv, MAGIC *mg)
     }
     len = SvPOK(lsv) ? SvCUR(lsv) : sv_len(lsv);
 
-    pos = SvIV(sv) - CopARYBASE_get(PL_curcop);
+    pos = SvIV(sv);
 
     if (DO_UTF8(lsv)) {
 	ulen = sv_len_utf8(lsv);
@@ -2159,16 +2168,24 @@ Perl_magic_getsubstr(pTHX_ SV *sv, MAGIC *mg)
     const char * const tmps = SvPV_const(lsv,len);
     STRLEN offs = LvTARGOFF(sv);
     STRLEN rem = LvTARGLEN(sv);
+    const bool negoff = LvFLAGS(sv) & 1;
+    const bool negrem = LvFLAGS(sv) & 2;
 
     PERL_ARGS_ASSERT_MAGIC_GETSUBSTR;
     PERL_UNUSED_ARG(mg);
 
+    if (!translate_substr_offsets(
+	    SvUTF8(lsv) ? sv_len_utf8(lsv) : len,
+	    negoff ? -(IV)offs : (IV)offs, !negoff,
+	    negrem ? -(IV)rem  : (IV)rem,  !negrem, &offs, &rem
+    )) {
+	Perl_ck_warner(aTHX_ packWARN(WARN_SUBSTR), "substr outside of string");
+	sv_setsv_nomg(sv, &PL_sv_undef);
+	return 0;
+    }
+
     if (SvUTF8(lsv))
 	offs = sv_pos_u2b_flags(lsv, offs, &rem, SV_CONST_RETURN);
-    if (offs > len)
-	offs = len;
-    if (rem > len - offs)
-	rem = len - offs;
     sv_setpvn(sv, tmps + offs, rem);
     if (SvUTF8(lsv))
         SvUTF8_on(sv);
@@ -2179,34 +2196,52 @@ int
 Perl_magic_setsubstr(pTHX_ SV *sv, MAGIC *mg)
 {
     dVAR;
-    STRLEN len;
+    STRLEN len, lsv_len, oldtarglen, newtarglen;
     const char * const tmps = SvPV_const(sv, len);
     SV * const lsv = LvTARG(sv);
     STRLEN lvoff = LvTARGOFF(sv);
     STRLEN lvlen = LvTARGLEN(sv);
+    const bool negoff = LvFLAGS(sv) & 1;
+    const bool neglen = LvFLAGS(sv) & 2;
 
     PERL_ARGS_ASSERT_MAGIC_SETSUBSTR;
     PERL_UNUSED_ARG(mg);
 
+    SvGETMAGIC(lsv);
+    if (SvROK(lsv))
+	Perl_ck_warner(aTHX_ packWARN(WARN_SUBSTR),
+			    "Attempt to use reference as lvalue in substr"
+	);
+    if (SvUTF8(lsv)) lsv_len = sv_len_utf8(lsv);
+    else (void)SvPV_nomg(lsv,lsv_len);
+    if (!translate_substr_offsets(
+	    lsv_len,
+	    negoff ? -(IV)lvoff : (IV)lvoff, !negoff,
+	    neglen ? -(IV)lvlen : (IV)lvlen, !neglen, &lvoff, &lvlen
+    ))
+	Perl_croak(aTHX_ "substr outside of string");
+    oldtarglen = lvlen;
     if (DO_UTF8(sv)) {
 	sv_utf8_upgrade(lsv);
 	lvoff = sv_pos_u2b_flags(lsv, lvoff, &lvlen, SV_CONST_RETURN);
-	sv_insert(lsv, lvoff, lvlen, tmps, len);
-	LvTARGLEN(sv) = sv_len_utf8(sv);
+	sv_insert_flags(lsv, lvoff, lvlen, tmps, len, 0);
+	newtarglen = sv_len_utf8(sv);
 	SvUTF8_on(lsv);
     }
     else if (lsv && SvUTF8(lsv)) {
 	const char *utf8;
 	lvoff = sv_pos_u2b_flags(lsv, lvoff, &lvlen, SV_CONST_RETURN);
-	LvTARGLEN(sv) = len;
+	newtarglen = len;
 	utf8 = (char*)bytes_to_utf8((U8*)tmps, &len);
-	sv_insert(lsv, lvoff, lvlen, utf8, len);
+	sv_insert_flags(lsv, lvoff, lvlen, utf8, len, 0);
 	Safefree(utf8);
     }
     else {
-	sv_insert(lsv, lvoff, lvlen, tmps, len);
-	LvTARGLEN(sv) = len;
+	sv_insert_flags(lsv, lvoff, lvlen, tmps, len, 0);
+	newtarglen = len;
     }
+    if (!neglen) LvTARGLEN(sv) = newtarglen;
+    if (negoff)  LvTARGOFF(sv) += newtarglen - oldtarglen;
 
     return 0;
 }
@@ -2262,6 +2297,19 @@ Perl_magic_setvec(pTHX_ SV *sv, MAGIC *mg)
     PERL_UNUSED_ARG(mg);
     do_vecset(sv);	/* XXX slurp this routine */
     return 0;
+}
+
+int
+Perl_magic_setvstring(pTHX_ SV *sv, MAGIC *mg)
+{
+    PERL_ARGS_ASSERT_MAGIC_SETVSTRING;
+
+    if (SvPOKp(sv)) {
+	SV * const vecsv = sv_newmortal();
+	scan_vstring(mg->mg_ptr, mg->mg_ptr + mg->mg_len, vecsv);
+	if (sv_eq_flags(vecsv, sv, 0 /*nomg*/)) return 0;
+    }
+    return sv_unmagic(sv, mg->mg_type);
 }
 
 int
@@ -2669,33 +2717,25 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	    IoLINES(GvIOp(PL_last_in_gv)) = SvIV(sv);
 	break;
     case '^':
-	if (isGV_with_GP(PL_defoutgv)) {
-	    Safefree(IoTOP_NAME(GvIOp(PL_defoutgv)));
-	    s = IoTOP_NAME(GvIOp(PL_defoutgv)) = savesvpv(sv);
-	    IoTOP_GV(GvIOp(PL_defoutgv)) =  gv_fetchsv(sv, GV_ADD, SVt_PVIO);
-	}
+	Safefree(IoTOP_NAME(GvIOp(PL_defoutgv)));
+	s = IoTOP_NAME(GvIOp(PL_defoutgv)) = savesvpv(sv);
+	IoTOP_GV(GvIOp(PL_defoutgv)) =  gv_fetchsv(sv, GV_ADD, SVt_PVIO);
 	break;
     case '~':
-	if (isGV_with_GP(PL_defoutgv)) {
-	    Safefree(IoFMT_NAME(GvIOp(PL_defoutgv)));
-	    s = IoFMT_NAME(GvIOp(PL_defoutgv)) = savesvpv(sv);
-	    IoFMT_GV(GvIOp(PL_defoutgv)) =  gv_fetchsv(sv, GV_ADD, SVt_PVIO);
-	}
+	Safefree(IoFMT_NAME(GvIOp(PL_defoutgv)));
+	s = IoFMT_NAME(GvIOp(PL_defoutgv)) = savesvpv(sv);
+	IoFMT_GV(GvIOp(PL_defoutgv)) =  gv_fetchsv(sv, GV_ADD, SVt_PVIO);
 	break;
     case '=':
-	if (isGV_with_GP(PL_defoutgv))
-	    IoPAGE_LEN(GvIOp(PL_defoutgv)) = (SvIV(sv));
+	IoPAGE_LEN(GvIOp(PL_defoutgv)) = (SvIV(sv));
 	break;
     case '-':
-	if (isGV_with_GP(PL_defoutgv)) {
-	    IoLINES_LEFT(GvIOp(PL_defoutgv)) = (SvIV(sv));
-	    if (IoLINES_LEFT(GvIOp(PL_defoutgv)) < 0L)
+	IoLINES_LEFT(GvIOp(PL_defoutgv)) = (SvIV(sv));
+	if (IoLINES_LEFT(GvIOp(PL_defoutgv)) < 0L)
 		IoLINES_LEFT(GvIOp(PL_defoutgv)) = 0L;
-	}
 	break;
     case '%':
-	if (isGV_with_GP(PL_defoutgv))
-	    IoPAGE(GvIOp(PL_defoutgv)) = (SvIV(sv));
+	IoPAGE(GvIOp(PL_defoutgv)) = (SvIV(sv));
 	break;
     case '|':
 	{
@@ -2728,7 +2768,8 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	}
 	break;
     case '[':
-	CopARYBASE_set(&PL_compiling, SvIV(sv));
+	if (SvIV(sv) != 0)
+	    Perl_croak(aTHX_ "Assigning non-zero to $[ is no longer possible");
 	break;
     case '?':
 #ifdef COMPLEX_STATUS
@@ -2827,7 +2868,7 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	(void)setregid((Gid_t)PL_gid, (Gid_t)-1);
 #else
 #ifdef HAS_SETRESGID
-      (void)setresgid((Gid_t)PL_gid, (Gid_t)-1, (Gid_t) 1);
+      (void)setresgid((Gid_t)PL_gid, (Gid_t)-1, (Gid_t) -1);
 #else
 	if (PL_gid == PL_egid)			/* special case $( = $) */
 	    (void)PerlProc_setgid(PL_gid);
@@ -2992,22 +3033,41 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 }
 
 I32
-Perl_whichsig(pTHX_ const char *sig)
+Perl_whichsig_sv(pTHX_ SV *sigsv)
+{
+    const char *sigpv;
+    STRLEN siglen;
+    PERL_ARGS_ASSERT_WHICHSIG_SV;
+    PERL_UNUSED_CONTEXT;
+    sigpv = SvPV_const(sigsv, siglen);
+    return whichsig_pvn(sigpv, siglen);
+}
+
+I32
+Perl_whichsig_pv(pTHX_ const char *sig)
+{
+    PERL_ARGS_ASSERT_WHICHSIG_PV;
+    PERL_UNUSED_CONTEXT;
+    return whichsig_pvn(sig, strlen(sig));
+}
+
+I32
+Perl_whichsig_pvn(pTHX_ const char *sig, STRLEN len)
 {
     register char* const* sigv;
 
-    PERL_ARGS_ASSERT_WHICHSIG;
+    PERL_ARGS_ASSERT_WHICHSIG_PVN;
     PERL_UNUSED_CONTEXT;
 
     for (sigv = (char* const*)PL_sig_name; *sigv; sigv++)
-	if (strEQ(sig,*sigv))
+	if (strlen(*sigv) == len && memEQ(sig,*sigv, len))
 	    return PL_sig_num[sigv - (char* const*)PL_sig_name];
 #ifdef SIGCLD
-    if (strEQ(sig,"CHLD"))
+    if (memEQs(sig, len, "CHLD"))
 	return SIGCLD;
 #endif
 #ifdef SIGCHLD
-    if (strEQ(sig,"CLD"))
+    if (memEQs(sig, len, "CLD"))
 	return SIGCHLD;
 #endif
     return -1;

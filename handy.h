@@ -70,10 +70,13 @@ Null SV pointer. (No longer available when C<PERL_CORE> is defined.)
 #define MUTABLE_IO(p)	((IO *)MUTABLE_PTR(p))
 #define MUTABLE_SV(p)	((SV *)MUTABLE_PTR(p))
 
-/* XXX Configure ought to have a test for a boolean type, if I can
-   just figure out all the headers such a test needs.
-   Andy Dougherty	August 1996
-*/
+#ifdef I_STDBOOL
+#  include <stdbool.h>
+#  ifndef HAS_BOOL
+#    define HAS_BOOL 1
+#  endif
+#endif
+
 /* bool is built-in for g++-2.6.3 and later, which might be used
    for extensions.  <_G_config.h> defines _G_HAVE_BOOL, but we can't
    be sure _G_config.h will be included before this file.  _G_config.h
@@ -112,9 +115,10 @@ Null SV pointer. (No longer available when C<PERL_CORE> is defined.)
 
 /* a simple (bool) cast may not do the right thing: if bool is defined
  * as char for example, then the cast from int is implementation-defined
+ * (bool)!!(cbool) in a ternary triggers a bug in xlc on AIX
  */
 
-#define cBOOL(cbool) ((bool)!!(cbool))
+#define cBOOL(cbool) ((cbool) ? (bool)1 : (bool)0)
 
 /* Try to figure out __func__ or __FUNCTION__ equivalent, if any.
  * XXX Should really be a Configure probe, with HAS__FUNCTION__
@@ -470,7 +474,7 @@ There are three variants for all the functions in this section.  The base ones
 operate using the character set of the platform Perl is running on.  The ones
 with an C<_A> suffix operate on the ASCII character set, and the ones with an
 C<_L1> suffix operate on the full Latin1 character set.  All are unaffected by
-locale.
+locale and by C<use bytes>.
 
 For ASCII platforms, the base function with no suffix and the one with the
 C<_A> suffix are identical.  The function with the C<_L1> suffix imposes the
@@ -559,27 +563,38 @@ patched there.  The file as of this writing is cpan/Devel-PPPort/parts/inc/misc
 
 */
 
-/* FITS_IN_8_BITS(c) returns true if c occupies no more than 8 bits.  It is
- * designed to be hopefully bomb-proof, making sure that no bits of
- * information are lost even on a 64-bit machine, but to get the compiler to
- * optimize it out if possible.  This is because Configure makes sure that the
- * machine has an 8-bit byte, so if c is stored in a byte, the sizeof()
- * guarantees that this evaluates to a constant true at compile time.  The use
- * of the mask instead of '< 256' keeps gcc from complaining that it is alway
- * true, when c's storage class is a byte.  Use U64TYPE because U64 is known
- * only in the perl core, and this macro can be called from outside that */
+/* Specify the widest unsigned type on the platform.  Use U64TYPE because U64
+ * is known only in the perl core, and this macro can be called from outside
+ * that */
 #ifdef HAS_QUAD
-#  define FITS_IN_8_BITS(c) ((sizeof(c) == 1) || (((U64TYPE)(c) & 0xFF) == (U64TYPE)(c)))
+#   define WIDEST_UTYPE U64TYPE
 #else
-#  define FITS_IN_8_BITS(c) ((sizeof(c) == 1) || (((U32)(c) & 0xFF) == (U32)(c)))
+#   define WIDEST_UTYPE U32
 #endif
 
-#define isASCII(c)    (FITS_IN_8_BITS(c) ? NATIVE_TO_UNI((U8) c) <= 127 : 0)
+/* FITS_IN_8_BITS(c) returns true if c doesn't have  a bit set other than in
+ * the lower 8.  It is designed to be hopefully bomb-proof, making sure that no
+ * bits of information are lost even on a 64-bit machine, but to get the
+ * compiler to optimize it out if possible.  This is because Configure makes
+ * sure that the machine has an 8-bit byte, so if c is stored in a byte, the
+ * sizeof() guarantees that this evaluates to a constant true at compile time.
+ */
+#define FITS_IN_8_BITS(c) ((sizeof(c) == 1) || !(((WIDEST_UTYPE)(c)) & ~0xFF))
+
+#ifdef EBCDIC
+#   define isASCII(c)    (FITS_IN_8_BITS(c) && (NATIVE_TO_UNI((U8) (c)) < 128))
+#else
+#   define isASCII(c)    ((WIDEST_UTYPE)(c) < 128)
+#endif
+
 #define isASCII_A(c)  isASCII(c)
+#define isASCII_L1(c)  isASCII(c)
 
 /* ASCII range only */
 #ifdef H_PERL       /* If have access to perl.h, lookup in its table */
-/* Bits for PL_charclass[] */
+/* Bits for PL_charclass[].  These use names used in l1_char_class_tab.h but
+ * their actual definitions are here.  If that has a name not used here, it
+ * won't compile. */
 #  define _CC_ALNUMC_A         (1<<0)
 #  define _CC_ALNUMC_L1        (1<<1)
 #  define _CC_ALPHA_A          (1<<2)
@@ -613,6 +628,10 @@ patched there.  The file as of this writing is cpan/Devel-PPPort/parts/inc/misc
 #  define _CC_NONLATIN1_FOLD   (1<<30)
 /* Unused
  *                             (1<<31)
+ * If more are needed, can give up some of the above.  The first ones to go
+ * would be those that require just two tests to verify, either there are two
+ * code points, like BLANK_A, or occupy a single range like OCTAL_A, DIGIT_A,
+ * UPPER_A, and LOWER_A.
  */
 
 #  ifdef DOINIT
@@ -644,7 +663,7 @@ EXTCONST U32 PL_charclass[];
      * multi-char fold */
 #   define _HAS_NONLATIN1_FOLD_CLOSURE_ONLY_FOR_USE_BY_REGCOMP_DOT_C_AND_REGEXEC_DOT_C(c) ((! cBOOL(FITS_IN_8_BITS(c))) || (PL_charclass[(U8) NATIVE_TO_UNI(c)] & _CC_NONLATIN1_FOLD))
 #else   /* No perl.h. */
-#   define isOCTAL_A(c)  ((c) >= '0' && (c) <= '9')
+#   define isOCTAL_A(c)  ((c) <= '7' && (c) >= '0')
 #   ifdef EBCDIC
 #       define isALNUMC_A(c)   (isASCII(c) && isALNUMC(c))
 #       define isALPHA_A(c)    (isASCII(c) && isALPHA(c))
@@ -665,8 +684,8 @@ EXTCONST U32 PL_charclass[];
 #       define isALNUMC_A(c) (isALPHA_A(c) || isDIGIT_A(c))
 #       define isALPHA_A(c)  (isUPPER_A(c) || isLOWER_A(c))
 #       define isBLANK_A(c)  ((c) == ' ' || (c) == '\t')
-#       define isCNTRL_A(c)  (FITS_IN_8_BITS(c) ? ((U8) (c) < ' ' || (c) == 127) : 0)
-#       define isDIGIT_A(c)  ((c) >= '0' && (c) <= '9')
+#       define isCNTRL_A(c)  (FITS_IN_8_BITS(c) && ((U8) (c) < ' ' || (c) == 127))
+#       define isDIGIT_A(c)  ((c) <= '9' && (c) >= '0')
 #       define isGRAPH_A(c)  (isWORDCHAR_A(c) || isPUNCT_A(c))
 #       define isIDFIRST_A(c) (isALPHA_A(c) || (c) == '_')
 #       define isLOWER_A(c)  ((c) >= 'a' && (c) <= 'z')
@@ -674,9 +693,9 @@ EXTCONST U32 PL_charclass[];
 #       define isPSXSPC_A(c) (isSPACE_A(c) || (c) == '\v')
 #       define isPUNCT_A(c)  (((c) >= 33 && (c) <= 47) || ((c) >= 58 && (c) <= 64)  || ((c) >= 91 && (c) <= 96) || ((c) >= 123 && (c) <= 126))
 #       define isSPACE_A(c)  ((c) == ' ' || (c) == '\t' || (c) == '\n' || (c) =='\r' || (c) == '\f')
-#       define isUPPER_A(c) ((c) >= 'A' && (c) <= 'Z')
+#       define isUPPER_A(c)  ((c) <= 'Z' && (c) >= 'A')
 #       define isWORDCHAR_A(c) (isALPHA_A(c) || isDIGIT_A(c) || (c) == '_')
-#       define isXDIGIT_A(c)   (isDIGIT_A(c) || ((c) >= 'a' && (c) <= 'f') || ((c) >= 'A' && (c) <= 'F'))
+#       define isXDIGIT_A(c)   (isDIGIT_A(c) || ((c) >= 'a' && (c) <= 'f') || ((c) <= 'F' && (c) >= 'A'))
 #   endif
 #endif  /* ASCII range definitions */
 
@@ -846,25 +865,38 @@ EXTCONST U32 PL_charclass[];
 #define isPSXSPC_LC(c)		(isSPACE_LC(c) || (c) == '\v')
 #define isBLANK_LC(c)		isBLANK(c) /* could be wrong */
 
-#define isALNUM_uni(c)		is_uni_alnum(c)
-#define isIDFIRST_uni(c)	is_uni_idfirst(c)
-#define isALPHA_uni(c)		is_uni_alpha(c)
-#define isSPACE_uni(c)		is_uni_space(c)
-#define isDIGIT_uni(c)		is_uni_digit(c)
-#define isUPPER_uni(c)		is_uni_upper(c)
-#define isLOWER_uni(c)		is_uni_lower(c)
-#define isASCII_uni(c)		is_uni_ascii(c)
-#define isCNTRL_uni(c)		is_uni_cntrl(c)
-#define isGRAPH_uni(c)		is_uni_graph(c)
-#define isPRINT_uni(c)		is_uni_print(c)
-#define isPUNCT_uni(c)		is_uni_punct(c)
-#define isXDIGIT_uni(c)		is_uni_xdigit(c)
+/* For use in the macros just below.  If the input is Latin1, use the Latin1
+ * (_L1) version of the macro; otherwise use the function.  Won't compile if
+ * 'c' isn't unsigned, as won't match function prototype. The macros do bounds
+ * checking, so have duplicate checks here, so could create versions of the
+ * macros that don't, but experiments show that gcc optimizes them out anyway.
+ */
+#define generic_uni(macro, function, c) ((c) < 256               \
+                                         ? CAT2(macro, _L1)(c)   \
+                                         : function(c))
+/* Note that all ignore 'use bytes' */
+
+#define isALNUM_uni(c)		generic_uni(isWORDCHAR, is_uni_alnum, c)
+#define isIDFIRST_uni(c)        generic_uni(isIDFIRST, is_uni_idfirst, c)
+#define isALPHA_uni(c)		generic_uni(isALPHA, is_uni_alpha, c)
+#define isSPACE_uni(c)		generic_uni(isSPACE, is_uni_space, c)
+#define isDIGIT_uni(c)		generic_uni(isDIGIT, is_uni_digit, c)
+#define isUPPER_uni(c)		generic_uni(isUPPER, is_uni_upper, c)
+#define isLOWER_uni(c)		generic_uni(isLOWER, is_uni_lower, c)
+#define isASCII_uni(c)		isASCII(c)
+/* All controls are in Latin1 */
+#define isCNTRL_uni(c)		((c) < 256 && isCNTRL_L1(c))
+#define isGRAPH_uni(c)		generic_uni(isGRAPH, is_uni_graph, c)
+#define isPRINT_uni(c)		generic_uni(isPRINT, is_uni_print, c)
+#define isPUNCT_uni(c)		generic_uni(isPUNCT, is_uni_punct, c)
+#define isXDIGIT_uni(c)		generic_uni(isXDIGIT, is_uni_xdigit, c)
 #define toUPPER_uni(c,s,l)	to_uni_upper(c,s,l)
 #define toTITLE_uni(c,s,l)	to_uni_title(c,s,l)
 #define toLOWER_uni(c,s,l)	to_uni_lower(c,s,l)
 #define toFOLD_uni(c,s,l)	to_uni_fold(c,s,l)
 
-#define isPSXSPC_uni(c)		(isSPACE_uni(c) ||(c) == '\f')
+/* Posix and regular space differ only in U+000B, which is in Latin1 */
+#define isPSXSPC_uni(c)		((c) < 256 ? isPSXSPC_L1(c) : isSPACE_uni(c))
 #define isBLANK_uni(c)		isBLANK(c) /* could be wrong */
 
 #define isALNUM_LC_uvchr(c)	(c < 256 ? isALNUM_LC(c) : is_uni_alnum_lc(c))
@@ -882,30 +914,60 @@ EXTCONST U32 PL_charclass[];
 #define isPSXSPC_LC_uni(c)	(isSPACE_LC_uni(c) ||(c) == '\f')
 #define isBLANK_LC_uni(c)	isBLANK(c) /* could be wrong */
 
-#define isALNUM_utf8(p)		is_utf8_alnum(p)
+/* For use in the macros just below.  If the input is ASCII, use the ASCII (_A)
+ * version of the macro; if the input is in the upper Latin1 range, use the
+ * Latin1 (_L1) version of the macro, after converting from utf8; otherwise use
+ * the function.  This relies on the fact that ASCII characters have the same
+ * representation whether utf8 or not */
+#define generic_utf8(macro, function, p) (isASCII(*(p))                        \
+                                         ? CAT2(CAT2(macro,_),A)(*(p))               \
+                                         : (UTF8_IS_DOWNGRADEABLE_START(*(p))) \
+                                           ? CAT2(macro, _L1)                  \
+                                             (TWO_BYTE_UTF8_TO_UNI(*(p),       \
+                                                                   *((p)+1)))  \
+                                           : function(p))
+
+/* Note that all ignore 'use bytes' */
+
+#define isALNUM_utf8(p)		generic_utf8(isWORDCHAR, is_utf8_alnum, p)
 /* To prevent S_scan_word in toke.c from hanging, we have to make sure that
  * IDFIRST is an alnum.  See
- * http://rt.perl.org/rt3/Ticket/Display.html?id=74022
- * for more detail than you ever wanted to know about.  This used to be not the
- * XID version, but we decided to go with the more modern Unicode definition */
-#define isIDFIRST_utf8(p)	(is_utf8_xidfirst(p) && is_utf8_alnum(p))
-#define isIDCONT_utf8(p)	is_utf8_xidcont(p)
-#define isALPHA_utf8(p)		is_utf8_alpha(p)
-#define isSPACE_utf8(p)		is_utf8_space(p)
-#define isDIGIT_utf8(p)		is_utf8_digit(p)
-#define isUPPER_utf8(p)		is_utf8_upper(p)
-#define isLOWER_utf8(p)		is_utf8_lower(p)
-#define isASCII_utf8(p)		is_utf8_ascii(p)
-#define isCNTRL_utf8(p)		is_utf8_cntrl(p)
-#define isGRAPH_utf8(p)		is_utf8_graph(p)
-#define isPRINT_utf8(p)		is_utf8_print(p)
-#define isPUNCT_utf8(p)		is_utf8_punct(p)
-#define isXDIGIT_utf8(p)	is_utf8_xdigit(p)
+ * http://rt.perl.org/rt3/Ticket/Display.html?id=74022 for more detail than you
+ * ever wanted to know about.  XXX It is unclear if this should extend to
+ * isIDFIRST_uni() which it hasn't so far.  (In the ASCII range, there isn't a
+ * difference.) This used to be not the XID version, but we decided to go with
+ * the more modern Unicode definition */
+#define isIDFIRST_utf8(p)       (isASCII(*(p))                                  \
+                                ? isIDFIRST_A(*(p))                             \
+                                : (UTF8_IS_DOWNGRADEABLE_START(*(p)))           \
+                                  ? isIDFIRST_L1(TWO_BYTE_UTF8_TO_UNI(*(p),     \
+                                                                      *((p)+1)))\
+                                  : Perl__is_utf8__perl_idstart(aTHX_ p))
+#define isIDCONT_utf8(p)	generic_utf8(isWORDCHAR, is_utf8_xidcont, p)
+#define isALPHA_utf8(p)		generic_utf8(isALPHA, is_utf8_alpha, p)
+#define isSPACE_utf8(p)		generic_utf8(isSPACE, is_utf8_space, p)
+#define isDIGIT_utf8(p)		generic_utf8(isDIGIT, is_utf8_digit, p)
+#define isUPPER_utf8(p)		generic_utf8(isUPPER, is_utf8_upper, p)
+#define isLOWER_utf8(p)		generic_utf8(isLOWER, is_utf8_lower, p)
+/* Because ASCII is invariant under utf8, the non-utf8 macro works */
+#define isASCII_utf8(p)		isASCII(p)
+#define isCNTRL_utf8(p)		generic_utf8(isCNTRL, is_utf8_cntrl, p)
+#define isGRAPH_utf8(p)		generic_utf8(isGRAPH, is_utf8_graph, p)
+#define isPRINT_utf8(p)		generic_utf8(isPRINT, is_utf8_print, p)
+#define isPUNCT_utf8(p)		generic_utf8(isPUNCT, is_utf8_punct, p)
+#define isXDIGIT_utf8(p)	generic_utf8(isXDIGIT, is_utf8_xdigit, p)
 #define toUPPER_utf8(p,s,l)	to_utf8_upper(p,s,l)
 #define toTITLE_utf8(p,s,l)	to_utf8_title(p,s,l)
 #define toLOWER_utf8(p,s,l)	to_utf8_lower(p,s,l)
 
-#define isPSXSPC_utf8(c)	(isSPACE_utf8(c) ||(c) == '\f')
+/* Posix and regular space differ only in U+000B, which is in ASCII (and hence
+ * Latin1 */
+#define isPSXSPC_utf8(p)	((isASCII(*(p)))                               \
+                                ? isPSXSPC_A(*(p))                             \
+                                : (UTF8_IS_DOWNGRADEABLE_START(*(p))           \
+				  ? isPSXSPC_L1(TWO_BYTE_UTF8_TO_UNI(*(p),     \
+                                                                     *((p)+1)))\
+                                  : isSPACE_utf8(p)))
 #define isBLANK_utf8(c)		isBLANK(c) /* could be wrong */
 
 #define isALNUM_LC_utf8(p)	isALNUM_LC_uvchr(utf8_to_uvchr(p,  0))

@@ -42,8 +42,9 @@ XSUBs don't have CvPADLIST set - dXSTARG fetches values from PL_curpad,
 but that is really the callers pad (a slot of which is allocated by
 every entersub).
 
-The CvPADLIST AV has does not have AvREAL set, so REFCNT of component items
-is managed "manual" (mostly in pad.c) rather than normal av.c rules.
+The CvPADLIST AV has the REFCNT of its component items managed "manually"
+(mostly in pad.c) rather than by normal av.c rules.  So we turn off AvREAL
+just before freeing it, to let av.c know not to touch the entries.
 The items in the AV are not SVs as for a normal AV, but other AVs:
 
 0'th Entry of the CvPADLIST is an AV which represents the "names" or rather
@@ -277,7 +278,6 @@ Perl_pad_new(pTHX_ int flags)
 	av_store(pad, 0, NULL);
     }
 
-    AvREAL_off(padlist);
     /* Most subroutines never recurse, hence only need 2 entries in the padlist
        array - names, and depth=1.  The default for av_store() is to allocate
        0..3, and even an explicit call to av_extend() with <3 will be rounded
@@ -341,13 +341,10 @@ Perl_cv_undef(pTHX_ CV *cv)
 	    PTR2UV(cv), PTR2UV(PL_comppad))
     );
 
-#ifdef USE_ITHREADS
-    if (CvFILE(cv) && !CvISXSUB(cv)) {
-	/* for XSUBs CvFILE point directly to static memory; __FILE__ */
+    if (CvFILE(cv) && CvDYNFILE(cv)) {
 	Safefree(CvFILE(cv));
     }
     CvFILE(cv) = NULL;
-#endif
 
     if (!CvISXSUB(cv) && CvROOT(cv)) {
 	if (SvTYPE(cv) == SVt_PVCV && CvDEPTH(cv))
@@ -447,6 +444,7 @@ Perl_cv_undef(pTHX_ CV *cv)
 		PL_comppad_name = NULL;
 	    SvREFCNT_dec(sv);
 	}
+	AvREAL_off(CvPADLIST(cv));
 	SvREFCNT_dec(MUTABLE_SV(CvPADLIST(cv)));
 	CvPADLIST(cv) = NULL;
     }
@@ -466,8 +464,9 @@ Perl_cv_undef(pTHX_ CV *cv)
 	CvXSUB(cv) = NULL;
     }
     /* delete all flags except WEAKOUTSIDE and CVGV_RC, which indicate the
-     * ref status of CvOUTSIDE and CvGV */
-    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC);
+     * ref status of CvOUTSIDE and CvGV, and ANON, which pp_entersub uses
+     * to choose an error message */
+    CvFLAGS(cv) &= (CVf_WEAKOUTSIDE|CVf_CVGV_RC|CVf_ANON);
 }
 
 /*
@@ -670,7 +669,8 @@ Perl_pad_alloc(pTHX_ I32 optype, U32 tmptype)
     ASSERT_CURPAD_ACTIVE("pad_alloc");
 
     if (AvARRAY(PL_comppad) != PL_curpad)
-	Perl_croak(aTHX_ "panic: pad_alloc");
+	Perl_croak(aTHX_ "panic: pad_alloc, %p!=%p",
+		   AvARRAY(PL_comppad), PL_curpad);
     if (PL_pad_reset_pending)
 	pad_reset();
     if (tmptype & SVs_PADMY) {
@@ -763,13 +763,15 @@ Perl_pad_add_anon(pTHX_ CV* func, I32 optype)
 }
 
 /*
-=for apidoc m|pad_check_dup|SV *name|U32 flags|const HV *ourstash
+=for apidoc pad_check_dup
 
 Check for duplicate declarations: report any of:
+
      * a my in the current scope with the same name;
-     * an our (anywhere in the pad) with the same name and the same stash
-       as C<ourstash>
-C<is_our> indicates that the name to check is an 'our' declaration
+     * an our (anywhere in the pad) with the same name and the
+       same stash as C<ourstash>
+
+C<is_our> indicates that the name to check is an 'our' declaration.
 
 =cut
 */
@@ -994,6 +996,24 @@ Perl_find_rundefsv(pTHX)
 	return DEFSV;
 
     return PAD_SVl(po);
+}
+
+SV *
+Perl_find_rundefsv2(pTHX_ CV *cv, U32 seq)
+{
+    SV *namesv;
+    int flags;
+    PADOFFSET po;
+
+    PERL_ARGS_ASSERT_FIND_RUNDEFSV2;
+
+    po = pad_findlex("$_", 2, 0, cv, seq, 1,
+	    NULL, &namesv, &flags);
+
+    if (po == NOT_IN_PAD || SvPAD_OUR(namesv))
+	return DEFSV;
+
+    return AvARRAY((PAD*) (AvARRAY(CvPADLIST(cv))[CvDEPTH(cv)]))[po];
 }
 
 /*
@@ -1494,7 +1514,8 @@ Perl_pad_swipe(pTHX_ PADOFFSET po, bool refadjust)
     if (!PL_curpad)
 	return;
     if (AvARRAY(PL_comppad) != PL_curpad)
-	Perl_croak(aTHX_ "panic: pad_swipe curpad");
+	Perl_croak(aTHX_ "panic: pad_swipe curpad, %p!=%p",
+		   AvARRAY(PL_comppad), PL_curpad);
     if (!po)
 	Perl_croak(aTHX_ "panic: pad_swipe po");
 
@@ -1540,7 +1561,8 @@ S_pad_reset(pTHX)
     dVAR;
 #ifdef USE_BROKEN_PAD_RESET
     if (AvARRAY(PL_comppad) != PL_curpad)
-	Perl_croak(aTHX_ "panic: pad_reset curpad");
+	Perl_croak(aTHX_ "panic: pad_reset curpad, %p!=%p",
+		   AvARRAY(PL_comppad), PL_curpad);
 
     DEBUG_X(PerlIO_printf(Perl_debug_log,
 	    "Pad 0x%"UVxf"[0x%"UVxf"] reset:     padix %ld -> %ld",
@@ -1693,7 +1715,8 @@ Perl_pad_free(pTHX_ PADOFFSET po)
     if (!PL_curpad)
 	return;
     if (AvARRAY(PL_comppad) != PL_curpad)
-	Perl_croak(aTHX_ "panic: pad_free curpad");
+	Perl_croak(aTHX_ "panic: pad_free curpad, %p!=%p",
+		   AvARRAY(PL_comppad), PL_curpad);
     if (!po)
 	Perl_croak(aTHX_ "panic: pad_free po");
 
@@ -1703,7 +1726,7 @@ Perl_pad_free(pTHX_ PADOFFSET po)
     );
 
     if (PL_curpad[po] && PL_curpad[po] != &PL_sv_undef) {
-	SvPADTMP_off(PL_curpad[po]);
+	SvFLAGS(PL_curpad[po]) &= ~SVs_PADTMP; /* also clears SVs_PADSTALE */
     }
     if ((I32)po < PL_padix)
 	PL_padix = po - 1;
@@ -1875,12 +1898,8 @@ Perl_cv_clone(pTHX_ CV *proto)
     CvFLAGS(cv) = CvFLAGS(proto) & ~(CVf_CLONE|CVf_WEAKOUTSIDE|CVf_CVGV_RC);
     CvCLONED_on(cv);
 
-#ifdef USE_ITHREADS
-    CvFILE(cv)		= CvISXSUB(proto) ? CvFILE(proto)
-					  : savepv(CvFILE(proto));
-#else
-    CvFILE(cv)		= CvFILE(proto);
-#endif
+    CvFILE(cv)		= CvDYNFILE(proto) ? savepv(CvFILE(proto))
+					   : CvFILE(proto);
     CvGV_set(cv,CvGV(proto));
     CvSTASH_set(cv, CvSTASH(proto));
     OP_REFCNT_LOCK;
@@ -2120,15 +2139,9 @@ Perl_padlist_dup(pTHX_ AV *srcpad, CLONE_PARAMS *param)
     if (!srcpad)
 	return NULL;
 
-    assert(!AvREAL(srcpad));
-
     if (param->flags & CLONEf_COPY_STACKS
 	|| SvREFCNT(AvARRAY(srcpad)[1]) > 1) {
-	/* XXX padlists are real, but pretend to be not */
-	AvREAL_on(srcpad);
 	dstpad = av_dup_inc(srcpad, param);
-	AvREAL_off(srcpad);
-	AvREAL_off(dstpad);
 	assert (SvREFCNT(AvARRAY(srcpad)[1]) == 1);
     } else {
 	/* CvDEPTH() on our subroutine will be set to 0, so there's no need
@@ -2142,17 +2155,17 @@ Perl_padlist_dup(pTHX_ AV *srcpad, CLONE_PARAMS *param)
 	SV **names;
 	SV **pad1a;
 	AV *args;
-	/* look for it in the table first.
-	   I *think* that it shouldn't be possible to find it there.
-	   Well, except for how Perl_sv_compile_2op() "works" :-(   */
+	/* Look for it in the table first, as the padlist may have ended up
+	   as an element of @DB::args (or theoretically even @_), so it may
+	   may have been cloned already.  It may also be there because of
+	   how Perl_sv_compile_2op() "works". :-(   */
 	dstpad = (AV*)ptr_table_fetch(PL_ptr_table, srcpad);
 
 	if (dstpad)
-	    return dstpad;
+	    return (AV *)SvREFCNT_inc_simple_NN(dstpad);
 
 	dstpad = newAV();
 	ptr_table_store(PL_ptr_table, srcpad, dstpad);
-	AvREAL_off(dstpad);
 	av_extend(dstpad, 1);
 	AvARRAY(dstpad)[0] = MUTABLE_SV(av_dup_inc(AvARRAY(srcpad)[0], param));
 	names = AvARRAY(AvARRAY(dstpad)[0]);

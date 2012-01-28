@@ -45,6 +45,10 @@ my %feature_kw = (
 	say     => 'say',
 
 	state	=> 'state',
+
+	evalbytes=>'evalbytes',
+
+	__SUB__ => '__SUB__',
 	);
 
 my %pos = map { ($_ => 1) } @{$by_strength{'+'}};
@@ -64,6 +68,7 @@ print $c <<"END";
 #define PERL_IN_KEYWORDS_C
 #include "perl.h"
 #include "keywords.h"
+#include "feature.h"
 
 I32
 Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
@@ -91,7 +96,7 @@ END
   elsif (my $feature = $feature_kw{$k}) {
     $feature =~ s/([\\"])/\\$1/g;
     return <<END;
-return (all_keywords || FEATURE_IS_ENABLED("$feature") ? ${sign}KEY_$k : 0);
+return (all_keywords || FEATURE_\U$feature\E_IS_ENABLED ? ${sign}KEY_$k : 0);
 END
   }
   return <<END;
@@ -101,6 +106,10 @@ END
 
 read_only_bottom_close_and_rename($_, [$0]) foreach $c, $h;
 
+
+# coresub_op in op.c expects __FILE__, __LINE__ and __PACKAGE__ to be the
+# first three.
+
 __END__
 
  NULL
@@ -109,6 +118,7 @@ __END__
 -__PACKAGE__
 +__DATA__
 +__END__
+-__SUB__
 +AUTOLOAD
 +BEGIN
 +UNITCHECK
@@ -161,6 +171,7 @@ __END__
 -eof
 -eq
 +eval
+-evalbytes
 -exec
 +exists
 -exit

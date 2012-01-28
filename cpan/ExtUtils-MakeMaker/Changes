@@ -1,3 +1,85 @@
+6.63_02  Tue Nov  1 17:02:40 PDT 2011
+    Test Fixes
+    * Inform BSDPAN (on FreeBSD) to not register modules installed while
+      testing. [rt.cpan.org 70232]
+    * Fix t/echo.t test on Win32. [rt.cpan.org 72097]
+    * Fix t/echo.t test on VMS. (Craig A. Berry)
+    * Fix t/Win32.t to handle the change to init_others(). [rt.cpan.org 72096]
+
+    Bug Fixes
+    * Fix VMS's echo() for the interface changes. (Craig A. Berry)
+    * Fix VMS's dollar sign escaping. (Craig A. Berry)
+
+    Misc
+    * my::bundle::copy_bundles() will only load File::Copy::Recursive if
+      it needs it, allowing vendors packaging MakeMaker to just delete
+      bundled/*
+    * Bundling can be overridden by setting the BUILDING_AS_PACKAGE
+      environment variable.  This makes life easier for vendor packagers.
+    * Stripped the Windows newlines off Parse::CPAN::Meta to avoid
+      confusing old versions of Module::Signature.
+
+    Docs
+    * README.packaging explains how to package MakeMaker
+    * bundled/README explains what the bundled directory is about.
+    
+
+6.63_01  Sun Oct 23 16:57:24 PDT 2011
+    Bug Fixes
+    * Stray $ in the PPD and meta files (for example, from the ABSTRACT)
+      are now escaped.  [rt.cpan.org 71847]
+
+    Possibly incompatible changes
+    * echo() now escapes all dollar signs by default
+
+    New Features
+    * echo() has an option to allow make variable expansion.
+    * echo() is now passed a hash of options (old style $appending flag
+      still works for compatibility).
+    * quote_literal() now escapes dollar signs, but allows make variables.
+    * quote_literal() has an option to escape make variables.
+    * escape_dollarsigns() to escape dollar signs but allow variables
+    * escape_all_dollarsigns() to escape all dollar signs
+
+    Improvements
+    * The PPD VERSION is now derived from the VERSION variable in the Makefile
+      rather than hard coded.
+
+    Bundled Modules
+    * Updated CPAN::Meta to 2.112621
+    * Updated CPAN::Meta::YAML to 0.004
+    * Updated JSON::PP to 2.27200
+
+
+6.62  Sun Oct 23 16:43:36 PDT 2011
+    No changes from 6.61_01
+
+
+6.61_01  Sat Sep 24 22:16:13 PDT 2011
+    Win32
+    * Liblist::Kid now checks the ActiveState MinGW library path environment
+      variable [MITHALDU]
+    * Further fixes to the Win32 quoting rules.  Fixes failures on VC8+.
+      [rt.cpan.org #69528] [SHAY]
+
+
+6.59  Fri Aug  5 12:09:00 BST
+    No changes since 6.58_01
+
+
+6.58_01  Wed Aug  3 21:12:00 BST
+    Doc Fixes
+    * Corrected the repository location [chorny]
+
+    Bug Fixes
+    * Removed the %INC check from _has_cpan_meta and updated the CPAN::Meta
+      bundled with EUMM to one that doesn't set $VERSION in a begin block
+      so it can't appear to be loaded, thus causing us to mistakenly try
+      and call methods on CPAN::Meta modules - this is due to older versions
+      in site_perl shadowing our installation of other bundled modules.
+      [rt.cpan.org 69465] [rt.cpan.org 69900] [MSTROUT]
+
+
 6.58  Wed Jul  6 14:17:06 PDT 2011
     No changes since 6.57_11
 

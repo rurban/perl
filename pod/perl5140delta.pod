@@ -1547,9 +1547,9 @@ It is now safe to use this module in combination with threads.
 
 L<Digest::SHA> has been upgraded from version 5.47 to 5.61.
 
-L<shasum> now more closely mimics L<sha1sum(1)>/L<md5sum(1)>.
+C<shasum> now more closely mimics L<sha1sum(1)>/L<md5sum(1)>.
 
-L<Addfile> accepts all POSIX filenames.
+C<addfile> accepts all POSIX filenames.
 
 New SHA-512/224 and SHA-512/256 transforms (ref. NIST Draft FIPS 180-4
 [February 2011])
@@ -2125,7 +2125,7 @@ L<Unicode::UCD> has been upgraded from version 0.27 to 0.32.
 A new function, Unicode::UCD::num(), has been added.  This function
 returns the numeric value of the string passed it or C<undef> if the string
 in its entirety has no "safe" numeric value.  (For more detail, and for the
-definition of "safe", see L<Unicode::UCD/num>.)
+definition of "safe", see L<Unicode::UCD/num()>.)
 
 This upgrade also includes several bug fixes:
 
@@ -2888,7 +2888,7 @@ When C<perlio> became the default and C<unix> became the default bottom layer,
 the most common path for creating files from Perl became C<PerlIOUnix_open>,
 which has always explicitly used C<0666> as the permission mask.  This prevents
 inheriting permissions from RMS defaults and ACLs, so to avoid that problem,
-we now pass C<0777> to open().  In theVMS CRTL, C<0777> has a special
+we now pass C<0777> to open().  In the VMS CRTL, C<0777> has a special
 meaning over and above intersecting with the current umask; specifically, it
 allows Unix syscalls to preserve native default permissions (5.12.3).
 

@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More 0.88;
+use utf8;
 
 use CPAN::Meta;
 use CPAN::Meta::Validator;
@@ -8,6 +9,22 @@ use CPAN::Meta::Converter;
 use File::Spec;
 use IO::Dir;
 use Parse::CPAN::Meta 1.4400;
+use version;
+
+delete $ENV{$_} for qw/PERL_JSON_BACKEND PERL_YAML_BACKEND/; # use defaults
+
+# mock file object
+package
+  File::StringObject;
+
+use overload q{""} => sub { ${$_[0]} }, fallback => 1;
+
+sub new {
+  my ($class, $file) = @_;
+  bless \$file, $class;
+}
+
+package main;
 
 my $data_dir = IO::Dir->new( 't/data' );
 my @files = sort grep { /^\w/ } $data_dir->read;
@@ -148,5 +165,26 @@ for my $f ( reverse sort @files ) {
   );
 }
 
-done_testing;
+# specific test for object conversion
+{
+  my $path = File::Spec->catfile('t','data','resources.yml');
+  my $original = Parse::CPAN::Meta->load_file( $path  );
+  ok( $original, "loaded resources.yml" );
+  $original->{version} = version->new("1.64");
+  $original->{no_index}{file} = File::StringObject->new(".gitignore");
+  pass( "replaced some data fields with objects" );
+  my $cmc = CPAN::Meta::Converter->new( $original );
+  ok( my $converted = $cmc->convert( version => 2 ), "conversion successful" );
+}
 
+# specific test for UTF-8 handling
+{
+  my $path = File::Spec->catfile('t','data','unicode.yml');
+  my $original = CPAN::Meta->load_file( $path  )
+    or die "Couldn't load $path";
+  ok( $original, "unicode.yml" );
+  my @authors = $original->authors;
+  like( $authors[0], qr/Williåms/, "Unicode characters preserved in authors" );
+}
+
+done_testing;

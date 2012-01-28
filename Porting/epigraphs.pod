@@ -17,6 +17,158 @@ Consult your favorite dictionary for details.
 
 =head1 EPIGRAPHS
 
+=head2 v5.15.7 - Penelope Lively, The Voyage of QV66
+
+L<Announced on 2012-01-20 by Chris 'BinGOs' Williams
+|http://www.nntp.perl.org/group/perl.perl5.porters/2012/01/msg182230.html>
+
+"Laboratories," announced Henry. "Kindly don't touch anything."
+
+He led us into a long low brick shed. Outside there was a
+notice on a piece of board, crudely printed in red paint,
+which said GRATE SIENCE DISCOVERYS DONE HERE SSSH! BRING YOUR
+OWN BUKKIT NO PINCHING ANYWUN ELSE'S EXPERRYMENTS CANTEEN OPEN
+ALL DAY CHIMPS ONLY.
+
+There were a lot of large black monkeys inside, all intently
+busy on what they were doing. Some of them were pouring stuff
+out of bottles into buckets and carefully stirring the ensuing
+mixture; others were at work with glass tubes and jars, blowing
+and measuring and mixing; others were crouched over long benches
+with tools and heaps of bits and pieces of metal, cutting and
+bending and constructing. There was a great deal of noise and
+chatter. Every now and then one of them would give a whoop of
+excitement and all the others would gather round and jump up and
+down cheering and applauding.
+
+"Chimps," said Henry. "They're awfully clever."
+
+=head2 v5.15.6 - Ursula K. Leguin, A Wizard of Earthsea
+
+L<Announced on 2011-12-20 by Dave
+Rolsky|http://www.nntp.perl.org/group/perl.perl5.porters/2011/12/msg180962.html>
+
+Ged had thought that as the prentice of a great mage he would enter at once
+into the mystery and mastery of power. He would understand the language of the
+beasts and the speech of the leaves of the forest, he thought, and sway the
+winds with his word, and learn to change himself into any shape he
+wished. Maybe he and his master would run together as stags, or fly to Re Albi
+over the mountain on the wings of eagles.
+
+But it was not so at all. They wandered, first down into the Vale and then
+gradually south and westward around the mountain, given lodging in little
+villages or spending the night out in the wilderness, like poor
+journeyman-sorcerers, or tinkers, or beggars. They entered no mysterious
+domain. Nothing happened. The mage's oaken staff that Ged had watched at first
+with eager dread was nothing but a stout staff to walk with. Three days went
+by and four days went by and still Ogion had not spoken a single charm in
+Ged's hearing, and had not taught him a single name or rune or spell.
+
+=head2 v5.15.5 - Nikolai Gogol, The Diary of a Madman
+
+L<Announced on 2011-11-20 by Steve
+Hay|http://www.nntp.perl.org/group/perl.perl5.porters/2011/11/msg179588.html>
+
+This day - is a day of the greatest solemnity!  Spain has a king.  He has
+been found.  I am that king.  Only this very day did I learn of it.  I
+confess, it came to me suddenly in a flash of lightning.  I don't understand
+how I could have thought and imagined that I was a titular councillor.  How
+could such a wild notion enter my head?  It's a good thing no one thought of
+putting me in an insane asylum.  Now everything is laid open before me.  Now
+I see everything as on the palm of my hand.  And before, I don't understand,
+before everything around me was in some sort of fog.  And all this happens, I
+think, because people imagine that the human brain is in the head.  Not at
+all: it is brought by a wind from the direction of the Caspian Sea.  First
+off, I announced to Mavra who I am.  When she heard that the king of Spain
+was standing before her, she clasped her hands and nearly died of fright.
+The stupid woman had never seen a king of Spain before.  However, I
+endeavoured to calm her down and assured her in gracious words of my
+benevolence and that I was not at all angry that she sometimes polished my
+boots poorly.  They're benighted folk.  It's impossible to tell them about
+lofty matters.  She got frightened because she's convinced that all kings of
+Spain are like Philip II.  But I explained to her that there was no
+resemblance between me and Philip II, and that I didn't have a single
+Capuchin . . . I didn't go to the office . . . To hell with it!  No friends,
+you won't lure me there now; I'm not going to copy your vile papers!
+
+  -- Nikolai Gogol, The Diary of a Madman,
+     trans. Richard Pevear and Larissa Volokhonsky
+
+=head2 v5.15.4 - Steve Jobs
+
+L<Announced on 2011-10-20 by Florian
+Ragwitz|http://www.nntp.perl.org/group/perl.perl5.porters/2011/10/msg178412.html>
+
+A lot of people in our industry haven't had very diverse experiences. So they
+don't have enough dots to connect, and they end up with very linear solutions
+without a broad perspective on the problem. The broader one's understanding of
+the human experience, the better design we will have.
+
+=head2 v5.14.2 -  L<< Larry Wall, January 12, 1988 <992@devvax.JPL.NASA.GOV>  | http://groups.google.com/group/comp.sources.d/msg/5d17fa68c250b9b2 >>
+
+L<Announced on 2011-09-26 by Florian
+Ragwitz|http://www.nntp.perl.org/group/perl.perl5.porters/2011/09/msg177618.html>
+
+
+It's not so much that people don't value the programs after they have them--they
+do value them.  But they're not the sort of thing that would ever catch on if
+they had to overcome the marketing barrier.  (I don't yet know if perl will
+catch on at all--I'm worried enough about it that I specifically included an
+awk-to-perl translator just to help it catch on.)  Maybe it's all just an
+inferiority complex.  Or maybe I don't like to be mercenary.
+
+So I guess I'd say that the reason some software comes free is that the
+mechanism for selling it is missing, either from the work environment, or from
+the heart of the programmer.
+
+
+=head2 v5.15.3 - Oscar Wilde, All Art is Quite Useless
+
+L<Announced on 2011-09-20 by Stevan
+Little|http://www.nntp.perl.org/group/perl.perl5.porters/2011/09/msg177427.html>
+
+  All art is at once surface and symbol. Those who go beneath
+  the surface do so at their peril. Those who read the symbol
+  do so at their peril.
+
+  It is the spectator, and not life, that art really mirrors.
+  Diversity of opinion about a work of art shows that the
+  work is new, complex, and vital. When critics disagree, the
+  artist is in accord with himself.
+
+  We can forgive a man for making a useful thing as long as
+  he does not admire it. The only excuse for making a useless
+  thing is that one admires it intensely.
+
+  All art is quite useless.
+
+    -- Oscar Wilde, From the preface to The Picture of Dorian Gray
+
+
+=head2 v5.15.2 - Rainer Maria Rilke, The Third Duina Elegy
+
+L<Announced on 2011-08-20 by Ricardo
+Signes|http://www.xray.mpe.mpg.de/mailing-lists/perl5-porters/2011-08/msg00694.html>
+
+True, it is strange to live no more on earth,
+no longer follow the folkways scarecely learned;
+not to give roses and other especially auspicious
+things the significance of a human future;
+to be no more what one was in infinitely anxious hands,
+and to put aside even one's name, like a broken plaything.
+Strange, to wish wishes no longer.  Strange, to see
+all that was related fluttering so loosely in space.
+And being dead is hard, full of catching-up,
+so that finally one feels a little eternity.–
+But the living all make the mistake of too sharp discrimination.
+Often angels (it's said) don't know if they move
+among the quick or the dead.  The eternal current
+hurtles all ages along with it forever
+through both realms and drowns their voices in both.
+
+  -- Rainer Maria Rilke, Duino, The First Elegy
+     trans., C. F. MacIntyre
+
 =head2 v5.15.1 - Greg Egan, "Permutation City"
 
 L<Announced on 2011-07-20 by Zefram|http://www.nntp.perl.org/group/perl.perl5.porters/2011/07/msg175014.html>

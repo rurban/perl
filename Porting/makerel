@@ -131,6 +131,8 @@ system("chmod +x @exe") == 0
 my @writables = qw(
     NetWare/config_H.wc
     NetWare/Makefile
+    feature.h
+    lib/feature.pm
     keywords.h
     keywords.c
     opcode.h
@@ -139,7 +141,6 @@ my @writables = qw(
     proto.h
     embed.h
     embedvar.h
-    global.sym
     overload.c
     overload.h
     mg_vtable.h
@@ -156,9 +157,12 @@ my @writables = qw(
     win32/Makefile
     win32/Makefile.ce
     win32/makefile.mk
-    win32/config_H.bc
+    win32/config_H.ce
     win32/config_H.gc
+    win32/config_H.gc64
+    win32/config_H.gc64nox
     win32/config_H.vc
+    win32/config_H.vc64
     utils/Makefile
     uconfig.h
 );

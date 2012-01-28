@@ -10,6 +10,8 @@ BEGIN {
 
 use strict;
 use Test::More;
+use feature (sprintf(":%vd", $^V)); # to avoid relying on the feature
+                                    # logic to add CORE::
 
 # Many functions appear in multiple lists, so that shift() and shift(foo)
 # are both tested.
@@ -18,20 +20,21 @@ my @nary = (
  # nullary functions
      [qw( abs alarm break chr cos chop close chdir chomp chmod chown
           chroot caller continue die dump exp exit exec endgrent
-          endpwent endnetent endhostent endservent endprotoent fork
+          endpwent endnetent endhostent endservent
+          endprotoent evalbytes fork glob
           getppid getpwent getprotoent gethostent getnetent getservent
           getgrent getlogin getc gmtime hex int lc log lstat length
           lcfirst localtime mkdir ord oct pop quotemeta ref rand
           rmdir reset reverse readlink select setpwent setgrent
-          shift sin sleep sqrt srand stat system tell time times
+          shift sin sleep sqrt srand stat __SUB__ system tell time times
           uc utime umask unlink ucfirst wantarray warn wait write    )],
  # unary
      [qw( abs alarm bless binmode chr cos chop close chdir chomp
-          chmod chown chroot closedir die dump exp exit exec
-          each fileno getpgrp getpwnam getpwuid getpeername
+          chmod chown chroot closedir die do dump exp exit exec
+          each evalbytes fileno getpgrp getpwnam getpwuid getpeername
           getprotobyname getprotobynumber gethostbyname
           getnetbyname getsockname getgrnam getgrgid
-          getc gmtime hex int join keys kill lc
+          getc glob gmtime hex int join keys kill lc
           log lock lstat length lcfirst localtime
           mkdir ord oct open pop push pack quotemeta
           ref rand rmdir reset reverse readdir readlink
@@ -96,8 +99,7 @@ CORE_test keys => 'CORE::keys %bar', 'keys %hash';
 CORE_test reverse => 'CORE::reverse sort @foo', 'reverse sort';
 CORE_test system => 'CORE::system $foo $bar', 'system PROGRAM LIST';
 CORE_test values => 'CORE::values %bar', 'values %hash';
-# This test does not work. How do I get Deparse to output a not?
-#CORE_test not => 'CORE::not $a, $b', 'not';
+CORE_test not => '3 unless CORE::not $a && $b', 'not';
 CORE_test readline => 'CORE::readline $a.$b', 'readline';
 CORE_test readpipe => 'CORE::readpipe $a+$b', 'readpipe';
 

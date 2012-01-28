@@ -840,21 +840,6 @@ PerlStdIOFdupopen(struct IPerlStdIO* piPerl, FILE* pf)
     int fileno = win32_dup(win32_fileno(pf));
 
     /* open the file in the same mode */
-#ifdef __BORLANDC__
-    if((pf)->flags & _F_READ) {
-	mode[0] = 'r';
-	mode[1] = 0;
-    }
-    else if((pf)->flags & _F_WRIT) {
-	mode[0] = 'a';
-	mode[1] = 0;
-    }
-    else if((pf)->flags & _F_RDWR) {
-	mode[0] = 'r';
-	mode[1] = '+';
-	mode[2] = 0;
-    }
-#else
     if((pf)->_flag & _IOREAD) {
 	mode[0] = 'r';
 	mode[1] = 0;
@@ -868,7 +853,6 @@ PerlStdIOFdupopen(struct IPerlStdIO* piPerl, FILE* pf)
 	mode[1] = '+';
 	mode[2] = 0;
     }
-#endif
 
     /* it appears that the binmode is attached to the
      * file descriptor so binmode files will be handled
@@ -1773,6 +1757,10 @@ restart:
 		LEAVE;
 	    FREETMPS;
 	    PL_curstash = PL_defstash;
+	    if (PL_curstash != PL_defstash) {
+		SvREFCNT_dec(PL_curstash);
+		PL_curstash = (HV *)SvREFCNT_inc(PL_defstash);
+	    }
 	    if (PL_endav && !PL_minus_c)
 		call_list(oldscope, PL_endav);
 	    status = STATUS_EXIT;

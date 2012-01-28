@@ -51,8 +51,8 @@ my $text
 since Perl $previous_version and contains approximately $formatted_changes
 lines of changes across $formatted_files files from $nauthors authors.
 
-Perl continues to flourish into its third decade thanks to a vibrant 
-community of users and developers. The following people are known to 
+Perl continues to flourish into its third decade thanks to a vibrant
+community of users and developers. The following people are known to
 have contributed the improvements that became Perl $next_version:
 
 $authors
@@ -66,8 +66,7 @@ modules included in Perl's core. We're grateful to the entire CPAN
 community for helping Perl to flourish.
 
 For a more complete list of all of Perl's historical contributors,
-please see the F<AUTHORS> file in the Perl source distribution.
-";
+please see the F<AUTHORS> file in the Perl source distribution.";
 
 my $wrapped = fill( '', '', $text );
 print "$wrapped\n";
@@ -89,21 +88,15 @@ sub next_version {
 # returns the development time since the previous version in weeks
 # or months
 sub development_time {
-    my $dates = qx(git log --pretty=format:%ct --summary $since_until);
-    my $first_timestamp;
-    foreach my $line ( split $/, $dates ) {
-        next unless $line;
-        next unless $line =~ /^\d+$/;
-        $first_timestamp = $line;
-    }
+    my $first_timestamp = qx(git log -1 --pretty=format:%ct --summary $since);
+    my $last_timestamp  = qx(git log -1 --pretty=format:%ct --summary $until);
 
     die "Missing first timestamp" unless $first_timestamp;
+    die "Missing last timestamp" unless $last_timestamp;
 
-    my $now     = localtime;
-    my $then    = localtime($first_timestamp);
-    my $seconds = $now - $then;
-    my $weeks   = ceil( $seconds / ONE_WEEK );
-    my $months  = ceil( $seconds / ONE_MONTH );
+    my $seconds = localtime($last_timestamp) - localtime($first_timestamp);
+    my $weeks   = _round( $seconds / ONE_WEEK );
+    my $months  = _round( $seconds / ONE_MONTH );
 
     my $development_time;
     if ( $months < 2 ) {
@@ -111,6 +104,15 @@ sub development_time {
     } else {
         return "$months months";
     }
+}
+
+sub _round {
+    my $val = shift;
+
+    my $int = int $val;
+    my $remainder = $val - $int;
+
+    return $remainder >= 0.5 ? $int + 1 : $int;
 }
 
 # returns the number of changed lines and files since the previous
