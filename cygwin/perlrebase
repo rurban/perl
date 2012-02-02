@@ -36,7 +36,7 @@ result="/tmp/_rebase$suff.rst"
 lst="/tmp/_rebase$suff.lst"
 dotrebasedir="/usr/lib/perl5/vendor_perl/$ver/$arch/auto"
 if [ ! -d $dotrebasedir ]; then
-  dotrebasedir="$prefix/lib/perl5/$ver/$arch/auto"
+  dotrebasedir="$prefix/lib/perl5/site_perl/$ver/$arch/auto"
 fi
 dotrebase="$dotrebasedir/.rebase"
 /usr/bin/rebase -b0x40000000 $perl
