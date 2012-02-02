@@ -65,11 +65,7 @@ foreach (@ARGV) {
 	$excl{$1} = 1;
     } elsif (/^\+(.*)$/) {
 	$incl{$1} = 1;
-<<<<<<< HEAD
-    } elsif (/^--verbose$/) {
-=======
     } elsif (/^--verbose$/ or /^-v$/) {
->>>>>>> ca15df46ae6e66e5733577c57972143e31ade151
 	$verbose = 1;
     } elsif (/^--([\w\-]+)$/) {
 	$opts{$1} = 1;
