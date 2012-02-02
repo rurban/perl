@@ -132,7 +132,8 @@ sub dynamic_lib {
     my $s = ExtUtils::MM_Unix::dynamic_lib($self, %attribs);
     return $s unless $s;
     my $ori = "$self->{INSTALLARCHLIB}/auto/$self->{FULLEXT}/$self->{BASEEXT}.$self->{DLEXT}";
-    my $rebase = "$self->{INSTALLVENDORARCH}/auto/.rebase";
+    my $instkey = $self->{INSTALLVENDORARCH} ? 'INSTALLVENDORARCH' : 'INSTALLSITEARCH';
+    my $rebase = "$self->{$instkey}/auto/.rebase";
     my $imagebase;
     if (-f $rebase) {
       $imagebase = `/bin/cat $rebase`;
@@ -158,7 +159,7 @@ sub dynamic_lib {
       # TODO Here we create all DLL's per project with the same imagebase. We'd need
       # a better tool to inc the imagebase.
       $s .= "\t/bin/rebase -v -b 0x$imagebase \$@ | ";
-      $s .= "\$(FULLPERL) -n _rebase.pl > \$(INSTALLVENDORARCH)/auto/.rebase\n";
+      $s .= "\$(FULLPERL) -n _rebase.pl > \$($instkey)/auto/.rebase\n";
     } else {
       warn "Hint: run perlrebase to initialize $rebase\n";
     }
