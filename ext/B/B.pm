@@ -15,7 +15,7 @@ require Exporter;
 # walkoptree comes from B.xs
 
 BEGIN {
-    $B::VERSION = '1.33';
+    $B::VERSION = '1.34';
     @B::EXPORT_OK = ();
 
     # Our BOOT code needs $VERSION set, and will append to @EXPORT_OK.
@@ -945,8 +945,6 @@ A character symbolizing the type of IO Handle.
 
 =item IoFLAGS
 
-See F<perliol.h>.
-
 =item IsSTD
 
 Takes one argument ( 'stdin' | 'stdout' | 'stderr' ) and returns true
@@ -1212,6 +1210,8 @@ Only when perl was compiled with ithreads.
 =item stash
 
 =item stashpv
+
+=item stashflags
 
 =item file
 

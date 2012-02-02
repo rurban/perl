@@ -21,7 +21,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan tests => 465;  # Update this when adding/deleting tests.
+plan tests => 469;  # Update this when adding/deleting tests.
 
 run_tests() unless caller;
 
@@ -1222,6 +1222,37 @@ EOP
 	eval ' sub { my @a =~ // } ';
     }
 
+    { # Concat overloading and qr// thingies
+	my @refs;
+	my $qr = qr//;
+        package Cat {
+            require overload;
+            overload->import(
+		'""' => sub { ${$_[0]} },
+		'.' => sub {
+		    push @refs, ref $_[1] if ref $_[1];
+		    bless $_[2] ? \"$_[1]${$_[0]}" : \"${$_[0]}$_[1]"
+		}
+            );
+	}
+	my $s = "foo";
+	my $o = bless \$s, Cat::;
+	/$o$qr/;
+	is "@refs", "Regexp", '/$o$qr/ passes qr ref to cat overload meth';
+    }
+
+    {
+        my $count=0;
+        my $str="\n";
+        $count++ while $str=~/.*/g;
+        is $count, 2, 'test that ANCH_MBOL works properly. We should get 2 from $count++ while "\n"=~/.*/g';
+        my $class_count= 0;
+        $class_count++ while $str=~/[^\n]*/g;
+        is $class_count, $count, 'while "\n"=~/.*/g and while "\n"=~/[^\n]*/g should behave the same';
+        my $anch_count= 0;
+        $anch_count++ while $str=~/^.*/mg;
+        is $anch_count, 1, 'while "\n"=~/^.*/mg should match only once';
+    }
 } # End of sub run_tests
 
 1;

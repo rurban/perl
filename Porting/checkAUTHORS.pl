@@ -387,6 +387,7 @@ davem                                   davem\100fdgroup.com
 demerphq                                demerphq\100gmail.com
 +                                       yves.orton\100de.mci.com
 +                                       yves.orton\100mciworldcom.de
++                                       yves.orton\100booking.com
 +                                       demerphq\100dromedary.booking.com
 +                                       demerphq\100gemini.(none)
 +                                       demerphq\100camel.booking.com
@@ -475,6 +476,7 @@ tonyc                                   tony\100develop-help.com
 # Mere mortals.
 #
 \043####\100juerd.nl                    juerd\100cpan.org
++                                       juerd\100c3.convolution.nl
 +                                       juerd\100convolution.nl
 a.r.ferreira\100gmail.com               aferreira\100shopzilla.com
 abe\100ztreet.demon.nl                  abeltje\100cpan.org

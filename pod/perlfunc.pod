@@ -107,8 +107,8 @@ than one place.
 =item Functions for SCALARs or strings
 X<scalar> X<string> X<character>
 
-C<chomp>, C<chop>, C<chr>, C<crypt>, C<hex>, C<index>, C<lc>, C<lcfirst>,
-C<length>, C<oct>, C<ord>, C<pack>, C<q//>, C<qq//>, C<reverse>,
+C<chomp>, C<chop>, C<chr>, C<crypt>, C<fc>, C<hex>, C<index>, C<lc>,
+C<lcfirst>, C<length>, C<oct>, C<ord>, C<pack>, C<q//>, C<qq//>, C<reverse>,
 C<rindex>, C<sprintf>, C<substr>, C<tr///>, C<uc>, C<ucfirst>, C<y///>
 
 =item Regular expressions and pattern matching
@@ -247,21 +247,12 @@ X<time> X<date>
 
 C<gmtime>, C<localtime>, C<time>, C<times>
 
-=item Functions new in perl5
-X<perl5>
+=item Non-function keywords
 
-C<abs>, C<bless>, C<break>, C<chomp>, C<chr>, C<continue>, C<default>, 
-C<exists>, C<formline>, C<given>, C<glob>, C<import>, C<lc>, C<lcfirst>,
-C<lock>, C<map>, C<my>, C<no>, C<our>, C<prototype>, C<qr//>, C<qw//>, C<qx//>,
-C<readline>, C<readpipe>, C<ref>, C<sub>*, C<sysopen>, C<tie>, C<tied>, C<uc>,
-C<ucfirst>, C<untie>, C<use>, C<when>
-
-* C<sub> was a keyword in Perl 4, but in Perl 5 it is an
-operator, which can be used in expressions.
-
-=item Functions obsoleted in perl5
-
-C<dbmclose>, C<dbmopen>
+C<AUTOLOAD>, C<BEGIN>, C<CHECK>, C<CORE>, C<DESTROY>, C<END>, C<INIT>,
+C<UNITCHECK>, C<__DATA__>, C<__END__>, C<and>, C<cmp>, C<else>, C<elseif>,
+C<elsif>, C<eq>, C<for>, C<foreach>, C<ge>, C<gt>, C<if>, C<le>, C<lt>, C<ne>,
+C<not>, C<or>, C<unless>, C<until>, C<while>, C<x>, C<xor>
 
 =back
 
@@ -1994,6 +1985,54 @@ X<exp> X<exponential> X<antilog> X<antilogarithm> X<e>
 
 Returns I<e> (the natural logarithm base) to the power of EXPR.
 If EXPR is omitted, gives C<exp($_)>.
+
+=item fc EXPR
+X<fc> X<foldcase> X<casefold> X<fold-case> X<case-fold>
+
+=item fc
+
+Returns the casefolded version of EXPR.  This is the internal function
+implementing the C<\F> escape in double-quoted strings.
+
+Casefolding is the process of mapping strings to a form where case
+differences are erased; comparing two strings in their casefolded
+form is effectively a way of asking if two strings are equal,
+regardless of case.
+
+Roughly, if you ever found yourself writing this
+
+    lc($this) eq lc($that)  # Wrong!
+        # or
+    uc($this) eq uc($that)  # Also wrong!
+        # or
+    $this =~ /\Q$that/i     # Right!
+
+Now you can write
+
+    fc($this) eq fc($that)
+
+And get the correct results.
+
+Perl only implements the full form of casefolding.
+For further information on casefolding, refer to
+the Unicode Standard, specifically sections 3.13 C<Default Case Operations>,
+4.2 C<Case-Normative>, and 5.18 C<Case Mappings>,
+available at L<http://www.unicode.org/versions/latest/>, as well as the
+Case Charts available at L<http://www.unicode.org/charts/case/>.
+
+If EXPR is omitted, uses C<$_>.
+
+This function behaves the same way under various pragma, such as in a locale,
+as L</lc> does.
+
+While the Unicode Standard defines two additional forms of casefolding,
+one for Turkic languages and one that never maps one character into multiple
+characters, these are not provided by the Perl core; However, the CPAN module
+C<Unicode::Casing> may be used to provide an implementation.
+
+This keyword is available only when the C<"fc"> feature is enabled,
+or when prefixed with C<CORE::>; See L<feature>. Alternately,
+include a C<use v5.16> or later to the current scope.
 
 =item fcntl FILEHANDLE,FUNCTION,SCALAR
 X<fcntl>
@@ -6047,7 +6086,7 @@ Examples:
     @articles = sort {$a cmp $b} @files;
     
     # now case-insensitively
-    @articles = sort {uc($a) cmp uc($b)} @files;
+    @articles = sort {fc($a) cmp fc($b)} @files;
     
     # same thing in reversed order
     @articles = sort {$b cmp $a} @files;
@@ -6085,7 +6124,7 @@ Examples:
     my @new = sort {
         ($b =~ /=(\d+)/)[0] <=> ($a =~ /=(\d+)/)[0]
                             ||
-                    uc($a)  cmp  uc($b)
+                    fc($a)  cmp  fc($b)
     } @old;
 
     # same thing, but much more efficiently;
@@ -6094,7 +6133,7 @@ Examples:
     my @nums = @caps = ();
     for (@old) {
         push @nums, ( /=(\d+)/ ? $1 : undef );
-        push @caps, uc($_);
+        push @caps, fc($_);
     }
 
     my @new = @old[ sort {
@@ -6109,7 +6148,7 @@ Examples:
            sort { $b->[1] <=> $a->[1]
                            ||
                   $a->[2] cmp $b->[2]
-           } map { [$_, /=(\d+)/, uc($_)] } @old;
+           } map { [$_, /=(\d+)/, fc($_)] } @old;
 
     # using a prototype allows you to use any comparison subroutine
     # as a sort subroutine (including other package's subroutines)
@@ -8451,6 +8490,108 @@ Note that write is I<not> the opposite of C<read>.  Unfortunately.
 
 The transliteration operator.  Same as C<tr///>.  See
 L<perlop/"Quote and Quote-like Operators">.
+
+=back
+
+=head2 Non-function Keywords by Cross-reference
+
+=head3 perldata
+
+=over
+
+=item __DATA__
+
+=item __END__
+
+These keywords are documented in L<perldata>.
+
+=back
+
+=head3 perlmod
+
+=over
+
+=item BEGIN
+
+=item CHECK
+
+=item DESTROY
+
+=item END
+
+=item INIT
+
+=item UNITCHECK
+
+These keywords are documented in L<perlmod>.
+
+=back
+
+=head3 perlop
+
+=over
+
+=item and
+
+=item cmp
+
+=item eq
+
+=item ge
+
+=item gt
+
+=item if
+
+=item le
+
+=item lt
+
+=item ne
+
+=item not
+
+=item or
+
+=item x
+
+=item xor
+
+These operators are documented in L<perlop>.
+
+=back
+
+=head3 perlsub
+
+=over
+
+=item AUTOLOAD
+
+These are documented in L<perlsub>.
+
+=back
+
+=head2 perlsyn
+
+=over
+
+=item else
+
+=item elseif
+
+=item elsif
+
+=item for
+
+=item foreach
+
+=item unless
+
+=item until
+
+=item while
+
+These flow-control keywords are documented in L<perlsyn>.
 
 =back
 

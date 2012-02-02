@@ -784,10 +784,8 @@ ppname(opnum)
 	int	opnum
     CODE:
 	ST(0) = sv_newmortal();
-	if (opnum >= 0 && opnum < PL_maxo) {
-	    sv_setpvs(ST(0), "pp_");
-	    sv_catpv(ST(0), PL_op_name[opnum]);
-	}
+	if (opnum >= 0 && opnum < PL_maxo)
+	    Perl_sv_setpvf(aTHX_ ST(0), "pp_%s", PL_op_name[opnum]);
 
 void
 hash(sv)
@@ -983,12 +981,12 @@ ppaddr(o)
 	B::OP		o
     PREINIT:
 	int i;
-	SV *sv = newSVpvs_flags("PL_ppaddr[OP_", SVs_TEMP);
+	SV *sv;
     CODE:
-	sv_catpv(sv, PL_op_name[o->op_type]);
+	sv = sv_2mortal(Perl_newSVpvf(aTHX_ "PL_ppaddr[OP_%s]",
+				      PL_op_name[o->op_type]));
 	for (i=13; (STRLEN)i < SvCUR(sv); ++i)
 	    SvPVX(sv)[i] = toUPPER(SvPVX(sv)[i]);
-	sv_catpvs(sv, "]");
 	ST(0) = sv;
 
 #if PERL_VERSION >= 9
@@ -1229,6 +1227,9 @@ pv(o)
 	    ST(0) = newSVpvn_flags(o->op_pv, strlen(o->op_pv), SVs_TEMP);
 
 #define COP_label(o)	CopLABEL(o)
+#ifdef CopSTASH_flags
+#define COP_stashflags(o)	CopSTASH_flags(o)
+#endif
 
 MODULE = B	PACKAGE = B::COP		PREFIX = COP_
 
@@ -1251,6 +1252,14 @@ COP_stash(o)
     PPCODE:
 	PUSHs(make_sv_object(aTHX_
 			     ix ? (SV *)CopFILEGV(o) : (SV *)CopSTASH(o)));
+
+#ifdef CopSTASH_flags
+
+U32
+COP_stashflags(o)
+	B::COP	o
+
+#endif
 
 #else
 

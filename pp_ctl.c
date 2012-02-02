@@ -130,6 +130,13 @@ PP(pp_regcomp)
 	       sv_setsv(tmpstr, sv);
 	       continue;
 	    }
+
+	    if (SvROK(msv) && SvTYPE(SvRV(msv)) == SVt_REGEXP) {
+		msv = SvRV(msv);
+		PL_reginterp_cnt +=
+		    RX_SEEN_EVALS((REGEXP *)MUTABLE_PTR(msv));
+	    }
+
 	    sv_catsv_nomg(tmpstr, msv);
 	}
     	SvSETMAGIC(tmpstr);
@@ -3478,8 +3485,8 @@ S_try_yyparse(pTHX_ int gramtype)
 /* This function is called from three places, sv_compile_2op, pp_return
  * and pp_entereval.  These can be distinguished as follows:
  *    sv_compile_2op - startop is non-null
- *    pp_require     - startop is null; in_require is true
- *    pp_entereval   - stortop is null; in_require is false
+ *    pp_require     - startop is null; saveop is not entereval
+ *    pp_entereval   - startop is null; saveop is entereval
  */
 
 STATIC bool
@@ -3549,8 +3556,9 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 	CLEAR_ERRSV();
 
     if (!startop) {
+	bool clear_hints = saveop->op_type != OP_ENTEREVAL;
 	SAVEHINTS();
-	if (in_require) {
+	if (clear_hints) {
 	    PL_hints = 0;
 	    hv_clear(GvHV(PL_hintgv));
 	}
@@ -3564,7 +3572,7 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 	    }
 	}
 	SAVECOMPILEWARNINGS();
-	if (in_require) {
+	if (clear_hints) {
 	    if (PL_dowarn & G_WARN_ALL_ON)
 	        PL_compiling.cop_warnings = pWARN_ALL ;
 	    else if (PL_dowarn & G_WARN_ALL_OFF)
@@ -4554,7 +4562,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other, const bool copied)
 	DEBUG_M(Perl_deb(aTHX_ "    applying rule Any-Object\n"));
 	DEBUG_M(Perl_deb(aTHX_ "        attempting overload\n"));
 
-	tmpsv = amagic_call(d, e, smart_amg, 0);
+	tmpsv = amagic_call(d, e, smart_amg, AMGf_noleft);
 	if (tmpsv) {
 	    SPAGAIN;
 	    (void)POPs;
