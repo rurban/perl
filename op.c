@@ -2402,6 +2402,7 @@ S_my_kid(pTHX_ OP *o, OP *attrs, OP **imopsp)
         OP *kid;
 	for (kid = cLISTOPo->op_first; kid; kid = kid->op_sibling)
 	    my_kid(kid, attrs, imopsp);
+	return o;
     } else if (type == OP_UNDEF
 #ifdef PERL_MAD
 	       || type == OP_STUB
@@ -9112,7 +9113,7 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
     const char *e = NULL;
     PERL_ARGS_ASSERT_CK_ENTERSUB_ARGS_PROTO;
     if (SvTYPE(protosv) == SVt_PVCV ? !SvPOK(protosv) : !SvOK(protosv))
-	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto,"
+	Perl_croak(aTHX_ "panic: ck_entersub_args_proto CV with no proto, "
 		   "flags=%lx", (unsigned long) SvFLAGS(protosv));
     if (SvTYPE(protosv) == SVt_PVCV)
 	 proto = CvPROTO(protosv), proto_len = CvPROTOLEN(protosv);

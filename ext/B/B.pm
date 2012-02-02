@@ -1205,6 +1205,8 @@ Only when perl was compiled with ithreads.
 
 =item stashpv
 
+=item stashflags
+
 =item file
 
 =item cop_seq

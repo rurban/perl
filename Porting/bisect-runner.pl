@@ -61,9 +61,13 @@ my %defines =
 unless(GetOptions(\%options,
                   'target=s', 'make=s', 'jobs|j=i', 'expect-pass=i',
                   'expect-fail' => sub { $options{'expect-pass'} = 0; },
-                  'clean!', 'one-liner|e=s', 'match=s', 'force-manifest',
-                  'force-regen', 'test-build', 'A=s@', 'l', 'w',
-                  'check-args', 'check-shebang!', 'usage|help|?', 'validate',
+                  'clean!', 'one-liner|e=s', 'l', 'w', 'match=s',
+                  'no-match=s' => sub {
+                      $options{match} = $_[1];
+                      $options{'expect-pass'} = 0;
+                  },
+                  'force-manifest', 'force-regen', 'test-build', 'validate',
+                  'check-args', 'check-shebang!', 'usage|help|?', 'A=s@',
                   'D=s@' => sub {
                       my (undef, $val) = @_;
                       if ($val =~ /\A([^=]+)=(.*)/s) {
@@ -84,13 +88,14 @@ my ($target, $j, $match) = @options{qw(target jobs match)};
 @ARGV = ('sh', '-c', 'cd t && ./perl TEST base/*.t')
     if $options{validate} && !@ARGV;
 
-pod2usage(exitval => 255, verbose => 1) if $options{usage};
+pod2usage(exitval => 0, verbose => 1) if $options{usage};
 pod2usage(exitval => 255, verbose => 1)
     unless @ARGV || $match || $options{'test-build'} || defined $options{'one-liner'};
 pod2usage(exitval => 255, verbose => 1)
     if !$options{'one-liner'} && ($options{l} || $options{w});
 
-check_shebang($ARGV[0]) if $options{'check-shebang'} && @ARGV;
+check_shebang($ARGV[0])
+    if $options{'check-shebang'} && @ARGV && !$options{match};
 
 exit 0 if $options{'check-args'};
 
@@ -349,14 +354,43 @@ I<number of CPUs>. Otherwise defaults to 2.
 
 --match pattern
 
-Instead of running a test program to determine I<pass> or I<fail>, pass
-if the given regex matches, and hence search for the commit that removes
-the last matching file.
+=item *
+
+--no-match pattern
+
+Instead of running a test program to determine I<pass> or I<fail>,
+C<--match> will pass if the given regex matches, and hence search for the
+commit that removes the last matching file. C<--no-match> inverts the test,
+to search for the first commit that adds files that match.
+
+The remaining command line arguments are treated as glob patterns for files
+to match against. If none are specified, then they default as follows:
+
+=over 4
+
+=item *
 
 If no I<target> is specified, the match is against all files in the
-repository (which is fast). If a I<target> is specified, that target is
-built, and the match is against only the built files. C<--expect-fail> can
-be used with C<--match> to search for a commit that adds files that match.
+repository (which is fast).
+
+=item *
+
+If a I<target> is specified, that target is built, and the match is against
+only the built files.
+
+=back
+
+Treating the command line arguments as glob patterns should not cause
+problems, as the perl distribution has never shipped or built files with
+names that contain characters which are globbing metacharacters.
+
+Anything which is not a readable file is ignored, instead of generating an
+error. (If you want an error, run C<grep> or C<ack> as a test case). This
+permits one to easily search in a file that changed its name. For example:
+
+    .../Porting/bisect.pl --match 'Pod.*Functions' 'pod/buildtoc*'
+
+C<--no-match ...> is implemented as C<--expect-fail --match ...>
 
 =item *
 
@@ -774,12 +808,21 @@ sub report_and_exit {
 }
 
 sub match_and_exit {
-    my $target = shift;
+    my ($target, @globs) = @_;
     my $matches = 0;
     my $re = qr/$match/;
     my @files;
 
-    {
+    if (@globs) {
+        require File::Glob;
+        foreach (sort map { File::Glob::bsd_glob($_)} @globs) {
+            if (!-f $_ || !-r _) {
+                warn "Skipping matching '$_' as it is not a readable file\n";
+            } else {
+                push @files, $_;
+            }
+        }
+    } else {
         local $/ = "\0";
         @files = defined $target ? `git ls-files -o -z`: `git ls-files -z`;
         chomp @files;
@@ -809,7 +852,7 @@ sub match_and_exit {
 system 'git clean -dxf </dev/null' and die;
 
 if (!defined $target) {
-    match_and_exit() if $match;
+    match_and_exit(undef, @ARGV) if $match;
     $target = 'test_prep';
 }
 
@@ -914,7 +957,7 @@ if (-f 'config.sh') {
 }
 
 if ($target =~ /config\.s?h/) {
-    match_and_exit($target) if $match && -f $target;
+    match_and_exit($target, @ARGV) if $match && -f $target;
     report_and_exit(!-f $target, 'could build', 'could not build', $target)
         if $options{'test-build'};
 
@@ -997,7 +1040,7 @@ if ($options{'test-build'}) {
     skip("could not build $real_target");
 }
 
-match_and_exit($real_target) if $match;
+match_and_exit($real_target, @ARGV) if $match;
 
 if (defined $options{'one-liner'}) {
     my $exe = $target =~ /^(?:perl$|test)/ ? 'perl' : 'miniperl';

@@ -17,7 +17,8 @@
 
 #define CURRENT_HINTS \
     (PL_curcop == &PL_compiling ? PL_hints : PL_curcop->cop_hints)
-#define CURRENT_FEATURE_BUNDLE	(CURRENT_HINTS >> HINT_FEATURE_SHIFT)
+#define CURRENT_FEATURE_BUNDLE \
+    ((CURRENT_HINTS & HINT_FEATURE_MASK) >> HINT_FEATURE_SHIFT)
 
 #define FEATURE_IS_ENABLED(name)				        \
 	((CURRENT_HINTS							 \
@@ -25,6 +26,13 @@
 	    && Perl_feature_is_enabled(aTHX_ STR_WITH_LEN(name)))
 /* The longest string we pass in.  */
 #define MAX_FEATURE_LEN (sizeof("evalbytes")-1)
+
+#define FEATURE_FC_IS_ENABLED \
+    ( \
+	CURRENT_FEATURE_BUNDLE == FEATURE_BUNDLE_515 \
+     || (CURRENT_FEATURE_BUNDLE == FEATURE_BUNDLE_CUSTOM && \
+	 FEATURE_IS_ENABLED("fc")) \
+    )
 
 #define FEATURE_SAY_IS_ENABLED \
     ( \

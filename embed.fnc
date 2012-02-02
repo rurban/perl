@@ -1211,8 +1211,8 @@ Apd	|NV	|sv_2nv_flags	|NULLOK SV *const sv|const I32 flags
 pMd	|SV*	|sv_2num	|NN SV *const sv
 Amb	|char*	|sv_2pv		|NULLOK SV *sv|NULLOK STRLEN *lp
 Apd	|char*	|sv_2pv_flags	|NULLOK SV *const sv|NULLOK STRLEN *const lp|const I32 flags
-Apd	|char*	|sv_2pvutf8	|NN SV *const sv|NULLOK STRLEN *const lp
-Apd	|char*	|sv_2pvbyte	|NN SV *const sv|NULLOK STRLEN *const lp
+Apd	|char*	|sv_2pvutf8	|NN SV *sv|NULLOK STRLEN *const lp
+Apd	|char*	|sv_2pvbyte	|NN SV *sv|NULLOK STRLEN *const lp
 Ap	|char*	|sv_pvn_nomg	|NN SV* sv|NULLOK STRLEN* lp
 Amb	|UV	|sv_2uv		|NULLOK SV *sv
 Apd	|UV	|sv_2uv_flags	|NULLOK SV *const sv|const I32 flags
@@ -2250,9 +2250,9 @@ Apd	|PADOFFSET|pad_add_anon	|NN CV* func|I32 optype
 #if defined(PERL_IN_PAD_C)
 sd	|void	|pad_check_dup	|NN SV *name|U32 flags|NULLOK const HV *ourstash
 #endif
-ApdR	|PADOFFSET|pad_findmy_pvn|NN const char* namepv|STRLEN namelen|U32 flags
-ApdR	|PADOFFSET|pad_findmy_pv|NN const char* name|U32 flags
-ApdR	|PADOFFSET|pad_findmy_sv|NN SV* name|U32 flags
+Apd	|PADOFFSET|pad_findmy_pvn|NN const char* namepv|STRLEN namelen|U32 flags
+Apd	|PADOFFSET|pad_findmy_pv|NN const char* name|U32 flags
+Apd	|PADOFFSET|pad_findmy_sv|NN SV* name|U32 flags
 ApdD	|PADOFFSET|find_rundefsvoffset	|
 Apd	|SV*	|find_rundefsv	|
 : Used in pp.c

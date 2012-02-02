@@ -2956,19 +2956,16 @@ PERL_CALLCONV HV*	Perl_pad_compname_type(pTHX_ const PADOFFSET po)
 			__attribute__warn_unused_result__;
 
 PERL_CALLCONV PADOFFSET	Perl_pad_findmy_pv(pTHX_ const char* name, U32 flags)
-			__attribute__warn_unused_result__
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_PAD_FINDMY_PV	\
 	assert(name)
 
 PERL_CALLCONV PADOFFSET	Perl_pad_findmy_pvn(pTHX_ const char* namepv, STRLEN namelen, U32 flags)
-			__attribute__warn_unused_result__
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_PAD_FINDMY_PVN	\
 	assert(namepv)
 
 PERL_CALLCONV PADOFFSET	Perl_pad_findmy_sv(pTHX_ SV* name, U32 flags)
-			__attribute__warn_unused_result__
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_PAD_FINDMY_SV	\
 	assert(name)
@@ -3716,7 +3713,7 @@ PERL_CALLCONV char*	Perl_sv_2pv_flags(pTHX_ SV *const sv, STRLEN *const lp, cons
 #define PERL_ARGS_ASSERT_SV_2PV_NOLEN	\
 	assert(sv)
 
-PERL_CALLCONV char*	Perl_sv_2pvbyte(pTHX_ SV *const sv, STRLEN *const lp)
+PERL_CALLCONV char*	Perl_sv_2pvbyte(pTHX_ SV *sv, STRLEN *const lp)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_SV_2PVBYTE	\
 	assert(sv)
@@ -3727,7 +3724,7 @@ PERL_CALLCONV char*	Perl_sv_2pvbyte(pTHX_ SV *const sv, STRLEN *const lp)
 #define PERL_ARGS_ASSERT_SV_2PVBYTE_NOLEN	\
 	assert(sv)
 
-PERL_CALLCONV char*	Perl_sv_2pvutf8(pTHX_ SV *const sv, STRLEN *const lp)
+PERL_CALLCONV char*	Perl_sv_2pvutf8(pTHX_ SV *sv, STRLEN *const lp)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_SV_2PVUTF8	\
 	assert(sv)
