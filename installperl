@@ -757,6 +757,7 @@ sub installlib {
 
     # ignore pods that are stand alone documentation from dual life modules.
     return if /\.pod\z/ && is_duplicate_pod($_);
+    $_ = $name;
 
     return if $name eq 'ExtUtils/XSSymSet.pm' and !$Is_VMS;
 
