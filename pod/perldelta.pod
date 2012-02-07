@@ -346,7 +346,30 @@ L<Version::Requirements> has been upgraded from version 0.101021 to version 0.10
 
 =item *
 
-XXX
+L<Devel::DProf> which has been deprecated with 5.14 was removed.
+
+Get it from CPAN or better use L<Devel::NYTProf> instead.
+
+=item *
+
+L<Shell> which has been deprecated with 5.14 was removed.
+
+Get it from CPAN.
+
+=item *
+
+L<Locale::Constants> was moved to L<Locale::Codes::Constants>.
+
+=item *
+
+Several old perl4-style libraries which have been deprecated with
+5.14 are now removed:
+
+    abbrev.pl assert.pl bigfloat.pl bigint.pl bigrat.pl cacheout.pl
+    complete.pl ctime.pl dotsh.pl exceptions.pl fastcwd.pl flush.pl
+    getcwd.pl getopt.pl getopts.pl hostname.pl importenv.pl
+    lib/find{,depth}.pl look.pl newgetopt.pl open2.pl open3.pl pwd.pl
+    shellwords.pl stat.pl tainted.pl termcap.pl timelocal.pl
 
 =back
 
