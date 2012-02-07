@@ -9,7 +9,7 @@ package File::Copy;
 
 use 5.006;
 use strict;
-use warnings;
+use warnings; no warnings 'newline';
 use File::Spec;
 use Config;
 # During perl build, we need File::Copy but Scalar::Util might not be built yet
@@ -22,7 +22,7 @@ sub syscopy;
 sub cp;
 sub mv;
 
-$VERSION = '2.21';
+$VERSION = '2.23';
 
 require Exporter;
 @ISA = qw(Exporter);

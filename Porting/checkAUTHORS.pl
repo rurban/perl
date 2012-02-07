@@ -387,6 +387,7 @@ davem                                   davem\100fdgroup.com
 demerphq                                demerphq\100gmail.com
 +                                       yves.orton\100de.mci.com
 +                                       yves.orton\100mciworldcom.de
++                                       yves.orton\100booking.com
 +                                       demerphq\100dromedary.booking.com
 +                                       demerphq\100gemini.(none)
 +                                       demerphq\100camel.booking.com
@@ -475,6 +476,7 @@ tonyc                                   tony\100develop-help.com
 # Mere mortals.
 #
 \043####\100juerd.nl                    juerd\100cpan.org
++                                       juerd\100c3.convolution.nl
 +                                       juerd\100convolution.nl
 a.r.ferreira\100gmail.com               aferreira\100shopzilla.com
 abe\100ztreet.demon.nl                  abeltje\100cpan.org
@@ -679,6 +681,7 @@ lupe\100lupe-christoph.de               lupe\100alanya.m.isar.de
 lutherh\100stratcom.com                 lutherh\100infinet.com
 mab\100wdl.loral.com                    markb\100rdcf.sm.unisys.com
 marcel\100codewerk.com                  gr\100univie.ac.at
+marcgreen\100cpan.org                   marcgreen\100wpi.edu
 mark.p.lutz\100boeing.com               tecmpl1\100triton.ca.boeing.com
 marnix\100gmail.com                     pttesac!marnix!vanam
 marty+p5p\100kasei.com                  marty\100martian.org

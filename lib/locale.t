@@ -21,8 +21,9 @@ BEGIN {
 }
 
 use strict;
+use feature 'fc';
 
-my $debug = 1;
+my $debug = 0;
 
 use Dumpvalue;
 
@@ -105,7 +106,9 @@ check_taint       "\U$a";
 check_taint       ucfirst($a);
 check_taint       "\u$a";
 check_taint       lc($a);
+check_taint       fc($a);
 check_taint       "\L$a";
+check_taint       "\F$a";
 check_taint       lcfirst($a);
 check_taint       "\l$a";
 
@@ -266,7 +269,9 @@ check_taint_not  $a;
     check_taint_not	ucfirst($a);
     check_taint_not	"\u$a";
     check_taint_not	lc($a);
+    check_taint_not	fc($a);
     check_taint_not	"\L$a";
+    check_taint_not	"\F$a";
     check_taint_not	lcfirst($a);
     check_taint_not	"\l$a";
 
@@ -1148,13 +1153,13 @@ foreach $Locale (@Locale) {
         my @f = ();
         ++$locales_test_number;
         $test_names{$locales_test_number} = 'Verify case insensitive matching works';
-        foreach my $x (keys %UPPER) {
+        foreach my $x (sort keys %UPPER) {
             if (! $is_utf8_locale) {
                 my $y = lc $x;
                 next unless uc $y eq $x;
                 print "# UPPER $x lc $y ",
-                $x =~ /$y/i ? 1 : 0, " ",
-                $y =~ /$x/i ? 1 : 0, "\n" if 0;
+                        $x =~ /$y/i ? 1 : 0, " ",
+                        $y =~ /$x/i ? 1 : 0, "\n" if 0;
                 #
                 # If $x and $y contain regular expression characters
                 # AND THEY lowercase (/i) to regular expression characters,
@@ -1186,28 +1191,35 @@ foreach $Locale (@Locale) {
                 # With utf8 both will fail since the locale concept
                 # of upper/lower does not work well in Unicode.
                 push @f, $x unless $x =~ /$y/i == $y =~ /$x/i;
+
+                # fc is not a locale concept, so Perl uses lc for it.
+                push @f, $x unless lc $x eq fc $x;
             }
             else {
                 use locale ':not_characters';
                 my $y = lc $x;
                 next unless uc $y eq $x;
                 print "# UPPER $x lc $y ",
-                $x =~ /$y/i ? 1 : 0, " ",
-                $y =~ /$x/i ? 1 : 0, "\n" if 0;
+                        $x =~ /$y/i ? 1 : 0, " ",
+                        $y =~ /$x/i ? 1 : 0, "\n" if 0;
 
                 # Here, we can fully test things, unlike plain 'use locale',
                 # because this form does work well with Unicode
                 push @f, $x unless $x =~ /$y/i && $y =~ /$x/i;
+
+                # The places where Unicode's lc is different from fc are
+                # skipped here by virtue of the 'next unless uc...' line above
+                push @f, $x unless lc $x eq fc $x;
             }
         }
 
-	foreach my $x (keys %lower) {
+	foreach my $x (sort keys %lower) {
             if (! $is_utf8_locale) {
                 my $y = uc $x;
                 next unless lc $y eq $x;
                 print "# lower $x uc $y ",
-                $x =~ /$y/i ? 1 : 0, " ",
-                $y =~ /$x/i ? 1 : 0, "\n" if 0;
+                    $x =~ /$y/i ? 1 : 0, " ",
+                    $y =~ /$x/i ? 1 : 0, "\n" if 0;
                 if ($x =~ $re || $y =~ $re) { # See above.
                     print "# Regex characters in '$x' or '$y', skipping test $locales_test_number for locale '$Locale'\n";
                     next;
@@ -1215,15 +1227,19 @@ foreach $Locale (@Locale) {
                 # With utf8 both will fail since the locale concept
                 # of upper/lower does not work well in Unicode.
                 push @f, $x unless $x =~ /$y/i == $y =~ /$x/i;
+
+                push @f, $x unless lc $x eq fc $x;
             }
             else {
                 use locale ':not_characters';
                 my $y = uc $x;
                 next unless lc $y eq $x;
                 print "# lower $x uc $y ",
-                $x =~ /$y/i ? 1 : 0, " ",
-                $y =~ /$x/i ? 1 : 0, "\n" if 0;
+                        $x =~ /$y/i ? 1 : 0, " ",
+                        $y =~ /$x/i ? 1 : 0, "\n" if 0;
                 push @f, $x unless $x =~ /$y/i && $y =~ /$x/i;
+
+                push @f, $x unless lc $x eq fc $x;
             }
 	}
 	tryneoalpha($Locale, $locales_test_number, @f == 0);
@@ -1336,11 +1352,14 @@ $test_num = $final_locales_test_number;
 # Test that tainting and case changing works on utf8 strings.  These tests are
 # placed last to avoid disturbing the hard-coded test numbers that existed at
 # the time these were added above this in this file.
+# This also tests that locale overrides unicode_strings in the same scope for
+# non-utf8 strings.
 setlocale(LC_ALL, "C");
 {
     use locale;
+    use feature 'unicode_strings';
 
-    foreach my $function ("uc", "ucfirst", "lc", "lcfirst") {
+    foreach my $function ("uc", "ucfirst", "lc", "lcfirst", "fc") {
         my @list;   # List of code points to test for $function
 
         # Used to calculate the changed case for ASCII characters by using the
@@ -1373,61 +1392,75 @@ setlocale(LC_ALL, "C");
         foreach my $is_utf8_locale (0 .. 1) {
             foreach my $j (0 .. $#list) {
                 my $char = $list[$j];
-                utf8::upgrade($char);
-                my $should_be;
-                my $changed;
-                if (! $is_utf8_locale) {
-                    $should_be = ($j == $#list)
-                                ? chr(ord($char) + $above_latin1_case_change_delta)
-                                : (length $char == 0 || ord($char) > 127)
-                                ? $char
-                                : chr(ord($char) + $ascii_case_change_delta);
 
-                # This monstrosity is in order to avoid using an eval, which
-                # might perturb the results
-                $changed = ($function eq "uc")
-                            ? uc($char)
-                            : ($function eq "ucfirst")
-                                ? ucfirst($char)
-                                : ($function eq "lc")
-                                ? lc($char)
-                                : ($function eq "lcfirst")
-                                    ? lcfirst($char)
-                                    : die("Unexpected function \"$function\"");
-                }
-                else {
-                    {
-                        no locale;
+                for my $encoded_in_utf8 (0 .. 1) {
+                    my $should_be;
+                    my $changed;
+                    if (! $is_utf8_locale) {
+                        $should_be = ($j == $#list)
+                            ? chr(ord($char) + $above_latin1_case_change_delta)
+                            : (length $char == 0 || ord($char) > 127)
+                            ? $char
+                            : chr(ord($char) + $ascii_case_change_delta);
 
-                        # For utf8-locales the case changing functions should
-                        # work just like they do outside of locale.  Can use
-                        # eval here because not testing it when not in locale.
-                        $should_be = eval "$function('$char')";
-                        die "Unexpected eval error $@ from 'eval \"$function('$char')\"'" if  $@;
-
+                        # This monstrosity is in order to avoid using an eval,
+                        # which might perturb the results
+                        $changed = ($function eq "uc")
+                                    ? uc($char)
+                                    : ($function eq "ucfirst")
+                                      ? ucfirst($char)
+                                      : ($function eq "lc")
+                                        ? lc($char)
+                                        : ($function eq "lcfirst")
+                                          ? lcfirst($char)
+                                          : ($function eq "fc")
+                                            ? fc($char)
+                                            : die("Unexpected function \"$function\"");
                     }
-                    use locale ':not_characters';
-                    $changed = ($function eq "uc")
-                                ? uc($char)
-                                : ($function eq "ucfirst")
-                                    ? ucfirst($char)
-                                    : ($function eq "lc")
-                                    ? lc($char)
-                                    : ($function eq "lcfirst")
-                                        ? lcfirst($char)
-                                        : die("Unexpected function \"$function\"");
-                }
-                ok($changed eq $should_be, "$function(\"$char\") in C locale "
-                                        . (($is_utf8_locale)
-                                            ? "(use locale ':not_characters')"
-                                            : "(use locale)")
-                                        . " should be \"$should_be\", got \"$changed\"");
+                    else {
+                        {
+                            no locale;
 
-                # Tainting shouldn't happen for utf8 locales, empty strings,
-                # or those characters above 255.
-                (! $is_utf8_locale && length($char) > 0 && ord($char) < 256)
-                ? check_taint($changed)
-                : check_taint_not($changed);
+                            # For utf8-locales the case changing functions
+                            # should work just like they do outside of locale.
+                            # Can use eval here because not testing it when
+                            # not in locale.
+                            $should_be = eval "$function('$char')";
+                            die "Unexpected eval error $@ from 'eval \"$function('$char')\"'" if  $@;
+
+                        }
+                        use locale ':not_characters';
+                        $changed = ($function eq "uc")
+                                    ? uc($char)
+                                    : ($function eq "ucfirst")
+                                      ? ucfirst($char)
+                                      : ($function eq "lc")
+                                        ? lc($char)
+                                        : ($function eq "lcfirst")
+                                          ? lcfirst($char)
+                                          : ($function eq "fc")
+                                            ? fc($char)
+                                            : die("Unexpected function \"$function\"");
+                    }
+                    ok($changed eq $should_be,
+                        "$function(\"$char\") in C locale "
+                        . (($is_utf8_locale)
+                            ? "(use locale ':not_characters'"
+                            : "(use locale")
+                        . (($encoded_in_utf8)
+                            ? "; encoded in utf8)"
+                            : "; not encoded in utf8)")
+                        . " should be \"$should_be\", got \"$changed\"");
+
+                    # Tainting shouldn't happen for utf8 locales, empty
+                    # strings, or those characters above 255.
+                    (! $is_utf8_locale && length($char) > 0 && ord($char) < 256)
+                    ? check_taint($changed)
+                    : check_taint_not($changed);
+
+                    # Use UTF-8 next time through the loop
+                    utf8::upgrade($char);
+                }
             }
         }
     }
