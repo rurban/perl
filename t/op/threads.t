@@ -130,7 +130,6 @@ fresh_perl_is(<<'EOI', 'ok', { }, 'Bug #41138');
     print 'ok';
 EOI
 
-
 # [perl #45053] Memory corruption with heavy module loading in threads
 #
 # run-time usage of newCONSTSUB (as done by the IO boot code) wasn't

@@ -6,10 +6,10 @@
 #      License or the Artistic License, as specified in the README file.
 #
 package B;
-use strict;
 
+require XSLoader;
 require Exporter;
-@B::ISA = qw(Exporter);
+@ISA = qw(Exporter);
 
 # walkoptree_slow comes from B.pm (you are there),
 # walkoptree comes from B.xs
@@ -27,7 +27,7 @@ BEGIN {
     XSLoader::load();
 }
 
-push @B::EXPORT_OK, (qw(minus_c ppname save_BEGINs
+push @EXPORT_OK = (qw(minus_c ppname save_BEGINs
 			class peekop cast_I32 cstring cchar hash threadsv_names
 			main_root main_start main_cv svref_2object opnumber
 			sub_generation amagic_generation perlstring
@@ -37,7 +37,9 @@ push @B::EXPORT_OK, (qw(minus_c ppname save_BEGINs
 			defstash curstash warnhook diehook inc_gv @optype
 			@specialsv_name
 		      ), $] > 5.009 && 'unitcheck_av');
-
+sub OPf_KIDS ();
+use strict;
+ 
 @B::SV::ISA = 'B::OBJECT';
 @B::NULL::ISA = 'B::SV';
 @B::PV::ISA = 'B::SV';
@@ -331,6 +333,8 @@ sub walksymtable {
 	}
     }
 }
+
+XSLoader::load();
 
 1;
 
@@ -1063,7 +1067,7 @@ underlying C "inheritance":
             /     \
         B::LOOP B::PMOP
 
-Access methods correspond to the underlying C structre field names,
+Access methods correspond to the underlying C structure field names,
 with the leading "class indication" prefix (C<"op_">) removed.
 
 =head2 B::OP Methods
