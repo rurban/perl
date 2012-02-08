@@ -171,7 +171,7 @@ use strict;
 use Exporter;
 use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
 
-$VERSION = '3.39_01';
+$VERSION = '3.39_02';
 my $xs_version = $VERSION;
 $VERSION =~ tr/_//;
 
@@ -579,6 +579,7 @@ sub _perl_abs_path
 	unless (opendir(PARENT, $dotdots))
 	{
 	    # probably a permissions issue.  Try the native command.
+	    require File::Spec;
 	    return File::Spec->rel2abs( $start, _backtick_pwd() );
 	}
 	unless (@cst = stat($dotdots))

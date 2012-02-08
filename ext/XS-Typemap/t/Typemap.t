@@ -6,7 +6,7 @@ BEGIN {
     }
 }
 
-use Test::More tests => 108;
+use Test::More tests => 140;
 
 use strict;
 use warnings;
@@ -283,9 +283,14 @@ for (0..$#opq) {
 note("T_PACKED");
 my $struct = T_PACKED_out(-4, 3, 2.1);
 ok(ref($struct) eq 'HASH');
-is_deeply($struct, {a => -4, b => 3, c => 2.1});
+is_approx($struct->{a}, -4);
+is_approx($struct->{b}, 3);
+is_approx($struct->{c}, 2.1);
 my @rv = T_PACKED_in($struct);
-is_deeply(\@rv, [-4, 3, 2.1]);
+is(scalar(@rv), 3);
+is_approx($rv[0], -4);
+is_approx($rv[1], 3);
+is_approx($rv[2], 2.1);
 
 # T_PACKEDARRAY
 SCOPE: {
@@ -299,12 +304,19 @@ SCOPE: {
   push @out, {a => $d[$_*3], b => $d[$_*3+1], c => $d[$_*3+2]} for (0..2);
   my $structs = T_PACKEDARRAY_out(@d);
   ok(ref($structs) eq 'ARRAY');
-  is_deeply(
-    $structs,
-    \@out
-  );
+  is(scalar(@$structs), 3);
+  foreach my $i (0..2) {
+    my $s = $structs->[$i];
+    is(ref($s), 'HASH');
+    is_approx($s->{a}, $d[$i*3+0]);
+    is_approx($s->{b}, $d[$i*3+1]);
+    is_approx($s->{c}, $d[$i*3+2]);
+  }
   my @rv = T_PACKEDARRAY_in($structs);
-  is_deeply(\@rv, \@d);
+  is(scalar(@rv), scalar(@d));
+  foreach my $i (0..$#d) {
+    is_approx($rv[$i], $d[$i]);
+  }
 }
 
 # Skip T_DATAUNIT
@@ -356,44 +368,52 @@ if (defined $fh) {
 }
 
 # T_INOUT
-# Craig reported issues with PerlIO related typemap tests (VMS?)
-# note("T_INOUT");
-# SCOPE: {
-#   my $buf = '';
-#   local $| = 1;
-#   open my $fh, "+<", \$buf or die $!;
-#   my $str = "Fooo!\n";
-#   print $fh $str;
-#   my $fh2 = T_INOUT($fh);
-#   seek($fh2, 0, 0);
-#   is(readline($fh2), $str);
-#   ok(print $fh2 "foo\n");
-# }
+note("T_INOUT");
+SCOPE: {
+  my $buf = '';
+  local $| = 1;
+  open my $fh, "+<", \$buf or die $!;
+  my $str = "Fooo!\n";
+  print $fh $str;
+  my $fh2 = T_INOUT($fh);
+  seek($fh2, 0, 0);
+  is(readline($fh2), $str);
+  ok(print $fh2 "foo\n");
+}
 
 # T_IN
-# Craig reported issues with PerlIO related typemap tests (VMS?)
-# note("T_IN");
-# SCOPE: {
-#   my $buf = "Hello!\n";
-#   local $| = 1;
-#   open my $fh, "<", \$buf or die $!;
-#   my $fh2 = T_IN($fh);
-#   is(readline($fh2), $buf);
-#   local $SIG{__WARN__} = sub {die};
-#   ok(not(eval {print $fh2 "foo\n"; 1}));
-# }
+note("T_IN");
+SCOPE: {
+  my $buf = "Hello!\n";
+  local $| = 1;
+  open my $fh, "<", \$buf or die $!;
+  my $fh2 = T_IN($fh);
+  is(readline($fh2), $buf);
+  local $SIG{__WARN__} = sub {die};
+  ok(not(eval {print $fh2 "foo\n"; 1}));
+}
 
 # T_OUT
-# Craig reported issues with PerlIO related typemap tests (VMS?)
-# note("T_OUT");
-# SCOPE: {
-#   my $buf = '';
-#   local $| = 1;
-#   open my $fh, "+<", \$buf or die $!;
-#   my $str = "Fooo!\n";
-#   print $fh $str;
-#   my $fh2 = T_OUT($fh);
-#   seek($fh2, 0, 0);
-#   is(readline($fh2), $str);
-#   ok(eval {print $fh2 "foo\n"; 1});
-# }
+note("T_OUT");
+SCOPE: {
+  my $buf = '';
+  local $| = 1;
+  open my $fh, "+<", \$buf or die $!;
+  my $str = "Fooo!\n";
+  print $fh $str;
+  my $fh2 = T_OUT($fh);
+  seek($fh2, 0, 0);
+  is(readline($fh2), $str);
+  ok(eval {print $fh2 "foo\n"; 1});
+}
+
+sub is_approx {
+  my ($l, $r, $n) = @_;
+  if (not defined $l or not defined $r) {
+    fail(defined($n) ? $n : ());
+  }
+  else {
+    ok($l < $r+1e-6 && $r < $l+1e-6, defined($n) ? $n : ())
+      or note("$l and $r seem to be different given a fuzz of 1e-6");
+  }
+}

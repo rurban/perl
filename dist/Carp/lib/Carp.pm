@@ -6,8 +6,8 @@ use warnings;
 
 BEGIN {
     no strict "refs";
-    if(exists($::{"utf8::"}) && exists($utf8::{"is_utf8"}) &&
-	    defined(*{"utf8::is_utf8"}{CODE})) {
+    if(exists($::{"utf8::"}) && exists(*{$::{"utf8::"}}{HASH}->{"is_utf8"}) &&
+	    defined(*{*{$::{"utf8::"}}{HASH}->{"is_utf8"}}{CODE})) {
 	*is_utf8 = \&{"utf8::is_utf8"};
     } else {
 	*is_utf8 = sub { 0 };
@@ -16,15 +16,15 @@ BEGIN {
 
 BEGIN {
     no strict "refs";
-    if(exists($::{"utf8::"}) && exists($utf8::{"downgrade"}) &&
-	    defined(*{"utf8::downgrade"}{CODE})) {
+    if(exists($::{"utf8::"}) && exists(*{$::{"utf8::"}}{HASH}->{"downgrade"}) &&
+	    defined(*{*{$::{"utf8::"}}{HASH}->{"downgrade"}}{CODE})) {
 	*downgrade = \&{"utf8::downgrade"};
     } else {
 	*downgrade = sub {};
     }
 }
 
-our $VERSION = '1.24';
+our $VERSION = '1.25';
 
 our $MaxEvalLen = 0;
 our $Verbose    = 0;
@@ -297,7 +297,7 @@ sub ret_backtrace {
             $mess .= $1;
         }
     }
-    $mess .= "\n";
+    $mess .= "\.\n";
 
     while ( my %i = caller_info( ++$i ) ) {
         $mess .= "\t$i{sub_name} called at $i{file} line $i{line}$tid_msg\n";
@@ -318,7 +318,7 @@ sub ret_summary {
     }
 
     my %i = caller_info($i);
-    return "$err at $i{file} line $i{line}$tid_msg\n";
+    return "$err at $i{file} line $i{line}$tid_msg\.\n";
 }
 
 sub short_error_loc {
@@ -400,6 +400,17 @@ sub trusts_directly {
     return @{"$class\::CARP_NOT"}
         ? @{"$class\::CARP_NOT"}
         : @{"$class\::ISA"};
+}
+
+if(!defined($warnings::VERSION) || $warnings::VERSION < 1.03) {
+    # Very old versions of warnings.pm import from Carp.  This can go
+    # wrong due to the circular dependency.  If Carp is invoked before
+    # warnings, then Carp starts by loading warnings, then warnings
+    # tries to import from Carp, and gets nothing because Carp is in
+    # the process of loading and hasn't defined its import method yet.
+    # So we work around that by manually exporting to warnings here.
+    no strict "refs";
+    *{"warnings::$_"} = \&$_ foreach @EXPORT;
 }
 
 1;
@@ -647,9 +658,9 @@ distribution.
 
 =head1 COPYRIGHT
 
-Copyright (C) 1994-2011 Larry Wall
+Copyright (C) 1994-2012 Larry Wall
 
-Copyright (C) 2011 Andrew Main (Zefram) <zefram@fysh.org>
+Copyright (C) 2011, 2012 Andrew Main (Zefram) <zefram@fysh.org>
 
 =head1 LICENSE
 

@@ -481,7 +481,7 @@ use File::Glob qw(:case);
 
     'CPAN::Meta' => {
         'MAINTAINER'   => 'dagolden',
-        'DISTRIBUTION' => 'RJBS/CPAN-Meta-2.113640.tar.gz',
+        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-2.120351.tar.gz',
         'FILES'        => q[cpan/CPAN-Meta],
         'EXCLUDED'     => [
             qw(t/00-compile.t),
@@ -493,9 +493,10 @@ use File::Glob qw(:case);
 
     'CPAN::Meta::YAML' => {
         'MAINTAINER'   => 'dagolden',
-        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-YAML-0.005.tar.gz',
+        'DISTRIBUTION' => 'DAGOLDEN/CPAN-Meta-YAML-0.006.tar.gz',
         'FILES'        => q[cpan/CPAN-Meta-YAML],
         'EXCLUDED'     => [
+            't/00-compile.t',
             't/04_scalar.t',    # requires YAML.pm
             qr{^xt},
         ],
@@ -1959,7 +1960,7 @@ use File::Glob qw(:case);
 
     'Version::Requirements' => {
         'MAINTAINER'   => 'rjbs',
-        'DISTRIBUTION' => 'RJBS/Version-Requirements-0.101021.tar.gz',
+        'DISTRIBUTION' => 'RJBS/Version-Requirements-0.101022.tar.gz',
         'FILES'        => q[cpan/Version-Requirements],
         'EXCLUDED'     => ['t/release-pod-syntax.t'],
         'UPSTREAM'     => 'cpan',

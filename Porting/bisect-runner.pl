@@ -53,7 +53,6 @@ my %defines =
     (
      usedevel => '',
      optimize => '-g',
-     cc => (`ccache --version`, $?) ? 'cc' : 'ccache cc',
      ld => 'cc',
      ($linux64 ? (libpth => \@paths) : ()),
     );
@@ -61,7 +60,7 @@ my %defines =
 unless(GetOptions(\%options,
                   'target=s', 'make=s', 'jobs|j=i', 'expect-pass=i',
                   'expect-fail' => sub { $options{'expect-pass'} = 0; },
-                  'clean!', 'one-liner|e=s', 'l', 'w', 'match=s',
+                  'clean!', 'one-liner|e=s', 'c', 'l', 'w', 'match=s',
                   'no-match=s' => sub {
                       $options{match} = $_[1];
                       $options{'expect-pass'} = 0;
@@ -88,7 +87,7 @@ my ($target, $j, $match) = @options{qw(target jobs match)};
 @ARGV = ('sh', '-c', 'cd t && ./perl TEST base/*.t')
     if $options{validate} && !@ARGV;
 
-pod2usage(exitval => 0, verbose => 1) if $options{usage};
+pod2usage(exitval => 0, verbose => 2) if $options{usage};
 pod2usage(exitval => 255, verbose => 1)
     unless @ARGV || $match || $options{'test-build'} || defined $options{'one-liner'};
 pod2usage(exitval => 255, verbose => 1)
@@ -284,6 +283,12 @@ which interferes with detecting errors in the example code itself.
 
 =item *
 
+-c
+
+Add C<-c> to the command line, to cause perl to exit after syntax checking.
+
+=item *
+
 -l
 
 Add C<-l> to the command line with C<-e>
@@ -300,8 +305,8 @@ a full test case, instead of using C<bisect.pl>'s C<-e> shortcut.
 
 Add C<-w> to the command line with C<-e>
 
-It's not valid to pass C<-l> or C<-w> to C<bisect.pl> unless you are also
-using C<-e>
+It's not valid to pass C<-c>,  C<-l> or C<-w> to C<bisect.pl> unless you are
+also using C<-e>
 
 =item *
 
@@ -511,6 +516,15 @@ Display the usage information and exit.
 =cut
 
 die "$0: Can't build $target" if defined $target && !grep {@targets} $target;
+
+unless (exists $defines{cc}) {
+    # If it fails, the heuristic of 63f9ec3008baf7d6 is noisy, and hence
+    # confusing. Additionally, it doesn't correctly cope with ccache 2.4
+    # FIXME - really it should be replaced with a proper test of
+    # "can we build something?" and a helpful diagnostic if we can't.
+    # For now, simply move it here.
+    $defines{cc} = (`ccache --version`, $?) ? 'cc' : 'ccache cc';
+}
 
 $j = "-j$j" if $j =~ /\A\d+\z/;
 
@@ -1045,8 +1059,9 @@ match_and_exit($real_target, @ARGV) if $match;
 if (defined $options{'one-liner'}) {
     my $exe = $target =~ /^(?:perl$|test)/ ? 'perl' : 'miniperl';
     unshift @ARGV, '-e', $options{'one-liner'};
-    unshift @ARGV, '-l' if $options{l};
-    unshift @ARGV, '-w' if $options{w};
+    foreach (qw(c l w)) {
+        unshift @ARGV, "-$_" if $options{$_};
+    }
     unshift @ARGV, "./$exe", '-Ilib';
 }
 
