@@ -819,6 +819,7 @@ d_semctl_semun=''
 d_union_semun=''
 d_unordered=''
 d_unsetenv=''
+d_userelocatableinc=''
 d_usleep=''
 d_usleepproto=''
 d_ustat=''
@@ -6161,6 +6162,7 @@ y|Y)	val="$define" ;;
 esac
 set userelocatableinc
 eval $setvar
+d_userelocatableinc="$userelocatableinc"
 
 initialinstalllocation="$binexp"
 : Default prefix is now "up one level from where the binaries are"
@@ -23186,6 +23188,7 @@ d_uname='$d_uname'
 d_union_semun='$d_union_semun'
 d_unordered='$d_unordered'
 d_unsetenv='$d_unsetenv'
+d_userelocatableinc='$d_userelocatableinc'
 d_usleep='$d_usleep'
 d_usleepproto='$d_usleepproto'
 d_ustat='$d_ustat'
