@@ -387,6 +387,7 @@ davem                                   davem\100fdgroup.com
 demerphq                                demerphq\100gmail.com
 +                                       yves.orton\100de.mci.com
 +                                       yves.orton\100mciworldcom.de
++                                       yves.orton\100booking.com
 +                                       demerphq\100dromedary.booking.com
 +                                       demerphq\100gemini.(none)
 +                                       demerphq\100camel.booking.com
@@ -450,6 +451,16 @@ rgs                                     rgarciasuarez\100free.fr
 sky                                     sky\100nanisky.com
 +                                       artur\100contiller.se
 +                                       arthur\100contiller.se
+smueller                                7k8lrvf02\100sneakemail.com
++                                       kjx9zthh3001\100sneakemail.com
++                                       dtr8sin02\100sneakemail.com
++                                       rt8363b02\100sneakemail.com
++                                       o6hhmk002\100sneakemail.com
++                                       smueller\100cpan.org
++                                       l2ot9pa02\100sneakemail.com
++                                       wyp3rlx02\100sneakemail.com
++                                       0mgwtfbbq\100sneakemail.com
++                                       xyey9001\100sneakemail.com
 steveh                                  steve.m.hay\100googlemail.com
 +                                       stevehay\100planit.com
 +                                       steve.hay\100uk.radan.com
@@ -465,16 +476,8 @@ tonyc                                   tony\100develop-help.com
 # Mere mortals.
 #
 \043####\100juerd.nl                    juerd\100cpan.org
++                                       juerd\100c3.convolution.nl
 +                                       juerd\100convolution.nl
-7k8lrvf02\100sneakemail.com             kjx9zthh3001\100sneakemail.com
-+                                       dtr8sin02\100sneakemail.com
-+                                       rt8363b02\100sneakemail.com
-+                                       o6hhmk002\100sneakemail.com
-+                                       smueller\100cpan.org
-+                                       l2ot9pa02\100sneakemail.com
-+                                       wyp3rlx02\100sneakemail.com
-+                                       0mgwtfbbq\100sneakemail.com
-+                                       xyey9001\100sneakemail.com
 a.r.ferreira\100gmail.com               aferreira\100shopzilla.com
 abe\100ztreet.demon.nl                  abeltje\100cpan.org
 abela\100hsc.fr                         abela\100geneanet.org
@@ -533,6 +536,7 @@ bepi\100perl.it                         enrico.sorcinelli\100gmail.com
 bert\100alum.mit.edu                    bert\100genscan.com
 bigbang7\100gmail.com                   ddascalescu+github\100gmail.com
 blgl\100stacken.kth.se                  blgl\100hagernas.com
++                                       2bfjdsla52kztwejndzdstsxl9athp\100gmail.com
 brian.d.foy\100gmail.com                bdfoy\100cpan.org
 BQW10602\100nifty.com                   sadahiro\100cpan.org
 
@@ -677,6 +681,7 @@ lupe\100lupe-christoph.de               lupe\100alanya.m.isar.de
 lutherh\100stratcom.com                 lutherh\100infinet.com
 mab\100wdl.loral.com                    markb\100rdcf.sm.unisys.com
 marcel\100codewerk.com                  gr\100univie.ac.at
+marcgreen\100cpan.org                   marcgreen\100wpi.edu
 mark.p.lutz\100boeing.com               tecmpl1\100triton.ca.boeing.com
 marnix\100gmail.com                     pttesac!marnix!vanam
 marty+p5p\100kasei.com                  marty\100martian.org
@@ -719,6 +724,8 @@ ilya\100math.berkeley.edu               ilya\100math.ohio-state.edu
 ilya\100martynov.org                    ilya\100juil.nonet
 
 joshua.pritikin\100db.com               joshua\100paloalto.com
+
+litt\100acm.org                         tlhackque\100yahoo.com
 
 meyering@asic.sc.ti.com                 jim\100meyering.net
 

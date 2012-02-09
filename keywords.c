@@ -8,6 +8,7 @@
 #define PERL_IN_KEYWORDS_C
 #include "perl.h"
 #include "keywords.h"
+#include "feature.h"
 
 I32
 Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
@@ -50,7 +51,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
           goto unknown;
       }
 
-    case 2: /* 18 tokens of length 2 */
+    case 2: /* 19 tokens of length 2 */
       switch (name[0])
       {
         case 'd':
@@ -65,6 +66,14 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
           if (name[1] == 'q')
           {                                       /* eq               */
             return -KEY_eq;
+          }
+
+          goto unknown;
+
+        case 'f':
+          if (name[1] == 'c')
+          {                                       /* fc               */
+            return (all_keywords || FEATURE_FC_IS_ENABLED ? -KEY_fc : 0);
           }
 
           goto unknown;
@@ -416,7 +425,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
             case 'a':
               if (name[2] == 'y')
               {                                   /* say              */
-                return (all_keywords || FEATURE_IS_ENABLED("say") ? KEY_say : 0);
+                return (all_keywords || FEATURE_SAY_IS_ENABLED ? KEY_say : 0);
               }
 
               goto unknown;
@@ -940,7 +949,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
               if (name[2] == 'e' &&
                   name[3] == 'n')
               {                                   /* when             */
-                return (all_keywords || FEATURE_IS_ENABLED("switch") ? KEY_when : 0);
+                return (all_keywords || FEATURE_SWITCH_IS_ENABLED ? KEY_when : 0);
               }
 
               goto unknown;
@@ -1023,7 +1032,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
                   name[3] == 'a' &&
                   name[4] == 'k')
               {                                   /* break            */
-                return (all_keywords || FEATURE_IS_ENABLED("switch") ? -KEY_break : 0);
+                return (all_keywords || FEATURE_SWITCH_IS_ENABLED ? -KEY_break : 0);
               }
 
               goto unknown;
@@ -1151,7 +1160,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
               name[3] == 'e' &&
               name[4] == 'n')
           {                                       /* given            */
-            return (all_keywords || FEATURE_IS_ENABLED("switch") ? KEY_given : 0);
+            return (all_keywords || FEATURE_SWITCH_IS_ENABLED ? KEY_given : 0);
           }
 
           goto unknown;
@@ -1319,7 +1328,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
                   if (name[3] == 't' &&
                       name[4] == 'e')
                   {                               /* state            */
-                    return (all_keywords || FEATURE_IS_ENABLED("state") ? KEY_state : 0);
+                    return (all_keywords || FEATURE_STATE_IS_ENABLED ? KEY_state : 0);
                   }
 
                   goto unknown;
@@ -1944,7 +1953,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
                     name[5] == '_' &&
                     name[6] == '_')
                 {                                 /* __SUB__          */
-                  return (all_keywords || FEATURE_IS_ENABLED("__SUB__") ? -KEY___SUB__ : 0);
+                  return (all_keywords || FEATURE___SUB___IS_ENABLED ? -KEY___SUB__ : 0);
                 }
 
                 goto unknown;
@@ -2007,7 +2016,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
                         name[5] == 'l' &&
                         name[6] == 't')
                     {                             /* default          */
-                      return (all_keywords || FEATURE_IS_ENABLED("switch") ? KEY_default : 0);
+                      return (all_keywords || FEATURE_SWITCH_IS_ENABLED ? KEY_default : 0);
                     }
 
                     goto unknown;
@@ -2805,7 +2814,7 @@ Perl_keyword (pTHX_ const char *name, I32 len, bool all_keywords)
                   name[7] == 'e' &&
                   name[8] == 's')
               {                                   /* evalbytes        */
-                return (all_keywords || FEATURE_IS_ENABLED("evalbytes") ? -KEY_evalbytes : 0);
+                return (all_keywords || FEATURE_EVALBYTES_IS_ENABLED ? -KEY_evalbytes : 0);
               }
 
               goto unknown;
@@ -3440,5 +3449,5 @@ unknown:
 }
 
 /* Generated from:
- * 76ce12941a02bdb120222155311eb8772ba4a4e8965a42ba347a077cac5b426e regen/keywords.pl
+ * e5a540774760ea54c761ef17ee4a153cc264e9a700b817d561e390730c457406 regen/keywords.pl
  * ex: set ro: */

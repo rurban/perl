@@ -1,6 +1,7 @@
 /*    utf8.h
  *
- *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009 by Larry Wall and others
+ *    Copyright (C) 2000, 2001, 2002, 2005, 2006, 2007, 2009,
+ *    2010, 2011 by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
  *    License or the Artistic License, as specified in the README file.
@@ -16,8 +17,16 @@
 #    define USE_UTF8_IN_NAMES (PL_hints & HINT_UTF8)
 #endif
 
+/* For to_utf8_fold_flags, q.v. */
+#define FOLD_FLAGS_LOCALE 0x1
+#define FOLD_FLAGS_FULL   0x2
+
 #define to_uni_fold(c, p, lenp) _to_uni_fold_flags(c, p, lenp, 1)
-#define to_utf8_fold(c, p, lenp) _to_utf8_fold_flags(c, p, lenp, 1)
+#define to_utf8_fold(c, p, lenp) _to_utf8_fold_flags(c, p, lenp, \
+	             FOLD_FLAGS_FULL, NULL)
+#define to_utf8_lower(a,b,c) _to_utf8_lower_flags(a,b,c,0, NULL)
+#define to_utf8_upper(a,b,c) _to_utf8_upper_flags(a,b,c,0, NULL)
+#define to_utf8_title(a,b,c) _to_utf8_title_flags(a,b,c,0, NULL)
 
 /* Source backward compatibility. */
 #define uvuni_to_utf8(d, uv)		uvuni_to_utf8_flags(d, uv, 0)
@@ -242,8 +251,10 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 
 #define IN_BYTES (CopHINTS_get(PL_curcop) & HINT_BYTES)
 #define DO_UTF8(sv) (SvUTF8(sv) && !IN_BYTES)
-#define IN_UNI_8_BIT ( (CopHINTS_get(PL_curcop) & HINT_UNI_8_BIT) \
-			&& ! IN_LOCALE_RUNTIME && ! IN_BYTES)
+#define IN_UNI_8_BIT \
+	    (CopHINTS_get(PL_curcop) & (HINT_UNI_8_BIT|HINT_LOCALE_NOT_CHARS) \
+	     && ! IN_LOCALE_RUNTIME && ! IN_BYTES)
+
 
 #define UTF8_ALLOW_EMPTY		0x0001	/* Allow a zero length string */
 

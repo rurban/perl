@@ -443,7 +443,7 @@ Beginning with Perl 5.9.4, you can declare variables with the C<state>
 keyword in place of C<my>.  For that to work, though, you must have
 enabled that feature beforehand, either by using the C<feature> pragma, or
 by using C<-E> on one-liners (see L<feature>).  Beginning with Perl 5.16,
-you can also write it as C<CORE::state>, which does not require the
+the C<CORE::state> form does not require the
 C<feature> pragma.
 
 For example, the following code maintains a private counter, incremented
@@ -1136,9 +1136,9 @@ is of an acceptable type.
 A semicolon (C<;>) separates mandatory arguments from optional arguments.
 It is redundant before C<@> or C<%>, which gobble up everything else.
 
-As the last character of a prototype, or just before a semicolon, you can
-use C<_> in place of C<$>: if this argument is not provided, C<$_> will be
-used instead.
+As the last character of a prototype, or just before a semicolon, a C<@>
+or a C<%>, you can use C<_> in place of C<$>: if this argument is not
+provided, C<$_> will be used instead.
 
 Note how the last three examples in the table above are treated
 specially by the parser.  C<mygrep()> is parsed as a true list

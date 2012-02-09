@@ -358,11 +358,17 @@ my $dl_ext  = $Config{'dlext'};   $dl_ext  =~ tr/.//d;
 # Not really pods, but can look like them.
 my %excluded_files = (
                         canonicalize("lib/unicore/mktables") => 1,
+                        canonicalize("Porting/make-rmg-checklist") => 1,
                         canonicalize("Porting/perldelta_template.pod") => 1,
+                        canonicalize("regen/feature.pl") => 1,
                         canonicalize("autodoc.pl") => 1,
                         canonicalize("configpm") => 1,
                         canonicalize("miniperl") => 1,
                         canonicalize("perl") => 1,
+                        canonicalize('cpan/Pod-Perldoc/corpus/no-head.pod') => 1,
+                        canonicalize('cpan/Pod-Perldoc/corpus/perlfunc.pod') => 1,
+                        canonicalize('cpan/Pod-Perldoc/corpus/utf8.pod') => 1,
+                        canonicalize("lib/unicore/mktables") => 1,
                     );
 
 # This list should not include anything for which case sensitivity is
@@ -1270,6 +1276,7 @@ sub is_pod_file {
                
     my $filename = $File::Find::name;
 
+    # $filename is relative, like './path'.  Strip that initial part away.
     # Assumes that the path separator is exactly one character.
     $filename =~ s/^\..//;
 

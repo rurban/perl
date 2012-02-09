@@ -182,6 +182,8 @@ Perl_mg_get(pTHX_ SV *sv)
 
     PERL_ARGS_ASSERT_MG_GET;
 
+    if (PL_localizing == 1 && sv == DEFSV) return 0;
+
     save_magic(mgs_ix, sv);
 
     /* We must call svt_get(sv, mg) for each valid entry in the linked
@@ -251,6 +253,8 @@ Perl_mg_set(pTHX_ SV *sv)
 
     PERL_ARGS_ASSERT_MG_SET;
 
+    if (PL_localizing == 2 && sv == DEFSV) return 0;
+
     save_magic(mgs_ix, sv);
 
     for (mg = SvMAGIC(sv); mg; mg = nextmg) {
@@ -261,7 +265,7 @@ Perl_mg_set(pTHX_ SV *sv)
 	    (SSPTR(mgs_ix, MGS*))->mgs_magical = 0;
 	}
 	if (PL_localizing == 2
-	    && (PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type) || sv == DEFSV))
+	    && PERL_MAGIC_TYPE_IS_VALUE_MAGIC(mg->mg_type))
 	    continue;
 	if (vtbl && vtbl->svt_set)
 	    vtbl->svt_set(aTHX_ sv, mg);
@@ -939,11 +943,8 @@ Perl_magic_get(pTHX_ SV *sv, MAGIC *mg)
 	        sv_setpvn(sv, WARN_NONEstring, WARNsize) ;
 	    }
 	    else if (PL_compiling.cop_warnings == pWARN_STD) {
-		sv_setpvn(
-		    sv, 
-		    (PL_dowarn & G_WARN_ON) ? WARN_ALLstring : WARN_NONEstring,
-		    WARNsize
-		);
+		sv_setsv(sv, &PL_sv_undef);
+		break;
 	    }
             else if (PL_compiling.cop_warnings == pWARN_ALL) {
 		/* Get the bit mask for $warnings::Bits{all}, because
@@ -1904,6 +1905,7 @@ Perl_magic_clearpack(pTHX_ SV *sv, MAGIC *mg)
 {
     PERL_ARGS_ASSERT_MAGIC_CLEARPACK;
 
+    if (mg->mg_type == PERL_MAGIC_tiedscalar) return 0;
     return magic_methpack(sv,mg,"DELETE");
 }
 
@@ -2295,6 +2297,19 @@ Perl_magic_setvec(pTHX_ SV *sv, MAGIC *mg)
 }
 
 int
+Perl_magic_setvstring(pTHX_ SV *sv, MAGIC *mg)
+{
+    PERL_ARGS_ASSERT_MAGIC_SETVSTRING;
+
+    if (SvPOKp(sv)) {
+	SV * const vecsv = sv_newmortal();
+	scan_vstring(mg->mg_ptr, mg->mg_ptr + mg->mg_len, vecsv);
+	if (sv_eq_flags(vecsv, sv, 0 /*nomg*/)) return 0;
+    }
+    return sv_unmagic(sv, mg->mg_type);
+}
+
+int
 Perl_magic_getdefelem(pTHX_ SV *sv, MAGIC *mg)
 {
     dVAR;
@@ -2647,9 +2662,8 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	}
 	else if (strEQ(mg->mg_ptr+1, "ARNING_BITS")) {
 	    if ( ! (PL_dowarn & G_WARN_ALL_MASK)) {
-		if (!SvPOK(sv) && PL_localizing) {
-	            sv_setpvn(sv, WARN_NONEstring, WARNsize);
-	            PL_compiling.cop_warnings = pWARN_NONE;
+		if (!SvPOK(sv)) {
+	            PL_compiling.cop_warnings = pWARN_STD;
 		    break;
 		}
 		{
@@ -2748,6 +2762,10 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 	else {
 	    PL_ors_sv = NULL;
 	}
+	break;
+    case '[':
+	if (SvIV(sv) != 0)
+	    Perl_croak(aTHX_ "Assigning non-zero to $[ is no longer possible");
 	break;
     case '?':
 #ifdef COMPLEX_STATUS

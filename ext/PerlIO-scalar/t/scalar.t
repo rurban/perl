@@ -16,7 +16,7 @@ use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END); # Not 0, 1, 2 everywhere.
 
 $| = 1;
 
-use Test::More tests => 71;
+use Test::More tests => 79;
 
 my $fh;
 my $var = "aaa\n";
@@ -255,7 +255,7 @@ EOF
     print($fh 'DEF');
     $s .= ':P';
     ok(close($fh), 'close tied scalar - write');
-    is($s, ':F:S():O:F:S(ABC):P:F:SK:F:S(DEF):P', 'tied actions - write');
+    is($s, ':F:S():O:F:S(ABC):P:SK:F:S(DEF):P', 'tied actions - write');
     is($x, 'DEF', 'new value preserved');
 
     $x = 'GHI';
@@ -285,10 +285,78 @@ EOF
      'seek beyond end end of string followed by read';
 }
 
-# Writing to COW scalars
+# Writing to COW scalars and non-PVs
 {
     my $bovid = __PACKAGE__;
     open my $handel, ">", \$bovid;
     print $handel "the COW with the crumpled horn";
     is $bovid, "the COW with the crumpled horn", 'writing to COW scalars';
+
+    package lrcg { use overload fallback => 1, '""'=>sub { 'chin' } }
+    seek $handel, 3, 0;
+    $bovid = bless [], lrcg::;
+    print $handel 'mney';
+    is $bovid, 'chimney', 'writing to refs';
+
+    seek $handel, 1, 0;
+    $bovid = 42;  # still has a PV
+    print $handel 5;
+    is $bovid, 45, 'writing to numeric scalar';
+
+    seek $handel, 1, 0;
+    undef $bovid;
+    $bovid = 42;   # just IOK
+    print $handel 5;
+    is $bovid, 45, 'writing to numeric scalar';
+}
+
+# [perl #92706]
+{
+    open my $fh, "<", \(my $f=*f); seek $fh, 2,1;
+    pass 'seeking on a glob copy';
+    open my $fh, "<", \(my $f=*f); seek $fh, -2,2;
+    pass 'seeking on a glob copy from the end';
+}
+
+# [perl #108398]
+sub has_trailing_nul(\$) {
+    my ($ref) = @_;
+    my $sv = B::svref_2object($ref);
+    return undef if !$sv->isa('B::PV');
+
+    my $cur = $sv->CUR;
+    my $len = $sv->LEN;
+    return 0 if $cur >= $len;
+
+    my $ptrlen = length(pack('P', ''));
+    my $ptrfmt
+	= $ptrlen == length(pack('J', 0)) ? 'J'
+	: $ptrlen == length(pack('I', 0)) ? 'I'
+	: die "Can't determine pointer format";
+
+    my $pv_addr = unpack $ptrfmt, pack 'P', $$ref;
+    my $trailing = unpack 'P', pack $ptrfmt, $pv_addr+$cur;
+    return $trailing eq "\0";
+}
+SKIP: {
+    if ($Config::Config{'extensions'} !~ m!\bPerlIO/scalar\b!) {
+	skip "no B", 1;
+    }
+    require B;
+
+    open my $fh, ">", \my $memfile or die $!;
+
+    print $fh "abc";
+    ok has_trailing_nul $memfile,
+	 'write appends trailing null when growing string';
+
+    seek $fh, 0,SEEK_SET;
+    print $fh "abc";
+    ok has_trailing_nul $memfile,
+	 'write appends trailing null when not growing string';
+
+    seek $fh, 200, SEEK_SET;
+    print $fh "abc";
+    ok has_trailing_nul $memfile,
+	 'write appends null when growing string after seek past end';
 }

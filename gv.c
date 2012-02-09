@@ -37,6 +37,7 @@ Perl stores its global variables.
 #include "perl.h"
 #include "overload.c"
 #include "keywords.h"
+#include "feature.h"
 
 static const char S_autoload[] = "AUTOLOAD";
 static const STRLEN S_autolen = sizeof(S_autoload)-1;
@@ -61,12 +62,12 @@ Perl_gv_add_by_type(pTHX_ GV *gv, svtype type)
 	     */
 	    what = OP_IS_DIRHOP(PL_op->op_type) ?
 		"dirhandle" : "filehandle";
-	    /* diag_listed_as: Bad symbol for filehandle */
 	} else if (type == SVt_PVHV) {
 	    what = "hash";
 	} else {
 	    what = type == SVt_PVAV ? "array" : "scalar";
 	}
+	/* diag_listed_as: Bad symbol for filehandle */
 	Perl_croak(aTHX_ "Bad symbol for %s", what);
     }
 
@@ -436,8 +437,7 @@ static void core_xsub(pTHX_ CV* cv);
 
 static GV *
 S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
-                          const char * const name, const STRLEN len,
-                          const char * const fullname, STRLEN const fullen)
+                          const char * const name, const STRLEN len)
 {
     const int code = keyword(name, len, 1);
     static const char file[] = __FILE__;
@@ -451,11 +451,7 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
 
     assert(gv || stash);
     assert(name);
-    assert(stash || fullname);
 
-    if (!fullname && !HvENAME(stash)) return NULL; /* pathological case
-                                                     that would require
-                                                    inlining newATTRSUB */
     if (code >= 0) return NULL; /* not overridable */
     switch (-code) {
      /* no support for \&CORE::infix;
@@ -486,6 +482,7 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
 	gv = (GV *)newSV(0);
 	gv_init(gv, stash, name, len, TRUE);
     }
+    GvMULTI_on(gv);
     if (ampable) {
 	ENTER;
 	oldcurcop = PL_curcop;
@@ -516,26 +513,20 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
            it this order as we need an op number before calling
            new ATTRSUB. */
     (void)core_prototype((SV *)cv, name, code, &opnum);
-    if (stash && (fullname || !fullen))
+    if (stash)
 	(void)hv_store(stash,name,len,(SV *)gv,0);
     if (ampable) {
-	SV *tmpstr;
 	CvLVALUE_on(cv);
-	if (!fullname) {
-	    tmpstr = newSVhek(HvENAME_HEK(stash));
-	    sv_catpvs(tmpstr, "::");
-	    sv_catpvn(tmpstr,name,len);
-	}
-	else tmpstr = newSVpvn_share(fullname,fullen,0);
-	newATTRSUB(oldsavestack_ix,
-	           newSVOP(OP_CONST, 0, tmpstr),
+	newATTRSUB_flags(
+		   oldsavestack_ix, (OP *)gv,
 	           NULL,NULL,
 	           coresub_op(
 	             opnum
 	               ? newSVuv((UV)opnum)
 	               : newSVpvn(name,len),
 	             code, opnum
-	           )
+	           ),
+	           1
 	);
 	assert(GvCV(gv) == cv);
 	if (opnum != OP_VEC && opnum != OP_SUBSTR)
@@ -687,7 +678,7 @@ Perl_gv_fetchmeth_pvn(pTHX_ HV *stash, const char *name, STRLEN len, I32 level, 
         }
 	else if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4
               && strnEQ(hvname, "CORE", 4)
-              && S_maybe_add_coresub(aTHX_ stash,topgv,name,len,0,1))
+              && S_maybe_add_coresub(aTHX_ NULL,topgv,name,len))
 	    goto have_gv;
     }
 
@@ -726,7 +717,7 @@ Perl_gv_fetchmeth_pvn(pTHX_ HV *stash, const char *name, STRLEN len, I32 level, 
                 const char *hvname = HvNAME(cstash); assert(hvname);
                 if (strnEQ(hvname, "CORE", 4)
                  && (candidate =
-                      S_maybe_add_coresub(aTHX_ cstash,NULL,name,len,0,0)
+                      S_maybe_add_coresub(aTHX_ cstash,NULL,name,len)
                     ))
                     goto have_candidate;
             }
@@ -1661,8 +1652,14 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 		else if (*name == '-' || *name == '+')
 		    require_tie_mod(gv, name, newSVpvs("Tie::Hash::NamedCapture"), "TIEHASH", 0);
 	      }
-	      if ((sv_type==SVt_PV || sv_type==SVt_PVGV) && *name == '[')
+	      if (sv_type==SVt_PV || sv_type==SVt_PVGV) {
+	       if (*name == '[')
 		require_tie_mod(gv,name,newSVpvs("arybase"),"FETCH",0);
+	       else if (*name == '&' || *name == '`' || *name == '\'') {
+		PL_sawampersand = TRUE;
+		(void)GvSVn(gv);
+	       }
+	      }
 	    }
 	    else if (len == 3 && sv_type == SVt_PVAV
 	          && strnEQ(name, "ISA", 3)
@@ -1729,11 +1726,8 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	if (len > 1 /* shortest is uc */ && HvNAMELEN_get(stash) == 4) {
 	  /* Avoid null warning: */
 	  const char * const stashname = HvNAME(stash); assert(stashname);
-	  if (strnEQ(stashname, "CORE", 4)
-	   && S_maybe_add_coresub(aTHX_
-	        addmg ? stash : 0, gv, name, len, nambeg, full_len
-	      ))
-	    addmg = 0;
+	  if (strnEQ(stashname, "CORE", 4))
+	    S_maybe_add_coresub(aTHX_ 0, gv, name, len);
 	}
     }
     else if (len > 1) {
@@ -1873,14 +1867,13 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	case '&':		/* $& */
 	case '`':		/* $` */
 	case '\'':		/* $' */
-	    if (
+	    if (!(
 		sv_type == SVt_PVAV ||
 		sv_type == SVt_PVHV ||
 		sv_type == SVt_PVCV ||
 		sv_type == SVt_PVFM ||
 		sv_type == SVt_PVIO
-		) { break; }
-	    PL_sawampersand = TRUE;
+		)) { PL_sawampersand = TRUE; }
 	    goto magicalize;
 
 	case ':':		/* $: */
@@ -1901,7 +1894,11 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 
             /* magicalization must be done before require_tie_mod is called */
 	    if (sv_type == SVt_PVHV || sv_type == SVt_PVGV)
+	    {
+		if (addmg) (void)hv_store(stash,name,len,(SV *)gv,0);
+		addmg = 0;
 		require_tie_mod(gv, "!", newSVpvs("Errno"), "TIEHASH", 1);
+	    }
 
 	    break;
 	case '-':		/* $- */
@@ -1918,13 +1915,18 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
             SvREADONLY_on(av);
 
             if (sv_type == SVt_PVHV || sv_type == SVt_PVGV)
+	    {
+		if (addmg) (void)hv_store(stash,name,len,(SV *)gv,0);
+		addmg = 0;
                 require_tie_mod(gv, name, newSVpvs("Tie::Hash::NamedCapture"), "TIEHASH", 0);
+	    }
 
             break;
 	}
 	case '*':		/* $* */
 	case '#':		/* $# */
 	    if (sv_type == SVt_PV)
+		/* diag_listed_as: $* is no longer supported */
 		Perl_ck_warner_d(aTHX_ packWARN2(WARN_DEPRECATED, WARN_SYNTAX),
 				 "$%c is no longer supported", *name);
 	    break;
@@ -1939,11 +1941,13 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 	    }
 	    goto magicalize;
 	case '[':		/* $[ */
-	    if (sv_type == SVt_PV || sv_type == SVt_PVGV) {
+	    if ((sv_type == SVt_PV || sv_type == SVt_PVGV)
+	     && FEATURE_ARYBASE_IS_ENABLED) {
 		if (addmg) (void)hv_store(stash,name,len,(SV *)gv,0);
 		require_tie_mod(gv,name,newSVpvs("arybase"),"FETCH",0);
 		addmg = 0;
 	    }
+	    else goto magicalize;
             break;
 	case '\023':	/* $^S */
 	ro_magicalize:
@@ -2343,6 +2347,7 @@ Perl_Gv_AMupdate(pTHX_ HV *stash, bool destructing)
 			const SV * const name = (gvsv && SvPOK(gvsv))
                                                     ? gvsv
                                                     : newSVpvs_flags("???", SVs_TEMP);
+			/* diag_listed_as: Can't resolve method "%s" overloading "%s" in package "%s" */
 			Perl_croak(aTHX_ "%s method \"%"SVf256
 				    "\" overloading \"%s\" "\
 				    "in package \"%"HEKf256"\"",
@@ -2569,6 +2574,31 @@ Perl_amagic_deref_call(pTHX_ SV *ref, int method) {
     return tmpsv ? tmpsv : ref;
 }
 
+bool
+Perl_amagic_is_enabled(pTHX_ int method)
+{
+      SV *lex_mask = cop_hints_fetch_pvs(PL_curcop, "overloading", 0);
+
+      assert(PL_curcop->cop_hints & HINT_NO_AMAGIC);
+
+      if ( !lex_mask || !SvOK(lex_mask) )
+	  /* overloading lexically disabled */
+	  return FALSE;
+      else if ( lex_mask && SvPOK(lex_mask) ) {
+	  /* we have an entry in the hints hash, check if method has been
+	   * masked by overloading.pm */
+	  STRLEN len;
+	  const int offset = method / 8;
+	  const int bit    = method % 8;
+	  char *pv = SvPV(lex_mask, len);
+
+	  /* Bit set, so this overloading operator is disabled */
+	  if ( (STRLEN)offset < len && pv[offset] & ( 1 << bit ) )
+	      return FALSE;
+      }
+      return TRUE;
+}
+
 SV*
 Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
 {
@@ -2590,23 +2620,7 @@ Perl_amagic_call(pTHX_ SV *left, SV *right, int method, int flags)
   PERL_ARGS_ASSERT_AMAGIC_CALL;
 
   if ( PL_curcop->cop_hints & HINT_NO_AMAGIC ) {
-      SV *lex_mask = cop_hints_fetch_pvs(PL_curcop, "overloading", 0);
-
-      if ( !lex_mask || !SvOK(lex_mask) )
-	  /* overloading lexically disabled */
-	  return NULL;
-      else if ( lex_mask && SvPOK(lex_mask) ) {
-	  /* we have an entry in the hints hash, check if method has been
-	   * masked by overloading.pm */
-	  STRLEN len;
-	  const int offset = method / 8;
-	  const int bit    = method % 8;
-	  char *pv = SvPV(lex_mask, len);
-
-	  /* Bit set, so this overloading operator is disabled */
-	  if ( (STRLEN)offset < len && pv[offset] & ( 1 << bit ) )
-	      return NULL;
-      }
+      if (!amagic_is_enabled(method)) return NULL;
   }
 
   if (!(AMGf_noleft & flags) && SvAMAGIC(left)

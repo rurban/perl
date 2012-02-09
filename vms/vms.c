@@ -5908,8 +5908,6 @@ int_fileify_dirspec(const char *dir, char *buf, int *utf8_fl)
     char *cp1, *cp2, *lastdir;
     char *trndir, *vmsdir;
     unsigned short int trnlnm_iter_count;
-    int is_vms = 0;
-    int is_unix = 0;
     int sts;
     if (utf8_fl != NULL)
 	*utf8_fl = 0;
@@ -5992,30 +5990,6 @@ int_fileify_dirspec(const char *dir, char *buf, int *utf8_fl)
     cp1 = strpbrk(trndir,"]:>");
     if (hasfilename || !cp1) { /* filename present or not VMS */
 
-      if (decc_efs_charset && !cp1) {
-
-          /* EFS handling for UNIX mode */
-
-          /* Just remove the trailing '/' and we should be done */
-          STRLEN trndir_len;
-          trndir_len = strlen(trndir);
-
-          if (trndir_len > 1) {
-              trndir_len--;
-              if (trndir[trndir_len] == '/') {
-                  trndir[trndir_len] = '\0';
-              }
-          }
-          my_strlcpy(buf, trndir, VMS_MAXRSS);
-          PerlMem_free(trndir);
-          PerlMem_free(vmsdir);
-          return buf;
-      }
-
-      /* For non-EFS mode, this is left for backwards compatibility */
-      /* For EFS mode, this is only done for VMS format filespecs as */
-      /* Perl programs generally have problems when a UNIX format spec */
-      /* returns a VMS format spec */
       if (trndir[0] == '.') {
         if (trndir[1] == '\0' || (trndir[1] == '/' && trndir[2] == '\0')) {
 	  PerlMem_free(trndir);
@@ -6133,6 +6107,20 @@ int_fileify_dirspec(const char *dir, char *buf, int *utf8_fl)
                 /* The .dir for now, and fix this better later */
                 dirlen = cp2 - trndir;
             }
+            if (decc_efs_charset && !strchr(trndir,'/')) {
+                /* Dots are allowed in dir names, so escape them if input not in Unix syntax. */
+                char *cp4 = is_dir ? (cp2 - 1) : cp2;
+                  
+                for (; cp4 > cp1; cp4--) {
+                    if (*cp4 == '.') {
+                        if ((cp4 - 1 > trndir) && (*(cp4 - 1) != '^')) {
+                            memmove(cp4 + 1, cp4, trndir + dirlen - cp4 + 1);
+                            *cp4 = '^';
+                            dirlen++;
+	                }
+                    }
+                }
+            }
         }
 
       }
@@ -6143,52 +6131,10 @@ int_fileify_dirspec(const char *dir, char *buf, int *utf8_fl)
 
       /* We've picked up everything up to the directory file name.
          Now just add the type and version, and we're set. */
-
-      /* We should only add type for VMS syntax, but historically Perl
-         has added it for UNIX style also */
-
-      /* Fix me - we should not be using the same routine for VMS and
-         UNIX format files.  Things are too tangled so we need to lookup
-         what syntax the output is */
-
-      is_unix = 0;
-      is_vms = 0;
-      lastdir = strrchr(trndir,'/');
-      if (lastdir) {
-          is_unix = 1;
-      } else {
-          lastdir = strpbrk(trndir,"]:>");
-          if (lastdir) {
-              is_vms = 1;
-          }
-      }
-
-      if ((is_vms == 0) && (is_unix == 0)) {
-          /* We still do not  know? */
-          is_unix = decc_filename_unix_report;
-          if (is_unix == 0)
-              is_vms = 1;
-      }
-
-      if ((is_unix && !decc_efs_charset) || is_vms) {
-
-           /* It is a bug to add a .dir to a UNIX format directory spec */
-           /* However Perl on VMS may have programs that expect this so */
-           /* If not using EFS character specifications allow it. */
-
-           if ((!decc_efs_case_preserve) && vms_process_case_tolerant) {
-               /* Traditionally Perl expects filenames in lower case */
-               strcat(buf, ".dir");
-           } else {
-               /* VMS expects the .DIR to be in upper case */
-               strcat(buf, ".DIR");
-           }
-
-           /* It is also a bug to put a VMS format version on a UNIX file */
-           /* specification.  Perl self tests are looking for this */
-           if (is_vms || !(decc_efs_charset || decc_filename_unix_report))
-               strcat(buf, ";1");
-      }
+      if ((!decc_efs_case_preserve) && vms_process_case_tolerant)
+          strcat(buf,".dir;1");
+      else
+          strcat(buf,".DIR;1");
       PerlMem_free(trndir);
       PerlMem_free(vmsdir);
       return buf;
@@ -6746,61 +6692,51 @@ static char *int_pathify_dirspec(const char *dir, char *buf)
         return ret_spec;
 
     } else {
-        /* Unix specification, Could be trivial conversion */
-        STRLEN dir_len;
-        dir_len = strlen(trndir);
+        /* Unix specification, Could be trivial conversion, */
+        /* but have to deal with trailing '.dir' or extra '.' */
 
-        /* If the extended file character set is in effect */
-        /* then pathify is simple */
+        char * lastdot;
+        char * lastslash;
+        int is_dir;
+        STRLEN dir_len = strlen(trndir);
 
-        if (!decc_efs_charset) {
-            /* Have to deal with trailing '.dir' or extra '.' */
-            /* that should not be there in legacy mode, but is */
+        lastslash = strrchr(trndir, '/');
+        if (lastslash == NULL)
+            lastslash = trndir;
+        else
+            lastslash++;
 
-            char * lastdot;
-            char * lastslash;
-            int is_dir;
+        lastdot = NULL;
 
-            lastslash = strrchr(trndir, '/');
-            if (lastslash == NULL)
-                lastslash = trndir;
-            else
-                lastslash++;
-
-            lastdot = NULL;
-
-            /* '..' or '.' are valid directory components */
-            is_dir = 0;
-            if (lastslash[0] == '.') {
-                if (lastslash[1] == '\0') {
-                   is_dir = 1;
-                } else if (lastslash[1] == '.') {
-                    if (lastslash[2] == '\0') {
+        /* '..' or '.' are valid directory components */
+        is_dir = 0;
+        if (lastslash[0] == '.') {
+            if (lastslash[1] == '\0') {
+               is_dir = 1;
+            } else if (lastslash[1] == '.') {
+                if (lastslash[2] == '\0') {
+                    is_dir = 1;
+                } else {
+                    /* And finally allow '...' */
+                    if ((lastslash[2] == '.') && (lastslash[3] == '\0')) {
                         is_dir = 1;
-                    } else {
-                        /* And finally allow '...' */
-                        if ((lastslash[2] == '.') && (lastslash[3] == '\0')) {
-                            is_dir = 1;
-                        }
                     }
                 }
             }
+        }
 
-            if (!is_dir) {
-               lastdot = strrchr(lastslash, '.');
-            }
-            if (lastdot != NULL) {
-                STRLEN e_len;
+        if (!is_dir) {
+           lastdot = strrchr(lastslash, '.');
+        }
+        if (lastdot != NULL) {
+            STRLEN e_len;
+             /* '.dir' is discarded, and any other '.' is invalid */
+            e_len = strlen(lastdot);
 
-                /* '.dir' is discarded, and any other '.' is invalid */
-                e_len = strlen(lastdot);
+            is_dir = is_dir_ext(lastdot, e_len, NULL, 0);
 
-                is_dir = is_dir_ext(lastdot, e_len, NULL, 0);
-
-                if (is_dir) {
-                    dir_len = dir_len - 4;
-
-                }
+            if (is_dir) {
+                dir_len = dir_len - 4;
             }
         }
 
@@ -7903,9 +7839,9 @@ int sts, v_len, r_len, d_len, n_len, e_len, vs_len;
     nextslash = strchr(&unixptr[1],'/');
     seg_len = 0;
     if (nextslash != NULL) {
-    int cmp;
+      int cmp;
       seg_len = nextslash - &unixptr[1];
-      my_strlcpy(vmspath, unixptr, seg_len + 1);
+      my_strlcpy(vmspath, unixptr, seg_len + 2);
       cmp = 1;
       if (seg_len == 3) {
 	cmp = strncmp(vmspath, "dev", 4);
@@ -7968,7 +7904,8 @@ int sts, v_len, r_len, d_len, n_len, e_len, vs_len;
        */
 
       /* Posix to VMS destroyed this, so copy it again */
-      vmslen = my_strlcpy(vmspath, &unixptr[1], seg_len);
+      my_strlcpy(vmspath, &unixptr[1], seg_len + 1);
+      vmslen = strlen(vmspath); /* We know we're truncating. */
       vmsptr = &vmsptr[vmslen];
       islnm = 0;
 
@@ -8466,17 +8403,6 @@ static char *int_tovmsspec
       }
   }
 
-/* If EFS charset mode active, handle the conversion */
-#if __CRTL_VER >= 80200000 && !defined(__VAX)
-  if (decc_efs_charset) {
-    posix_to_vmsspec_hardway(rslt, rslt_len, path, dir_flag, utf8_flag);
-    if (vms_debug_fileify) {
-        fprintf(stderr, "int_tovmsspec: rslt = %s\n", rslt);
-    }
-    return rslt;
-  }
-#endif
-
   if (*(dirend+1) == '.') {  /* do we have trailing "/." or "/.." or "/..."? */
     if (!*(dirend+2)) dirend +=2;
     if (*(dirend+2) == '.' && !*(dirend+3)) dirend += 3;
@@ -8615,13 +8541,8 @@ static char *int_tovmsspec
       else if (*(cp2+1) == '.' && (*(cp2+2) == '/' || *(cp2+2) == '\0')) {
         if (*(cp1-1) == '-' || *(cp1-1) == '[') *(cp1++) = '-'; /* handle "../" */
         else if (*(cp1-2) == '[') *(cp1-1) = '-';
-        else {  /* back up over previous directory name */
-          cp1--;
-          while (*(cp1-1) != '.' && *(cp1-1) != '[') cp1--;
-          if (*(cp1-1) == '[') {
-            memcpy(cp1,"000000.",7);
-            cp1 += 7;
-          }
+        else {
+          *(cp1++) = '-';
         }
         cp2 += 2;
         if (cp2 == dirend) break;
@@ -9364,14 +9285,14 @@ int rms_sts;
 
 	string = PerlMem_malloc(resultspec.dsc$w_length+1);
         if (string == NULL) _ckvmssts_noperl(SS$_INSFMEM);
-	my_strlcpy(string, resultspec.dsc$a_pointer, resultspec.dsc$w_length);
+	my_strlcpy(string, resultspec.dsc$a_pointer, resultspec.dsc$w_length+1);
 	if (NULL == had_version)
 	    *(strrchr(string, ';')) = '\0';
 	if ((!had_directory) && (had_device == NULL))
 	    {
 	    if (NULL == (devdir = strrchr(string, ']')))
 		devdir = strrchr(string, '>');
-	    my_strlcpy(string, devdir + 1, resultspec.dsc$w_length);
+	    my_strlcpy(string, devdir + 1, resultspec.dsc$w_length+1);
 	    }
 	/*
 	 * Be consistent with what the C RTL has already done to the rest of

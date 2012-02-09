@@ -1030,6 +1030,16 @@ ok
 Modification of a read-only value attempted at - line 16.
 ########
 
+# Similarly, read-only regexps cannot be tied.
+sub TIESCALAR { bless [] }
+$y = ${qr//};
+Internals::SvREADONLY($y,1);
+tie $y, "";
+
+EXPECT
+Modification of a read-only value attempted at - line 6.
+########
+
 # tied() should still work on tied scalars after glob assignment
 sub TIESCALAR {bless[]}
 sub FETCH {*foo}
@@ -1209,3 +1219,43 @@ $tyre = \tie $tied, "";
 print "ok\n" if \tied $tied == $tyre;
 EXPECT
 ok
+########
+
+# tied arrays should always be AvREAL
+$^W=1;
+sub TIEARRAY{bless[]}
+sub {
+  tie @_, "";
+  \@_; # used to produce: av_reify called on tied array at - line 7.
+}->(1);
+EXPECT
+########
+
+# [perl #67490] scalar-tying elements of magic hashes
+sub TIESCALAR{bless[]}
+sub STORE{}
+tie $ENV{foo}, '';
+$ENV{foo} = 78;
+delete $ENV{foo};
+tie $^H{foo}, '';
+$^H{foo} = 78;
+delete $^H{foo};
+EXPECT
+########
+
+# [perl #35865, #43011] autovivification should call FETCH after STORE
+# because perl does not know that the FETCH would have returned the same
+# thing that was just stored.
+
+# This package never likes to take ownership of other people’s refs.  It
+# always makes its own copies.  (For simplicity, it only accepts hashes.)
+package copier {
+    sub TIEHASH { bless {} }
+    sub FETCH   { $_[0]{$_[1]} }
+    sub STORE   { $_[0]{$_[1]} = { %{ $_[2] } } }
+}
+tie my %h, copier::;
+$h{i}{j} = 'k';
+print $h{i}{j}, "\n";
+EXPECT
+k

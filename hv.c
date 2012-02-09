@@ -19,10 +19,10 @@
 /* 
 =head1 Hash Manipulation Functions
 
-A HV structure represents a Perl hash. It consists mainly of an array
-of pointers, each of which points to a linked list of HE structures. The
+A HV structure represents a Perl hash.  It consists mainly of an array
+of pointers, each of which points to a linked list of HE structures.  The
 array is indexed by the hash function of the key, so each linked list
-represents all the hash entries with the same hash value. Each HE contains
+represents all the hash entries with the same hash value.  Each HE contains
 a pointer to the actual value, plus a pointer to a HEK structure which
 holds the key and hash value.
 
@@ -285,7 +285,8 @@ information on how to use this function on tied hashes.
 
 =for apidoc hv_exists_ent
 
-Returns a boolean indicating whether the specified hash key exists. C<hash>
+Returns a boolean indicating whether
+the specified hash key exists.  C<hash>
 can be a valid precomputed hash value, or 0 to ask for it to be
 computed.
 
@@ -1049,21 +1050,13 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 		    mro_changes = 1;
 	}
 
-	if (d_flags & G_DISCARD) {
-	    sv = HeVAL(entry);
-	    HeVAL(entry) = &PL_sv_placeholder;
-	    if (sv) {
-		/* deletion of method from stash */
-		if (isGV(sv) && isGV_with_GP(sv) && GvCVu(sv)
-		 && HvENAME_get(hv))
-		    mro_method_changed_in(hv);
-		SvREFCNT_dec(sv);
-		sv = NULL;
-	    }
-	}
-	else {
-	    sv = sv_2mortal(HeVAL(entry));
-	    HeVAL(entry) = &PL_sv_placeholder;
+	sv = d_flags & G_DISCARD ? HeVAL(entry) : sv_2mortal(HeVAL(entry));
+	HeVAL(entry) = &PL_sv_placeholder;
+	if (sv) {
+	    /* deletion of method from stash */
+	    if (isGV(sv) && isGV_with_GP(sv) && GvCVu(sv)
+	     && HvENAME_get(hv))
+		mro_method_changed_in(hv);
 	}
 
 	/*
@@ -1089,6 +1082,11 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    xhv->xhv_keys--; /* HvTOTALKEYS(hv)-- */
 	    if (xhv->xhv_keys == 0)
 	        HvHASKFLAGS_off(hv);
+	}
+
+	if (d_flags & G_DISCARD) {
+	    SvREFCNT_dec(sv);
+	    sv = NULL;
 	}
 
 	if (mro_changes == 1) mro_isa_changed_in(hv);
@@ -1358,7 +1356,7 @@ Perl_newHVhv(pTHX_ HV *ohv)
     HV * const hv = newHV();
     STRLEN hv_max;
 
-    if (!ohv || !HvTOTALKEYS(ohv))
+    if (!ohv || (!HvTOTALKEYS(ohv) && !SvMAGICAL((const SV *)ohv)))
 	return hv;
     hv_max = HvMAX(ohv);
 
@@ -1421,9 +1419,13 @@ Perl_newHVhv(pTHX_ HV *ohv)
 
 	hv_iterinit(ohv);
 	while ((entry = hv_iternext_flags(ohv, 0))) {
-	    SV *const val = HeVAL(entry);
-	    (void)hv_store_flags(hv, HeKEY(entry), HeKLEN(entry),
-			         SvIMMORTAL(val) ? val : newSVsv(val),
+	    SV *val = hv_iterval(ohv,entry);
+	    SV * const keysv = HeSVKEY(entry);
+	    val = SvIMMORTAL(val) ? val : newSVsv(val);
+	    if (keysv)
+		(void)hv_store_ent(hv, keysv, val, 0);
+	    else
+	        (void)hv_store_flags(hv, HeKEY(entry), HeKLEN(entry), val,
 				 HeHASH(entry), HeKFLAGS(entry));
 	}
 	HvRITER_set(ohv, riter);
@@ -1450,7 +1452,7 @@ Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 {
     HV * const hv = newHV();
 
-    if (ohv && HvTOTALKEYS(ohv)) {
+    if (ohv) {
 	STRLEN hv_max = HvMAX(ohv);
 	STRLEN hv_fill = HvFILL(ohv);
 	HE *entry;
@@ -1463,13 +1465,18 @@ Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 
 	hv_iterinit(ohv);
 	while ((entry = hv_iternext_flags(ohv, 0))) {
-	    SV *const sv = newSVsv(HeVAL(entry));
-	    SV *heksv = newSVhek(HeKEY_hek(entry));
-	    sv_magic(sv, NULL, PERL_MAGIC_hintselem,
+	    SV *const sv = newSVsv(hv_iterval(ohv,entry));
+	    SV *heksv = HeSVKEY(entry);
+	    if (!heksv && sv) heksv = newSVhek(HeKEY_hek(entry));
+	    if (sv) sv_magic(sv, NULL, PERL_MAGIC_hintselem,
 		     (char *)heksv, HEf_SVKEY);
-	    SvREFCNT_dec(heksv);
-	    (void)hv_store_flags(hv, HeKEY(entry), HeKLEN(entry),
-				 sv, HeHASH(entry), HeKFLAGS(entry));
+	    if (heksv == HeSVKEY(entry))
+		(void)hv_store_ent(hv, heksv, sv, 0);
+	    else {
+		(void)hv_common(hv, heksv, HeKEY(entry), HeKLEN(entry),
+				 HeKFLAGS(entry), HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, sv, HeHASH(entry));
+		SvREFCNT_dec(heksv);
+	    }
 	}
 	HvRITER_set(ohv, riter);
 	HvEITER_set(ohv, eiter);
@@ -1490,8 +1497,6 @@ S_hv_free_ent_ret(pTHX_ HV *hv, register HE *entry)
     if (!entry)
 	return NULL;
     val = HeVAL(entry);
-    if (val && isGV(val) && isGV_with_GP(val) && GvCVu(val) && HvENAME(hv))
-        mro_method_changed_in(hv);	/* deletion of method from stash */
     if (HeKLEN(entry) == HEf_SVKEY) {
 	SvREFCNT_dec(HeKEY_sv(entry));
 	Safefree(HeKEY_hek(entry));
@@ -1541,7 +1546,10 @@ Perl_hv_delayfree_ent(pTHX_ HV *hv, register HE *entry)
 =for apidoc hv_clear
 
 Frees the all the elements of a hash, leaving it empty.
-The XS equivalent of %hash = (). See also L</hv_undef>.
+The XS equivalent of C<%hash = ()>.  See also L</hv_undef>.
+
+If any destructors are triggered as a result, the hv itself may
+be freed.
 
 =cut
 */
@@ -1558,6 +1566,8 @@ Perl_hv_clear(pTHX_ HV *hv)
 
     xhv = (XPVHV*)SvANY(hv);
 
+    ENTER;
+    SAVEFREESV(SvREFCNT_inc_simple_NN(hv));
     if (SvREADONLY(hv) && HvARRAY(hv) != NULL) {
 	/* restricted hash: convert all keys to placeholders */
 	STRLEN i;
@@ -1595,6 +1605,7 @@ Perl_hv_clear(pTHX_ HV *hv)
             mro_isa_changed_in(hv);
 	HvEITER_set(hv, NULL);
     }
+    LEAVE;
 }
 
 /*
@@ -1755,10 +1766,14 @@ Perl_hfree_next_entry(pTHX_ HV *hv, STRLEN *indexp)
 /*
 =for apidoc hv_undef
 
-Undefines the hash.  The XS equivalent of undef(%hash).
+Undefines the hash.  The XS equivalent of C<undef(%hash)>.
 
 As well as freeing all the elements of the hash (like hv_clear()), this
 also frees any auxiliary data and storage associated with the hash.
+
+If any destructors are triggered as a result, the hv itself may
+be freed.
+
 See also L</hv_clear>.
 
 =cut
@@ -1770,6 +1785,7 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
     dVAR;
     register XPVHV* xhv;
     const char *name;
+    const bool save = !!SvREFCNT(hv);
 
     if (!hv)
 	return;
@@ -1793,6 +1809,10 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
                             G_DISCARD
                            );
 	hv_name_set(hv, NULL, 0, 0);
+    }
+    if (save) {
+	ENTER;
+	SAVEFREESV(SvREFCNT_inc_simple_NN(hv));
     }
     hfreeentries(hv);
     if (SvOOK(hv)) {
@@ -1847,6 +1867,7 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
 
     if (SvRMAGICAL(hv))
 	mg_clear(MUTABLE_SV(hv));
+    if (save) LEAVE;
 }
 
 /*
@@ -2116,7 +2137,7 @@ hek_eq_pvn_flags(pTHX_ const HEK *hek, const char* pv, const I32 pvlen, const U3
 /*
 =for apidoc hv_ename_add
 
-Adds a name to a stash's internal list of effective names. See
+Adds a name to a stash's internal list of effective names.  See
 C<hv_ename_delete>.
 
 This is called when a stash is assigned to a new location in the symbol
@@ -2177,7 +2198,7 @@ Perl_hv_ename_add(pTHX_ HV *hv, const char *name, U32 len, U32 flags)
 /*
 =for apidoc hv_ename_delete
 
-Removes a name from a stash's internal list of effective names. If this is
+Removes a name from a stash's internal list of effective names.  If this is
 the name returned by C<HvENAME>, then another name in the list will take
 its place (C<HvENAME> will use it).
 
@@ -2302,7 +2323,7 @@ The C<flags> value will normally be zero; if HV_ITERNEXT_WANTPLACEHOLDERS is
 set the placeholders keys (for restricted hashes) will be returned in addition
 to normal keys. By default placeholders are automatically skipped over.
 Currently a placeholder is implemented with a value that is
-C<&Perl_sv_placeholder>. Note that the implementation of placeholders and
+C<&PL_sv_placeholder>.  Note that the implementation of placeholders and
 restricted hashes may change, and the implementation currently is
 insufficiently abstracted for any change to be tidy.
 
@@ -2990,7 +3011,7 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
     U8 utf8_flag;
     PERL_ARGS_ASSERT_REFCOUNTED_HE_FETCH_PVN;
 
-    if (flags & ~REFCOUNTED_HE_KEY_UTF8)
+    if (flags & ~(REFCOUNTED_HE_KEY_UTF8|REFCOUNTED_HE_EXISTS))
 	Perl_croak(aTHX_ "panic: refcounted_he_fetch_pvn bad flags %"UVxf,
 	    (UV)flags);
     if (!chain)
@@ -3041,10 +3062,15 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
 	    memEQ(HEK_KEY(chain->refcounted_he_hek), keypv, keylen) &&
 	    utf8_flag == (HEK_FLAGS(chain->refcounted_he_hek) & HVhek_UTF8)
 #endif
-	)
+	) {
+	    if (flags & REFCOUNTED_HE_EXISTS)
+		return (chain->refcounted_he_data[0] & HVrhek_typemask)
+		    == HVrhek_delete
+		    ? NULL : &PL_sv_yes;
 	    return sv_2mortal(refcounted_he_value(chain));
+	}
     }
-    return &PL_sv_placeholder;
+    return flags & REFCOUNTED_HE_EXISTS ? NULL : &PL_sv_placeholder;
 }
 
 /*

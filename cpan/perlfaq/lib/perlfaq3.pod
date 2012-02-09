@@ -133,8 +133,8 @@ Have you read the appropriate manpages? Here's a brief index:
 
 =item Various
 
-L<http://www.cpan.org/misc/olddoc/FMTEYEWTK.tgz> 
-(not a man-page but still useful, a collection of various essays on 
+L<http://www.cpan.org/misc/olddoc/FMTEYEWTK.tgz>
+(not a man-page but still useful, a collection of various essays on
 Perl techniques)
 
 =back
@@ -153,7 +153,7 @@ evaluated. You can also examine the symbol table, get stack
 backtraces, check variable values, set breakpoints, and other
 operations typically found in symbolic debuggers.
 
-You can also use L<Devel::REPL> which is an interactive shell for Perl, 
+You can also use L<Devel::REPL> which is an interactive shell for Perl,
 commonly known as a REPL - Read, Evaluate, Print, Loop. It provides
 various handy features.
 
@@ -315,8 +315,8 @@ for Perl programs.
 
 =head2 Is there a pretty-printer (formatter) for Perl?
 
-L<Perl::Tidy> comes with a perl script L<perltidy> which indents and 
-reformats Perl scripts to make them easier to read by trying to follow 
+L<Perl::Tidy> comes with a perl script L<perltidy> which indents and
+reformats Perl scripts to make them easier to read by trying to follow
 the rules of the L<perlstyle>. If you write Perl, or spend much time reading
 Perl, you will probably find it useful.
 
@@ -744,7 +744,7 @@ toward this:
 
 =over 4
 
-=item * Don't slurp!
+=item Don't slurp!
 
 Don't read an entire file into memory if you can process it line
 by line. Or more concretely, use a loop like this:
@@ -770,7 +770,7 @@ When the files you're processing are small, it doesn't much matter which
 way you do it, but it makes a huge difference when they start getting
 larger.
 
-=item * Use map and grep selectively
+=item Use map and grep selectively
 
 Remember that both map and grep expect a LIST argument, so doing this:
 
@@ -783,7 +783,7 @@ to loop:
                 push(@wanted, $_) if /pattern/;
         }
 
-=item * Avoid unnecessary quotes and stringification
+=item Avoid unnecessary quotes and stringification
 
 Don't quote large strings unless absolutely necessary:
 
@@ -815,7 +815,7 @@ or
     }
 
 
-=item * Pass by reference
+=item Pass by reference
 
 Pass arrays and hashes by reference, not by value. For one thing, it's
 the only way to pass multiple lists or hashes (or both) in a single
@@ -824,7 +824,7 @@ requires some judgement, however, because any changes will be propagated
 back to the original data. If you really want to mangle (er, modify) a
 copy, you'll have to sacrifice the memory needed to make one.
 
-=item * Tie large variables to disk
+=item Tie large variables to disk
 
 For "big" data stores (i.e. ones that exceed available memory) consider
 using one of the DB modules to store it on disk instead of in RAM. This
@@ -906,7 +906,7 @@ you use. It can allow existing CGI scripts to enjoy this flexibility and
 performance with minimal changes, or can be used along with modern Perl web
 frameworks to make writing and deploying web services with Perl a breeze.
 
-These solutions can have far-reaching effects on your system and on the way you 
+These solutions can have far-reaching effects on your system and on the way you
 write your CGI programs, so investigate them with care.
 
 See also

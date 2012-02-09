@@ -121,7 +121,10 @@ is runperl(prog => 'print CORE->lc, qq-\n-'), "core\n",
 is runperl(prog => '@ISA=CORE; print main->uc, qq-\n-'), "MAIN\n",
  'inherted method calls autovivify coresubs';
 
-is curr_test, $tests+1, 'right number of tests';
-done_testing;
+$tests++;
+ok eval { *CORE::exit = \42 },
+  '[rt.cpan.org #74289] *CORE::foo is not accidentally made read-only';
+
+done_testing $tests;
 
 CORE::__END__

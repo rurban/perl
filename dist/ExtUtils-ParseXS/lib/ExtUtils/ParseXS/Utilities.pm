@@ -6,7 +6,7 @@ use File::Spec;
 use lib qw( lib );
 use ExtUtils::ParseXS::Constants ();
 
-our $VERSION = '3.07';
+our $VERSION = '3.14';
 
 our (@ISA, @EXPORT_OK);
 @ISA = qw(Exporter);
@@ -28,6 +28,8 @@ our (@ISA, @EXPORT_OK);
   blurt
   death
   check_conditional_preprocessor_statements
+  escape_file_for_line_directive
+  report_typemap_failure
 );
 
 =head1 NAME
@@ -53,6 +55,8 @@ ExtUtils::ParseXS::Utilities - Subroutines used with ExtUtils::ParseXS
     blurt
     death
     check_conditional_preprocessor_statements
+    escape_file_for_line_directive
+    report_typemap_failure
   );
 
 =head1 SUBROUTINES
@@ -842,6 +846,77 @@ sub check_conditional_preprocessor_statements {
     }
     $self->Warn("Warning: #if without #endif in this function") if $cpplevel;
   }
+}
+
+=head2 C<escape_file_for_line_directive()>
+
+=over 4
+
+=item * Purpose
+
+Escapes a given code source name (typically a file name but can also
+be a command that was read from) so that double-quotes and backslashes are escaped.
+
+=item * Arguments
+
+A string.
+
+=item * Return Value
+
+A string with escapes for double-quotes and backslashes.
+
+=back
+
+=cut
+
+sub escape_file_for_line_directive {
+  my $string = shift;
+  $string =~ s/\\/\\\\/g;
+  $string =~ s/"/\\"/g;
+  return $string;
+}
+
+=head2 C<report_typemap_failure>
+
+=over 4
+
+=item * Purpose
+
+Do error reporting for missing typemaps.
+
+=item * Arguments
+
+The C<ExtUtils::ParseXS> object.
+
+An C<ExtUtils::Typemaps> object.
+
+The string that represents the C type that was not found in the typemap.
+
+Optionally, the string C<death> or C<blurt> to choose
+whether the error is immediately fatal or not. Default: C<blurt>
+
+=item * Return Value
+
+Returns nothing. Depending on the arguments, this
+may call C<death> or C<blurt>, the former of which is
+fatal.
+
+=back
+
+=cut
+
+sub report_typemap_failure {
+  my ($self, $tm, $ctype, $error_method) = @_;
+  $error_method ||= 'blurt';
+
+  my @avail_ctypes = $tm->list_mapped_ctypes;
+
+  my $err = "Could not find a typemap for C type '$ctype'.\n"
+            . "The following C types are mapped by the current typemap:\n'"
+            . join("', '", @avail_ctypes) . "'\n";
+
+  $self->$error_method($err);
+  return();
 }
 
 1;

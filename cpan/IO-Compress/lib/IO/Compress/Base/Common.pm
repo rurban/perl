@@ -11,7 +11,7 @@ use File::GlobMapper;
 require Exporter;
 our ($VERSION, @ISA, @EXPORT, %EXPORT_TAGS, $HAS_ENCODE);
 @ISA = qw(Exporter);
-$VERSION = '2.045';
+$VERSION = '2.048';
 
 @EXPORT = qw( isaFilehandle isaFilename isaScalar
               whatIsInput whatIsOutput 
@@ -519,6 +519,7 @@ sub ParseParameters
 #package IO::Compress::Base::Parameters;
 
 use strict;
+
 use warnings;
 use Carp;
 
@@ -979,6 +980,28 @@ sub equal
     return $self->[LOW]  == $other->[LOW] &&
            $self->[HIGH] == $other->[HIGH] ;
 }
+
+sub gt
+{
+    my $self = shift;
+    my $other = shift;
+
+    return $self->cmp($other) > 0 ;
+}
+
+sub cmp
+{
+    my $self = shift;
+    my $other = shift ;
+
+    if ($self->[LOW] == $other->[LOW]) {
+        return $self->[HIGH] - $other->[HIGH] ;
+    }
+    else {
+        return $self->[LOW] - $other->[LOW] ;
+    }
+}
+    
 
 sub is64bit
 {

@@ -1,8 +1,8 @@
 use strict;
 use warnings;
 package Version::Requirements;
-BEGIN {
-  $Version::Requirements::VERSION = '0.101020';
+{
+  $Version::Requirements::VERSION = '0.101022';
 }
 # ABSTRACT: a set of version requirements for a CPAN dist
 
@@ -10,6 +10,13 @@ BEGIN {
 use Carp ();
 use Scalar::Util ();
 use version 0.77 (); # the ->parse method
+
+# We silence this warning during core tests, because this is only in core
+# because it has to be, and nobody wants to see this stupid warning.
+# -- rjbs, 2012-01-20
+Carp::cluck(
+  "Version::Requirements is deprecated; replace with CPAN::Meta::Requirements"
+) unless $ENV{PERL_CORE};
 
 
 sub new {
@@ -184,9 +191,6 @@ sub from_string_hash {
 {
   package
     Version::Requirements::_Range::Exact;
-BEGIN {
-  $Version::Requirements::_Range::Exact::VERSION = '0.101020';
-}
   sub _new     { bless { version => $_[1] } => $_[0] }
 
   sub _accepts { return $_[0]{version} == $_[1] }
@@ -231,9 +235,6 @@ BEGIN {
 {
   package
     Version::Requirements::_Range::Range;
-BEGIN {
-  $Version::Requirements::_Range::Range::VERSION = '0.101020';
-}
 
   sub _self { ref($_[0]) ? $_[0] : (bless { } => $_[0]) }
 
@@ -392,7 +393,7 @@ Version::Requirements - a set of version requirements for a CPAN dist
 
 =head1 VERSION
 
-version 0.101020
+version 0.101022
 
 =head1 SYNOPSIS
 
@@ -583,7 +584,7 @@ Version::Requirements object.
 
 =head1 AUTHOR
 
-  Ricardo Signes <rjbs@cpan.org>
+Ricardo Signes <rjbs@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 

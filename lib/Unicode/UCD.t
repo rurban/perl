@@ -342,7 +342,7 @@ is($bt->{AL}, 'Right-to-Left Arabic', 'AL is Right-to-Left Arabic');
 
 # If this fails, then maybe one should look at the Unicode changes to see
 # what else might need to be updated.
-is(Unicode::UCD::UnicodeVersion, '6.0.0', 'UnicodeVersion');
+is(Unicode::UCD::UnicodeVersion, '6.1.0', 'UnicodeVersion');
 
 use Unicode::UCD qw(compexcl);
 
@@ -470,7 +470,7 @@ is(Unicode::UCD::_getcode('U+123x'),  undef, "_getcode(x123)");
 {
     my $r1 = charscript('Latin');
     my $n1 = @$r1;
-    is($n1, 30, "number of ranges in Latin script (Unicode 6.0.0)");
+    is($n1, 30, "number of ranges in Latin script (Unicode 6.1.0)");
     shift @$r1 while @$r1;
     my $r2 = charscript('Latin');
     is(@$r2, $n1, "modifying results should not mess up internal caches");
@@ -567,7 +567,7 @@ while (<$props>) {
         # matching, which the tested function does on all inputs.
         my $mod_name = "$extra_chars$alias";
 
-        my $loose = utf8::_loose_name(lc $alias);
+        my $loose = &utf8::_loose_name(lc $alias);
 
         # Indicate we have tested this.
         $props{$loose} = 1;
@@ -622,12 +622,12 @@ while (<$props>) {
 foreach my $alias (keys %utf8::loose_to_file_of) {
     next if $alias =~ /=/;
     my $lc_name = lc $alias;
-    my $loose = utf8::_loose_name($lc_name);
+    my $loose = &utf8::_loose_name($lc_name);
     next if exists $props{$loose};  # Skip if already tested
     $props{$loose} = 1;
     my $mod_name = "$extra_chars$alias";    # Tests loose matching
     my @aliases = prop_aliases($mod_name);
-    my $found_it = grep { utf8::_loose_name(lc $_) eq $lc_name } @aliases;
+    my $found_it = grep { &utf8::_loose_name(lc $_) eq $lc_name } @aliases;
     if ($found_it) {
         pass("prop_aliases: '$lc_name' is listed as an alias for '$mod_name'");
     }
@@ -646,14 +646,14 @@ foreach my $alias (keys %utf8::loose_to_file_of) {
         # returned as an alias, so having successfully stripped it off above,
         # try again.
         if ($stripped) {
-            $found_it = grep { utf8::_loose_name(lc $_) eq $lc_name } @aliases;
+            $found_it = grep { &utf8::_loose_name(lc $_) eq $lc_name } @aliases;
         }
 
         # If that didn't work, it could be that it's a block, which is always
         # returned with a leading 'In_' to avoid ambiguity.  Try comparing
         # with that stripped off.
         if (! $found_it) {
-            $found_it = grep { utf8::_loose_name(s/^In_(.*)/\L$1/r) eq $lc_name }
+            $found_it = grep { &utf8::_loose_name(s/^In_(.*)/\L$1/r) eq $lc_name }
                               @aliases;
             # Could check that is a real block, but tests for invmap will
             # likely pickup any errors, since this will be tested there.
@@ -723,8 +723,8 @@ while (<$propvalues>) {
         $fields[0] = $fields[1];
     }
     elsif ($fields[0] ne $fields[1]
-           && utf8::_loose_name(lc $fields[0])
-               eq utf8::_loose_name(lc $fields[1])
+           && &utf8::_loose_name(lc $fields[0])
+               eq &utf8::_loose_name(lc $fields[1])
            && $fields[1] !~ /[[:upper:]]/)
     {
         # Also, there is a bug in the file in which "n/a" is omitted, and
@@ -740,7 +740,7 @@ while (<$propvalues>) {
     # the short and full names, respectively.  See comments in input file.
     splice (@fields, 0, 0, splice(@fields, 1, 2)) if $prop eq 'ccc';
 
-    my $loose_prop = utf8::_loose_name(lc $prop);
+    my $loose_prop = &utf8::_loose_name(lc $prop);
     my $suppressed = grep { $_ eq $loose_prop }
                           @Unicode::UCD::suppressed_properties;
     foreach my $value (@fields) {
@@ -748,7 +748,7 @@ while (<$propvalues>) {
             is(prop_value_aliases($prop, $value), undef, "prop_value_aliases('$prop', '$value') returns undef for suppressed property $prop");
             next;
         }
-        elsif (grep { $_ eq ("$loose_prop=" . utf8::_loose_name(lc $value)) } @Unicode::UCD::suppressed_properties) {
+        elsif (grep { $_ eq ("$loose_prop=" . &utf8::_loose_name(lc $value)) } @Unicode::UCD::suppressed_properties) {
             is(prop_value_aliases($prop, $value), undef, "prop_value_aliases('$prop', '$value') returns undef for suppressed property $prop=$value");
             next;
         }
@@ -790,10 +790,10 @@ while (<$propvalues>) {
         else {
             my @all_names = prop_value_aliases($mod_prop, $mod_value);
             is_deeply(\@all_names, \@names_via_short, "In '$prop', prop_value_aliases() returns the same list for both '$short_name' and '$mod_value'");
-            ok((grep { utf8::_loose_name(lc $_) eq utf8::_loose_name(lc $value) } prop_value_aliases($prop, $short_name)), "'$value' is listed as an alias for prop_value_aliases('$prop', '$short_name')");
+            ok((grep { &utf8::_loose_name(lc $_) eq &utf8::_loose_name(lc $value) } prop_value_aliases($prop, $short_name)), "'$value' is listed as an alias for prop_value_aliases('$prop', '$short_name')");
         }
 
-        $pva_tested{utf8::_loose_name(lc $prop) . "=" . utf8::_loose_name(lc $value)} = 1;
+        $pva_tested{&utf8::_loose_name(lc $prop) . "=" . &utf8::_loose_name(lc $value)} = 1;
         $count++;
     }
 }
@@ -843,7 +843,7 @@ foreach my $hash (\%utf8::loose_to_file_of, \%utf8::stricter_to_file_of) {
             is_deeply(\@l_, \@LC, "prop_value_aliases('$mod_prop', '$mod_value) returns the same list as prop_value_aliases('gc', 'lc')");
         }
         else {
-            ok((grep { utf8::_loose_name(lc $_) eq utf8::_loose_name(lc $value) }
+            ok((grep { &utf8::_loose_name(lc $_) eq &utf8::_loose_name(lc $value) }
                 prop_value_aliases($mod_prop, $mod_value)),
                 "'$value' is listed as an alias for prop_value_aliases('$mod_prop', '$mod_value')");
         }
@@ -873,9 +873,9 @@ use Unicode::UCD qw(prop_invlist prop_invmap MAX_CP);
 my $prop = "uc";
 my ($invlist_ref, $invmap_ref, $format, $missing) = prop_invmap($prop);
 is($format, 'cl', "prop_invmap() format of '$prop' is 'cl'");
-is($missing, '<code point>', "prop_invmap() missing of '$prop' is '<code point>'");
+is($missing, '0', "prop_invmap() missing of '$prop' is '0'");
 is($invlist_ref->[1], 0x61, "prop_invmap('$prop') list[1] is 0x61");
-is($invmap_ref->[1], 0x41, "prop_invmap('$prop') map[1] is 0x41");
+is($invmap_ref->[1], -32, "prop_invmap('$prop') map[1] is -32");
 
 $prop = "upper";
 ($invlist_ref, $invmap_ref, $format, $missing) = prop_invmap($prop);
@@ -894,9 +894,9 @@ is($invmap_ref->[1], 'Y', "prop_invmap('$prop') map[1] is 'Y'");
 $prop = "lc";
 ($invlist_ref, $invmap_ref, $format, $missing) = prop_invmap($prop);
 is($format, 'cl', "prop_invmap() format of '$prop' is 'cl'");
-is($missing, '<code point>', "prop_invmap() missing of '$prop' is '<code point>'");
+is($missing, '0', "prop_invmap() missing of '$prop' is '0'");
 is($invlist_ref->[1], 0x41, "prop_invmap('$prop') list[1] is 0x41");
-is($invmap_ref->[1], 0x61, "prop_invmap('$prop') map[1] is 0x61");
+is($invmap_ref->[1], 32, "prop_invmap('$prop') map[1] is 32");
 
 # This property is stable and small, so can test all of it
 $prop = "ASCII_Hex_Digit";
@@ -1102,12 +1102,12 @@ foreach my $set_of_tables (\%utf8::stricter_to_file_of, \%utf8::loose_to_file_of
         if (defined $table) {
 
             # May have optional prefixed 'is'
-            $prop = utf8::_loose_name($prop_only) =~ s/^is//r;
+            $prop = &utf8::_loose_name($prop_only) =~ s/^is//r;
             $prop = $utf8::loose_property_name_of{$prop};
-            $prop .= "=" . utf8::_loose_name($table);
+            $prop .= "=" . &utf8::_loose_name($table);
         }
         else {
-            $prop = utf8::_loose_name($prop);
+            $prop = &utf8::_loose_name($prop);
         }
         my $is_default = exists $Unicode::UCD::loose_defaults{$prop};
 
@@ -1180,7 +1180,7 @@ my %tested_invmaps;
 
 PROPERTY:
 foreach my $prop (keys %props) {
-    my $loose_prop = utf8::_loose_name(lc $prop);
+    my $loose_prop = &utf8::_loose_name(lc $prop);
     my $suppressed = grep { $_ eq $loose_prop }
                           @Unicode::UCD::suppressed_properties;
 
@@ -1196,7 +1196,7 @@ foreach my $prop (keys %props) {
 
     # Normalize the short name, as it is stored in the hashes under the
     # normalized version.
-    $name = utf8::_loose_name(lc $name);
+    $name = &utf8::_loose_name(lc $name);
 
     # Add in the characters that are supposed to be ignored to test loose
     # matching, which the tested function applies to all properties
@@ -1259,8 +1259,22 @@ foreach my $prop (keys %props) {
             next PROPERTY;
         }
     }
-    elsif ($format =~ /^ [cd] /x) {
-        if ($missing ne "<code point>") {
+    elsif ($format =~ /^ c /x) {
+        if ($full_name eq 'Perl_Decimal_Digit') {
+            if ($missing ne "") {
+                fail("prop_invmap('$mod_prop')");
+                diag("The missings should be \"\"; got '$missing'");
+                next PROPERTY;
+            }
+        }
+        elsif ($missing ne "0") {
+            fail("prop_invmap('$mod_prop')");
+            diag("The missings should be '0'; got '$missing'");
+            next PROPERTY;
+        }
+    }
+    elsif ($format =~ /^ d /x) {
+        if ($missing ne "0") {
             fail("prop_invmap('$mod_prop')");
             diag("The missings should be '<code point>'; got '$missing'");
             next PROPERTY;
@@ -1367,16 +1381,36 @@ foreach my $prop (keys %props) {
             # Get rid of any trailing space and comments in the file.
             $official =~ s/\s*(#.*)?$//mg;
 
-            # Decomposition.pl also has the <compatible> types in it, which
-            # should be removed.
-            $official =~ s/<.*?> //mg if $format eq 'd';
+            if ($format eq 'd') {
+                my @official = split /\n/, $official;
+                $official = "";
+                foreach my $line (@official) {
+                    my ($start, $end, $value)
+                                    = $line =~ / ^ (.+?) \t (.*?) \t (.+?)
+                                                \s* ( \# .* )? $ /x;
+                    # Decomposition.pl also has the <compatible> types in it,
+                    # which should be removed.
+                    $value =~ s/<.*?> //;
+                    $official .= "$start\t\t$value\n";
+
+                    # If this is a multi-char range, we turn it into as many
+                    # single character ranges as necessary.  This makes things
+                    # easier below.
+                    if ($end ne "") {
+                        for my $i (hex($start) + 1 .. hex $end) {
+                            $official .= sprintf "%04X\t\t%s\n", $i, $value;
+                        }
+                    }
+                }
+            }
         }
         chomp $official;
 
         # If there are any special elements, get a reference to them.
-        my $specials_ref = $utf8::file_to_swash_name{$base_file};
-        if ($specials_ref) {
-            $specials_ref = $utf8::SwashInfo{$specials_ref}{'specials_name'};
+        my $swash_name = $utf8::file_to_swash_name{$base_file};
+        my $specials_ref;
+        if ($swash_name) {
+            $specials_ref = $utf8::SwashInfo{$swash_name}{'specials_name'};
             if ($specials_ref) {
 
                 # Convert from the name to the actual reference.
@@ -1387,9 +1421,7 @@ foreach my $prop (keys %props) {
 
         # Certain of the proxy properties have to be adjusted to match the
         # real ones.
-        if (($proxy_prop ne $name && $full_name =~ 'Mapping')
-            || $full_name eq 'Case_Folding')
-        {
+        if ($full_name =~ /^(Case_Folding|(Lower|Title|Upper)case_Mapping)/) {
 
             # Here we have either
             #   1) Case_Folding; or
@@ -1403,99 +1435,91 @@ foreach my $prop (keys %props) {
             my @list;
             for (split "\n", $official) {
                 my ($start, $end, $value) = / ^ (.+?) \t (.*?) \t (.+?)
-                                                \s* ( \# .* )?
-                                                $ /x;
+                                                \s* ( \# .* )? $ /x;
                 $end = $start if $end eq "";
-                if ($end ne $start) {
-                    fail("prop_invmap('$mod_prop')");
-                    diag("This test is expecting only single code point ranges in $file.pl");
-                    next PROPERTY;
-                }
-                push @list, [ hex $start, $value ];
+                push @list, [ hex $start, hex $end, $value ];
             }
 
-            # For Case_Folding, the file contains all the simple mappings,
+            # For these mappings, the file contains all the simple mappings,
             # including the ones that are overridden by the specials.  These
-            # need to be removed as the list is for just the full ones.  For
-            # the other files, the proxy is missing the simple mappings that
-            # are overridden by the specials, so we need to add them.
-
-            # For the missing simples, we get the correct values by calling
-            # charinfo().  Set up which element of the hash returned by
-            # charinfo to look at
-            my $charinfo_element;
-            if ($full_name =~ / ^ Simple_ (Lower | Upper | Title) case_Mapping/x)
-            {
-                $charinfo_element = lc $1;  # e.g. Upper is referred to by the
-                                            # key 'upper' in the charinfo()
-                                            # returned hash
-            }
+            # need to be removed as the list is for just the full ones.
 
             # Go through any special mappings one by one.  They are packed.
             my $i = 0;
             foreach my $utf8_cp (sort keys %$specials_ref) {
                 my $cp = unpack("C0U", $utf8_cp);
 
-                # Get what the simple value for this should be; either nothing
-                # for Case_Folding, or what charinfo returns for the others.
-                my $simple = ($full_name eq "Case_Folding")
-                             ? ""
-                             : charinfo($cp)->{$charinfo_element};
-
-                # And create an entry to add to the list, if appropriate
-                my $replacement;
-                $replacement = [ $cp,  $simple ] if $simple ne "";
-
                 # Find the spot in the @list of simple mappings that this
                 # special applies to; uses a linear search.
                 while ($i < @list -1 ) {
-                    last if  $cp <= $list[$i][0];
+                    last if  $cp <= $list[$i][1];
                     $i++;
                 }
 
-                #note  $i-1 . ": " . join " => ", @{$list[$i-1]};
-                #note  $i-0 . ": " . join " => ", @{$list[$i-0]};
-                #note  $i+1 . ": " . join " => ", @{$list[$i+1]};
+                # Here $i is such that it points to the first range which ends
+                # at or above cp, and hence is the only range that could
+                # possibly contain it.
 
-                if (! defined $replacement) {
+                # If not in this range, no range contains it: nothing to
+                # remove.
+                next if $cp < $list[$i][0];
 
-                    # Here, are to remove any existing entry for this code
-                    # point.
-                    next if $cp != $list[$i][0];
-                    splice @list, $i, 1;
+                # Otherwise, remove the existing entry.  If it is the first
+                # element of the range...
+                if ($cp == $list[$i][0]) {
+
+                    # ... and there are other elements in the range, just shorten
+                    # the range to exclude this code point.
+                    if ($list[$i][1] > $list[$i][0]) {
+                        $list[$i][0]++;
+                    }
+
+                    # ... but if it is the only element in the range, remove
+                    # it entirely.
+                    else {
+                        splice @list, $i, 1;
+                    }
                 }
-                elsif ($cp == $list[$i][0]) {
-
-                    # Here, are to add something, but there is an existing
-                    # entry, so this just replaces it.
-                    $list[$i] = $replacement;
+                else { # Is somewhere in the middle of the range
+                    # Split the range into two, excluding this one in the
+                    # middle
+                    splice @list, $i, 1,
+                           [ $list[$i][0], $cp - 1, $list[$i][2] ],
+                           [ $cp + 1, $list[$i][1], $list[$i][2] ];
                 }
-                else {
-
-                    # Here, are to add something, and there isn't an existing
-                    # entry.
-                    splice @list, $i, 0, $replacement;
-                }
-
-                #note __LINE__ . ": $cp";
-                #note  $i-1 . ": " . join " => ", @{$list[$i-1]};
-                #note  $i-0 . ": " . join " => ", @{$list[$i-0]};
-                #note  $i+1 . ": " . join " => ", @{$list[$i+1]};
             }
 
             # Here, have gone through all the specials, modifying @list as
             # needed.  Turn it back into what the file should look like.
-            $official = join "\n", map { sprintf "%04X\t\t%s", @$_ } @list;
-
-            # And, no longer need the specials for the simple mappings, as are
-            # all incorporated into $official
-            undef $specials_ref if $full_name ne 'Case_Folding';
+            $official = "";
+            for my $element (@list) {
+                $official .= "\n" if $official;
+                if ($element->[1] == $element->[0]) {
+                    $official .= sprintf "%04X\t\t%s", $element->[0], $element->[2];
+                }
+                else {
+                    $official .= sprintf "%04X\t%04X\t%s", $element->[0], $element->[1], $element->[2];
+                }
+            }
         }
-        elsif ($full_name eq 'Simple_Case_Folding') {
+        elsif ($full_name =~ /Simple_(Case_Folding|(Lower|Title|Upper)case_Mapping)/)
+        {
 
-            # This property has everything in the regular array, and the
+            # These properties have everything in the regular array, and the
             # specials are superfluous.
-            undef $specials_ref if $full_name ne 'Case_Folding';
+            undef $specials_ref;
+        }
+        elsif ($name eq 'bmg') {
+
+            # For this property, the file is output using hex notation for the
+            # map, with all ranges equal to length 1.  Convert from hex to
+            # decimal.
+            my @lines = split "\n", $official;
+            foreach my $line (@lines) {
+                my ($code_point, $map) = split "\t\t", $line;
+                $line = $code_point . "\t\t" . hex $map;
+            }
+            $official = join "\n", @lines;
         }
 
         # Here, in $official, we have what the file looks like, or should like
@@ -1513,7 +1537,7 @@ foreach my $prop (keys %props) {
 
         # The extra -1 is because the final element has been tested above to
         # be for anything above Unicode.  The file doesn't go that high.
-        for my $i (0 .. @$invlist_ref - 1 - 1) {
+        for (my $i = 0; $i <  @$invlist_ref - 1; $i++) {
 
             # If the map element is a reference, have to stringify it (but
             # don't do so if the format doesn't allow references, so that an
@@ -1521,10 +1545,37 @@ foreach my $prop (keys %props) {
             if (ref $invmap_ref->[$i]
                 && ($format eq 'd' || $format =~ /^ . l /x))
             {
-                # The stringification depends on the format.  At the time of
-                # this writing, all 'sl' formats are space separated.
+                # The stringification depends on the format.
                 if ($format eq 'sl') {
-                    $invmap_ref->[$i] = join " ", @{$invmap_ref->[$i]};
+
+                    # At the time of this writing, there are two types of 'sl'
+                    # format  One, in Name_Alias, has multiple separate entries
+                    # for each code point; the other, in Script_Extension, is space
+                    # separated.  Assume the latter for non-Name_Alias.
+                    if ($full_name ne 'Name_Alias') {
+                        $invmap_ref->[$i] = join " ", @{$invmap_ref->[$i]};
+                    }
+                    else {
+                        # For Name_Alias, we emulate the file.  Entries with
+                        # just one value don't need any changes, but we
+                        # convert the list entries into a series of lines for
+                        # the file, starting with the first name.  The
+                        # succeeding entries are on separate lines, with the
+                        # code point repeated for each one and then two tabs,
+                        # then the value.  Code at the end of the loop will
+                        # set up the first line with its code point and two
+                        # tabs before the value, just as it does for every
+                        # other property; thus the special handling of the
+                        # first line.
+                        if (ref $invmap_ref->[$i]) {
+                            my $hex_cp = sprintf("%04X", $invlist_ref->[$i]);
+                            my $concatenated = $invmap_ref->[$i][0];
+                            for (my $j = 1; $j < @{$invmap_ref->[$i]}; $j++) {
+                                $concatenated .= "\n$hex_cp\t\t" . $invmap_ref->[$i][$j];
+                            }
+                            $invmap_ref->[$i] = $concatenated;
+                        }
+                    }
                 }
                 elsif ($format =~ / ^ cl e? $/x) {
 
@@ -1568,34 +1619,62 @@ foreach my $prop (keys %props) {
                     next PROPERTY;
                 }
             }
-            elsif ($format eq 'cle' && $invmap_ref->[$i] eq "") {
+            elsif ($format eq 'd' || $format eq 'cle') {
 
-                # cle properties have maps to the empty string that also
-                # should be in the specials hash, with the key the packed code
-                # point, and the map just empty.
-                my $value;
-                if (! defined ($value = delete $specials{pack("C0U", $invlist_ref->[$i]) })) {
-                    fail("prop_invmap('$mod_prop')");
-                    diag(sprintf "There was no specials element for %04X", $invlist_ref->[$i]);
-                    next PROPERTY;
-                }
-                if ($value ne "") {
-                    fail("prop_invmap('$mod_prop')");
-                    diag(sprintf "For %04X, expected the mapping to be \"\", but got '$value'", $invlist_ref->[$i]);
-                    next PROPERTY;
-                }
-
-                # As this doesn't get tested when we later compare with
-                # the actual file, it could be out of order and we
-                # wouldn't know it.
-                if (($i > 0 && $invlist_ref->[$i] <= $invlist_ref->[$i-1])
-                    || $invlist_ref->[$i] >= $invlist_ref->[$i+1])
+                # The numerics in the returned map are stored as deltas.  The
+                # defaults are 0, and don't appear in $official, and are
+                # excluded later, but the elements must be converted back to
+                # their real code point values before comparing with
+                # $official, as these files, for backwards compatibility, are
+                # not stored as deltas.  (There currently is only one cle
+                # property, nfkccf.  If that changed this would also have to.)
+                if ($invmap_ref->[$i] =~ / ^ -? \d+ $ /x
+                    && $invmap_ref->[$i] != 0)
                 {
-                    fail("prop_invmap('$mod_prop')");
-                    diag(sprintf "Range beginning at %04X is out-of-order.", $invlist_ref->[$i]);
-                    next PROPERTY;
+                    my $delta = $invmap_ref->[$i];
+                    $invmap_ref->[$i] += $invlist_ref->[$i];
+
+                    # If there are other elements with this same delta, they
+                    # must individually be re-mapped.  Do this by splicing in
+                    # a new element into the list and the map containing the
+                    # remainder of the range.  Next time through we will look
+                    # at that (possibly splicing again until the whole range
+                    # is processed).
+                    if ($invlist_ref->[$i+1] > $invlist_ref->[$i] + 1) {
+                        splice @$invlist_ref, $i+1, 0,
+                                $invlist_ref->[$i] + 1;
+                        splice @$invmap_ref, $i+1, 0, $delta;
+                    }
                 }
-                next;
+                if ($format eq 'cle' && $invmap_ref->[$i] eq "") {
+
+                    # cle properties have maps to the empty string that also
+                    # should be in the specials hash, with the key the packed
+                    # code point, and the map just empty.
+                    my $value;
+                    if (! defined ($value = delete $specials{pack("C0U", $invlist_ref->[$i]) })) {
+                        fail("prop_invmap('$mod_prop')");
+                        diag(sprintf "There was no specials element for %04X", $invlist_ref->[$i]);
+                        next PROPERTY;
+                    }
+                    if ($value ne "") {
+                        fail("prop_invmap('$mod_prop')");
+                        diag(sprintf "For %04X, expected the mapping to be \"\", but got '$value'", $invlist_ref->[$i]);
+                        next PROPERTY;
+                    }
+
+                    # As this doesn't get tested when we later compare with
+                    # the actual file, it could be out of order and we
+                    # wouldn't know it.
+                    if (($i > 0 && $invlist_ref->[$i] <= $invlist_ref->[$i-1])
+                        || $invlist_ref->[$i] >= $invlist_ref->[$i+1])
+                    {
+                        fail("prop_invmap('$mod_prop')");
+                        diag(sprintf "Range beginning at %04X is out-of-order.", $invlist_ref->[$i]);
+                        next PROPERTY;
+                    }
+                    next;
+                }
             }
             elsif ($is_binary) { # These binary files don't have an explicit Y
                 $invmap_ref->[$i] =~ s/Y//;
@@ -1615,9 +1694,13 @@ foreach my $prop (keys %props) {
                 next;
             }
 
-            # 'c'-type and 'd' properties have the mapping expressed in hex in
-            # the file
-            if ($format =~ /^ [cd] /x) {
+            # The 'd' property and 'c' properties whose underlying format is
+            # hexadecimal have the mapping expressed in hex in the file
+            if ($format eq 'd'
+                || ($format =~ /^c/
+                    && $swash_name
+                    && $utf8::SwashInfo{$swash_name}{'format'} eq 'x'))
+            {
 
                 # The d property has one entry which isn't in the file.
                 # Ignore it, but make sure it is in order.
@@ -1675,7 +1758,9 @@ foreach my $prop (keys %props) {
 
         # Handle the Name property similar to the above.  But the file is
         # sufficiently different that it is more convenient to make a special
-        # case for it.
+        # case for it.  It is a combination of the Name, Unicode1_Name, and
+        # Name_Alias properties, and named sequences.  We need to remove all
+        # but the Name in order to do the comparison.
 
         if ($missing ne "") {
             fail("prop_invmap('$mod_prop')");
@@ -1690,30 +1775,40 @@ foreach my $prop (keys %props) {
         $official =~ s/ ^ [^\t]+ \  .*? \n //xmg;
 
         # And get rid of the controls.  These are named in the file, but
-        # shouldn't be in the property.
+        # shouldn't be in the property.  This gets rid of the two ranges in
+        # one fell swoop, and also all the Unicode1_Name values that may not
+        # be in Name_Alias.
         $official =~ s/ 00000 \t .* 0001F .*? \n//xs;
         $official =~ s/ 0007F \t .* 0009F .*? \n//xs;
 
-        # This is slow; it gets rid of the aliases.  We look for lines that
-        # are for the same code point as the previous line.  The previous line
-        # will be a name_alias; and the current line will be the name.  Get
-        # rid of the name_alias line.  This won't work if there are multiple
-        # aliases for a given name.
-        my @temp_names = split "\n", $official;
-        my $previous_cp = "";
-        for (my $i = 0; $i < @temp_names - 1; $i++) {
-            $temp_names[$i] =~ /^ (.*)? \t /x;
-            my $current_cp = $1;
-            if ($current_cp eq $previous_cp) {
-                splice @temp_names, $i - 1, 1;
-                redo;
-            }
-            else {
-                $previous_cp = $current_cp;
+        # And remove the aliases.  We read in the Name_Alias property, and go
+        # through them one by one.
+        my ($aliases_code_points, $aliases_maps, undef, undef)
+                                                = &prop_invmap('Name_Alias');
+        for (my $i = 0; $i < @$aliases_code_points; $i++) {
+            my $code_point = $aliases_code_points->[$i];
+
+            # Already removed these above.
+            next if $code_point <= 0x1F
+                    || ($code_point >= 0x7F && $code_point <= 0x9F);
+
+            my $hex_code_point = sprintf "%05X", $code_point;
+
+            # Convert to a list if not already to make the following loop
+            # control uniform.
+            $aliases_maps->[$i] = [ $aliases_maps->[$i] ]
+                                                if ! ref $aliases_maps->[$i];
+
+            # Remove each alias for this code point from the file
+            foreach my $alias (@{$aliases_maps->[$i]}) {
+
+                # Remove the alias type from the entry, retaining just the name.
+                $alias =~ s/:.*//;
+
+                $alias = quotemeta($alias);
+                $official =~ s/$hex_code_point \t $alias \n //x;
             }
         }
-        $official = join "\n", @temp_names;
-        undef @temp_names;
         chomp $official;
 
         # Here have adjusted the file.  We also have to adjust the returned

@@ -11,7 +11,7 @@ use Symbol;
 
 our $VERSION;
 BEGIN {
-  $VERSION = '3.07';
+  $VERSION = '3.14';
 }
 use ExtUtils::ParseXS::Constants $VERSION;
 use ExtUtils::ParseXS::CountLines $VERSION;
@@ -36,6 +36,8 @@ use ExtUtils::ParseXS::Utilities qw(
   blurt
   death
   check_conditional_preprocessor_statements
+  escape_file_for_line_directive
+  report_typemap_failure
 );
 
 our @ISA = qw(Exporter);
@@ -193,7 +195,7 @@ sub process_file {
 EOM
 
 
-  print("#line 1 \"$self->{filepathname}\"\n")
+  print("#line 1 \"" . escape_file_for_line_directive($self->{filepathname}) . "\"\n")
     if $self->{WantLineNumbers};
 
   # Open the input file (using $self->{filename} which
@@ -220,7 +222,7 @@ EOM
           # concatenated until 2 steps later, so we are safe.
           #     - Nicholas Clark
           print("#if 0\n  \"Skipped embedded POD.\"\n#endif\n");
-          printf("#line %d \"$self->{filepathname}\"\n", $. + 1)
+          printf("#line %d \"%s\"\n", $. + 1, escape_file_for_line_directive($self->{filepathname}))
             if $self->{WantLineNumbers};
           next firstmodule
         }
@@ -313,7 +315,8 @@ EOM
 
     if ($self->check_keyword("BOOT")) {
       check_conditional_preprocessor_statements($self);
-      push (@{ $BootCode_ref }, "#line $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} }] \"$self->{filepathname}\"")
+      push (@{ $BootCode_ref }, "#line $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} }] \""
+                                . escape_file_for_line_directive($self->{filepathname}) . "\"")
         if $self->{WantLineNumbers} && $self->{line}->[0] !~ /^\s*#\s*line\b/;
       push (@{ $BootCode_ref }, @{ $self->{line} }, "");
       next PARAGRAPH;
@@ -1012,7 +1015,8 @@ sub print_section {
 
   my $consumed_code = '';
 
-  print("#line ", $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1], " \"$self->{filepathname}\"\n")
+  print("#line ", $self->{line_no}->[@{ $self->{line_no} } - @{ $self->{line} } -1], " \"",
+        escape_file_for_line_directive($self->{filepathname}), "\"\n")
     if $self->{WantLineNumbers} && !/^\s*#\s*line\b/ && !/^#if XSubPPtmp/;
   for (;  defined($_) && !/^$self->{BLOCK_re}/o;  $_ = shift(@{ $self->{line} })) {
     print "$_\n";
@@ -1114,7 +1118,7 @@ sub INPUT_handler {
 
     if ($self->{var_num}) {
       my $typemap = $self->{typemap}->get_typemap(ctype => $var_type);
-      $self->death("Could not find a typemap for C type '$var_type'")
+      $self->report_typemap_failure($self->{typemap}, $var_type, "death")
         if not $typemap and not $is_overridden_typemap;
       $self->{proto_arg}->[$self->{var_num}] = ($typemap && $typemap->proto) || "\$";
     }
@@ -1718,13 +1722,12 @@ sub fetch_para {
       my $tmapcode = join "", @tmaplines;
       my $tmap = ExtUtils::Typemaps->new(
         string => $tmapcode,
-        lineno_offset => $self->current_line_number()+1,
+        lineno_offset => ($self->current_line_number()||0)+1,
         fake_filename => $self->{filename},
       );
       $self->{typemap}->merge(typemap => $tmap, replace => 1);
 
-      last unless defined($self->{lastline} = readline($self->{FH}));
-      next;
+      $self->{lastline} = "";
     }
 
     if ($self->{lastline} !~ /^\s*#/ ||
@@ -1812,7 +1815,7 @@ sub generate_init {
   my $typemaps = $self->{typemap};
 
   $type = tidy_type($type);
-  $self->blurt("Error: '$type' not in typemap"), return
+  $self->report_typemap_failure($typemaps, $type), return
     unless $typemaps->get_typemap(ctype => $type);
 
   ($ntype = $type) =~ s/\s*\*/Ptr/g;
@@ -1838,7 +1841,7 @@ sub generate_init {
   # Note: This gruesome bit either needs heavy rethinking or documentation. I vote for the former. --Steffen
   if ($expr =~ /DO_ARRAY_ELEM/) {
     my $subtypemap  = $typemaps->get_typemap(ctype => $subtype);
-    $self->blurt("Error: C type '$subtype' not in typemap"), return
+    $self->report_typemap_failure($typemaps, $subtype), return
       if not $subtypemap;
     my $subinputmap = $typemaps->get_inputmap(xstype => $subtypemap->xstype);
     $self->blurt("Error: No INPUT definition for type '$subtype', typekind '" . $subtypemap->xstype . "' found"), return
@@ -1913,8 +1916,8 @@ sub generate_output {
     print "\tSvSETMAGIC($arg);\n" if $do_setmagic;
   }
   else {
-    my $typemap   = $typemaps->get_typemap(ctype => $type);
-    $self->blurt("Could not find a typemap for C type '$type'"), return
+    my $typemap = $typemaps->get_typemap(ctype => $type);
+    $self->report_typemap_failure($typemaps, $type), return
       if not $typemap;
     my $outputmap = $typemaps->get_outputmap(xstype => $typemap->xstype);
     $self->blurt("Error: No OUTPUT definition for type '$type', typekind '" . $typemap->xstype . "' found"), return
@@ -1926,8 +1929,8 @@ sub generate_output {
 
     my $expr = $outputmap->cleaned_code;
     if ($expr =~ /DO_ARRAY_ELEM/) {
-      my $subtypemap   = $typemaps->get_typemap(ctype => $subtype);
-      $self->blurt("Could not find a typemap for C type '$subtype'"), return
+      my $subtypemap = $typemaps->get_typemap(ctype => $subtype);
+      $self->report_typemap_failure($typemaps, $subtype), return
         if not $subtypemap;
       my $suboutputmap = $typemaps->get_outputmap(xstype => $subtypemap->xstype);
       $self->blurt("Error: No OUTPUT definition for type '$subtype', typekind '" . $subtypemap->xstype . "' found"), return

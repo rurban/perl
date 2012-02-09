@@ -4,7 +4,7 @@ package re;
 use strict;
 use warnings;
 
-our $VERSION     = "0.18";
+our $VERSION     = "0.19";
 our @ISA         = qw(Exporter);
 our @EXPORT_OK   = ('regmust',
                     qw(is_regexp regexp_pattern
@@ -108,10 +108,6 @@ sub _load_unload {
 sub bits {
     my $on = shift;
     my $bits = 0;
-    unless (@_) {
-	require Carp;
-	Carp::carp("Useless use of \"re\" pragma"); 
-    }
    ARG:
     foreach my $idx (0..$#_){
         my $s=$_[$idx];

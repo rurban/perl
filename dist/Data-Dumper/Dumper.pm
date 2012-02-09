@@ -9,7 +9,9 @@
 
 package Data::Dumper;
 
-$VERSION = '2.135'; # Don't forget to set version and release date in POD!
+BEGIN {
+    $VERSION = '2.135_04'; # Don't forget to set version and release
+}			   # date in POD!
 
 #$| = 1;
 
@@ -29,11 +31,11 @@ BEGIN {
     # toggled on load failure.
     eval {
 	require XSLoader;
-    };
-    $Useperl = 1 if $@;
+	XSLoader::load( 'Data::Dumper' );
+	1
+    }
+    or $Useperl = 1;
 }
-
-XSLoader::load( 'Data::Dumper' ) unless $Useperl;
 
 # module vars and their defaults
 $Indent     = 2         unless defined $Indent;
@@ -255,6 +257,10 @@ sub _quote {
     return  "'" . $val .  "'";
 }
 
+# Old Perls (5.14-) have trouble resetting vstring magic when it is no
+# longer valid.
+use constant _bad_vsmg => defined &_vstring && (_vstring(~v0)||'') eq "v0";
+
 #
 # twist, toil and turn;
 # and recurse, of course.
@@ -367,10 +373,11 @@ sub _dump {
         } else {
             $pat = "$val";
         }
-        $pat =~ s,/,\\/,g;
+        $pat =~ s <(\\.)|/> { $1 || '\\/' }ge;
         $out .= "qr/$pat/";
     }
-    elsif ($realtype eq 'SCALAR' || $realtype eq 'REF') {
+    elsif ($realtype eq 'SCALAR' || $realtype eq 'REF'
+	|| $realtype eq 'VSTRING') {
       if ($realpack) {
 	$out .= 'do{\\(my $o = ' . $s->_dump($$val, "\${$name}") . ')}';
       }
@@ -475,6 +482,7 @@ sub _dump {
   else {                                 # simple scalar
 
     my $ref = \$_[1];
+    my $v;
     # first, catalog the scalar
     if ($name ne '') {
       $id = format_refaddr($ref);
@@ -490,14 +498,20 @@ sub _dump {
 	$s->{seen}{$id} = ["\\$name", $ref];
       }
     }
-    if (ref($ref) eq 'GLOB' or "$ref" =~ /=GLOB\([^()]+\)$/) {  # glob
+    $ref = \$val;
+    if (ref($ref) eq 'GLOB') {  # glob
       my $name = substr($val, 1);
-      if ($name =~ /^[A-Za-z_][\w:]*$/) {
+      if ($name =~ /^[A-Za-z_][\w:]*$/ && $name ne 'main::') {
 	$name =~ s/^main::/::/;
 	$sname = $name;
       }
       else {
-	$sname = $s->_dump($name, "");
+	$sname = $s->_dump(
+	  $name eq 'main::' || $] < 5.007 && $name eq "main::\0"
+	    ? ''
+	    : $name,
+	  "",
+	);
 	$sname = '{' . $sname . '}';
       }
       if ($s->{purity}) {
@@ -519,6 +533,14 @@ sub _dump {
     }
     elsif (!defined($val)) {
       $out .= "undef";
+    }
+    elsif (defined &_vstring and $v = _vstring($val)
+	and !_bad_vsmg || eval $v eq $val) {
+      $out .= $v;
+    }
+    elsif (!defined &_vstring
+       and ref $ref eq 'VSTRING' || eval{Scalar::Util::isvstring($val)}) {
+      $out .= sprintf "%vd", $val;
     }
     elsif ($val =~ /^(?:0|-?[1-9]\d{0,8})\z/) { # safe decimal number
       $out .= $val;
@@ -1297,7 +1319,7 @@ modify it under the same terms as Perl itself.
 
 =head1 VERSION
 
-Version 2.135  (December 20 2011)
+Version 2.135_03  (December 19 2011)
 
 =head1 SEE ALSO
 

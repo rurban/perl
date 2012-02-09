@@ -37,7 +37,7 @@ INST_TOP	= $(INST_DRV)\perl
 # versioned installation can be obtained by setting INST_TOP above to a
 # path that includes an arbitrary version string.
 #
-#INST_VER	= \5.15.5
+#INST_VER	= \5.15.7
 
 #
 # Comment this out if you DON'T want your perl installation to have
@@ -1029,7 +1029,7 @@ Extensions_realclean:
 doc: $(PERLEXE) ..\pod\perltoc.pod
 	$(PERLEXE) -I..\lib ..\installhtml --podroot=.. --htmldir=$(HTMLDIR) \
 	    --podpath=pod:lib:ext:utils --htmlroot="file://$(INST_HTML::=|)" \
-	    --libpod=perlfunc:perlguts:perlvar:perlrun:perlop --recurse
+	    --recurse
 
 # Note that this next section is parsed (and regenerated) by pod/buildtoc
 # so please check that script before making structural changes here
@@ -1075,7 +1075,7 @@ utils: $(PERLEXE) $(X2P)
 	copy ..\README.vmesa    ..\pod\perlvmesa.pod
 	copy ..\README.vos      ..\pod\perlvos.pod
 	copy ..\README.win32    ..\pod\perlwin32.pod
-	copy ..\pod\perldelta.pod ..\pod\perl5156delta.pod
+	copy ..\pod\perldelta.pod ..\pod\perl5158delta.pod
 	cd ..\win32
 	$(PERLEXE) $(PL2BAT) $(UTILS)
 	$(PERLEXE) $(ICWD) ..\autodoc.pl ..
@@ -1168,7 +1168,7 @@ distclean: realclean
 	-if exist $(LIBDIR)\XS rmdir /s /q $(LIBDIR)\XS
 	-if exist $(LIBDIR)\Win32API rmdir /s /q $(LIBDIR)\Win32API
 	-cd $(PODDIR) && del /f *.html *.bat roffitall \
-	    perl5156delta.pod perlaix.pod perlamiga.pod perlapi.pod \
+	    perl5158delta.pod perlaix.pod perlamiga.pod perlapi.pod \
 	    perlbeos.pod perlbs2000.pod perlce.pod perlcn.pod \
 	    perlcygwin.pod perldgux.pod perldos.pod perlepoc.pod \
 	    perlfreebsd.pod perlhaiku.pod perlhpux.pod perlhurd.pod \
@@ -1240,6 +1240,11 @@ test-prep : all utils ../pod/perltoc.pod
 test : test-prep
 	cd ..\t
 	$(PERLEXE) -I..\lib harness $(TEST_SWITCHES) $(TEST_FILES)
+	cd ..\win32
+
+test_porting : test-prep
+	cd ..\t
+	$(PERLEXE) -I..\lib harness $(TEST_SWITCHES) porting\*.t ..\lib\diagnostics.t
 	cd ..\win32
 
 test-reonly : reonly utils

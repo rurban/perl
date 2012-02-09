@@ -2,7 +2,7 @@
 /*    perl.c
  *
  *    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001
- *    2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+ *    2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
  *     by Larry Wall and others
  *
  *    You may distribute under the terms of either the GNU General Public
@@ -92,7 +92,7 @@ static I32 read_e_script(pTHX_ int idx, SV *buf_sv, int maxlen);
 
 #define CALL_LIST_BODY(cv) \
     PUSHMARK(PL_stack_sp); \
-    call_sv(MUTABLE_SV((cv)), G_EVAL|G_DISCARD);
+    call_sv(MUTABLE_SV((cv)), G_EVAL|G_DISCARD|G_VOID);
 
 static void
 S_init_tls_and_interp(PerlInterpreter *my_perl)
@@ -2330,7 +2330,7 @@ perl_run(pTHXx)
 	    POPSTACK_TO(PL_mainstack);
 	    goto redo_body;
 	}
-	PerlIO_printf(Perl_error_log, "panic: restartop\n");
+	PerlIO_printf(Perl_error_log, "panic: restartop in perl_run\n");
 	FREETMPS;
 	ret = 1;
 	break;
@@ -3354,8 +3354,16 @@ Perl_moreswitches(pTHX_ const char *s)
     case 'S':			/* OS/2 needs -S on "extproc" line. */
 	break;
 #endif
-    default:
+    case 'e': case 'f': case 'x': case 'E':
+#ifndef ALTERNATE_SHEBANG
+    case 'S':
+#endif
+    case 'V':
 	Perl_croak(aTHX_ "Can't emulate -%.1s on #! line",s);
+    default:
+	Perl_croak(aTHX_
+	    "Unrecognized switch: -%.1s  (-h will show valid options)",s
+	);
     }
     return NULL;
 }
@@ -3414,7 +3422,7 @@ S_minus_v(pTHX)
 #endif
 
 	PerlIO_printf(PerlIO_stdout(),
-		      "\n\nCopyright 1987-2011, Larry Wall\n");
+		      "\n\nCopyright 1987-2012, Larry Wall\n");
 #ifdef MSDOS
 	PerlIO_printf(PerlIO_stdout(),
 		      "\nMS-DOS port Copyright (c) 1989, 1990, Diomidis Spinellis\n");
@@ -3889,6 +3897,8 @@ Perl_init_dbargs(pTHX)
 	   It might have entries, and if we just turn off AvREAL(), they will
 	   "leak" until global destruction.  */
 	av_clear(args);
+	if (SvTIED_mg((const SV *)args, PERL_MAGIC_tied))
+	    Perl_croak(aTHX_ "Cannot set tied @DB::args");
     }
     AvREIFY_only(PL_dbargs);
 }
@@ -4078,7 +4088,7 @@ S_init_predump_symbols(pTHX)
     GvMULTI_on(tmpgv);
     GvIOp(tmpgv) = MUTABLE_IO(SvREFCNT_inc_simple(io));
 
-    PL_statname = newSV(0);		/* last filename we did stat on */
+    PL_statname = newSVpvs("");		/* last filename we did stat on */
 }
 
 void
@@ -4810,7 +4820,7 @@ Perl_call_list(pTHX_ I32 oldscope, AV *paramList)
 		CopLINE_set(PL_curcop, oldline);
 		JMPENV_JUMP(3);
 	    }
-	    PerlIO_printf(Perl_error_log, "panic: restartop\n");
+	    PerlIO_printf(Perl_error_log, "panic: restartop in call_list\n");
 	    FREETMPS;
 	    break;
 	}

@@ -180,6 +180,7 @@ Perl_grok_bin(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
                     continue;
                 }
                 /* Bah. We're just overflowed.  */
+		/* diag_listed_as: Integer overflow in %s number */
 		Perl_ck_warner_d(aTHX_ packWARN(WARN_OVERFLOW),
 				 "Integer overflow in binary number");
                 overflowed = TRUE;
@@ -302,6 +303,7 @@ Perl_grok_hex(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
                     continue;
                 }
                 /* Bah. We're just overflowed.  */
+		/* diag_listed_as: Integer overflow in %s number */
 		Perl_ck_warner_d(aTHX_ packWARN(WARN_OVERFLOW),
 				 "Integer overflow in hexadecimal number");
                 overflowed = TRUE;
@@ -407,6 +409,7 @@ Perl_grok_oct(pTHX_ const char *start, STRLEN *len_p, I32 *flags, NV *result)
                     continue;
                 }
                 /* Bah. We're just overflowed.  */
+		/* diag_listed_as: Integer overflow in %s number */
 		Perl_ck_warner_d(aTHX_ packWARN(WARN_OVERFLOW),
 			       "Integer overflow in octal number");
                 overflowed = TRUE;
@@ -530,7 +533,7 @@ Perl_grok_numeric_radix(pTHX_ const char **sp, const char *send)
 
     PERL_ARGS_ASSERT_GROK_NUMERIC_RADIX;
 
-    if (PL_numeric_radix_sv && IN_LOCALE) { 
+    if (PL_numeric_radix_sv && IN_SOME_LOCALE_FORM) {
         STRLEN len;
         const char * const radix = SvPV(PL_numeric_radix_sv, len);
         if (*sp + len <= send && memEQ(*sp, radix, len)) {
@@ -844,7 +847,7 @@ Perl_my_atof(pTHX_ const char* s)
 
     PERL_ARGS_ASSERT_MY_ATOF;
 
-    if (PL_numeric_local && IN_LOCALE) {
+    if (PL_numeric_local && IN_SOME_LOCALE_FORM) {
 	NV y;
 
 	/* Scan the number twice; once using locale and once without;

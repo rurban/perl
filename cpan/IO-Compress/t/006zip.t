@@ -19,7 +19,7 @@ BEGIN {
     $extra = 1
         if eval { require Test::NoWarnings ;  import Test::NoWarnings; 1 };
 
-    plan tests => 85 + $extra ;
+    plan tests => 95 + $extra ;
 
     use_ok('IO::Compress::Zip', qw(:all)) ;
     use_ok('IO::Uncompress::Unzip', qw(unzip $UnzipError)) ;
@@ -46,7 +46,7 @@ sub getContent
     my @content;
     my $status ;
 
-    for ($status = 1; ! $u->eof(); $status = $u->nextStream())
+    for ($status = 1; $status > 0 ; $status = $u->nextStream())
     {
         my $name = $u->getHeaderInfo()->{Name};
         #warn "Processing member $name\n" ;
@@ -276,6 +276,25 @@ SKIP:
     is $got[1], $content[1], "Got 2nd entry";
 }
 
+{
+    title "Zip file with a single zero-length file";
+
+    my $lex = new LexFile my $file1;
+
+
+    my $zip = new IO::Compress::Zip $file1,
+                    Name => "one", Method => ZIP_CM_STORE, Stream => 0;
+    isa_ok $zip, "IO::Compress::Zip";
+
+    $zip->newStream(Name=> "two", Method => ZIP_CM_STORE);
+    ok $zip->close(), "closed";                    
+
+    my @got = getContent($file1);
+
+    is $got[0], "", "no content";
+    is $got[1], "", "no content";
+}
+
 SKIP:
 for my $method (ZIP_CM_DEFLATE, ZIP_CM_STORE, ZIP_CM_BZIP2)
 {
@@ -300,4 +319,14 @@ for my $method (ZIP_CM_DEFLATE, ZIP_CM_STORE, ZIP_CM_BZIP2)
     ok ! $u->getline, "  Second line doesn't exist";
 
 
+}
+
+{
+    title "isMethodAvailable" ;
+    
+    ok IO::Compress::Zip::isMethodAvailable(ZIP_CM_STORE), "ZIP_CM_STORE available";
+    ok IO::Compress::Zip::isMethodAvailable(ZIP_CM_DEFLATE), "ZIP_CM_DEFLATE available";
+    #ok IO::Compress::Zip::isMethodAvailable(ZIP_CM_STORE), "ZIP_CM_STORE available";
+    
+    ok ! IO::Compress::Zip::isMethodAvailable(999), "999 not available";    
 }

@@ -75,6 +75,7 @@ PP(pp_padav)
        const I32 flags = is_lvalue_sub();
        if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
+	    /* diag_listed_as: Can't return %s to lvalue scalar context */
 	    Perl_croak(aTHX_ "Can't return array to lvalue scalar context");
 	PUSHs(TARG);
 	RETURN;
@@ -121,6 +122,7 @@ PP(pp_padhv)
       const I32 flags = is_lvalue_sub();
       if (flags && !(flags & OPpENTERSUB_INARGS)) {
 	if (GIMME == G_SCALAR)
+	    /* diag_listed_as: Can't return %s to lvalue scalar context */
 	    Perl_croak(aTHX_ "Can't return hash to lvalue scalar context");
 	RETURN;
       }
@@ -163,7 +165,7 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 	sv = SvRV(sv);
 	if (SvTYPE(sv) == SVt_PVIO) {
 	    GV * const gv = MUTABLE_GV(sv_newmortal());
-	    gv_init(gv, 0, "$__ANONIO__", 11, 0);
+	    gv_init(gv, 0, "__ANONIO__", 10, 0);
 	    GvIOp(gv) = MUTABLE_IO(sv);
 	    SvREFCNT_inc_void_NN(sv);
 	    sv = MUTABLE_SV(gv);
@@ -232,7 +234,7 @@ S_rv2gv(pTHX_ SV *sv, const bool vivify_sv, const bool strict,
 	    SvFAKE_off(sv);
 	}
     }
-    if (SvFAKE(sv)) {
+    if (SvFAKE(sv) && !(PL_op->op_private & OPpALLOW_FAKE)) {
 	SV *newsv = sv_newmortal();
 	sv_setsv_flags(newsv, sv, 0);
 	SvFAKE_off(newsv);
@@ -414,12 +416,6 @@ PP(pp_rv2cv)
     if (cv) {
 	if (CvCLONE(cv))
 	    cv = MUTABLE_CV(sv_2mortal(MUTABLE_SV(cv_clone(cv))));
-	if ((PL_op->op_private & OPpLVAL_INTRO)) {
-	    if (gv && GvCV(gv) == cv && (gv = gv_autoload_pvn(GvSTASH(gv), GvNAME(gv), GvNAMELEN(gv), GvNAMEUTF8(gv) ? SVf_UTF8 : 0)))
-		cv = GvCV(gv);
-	    if (!CvLVALUE(cv))
-		DIE(aTHX_ "Can't modify non-lvalue subroutine call");
-	}
     }
     else if ((flags == (GV_ADD|GV_NOEXPAND)) && gv && SvROK(gv)) {
 	cv = MUTABLE_CV(gv);
@@ -2197,7 +2193,7 @@ PP(pp_bit_and)
 	  const UV u = SvUV_nomg(left) & SvUV_nomg(right);
 	  SETu(u);
 	}
-	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (left_ro_nonnum && left != TARG) SvNIOK_off(left);
 	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
@@ -2231,7 +2227,7 @@ PP(pp_bit_or)
 	  const UV result = op_type == OP_BIT_OR ? (l | r) : (l ^ r);
 	  SETu(result);
 	}
-	if (left_ro_nonnum)  SvNIOK_off(left);
+	if (left_ro_nonnum && left != TARG) SvNIOK_off(left);
 	if (right_ro_nonnum) SvNIOK_off(right);
       }
       else {
@@ -2719,6 +2715,7 @@ PP(pp_sin)
       if (neg_report) {
 	  if (op_type == OP_LOG ? (value <= 0.0) : (value < 0.0)) {
 	      SET_NUMERIC_STANDARD();
+	      /* diag_listed_as: Can't take log of %g */
 	      DIE(aTHX_ "Can't take %s of %"NVgf, neg_report, value);
 	  }
       }
@@ -3481,6 +3478,7 @@ PP(pp_ucfirst)
     STRLEN tculen;  /* tculen is the byte length of the freshly titlecased (or
 		     * lowercased) character stored in tmpbuf.  May be either
 		     * UTF-8 or not, but in either case is the number of bytes */
+    bool tainted = FALSE;
 
     SvGETMAGIC(source);
     if (SvOK(source)) {
@@ -3508,8 +3506,14 @@ PP(pp_ucfirst)
     else if (DO_UTF8(source)) {	/* Is the source utf8? */
 	doing_utf8 = TRUE;
         ulen = UTF8SKIP(s);
-        if (op_type == OP_UCFIRST) toTITLE_utf8(s, tmpbuf, &tculen);
-        else toLOWER_utf8(s, tmpbuf, &tculen);
+        if (op_type == OP_UCFIRST) {
+	    _to_utf8_title_flags(s, tmpbuf, &tculen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
+	}
+        else {
+	    _to_utf8_lower_flags(s, tmpbuf, &tculen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
+	}
 
         /* we can't do in-place if the length changes.  */
         if (ulen != tculen) inplace = FALSE;
@@ -3641,6 +3645,11 @@ PP(pp_ucfirst)
 	    Copy(tmpbuf, d, tculen, U8);
 	    SvCUR_set(dest, need - 1);
 	}
+
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     }
     else {  /* Neither source nor dest are in or need to be UTF-8 */
 	if (slen) {
@@ -3746,6 +3755,7 @@ PP(pp_uc)
     if (DO_UTF8(source)) {
 	const U8 *const send = s + len;
 	U8 tmpbuf[UTF8_MAXBYTES+1];
+	bool tainted = FALSE;
 
 	/* All occurrences of these are to be moved to follow any other marks.
 	 * This is context-dependent.  We may not be passed enough context to
@@ -3777,7 +3787,8 @@ PP(pp_uc)
              * and copy it to the output buffer */
 
             u = UTF8SKIP(s);
-            uv = toUPPER_utf8(s, tmpbuf, &ulen);
+            uv = _to_utf8_upper_flags(s, tmpbuf, &ulen,
+				      cBOOL(IN_LOCALE_RUNTIME), &tainted);
             if (uv == GREEK_CAPITAL_LETTER_IOTA
                 && utf8_to_uvchr(s, 0) == COMBINING_GREEK_YPOGEGRAMMENI)
             {
@@ -3807,7 +3818,12 @@ PP(pp_uc)
 	}
 	SvUTF8_on(dest);
 	*d = '\0';
+
 	SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     }
     else {	/* Not UTF-8 */
 	if (len) {
@@ -3976,12 +3992,14 @@ PP(pp_lc)
     if (DO_UTF8(source)) {
 	const U8 *const send = s + len;
 	U8 tmpbuf[UTF8_MAXBYTES_CASE+1];
+	bool tainted = FALSE;
 
 	while (s < send) {
 	    const STRLEN u = UTF8SKIP(s);
 	    STRLEN ulen;
 
-	    toLOWER_utf8(s, tmpbuf, &ulen);
+	    _to_utf8_lower_flags(s, tmpbuf, &ulen,
+				 cBOOL(IN_LOCALE_RUNTIME), &tainted);
 
 	    /* Here is where we would do context-sensitive actions.  See the
 	     * commit message for this comment for why there isn't any */
@@ -4011,6 +4029,10 @@ PP(pp_lc)
 	SvUTF8_on(dest);
 	*d = '\0';
 	SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
     } else {	/* Not utf8 */
 	if (len) {
 	    const U8 *const send = s + len;
@@ -4092,6 +4114,159 @@ PP(pp_quotemeta)
     else
 	sv_setpvn(TARG, s, len);
     SETTARG;
+    RETURN;
+}
+
+PP(pp_fc)
+{
+    dVAR;
+    dTARGET;
+    dSP;
+    SV *source = TOPs;
+    STRLEN len;
+    STRLEN min;
+    SV *dest;
+    const U8 *s;
+    const U8 *send;
+    U8 *d;
+    U8 tmpbuf[UTF8_MAXBYTES * UTF8_MAX_FOLD_CHAR_EXPAND + 1];
+    const bool full_folding = TRUE;
+    const U8 flags = ( full_folding      ? FOLD_FLAGS_FULL   : 0 )
+                   | ( IN_LOCALE_RUNTIME ? FOLD_FLAGS_LOCALE : 0 );
+
+    /* This is a facsimile of pp_lc, but with a thousand bugs thanks to me.
+     * You are welcome(?) -Hugmeir
+     */
+
+    SvGETMAGIC(source);
+
+    dest = TARG;
+
+    if (SvOK(source)) {
+        s = (const U8*)SvPV_nomg_const(source, len);
+    } else {
+        if (ckWARN(WARN_UNINITIALIZED))
+	    report_uninit(source);
+	s = (const U8*)"";
+	len = 0;
+    }
+
+    min = len + 1;
+
+    SvUPGRADE(dest, SVt_PV);
+    d = (U8*)SvGROW(dest, min);
+    (void)SvPOK_only(dest);
+
+    SETs(dest);
+
+    send = s + len;
+    if (DO_UTF8(source)) { /* UTF-8 flagged string. */
+        bool tainted = FALSE;
+        while (s < send) {
+            const STRLEN u = UTF8SKIP(s);
+            STRLEN ulen;
+
+            _to_utf8_fold_flags(s, tmpbuf, &ulen, flags, &tainted);
+
+            if (ulen > u && (SvLEN(dest) < (min += ulen - u))) {
+                const UV o = d - (U8*)SvPVX_const(dest);
+                SvGROW(dest, min);
+                d = (U8*)SvPVX(dest) + o;
+            }
+
+            Copy(tmpbuf, d, ulen, U8);
+            d += ulen;
+            s += u;
+        }
+        SvUTF8_on(dest);
+	if (tainted) {
+	    TAINT;
+	    SvTAINTED_on(dest);
+	}
+    } /* Unflagged string */
+    else if (len) {
+        /* For locale, bytes, and nothing, the behavior is supposed to be the
+         * same as lc().
+         */
+        if ( IN_LOCALE_RUNTIME ) { /* Under locale */
+            TAINT;
+            SvTAINTED_on(dest);
+            for (; s < send; d++, s++)
+                *d = toLOWER_LC(*s);
+        }
+        else if ( !IN_UNI_8_BIT ) { /* Under nothing, or bytes */
+            for (; s < send; d++, s++)
+                *d = toLOWER(*s);
+        }
+        else {
+            /* For ASCII and the Latin-1 range, there's only two troublesome folds,
+            * \x{DF} (\N{LATIN SMALL LETTER SHARP S}), which under full casefolding
+            * becomes 'ss', and \x{B5} (\N{MICRO SIGN}), which under any fold becomes
+            * \x{3BC} (\N{GREEK SMALL LETTER MU}) -- For the rest, the casefold is
+            * their lowercase.
+            */
+            for (; s < send; d++, s++) {
+                if (*s == MICRO_SIGN) {
+                    /* \N{MICRO SIGN}'s casefold is \N{GREEK SMALL LETTER MU}, which
+                    * is outside of the latin-1 range. There's a couple of ways to
+                    * deal with this -- khw discusses them in pp_lc/uc, so go there :)
+                    * What we do here is upgrade what we had already casefolded,
+                    * then enter an inner loop that appends the rest of the characters
+                    * as UTF-8.
+                    */
+                    len = d - (U8*)SvPVX_const(dest);
+                    SvCUR_set(dest, len);
+                    len = sv_utf8_upgrade_flags_grow(dest,
+                                                SV_GMAGIC|SV_FORCE_UTF8_UPGRADE,
+						/* The max expansion for latin1
+						 * chars is 1 byte becomes 2 */
+                                                (send -s) * 2 + 1);
+                    d = (U8*)SvPVX(dest) + len;
+
+                    CAT_UNI_TO_UTF8_TWO_BYTE(d, GREEK_SMALL_LETTER_MU);
+                    s++;
+                    for (; s < send; s++) {
+                        STRLEN ulen;
+                        UV fc = _to_uni_fold_flags(*s, tmpbuf, &ulen, flags);
+                        if UNI_IS_INVARIANT(fc) {
+                            if ( full_folding && *s == LATIN_SMALL_LETTER_SHARP_S) {
+                                *d++ = 's';
+                                *d++ = 's';
+                            }
+                            else
+                                *d++ = (U8)fc;
+                        }
+                        else {
+                            Copy(tmpbuf, d, ulen, U8);
+                            d += ulen;
+                        }
+                    }
+                    break;
+                }
+                else if (full_folding && *s == LATIN_SMALL_LETTER_SHARP_S) {
+                    /* Under full casefolding, LATIN SMALL LETTER SHARP S becomes "ss",
+                    * which may require growing the SV.
+                    */
+                    if (SvLEN(dest) < ++min) {
+                        const UV o = d - (U8*)SvPVX_const(dest);
+                        SvGROW(dest, min);
+                        d = (U8*)SvPVX(dest) + o;
+                     }
+                    *(d)++ = 's';
+                    *d = 's';
+                }
+                else { /* If it's not one of those two, the fold is their lower case */
+                    *d = toLOWER_LATIN1(*s);
+                }
+             }
+        }
+    }
+    *d = '\0';
+    SvCUR_set(dest, d - (U8*)SvPVX_const(dest));
+
+    if (SvTAINTED(source))
+	SvTAINT(dest);
+    SvSETMAGIC(dest);
     RETURN;
 }
 
@@ -4604,7 +4779,7 @@ PP(pp_hslice)
         svp = he ? &HeVAL(he) : NULL;
 
         if (lval) {
-            if (!svp || *svp == &PL_sv_undef) {
+            if (!svp || !*svp || *svp == &PL_sv_undef) {
                 DIE(aTHX_ PL_no_helem_sv, SVfARG(keysv));
             }
             if (localizing) {
@@ -4617,7 +4792,7 @@ PP(pp_hslice)
 		    SAVEHDELETE(hv, keysv);
             }
         }
-        *MARK = svp ? *svp : &PL_sv_undef;
+        *MARK = svp && *svp ? *svp : &PL_sv_undef;
     }
     if (GIMME != G_ARRAY) {
 	MARK = ORIGMARK;
@@ -5203,7 +5378,7 @@ PP(pp_split)
     pm = (PMOP*)POPs;
 #endif
     if (!pm || !s)
-	DIE(aTHX_ "panic: pp_split");
+	DIE(aTHX_ "panic: pp_split, pm=%p, s=%p", pm, s);
     rx = PM_GETRE(pm);
 
     TAINT_IF(get_regex_charset(RX_EXTFLAGS(rx)) == REGEX_LOCALE_CHARSET &&

@@ -237,6 +237,29 @@ sub test_precomputed_hashes {
 	'multiple stash aliases (bytes inside utf8) do not cause bad UTF8';
 }
 
+{ # newHVhv
+    use Tie::Hash;
+    tie my %h, 'Tie::StdHash';
+    %h = 1..10;
+    is join(' ', sort %{newHVhv \%h}), '1 10 2 3 4 5 6 7 8 9',
+      'newHVhv on tied hash';
+}
+
+# helem and hslice on entry with null value
+# This is actually a test for a Perl operator, not an XS API test.  But it
+# requires a hash that can only be produced by XS (although recently it
+# could be encountered when tying hint hashes).
+{
+    my %h;
+    fill_hash_with_nulls(\%h);
+    eval{ $h{84} = 1 };
+    pass 'no crash when writing to hash elem with null value';
+    eval{ no # silly
+	  warnings; # thank you!
+	  @h{85} = 1 };
+    pass 'no crash when writing to hash elem with null value via slice';
+}
+
 done_testing;
 exit;
 

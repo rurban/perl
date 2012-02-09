@@ -463,14 +463,17 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
         {
             STRLEN rlen;
 	    const char *rval = SvPV(val, rlen);
-	    const char *slash = strchr(rval, '/');
+	    const char * const rend = rval+rlen;
+	    const char *slash = rval;
 	    sv_catpvn(retval, "qr/", 3);
-	    while (slash) {
+	    for (;slash < rend; slash++) {
+	      if (*slash == '\\') { ++slash; continue; }
+	      if (*slash == '/') {    
 		sv_catpvn(retval, rval, slash-rval);
 		sv_catpvn(retval, "\\/", 2);
 		rlen -= slash-rval+1;
 		rval = slash+1;
-		slash = strchr(rval, '/');
+	      }
 	    }
 	    sv_catpvn(retval, rval, rlen);
 	    sv_catpvn(retval, "/", 1);
@@ -648,7 +651,7 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 		    (void)hv_iterinit((HV*)ival);
 		    while ((entry = hv_iternext((HV*)ival))) {
 			sv = hv_iterkeysv(entry);
-			SvREFCNT_inc(sv);
+			(void)SvREFCNT_inc(sv);
 			av_push(keys, sv);
 		    }
 # ifdef USE_LOCALE_NUMERIC
@@ -857,6 +860,7 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
     }
     else {
 	STRLEN i;
+	const MAGIC *mg;
 	
 	if (namelen) {
 #ifdef DD_USE_OLD_ID_FORMAT
@@ -917,7 +921,12 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 	    if(i) ++c, --i;			/* just get the name */
 	    if (i >= 6 && strncmp(c, "main::", 6) == 0) {
 		c += 4;
-		i -= 4;
+#if PERL_VERSION < 7
+		if (i == 6 || (i == 7 && c[6] == '\0'))
+#else
+		if (i == 6)
+#endif
+		    i = 0; else i -= 4;
 	    }
 	    if (needs_quote(c,i)) {
 #ifdef GvNAMEUTF8
@@ -998,6 +1007,20 @@ DD_dump(pTHX_ SV *val, const char *name, STRLEN namelen, SV *retval, HV *seenhv,
 	else if (val == &PL_sv_undef || !SvOK(val)) {
 	    sv_catpvn(retval, "undef", 5);
 	}
+#ifdef SvVOK
+	else if (SvMAGICAL(val) && (mg = mg_find(val, 'V'))) {
+# ifndef PL_vtbl_vstring
+	    SV * const vecsv = sv_newmortal();
+#  if PERL_VERSION < 10
+	    scan_vstring(mg->mg_ptr, vecsv);
+#  else
+	    scan_vstring(mg->mg_ptr, mg->mg_ptr + mg->mg_len, vecsv);
+#  endif
+	    if (!sv_eq(vecsv, val)) goto integer_came_from_string;
+# endif
+	    sv_catpvn(retval, (const char *)mg->mg_ptr, mg->mg_len);
+	}
+#endif
 	else {
         integer_came_from_string:
 	    c = SvPV(val, i);
@@ -1261,3 +1284,21 @@ Data_Dumper_Dumpxs(href, ...)
 	    if (gimme == G_SCALAR)
 		XPUSHs(sv_2mortal(retval));
 	}
+
+SV *
+Data_Dumper__vstring(sv)
+	SV	*sv;
+	PROTOTYPE: $
+	CODE:
+	{
+#ifdef SvVOK
+	    const MAGIC *mg;
+	    RETVAL =
+		SvMAGICAL(sv) && (mg = mg_find(sv, 'V'))
+		 ? newSVpvn((const char *)mg->mg_ptr, mg->mg_len)
+		 : &PL_sv_undef;
+#else
+	    RETVAL = &PL_sv_undef;
+#endif
+	}
+	OUTPUT: RETVAL

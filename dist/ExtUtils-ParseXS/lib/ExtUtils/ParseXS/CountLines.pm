@@ -1,13 +1,14 @@
 package ExtUtils::ParseXS::CountLines;
 use strict;
 
-our $VERSION = '3.07';
+our $VERSION = '3.14';
 
 our $SECTION_END_MARKER;
 
 sub TIEHANDLE {
   my ($class, $cfile, $fh) = @_;
   $cfile =~ s/\\/\\\\/g;
+  $cfile =~ s/"/\\"/g;
   $SECTION_END_MARKER = qq{#line --- "$cfile"};
 
   return bless {

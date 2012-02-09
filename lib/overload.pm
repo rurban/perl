@@ -1,6 +1,29 @@
 package overload;
 
-our $VERSION = '1.16';
+our $VERSION = '1.18';
+
+%ops = (
+    with_assign         => "+ - * / % ** << >> x .",
+    assign              => "+= -= *= /= %= **= <<= >>= x= .=",
+    num_comparison      => "< <= >  >= == !=",
+    '3way_comparison'   => "<=> cmp",
+    str_comparison      => "lt le gt ge eq ne",
+    binary              => '& &= | |= ^ ^=',
+    unary               => "neg ! ~",
+    mutators            => '++ --',
+    func                => "atan2 cos sin exp abs log sqrt int",
+    conversion          => 'bool "" 0+ qr',
+    iterators           => '<>',
+    filetest            => "-X",
+    dereferencing       => '${} @{} %{} &{} *{}',
+    matching            => '~~',
+    special             => 'nomethod fallback =',
+);
+
+my %ops_seen;
+for $category (keys %ops) {
+    $ops_seen{$_}++ for (split /\s+/, $ops{$category});
+}
 
 sub nil {}
 
@@ -15,6 +38,8 @@ sub OVERLOAD {
     if ($_ eq 'fallback') {
       $fb = $arg{$_};
     } else {
+      warnings::warnif("overload arg '$_' is invalid")
+        unless $ops_seen{$_};
       $sub = $arg{$_};
       if (not ref $sub and $sub !~ /::/) {
 	$ {$package . "::(" . $_} = $sub;
@@ -50,16 +75,15 @@ sub unimport {
 sub Overloaded {
   my $package = shift;
   $package = ref $package if ref $package;
-  $package->can('()');
+  mycan ($package, '()');
 }
 
 sub ov_method {
   my $globref = shift;
   return undef unless $globref;
   my $sub = \&{*$globref};
-  require Scalar::Util;
-  return $sub
-    if Scalar::Util::refaddr($sub) != Scalar::Util::refaddr(\&nil);
+  no overloading;
+  return $sub if !ref $sub or $sub != \&nil;
   return shift->can($ {*$globref});
 }
 
@@ -89,17 +113,8 @@ sub Method {
 }
 
 sub AddrRef {
-  my $package = ref $_[0];
-  return "$_[0]" unless $package;
-
-  local $@;
-  local $!;
-  require Scalar::Util;
-  my $class = Scalar::Util::blessed($_[0]);
-  my $class_prefix = defined($class) ? "$class=" : "";
-  my $type = Scalar::Util::reftype($_[0]);
-  my $addr = Scalar::Util::refaddr($_[0]);
-  return sprintf("%s%s(0x%x)", $class_prefix, $type, $addr);
+  no overloading;
+  "$_[0]";
 }
 
 *StrVal = *AddrRef;
@@ -127,22 +142,6 @@ sub mycan {				# Real can would leave stubs.
 	      'q'	  =>  0x8000, # HINT_NEW_STRING
 	      'qr'	  => 0x10000, # HINT_NEW_RE
 	     );
-
-%ops = ( with_assign	  => "+ - * / % ** << >> x .",
-	 assign		  => "+= -= *= /= %= **= <<= >>= x= .=",
-	 num_comparison	  => "< <= >  >= == !=",
-	 '3way_comparison'=> "<=> cmp",
-	 str_comparison	  => "lt le gt ge eq ne",
-	 binary		  => '& &= | |= ^ ^=',
-	 unary		  => "neg ! ~",
-	 mutators	  => '++ --',
-	 func		  => "atan2 cos sin exp abs log sqrt int",
-	 conversion	  => 'bool "" 0+ qr',
-	 iterators	  => '<>',
-         filetest         => "-X",
-	 dereferencing	  => '${} @{} %{} &{} *{}',
-	 matching	  => '~~',
-	 special	  => 'nomethod fallback =');
 
 use warnings::register;
 sub constant {
@@ -264,7 +263,7 @@ The second argument is the other operand, or C<undef> in the
 case of a unary operator.
 
 The third argument is set to TRUE if (and only if) the two
-operands have been swapped. Perl may do this to ensure that the
+operands have been swapped.  Perl may do this to ensure that the
 first argument (C<$self>) is an object implementing the overloaded
 operation, in line with general object calling conventions.
 For example, if C<$x> and C<$y> are C<Number>s:
@@ -280,7 +279,7 @@ have not been specified in the C<use overload> directive,
 according to the rules for L<Magic Autogeneration> described later.
 For example, the C<use overload> above declared no subroutine
 for any of the operators C<-->, C<neg> (the overload key for
-unary minus), or C<-=>. Thus
+unary minus), or C<-=>.  Thus
 
     operation   |   generates a call to
     ============|======================
@@ -379,6 +378,9 @@ Most of the overloadable operators map one-to-one to these keys.
 Exceptions, including additional overloadable operations not
 apparent from this hash, are included in the notes which follow.
 
+A warning is issued if an attempt is made to register an operator not found
+above.
+
 =over 5
 
 =item * C<not>
@@ -476,7 +478,7 @@ If the corresponding operation for this value is overloaded too,
 the operation will be called again with this value.
 
 As a special case if the overload returns the object itself then it will
-be used directly. An overloaded conversion returning the object is
+be used directly.  An overloaded conversion returning the object is
 probably a bug, because you're likely to get something that looks like
 C<YourPackage=HASH(0x8172b34)>.
 
@@ -510,7 +512,7 @@ second argument (that is, in the slot that for binary operators
 is used to pass the second operand).
 
 Calling an overloaded filetest operator does not affect the stat value
-associated with the special filehandle C<_>. It still refers to the
+associated with the special filehandle C<_>.  It still refers to the
 result of the last C<stat>, C<lstat> or unoverloaded filetest.
 
 This overload was introduced in Perl 5.12.
@@ -519,7 +521,7 @@ This overload was introduced in Perl 5.12.
 
 The key C<"~~"> allows you to override the smart matching logic used by
 the C<~~> operator and the switch construct (C<given>/C<when>).  See
-L<perlsyn/Switch statements> and L<feature>.
+L<perlsyn/Switch Statements> and L<feature>.
 
 Unusually, the overloaded implementation of the smart match operator
 does not get full control of the smart match behaviour.
@@ -543,7 +545,7 @@ so you may see between one and three of these calls instead:
     $obj->match(2,0);
     $obj->match(3,0);
 
-Consult the match table in  L<perlsyn/"Smart matching in detail"> for
+Consult the match table in  L<perlop/"Smartmatch Operator"> for
 details of when overloading is invoked.
 
 =item * I<Dereferencing>
@@ -667,7 +669,7 @@ Since some operations can be automatically generated from others, there is
 a minimal set of operations that need to be overloaded in order to have
 the complete set of overloaded operations at one's disposal.
 Of course, the autogenerated operations may not do exactly what the user
-expects. The minimal set is:
+expects.  The minimal set is:
 
     + - * / % ** << >> x
     <=> cmp
@@ -767,7 +769,7 @@ Note:
 
 The subroutine for C<'='> does not overload the Perl assignment
 operator: it is used only to allow mutators to work as described
-here. (See L</Assignments> above.)
+here.  (See L</Assignments> above.)
 
 =item *
 
@@ -960,7 +962,8 @@ Package C<overload.pm> provides the following public functions:
 
 =item overload::StrVal(arg)
 
-Gives string value of C<arg> as in absence of stringify overloading. If you
+Gives the string value of C<arg> as in the
+absence of stringify overloading.  If you
 are using this to get the address of a reference (useful for checking if two
 references point to the same thing) then you may be better off using
 C<Scalar::Util::refaddr()>, which is faster.
@@ -1031,12 +1034,12 @@ Note that it is probably meaningless to call the functions overload::constant()
 and overload::remove_constant() from anywhere but import() and unimport() methods.
 From these methods they may be called as
 
-	sub import {
-	  shift;
-	  return unless @_;
-	  die "unknown import: @_" unless @_ == 1 and $_[0] eq ':constant';
-	  overload::constant integer => sub {Math::BigInt->new(shift)};
-	}
+    sub import {
+       shift;
+       return unless @_;
+       die "unknown import: @_" unless @_ == 1 and $_[0] eq ':constant';
+       overload::constant integer => sub {Math::BigInt->new(shift)};
+    }
 
 =head1 IMPLEMENTATION
 
@@ -1045,8 +1048,8 @@ What follows is subject to change RSN.
 The table of methods for all operations is cached in magic for the
 symbol table hash for the package.  The cache is invalidated during
 processing of C<use overload>, C<no overload>, new function
-definitions, and changes in @ISA. However, this invalidation remains
-unprocessed until the next C<bless>ing into the package. Hence if you
+definitions, and changes in @ISA.  However, this invalidation remains
+unprocessed until the next C<bless>ing into the package.  Hence if you
 want to change overloading structure dynamically, you'll need an
 additional (fake) C<bless>ing to update the table.
 
@@ -1054,7 +1057,7 @@ additional (fake) C<bless>ing to update the table.
 queue.  This is how a single variable may participate in multiple
 forms of magic simultaneously.  For instance, environment variables
 regularly have two forms at once: their %ENV magic and their taint
-magic. However, the magic which implements overloading is applied to
+magic.  However, the magic which implements overloading is applied to
 the stashes, which are rarely used directly, thus should not slow down
 Perl.)
 
@@ -1071,10 +1074,10 @@ in doubt, test your speed with C<use overload> and without it.  So far
 there have been no reports of substantial speed degradation if Perl is
 compiled with optimization turned on.
 
-There is no size penalty for data if overload is not used. The only
+There is no size penalty for data if overload is not used.  The only
 size penalty if overload is used in some package is that I<all> the
 packages acquire a magic during the next C<bless>ing into the
-package. This magic is three-words-long for packages without
+package.  This magic is three-words-long for packages without
 overloading, and carries the cache table if the package is overloaded.
 
 It is expected that arguments to methods that are not explicitly supposed
@@ -1568,8 +1571,8 @@ induces diagnostic messages.
 
 Using the C<m> command of Perl debugger (see L<perldebug>) one can
 deduce which operations are overloaded (and which ancestor triggers
-this overloading). Say, if C<eq> is overloaded, then the method C<(eq>
-is shown by debugger. The method C<()> corresponds to the C<fallback>
+this overloading).  Say, if C<eq> is overloaded, then the method C<(eq>
+is shown by debugger.  The method C<()> corresponds to the C<fallback>
 key (in fact a presence of this method shows that this package has
 overloading enabled, and it is what is used by the C<Overloaded>
 function of module C<overload>).
@@ -1590,8 +1593,13 @@ The arguments should come in pairs.
 =item '%s' is not a code reference
 
 (W) The second (fourth, sixth, ...) argument of overload::constant needs
-to be a code reference. Either an anonymous subroutine, or a reference
+to be a code reference.  Either an anonymous subroutine, or a reference
 to a subroutine.
+
+=item overload arg '%s' is invalid
+
+(W) C<use overload> was passed an argument it did not
+recognize.  Did you mistype an operator?
 
 =back
 
@@ -1674,14 +1682,14 @@ The symbol table is filled with names looking like line-noise.
 =item *
 
 For the purpose of inheritance every overloaded package behaves as if
-C<fallback> is present (possibly undefined). This may create
+C<fallback> is present (possibly undefined).  This may create
 interesting effects if some package is not overloaded, but inherits
 from two overloaded packages.
 
 =item *
 
 Before Perl 5.14, the relation between overloading and tie()ing was broken.
-Overloading is triggered or not basing on the I<previous> class of the
+Overloading was triggered or not based on the I<previous> class of the
 tie()d variable.
 
 This happened because the presence of overloading was checked

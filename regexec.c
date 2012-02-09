@@ -303,13 +303,13 @@
 /* Currently these are only used when PL_regkind[OP(rn)] == EXACT so
    we don't need this definition. */
 #define IS_TEXT(rn)   ( OP(rn)==EXACT   || OP(rn)==REF   || OP(rn)==NREF   )
-#define IS_TEXTF(rn)  ( (OP(rn)==EXACTFU || OP(rn)==EXACTFA ||  OP(rn)==EXACTF)  || OP(rn)==REFF  || OP(rn)==NREFF )
+#define IS_TEXTF(rn)  ( OP(rn)==EXACTFU || OP(rn)==EXACTFU_SS || OP(rn)==EXACTFU_NO_TRIE || OP(rn)==EXACTFA || OP(rn)==EXACTF || OP(rn)==REFF  || OP(rn)==NREFF )
 #define IS_TEXTFL(rn) ( OP(rn)==EXACTFL || OP(rn)==REFFL || OP(rn)==NREFFL )
 
 #else
 /* ... so we use this as its faster. */
 #define IS_TEXT(rn)   ( OP(rn)==EXACT   )
-#define IS_TEXTFU(rn)  ( OP(rn)==EXACTFU || OP(rn) == EXACTFA)
+#define IS_TEXTFU(rn)  ( OP(rn)==EXACTFU || OP(rn)==EXACTFU_SS || OP(rn)==EXACTFU_NO_TRIE || OP(rn) == EXACTFA)
 #define IS_TEXTF(rn)  ( OP(rn)==EXACTF  )
 #define IS_TEXTFL(rn) ( OP(rn)==EXACTFL )
 
@@ -353,7 +353,8 @@ S_regcppush(pTHX_ I32 parenfloor)
     GET_RE_DEBUG_FLAGS_DECL;
 
     if (paren_elems_to_push < 0)
-	Perl_croak(aTHX_ "panic: paren_elems_to_push < 0");
+	Perl_croak(aTHX_ "panic: paren_elems_to_push, %i < 0",
+		   paren_elems_to_push);
 
     if ((elems_shifted >> SAVE_TIGHT_SHIFT) != total_elems)
 	Perl_croak(aTHX_ "panic: paren_elems_to_push offset %"UVuf
@@ -1464,10 +1465,10 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    goto do_exactf_non_utf8;	    /* isn't dealt with by these */
 
 	case EXACTF:
-	    if (UTF_PATTERN || utf8_target) {
+	    if (utf8_target) {
 
 		/* regcomp.c already folded this if pattern is in UTF-8 */
-		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
+		utf8_fold_flags = 0;
 		goto do_exactf_utf8;
 	    }
 	    fold_array = PL_fold;
@@ -1483,6 +1484,13 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 	    folder = foldEQ_locale;
 	    goto do_exactf_non_utf8;
 
+	case EXACTFU_SS:
+	    if (UTF_PATTERN) {
+		utf8_fold_flags = FOLDEQ_S2_ALREADY_FOLDED;
+	    }
+	    goto do_exactf_utf8;
+
+	case EXACTFU_NO_TRIE:
 	case EXACTFU:
 	    if (UTF_PATTERN || utf8_target) {
 		utf8_fold_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
@@ -1497,7 +1505,9 @@ S_find_byclass(pTHX_ regexp * prog, const regnode *c, char *s,
 
 	    /* FALL THROUGH */
 
-	do_exactf_non_utf8: /* Neither pattern nor string are UTF8 */
+	do_exactf_non_utf8: /* Neither pattern nor string are UTF8, and there
+			       are no glitches with fold-length differences
+			       between the target string and pattern */
 
 	    /* The idea in the non-utf8 EXACTF* cases is to first find the
 	     * first character of the EXACTF* node and then, if necessary,
@@ -2235,8 +2245,8 @@ Perl_regexec_flags(pTHX_ REGEXP * const rx, char *stringarg, register char *stre
                     /*XXX: The s-- is almost definitely wrong here under unicode - demeprhq*/
 		    s--;
 		}
-                /* We can use a more efficient search as newlines are the same in unicode as they are in latin */
-		while (s < end) {
+		/* We can use a more efficient search as newlines are the same in unicode as they are in latin */
+		while (s <= end) { /* note it could be possible to match at the end of the string */
 		    if (*s++ == '\n') {	/* don't need PL_utf8skip here */
 			if (regtry(&reginfo, &s))
 			    goto got_it;
@@ -3660,6 +3670,8 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	    fold_utf8_flags = FOLDEQ_UTF8_LOCALE;
 	    goto do_exactf;
 
+	case EXACTFU_SS:
+	case EXACTFU_NO_TRIE:
 	case EXACTFU:
 	    folder = foldEQ_latin1;
 	    fold_array = PL_fold_latin1;
@@ -3675,19 +3687,20 @@ S_regmatch(pTHX_ regmatch_info *reginfo, regnode *prog)
 	case EXACTF:
 	    folder = foldEQ;
 	    fold_array = PL_fold;
-	    fold_utf8_flags = (UTF_PATTERN) ? FOLDEQ_S1_ALREADY_FOLDED : 0;
+	    fold_utf8_flags = 0;
 
 	  do_exactf:
 	    s = STRING(scan);
 	    ln = STR_LEN(scan);
 
-	    if (utf8_target || UTF_PATTERN) {
-	      /* Either target or the pattern are utf8. */
+	    if (utf8_target || UTF_PATTERN || state_num == EXACTFU_SS) {
+	      /* Either target or the pattern are utf8, or has the issue where
+	       * the fold lengths may differ. */
 		const char * const l = locinput;
 		char *e = PL_regeol;
 
 		if (! foldEQ_utf8_flags(s, 0,  ln, cBOOL(UTF_PATTERN),
-			       l, &e, 0,  utf8_target, fold_utf8_flags))
+			                l, &e, 0,  utf8_target, fold_utf8_flags))
 		{
 		    sayNO;
 		}
@@ -4843,8 +4856,9 @@ NULL
 		&& !(PL_reg_flags & RF_warned))
 	    {
 		PL_reg_flags |= RF_warned;
-		Perl_warner(aTHX_ packWARN(WARN_REGEXP), "%s limit (%d) exceeded",
-		     "Complex regular subexpression recursion",
+		Perl_warner(aTHX_ packWARN(WARN_REGEXP),
+		     "Complex regular subexpression recursion limit (%d) "
+		     "exceeded",
 		     REG_INFTY - 1);
 	    }
 
@@ -4867,8 +4881,8 @@ NULL
 		{
 		    PL_reg_flags |= RF_warned;
 		    Perl_warner(aTHX_ packWARN(WARN_REGEXP),
-			"%s limit (%d) exceeded",
-			"Complex regular subexpression recursion",
+			"Complex regular subexpression recursion "
+			"limit (%d) exceeded",
 			REG_INFTY - 1);
 		}
 		cur_curlyx->u.curlyx.count--;
@@ -5070,6 +5084,8 @@ NULL
 			switch (OP(text_node)) {
 			    case EXACTF: ST.c2 = PL_fold[ST.c1]; break;
 			    case EXACTFA:
+			    case EXACTFU_SS:
+			    case EXACTFU_NO_TRIE:
 			    case EXACTFU: ST.c2 = PL_fold_latin1[ST.c1]; break;
 			    case EXACTFL: ST.c2 = PL_fold_locale[ST.c1]; break;
 			    default: ST.c2 = ST.c1;
@@ -5224,6 +5240,8 @@ NULL
 			switch (OP(text_node)) {
 			    case EXACTF: ST.c2 = PL_fold[ST.c1]; break;
 			    case EXACTFA:
+			    case EXACTFU_SS:
+			    case EXACTFU_NO_TRIE:
 			    case EXACTFU: ST.c2 = PL_fold_latin1[ST.c1]; break;
 			    case EXACTFL: ST.c2 = PL_fold_locale[ST.c1]; break;
 			    default: ST.c2 = ST.c1; break;
@@ -5692,27 +5710,6 @@ NULL
             sayNO;
             /* NOTREACHED */
 #undef ST
-        case FOLDCHAR:
-            n = ARG(scan);
-            if ( n == (U32)what_len_TRICKYFOLD(locinput,utf8_target,ln) ) {
-                locinput += ln;
-            } else if ( LATIN_SMALL_LETTER_SHARP_S == n && !utf8_target && !UTF_PATTERN ) {
-                sayNO;
-            } else  {
-                U8 folded[UTF8_MAXBYTES_CASE+1];
-                STRLEN foldlen;
-                const char * const l = locinput;
-                char *e = PL_regeol;
-                to_uni_fold(n, folded, &foldlen);
-
-		if (! foldEQ_utf8((const char*) folded, 0,  foldlen, 1,
-                	       l, &e, 0,  utf8_target)) {
-                        sayNO;
-                }
-                locinput = e;
-            } 
-            nextchr = UCHARAT(locinput);  
-            break;
         case LNBREAK:
             if ((n=is_LNBREAK(locinput,utf8_target))) {
                 locinput += n;
@@ -6034,6 +6031,11 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	goto do_exactf;
 
     case EXACTF:
+	    utf8_flags = 0;
+	    goto do_exactf;
+
+    case EXACTFU_SS:
+    case EXACTFU_NO_TRIE:
     case EXACTFU:
 	utf8_flags = (UTF_PATTERN) ? FOLDEQ_S2_ALREADY_FOLDED : 0;
 
@@ -6044,7 +6046,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	c = (U8)*STRING(p);
 	assert(! UTF_PATTERN || UNI_IS_INVARIANT(c));
 
-	if (utf8_target) { /* Use full Unicode fold matching */
+	if (utf8_target || OP(p) == EXACTFU_SS) { /* Use full Unicode fold matching */
 	    char *tmpeol = loceol;
 	    while (hardcount < max
 		    && foldEQ_utf8_flags(scan, &tmpeol, 0, utf8_target,
@@ -6075,6 +6077,7 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 	    switch (OP(p)) {
 		case EXACTF: folded = PL_fold[c]; break;
 		case EXACTFA:
+		case EXACTFU_NO_TRIE:
 		case EXACTFU: folded = PL_fold_latin1[c]; break;
 		case EXACTFL: folded = PL_fold_locale[c]; break;
 		default: Perl_croak(aTHX_ "panic: Unexpected op %u", OP(p));
@@ -6475,20 +6478,39 @@ S_regrepeat(pTHX_ const regexp *prog, const regnode *p, I32 max, int depth)
 
 #if !defined(PERL_IN_XSUB_RE) || defined(PLUGGABLE_RE_EXTENSION)
 /*
-- regclass_swash - prepare the utf8 swash
-*/
-
+- regclass_swash - prepare the utf8 swash.  Wraps the shared core version to
+create a copy so that changes the caller makes won't change the shared one
+ */
 SV *
 Perl_regclass_swash(pTHX_ const regexp *prog, register const regnode* node, bool doinit, SV** listsvp, SV **altsvp)
 {
+    PERL_ARGS_ASSERT_REGCLASS_SWASH;
+    return newSVsv(core_regclass_swash(prog, node, doinit, listsvp, altsvp));
+}
+#endif
+
+STATIC SV *
+S_core_regclass_swash(pTHX_ const regexp *prog, register const regnode* node, bool doinit, SV** listsvp, SV **altsvp)
+{
+    /* Returns the swash for the input 'node' in the regex 'prog'.
+     * If <doinit> is true, will attempt to create the swash if not already
+     *	  done.
+     * If <listsvp> is non-null, will return the swash initialization string in
+     *	  it.
+     * If <altsvp> is non-null, will return the alternates to the regular swash
+     *	  in it
+     * Tied intimately to how regcomp.c sets up the data structure */
+
     dVAR;
     SV *sw  = NULL;
     SV *si  = NULL;
     SV *alt = NULL;
+    SV*  invlist = NULL;
+
     RXi_GET_DECL(prog,progi);
     const struct reg_data * const data = prog ? progi->data : NULL;
 
-    PERL_ARGS_ASSERT_REGCLASS_SWASH;
+    PERL_ARGS_ASSERT_CORE_REGCLASS_SWASH;
 
     assert(ANYOF_NONBITMAP(node));
 
@@ -6499,34 +6521,82 @@ Perl_regclass_swash(pTHX_ const regexp *prog, register const regnode* node, bool
 	    SV * const rv = MUTABLE_SV(data->data[n]);
 	    AV * const av = MUTABLE_AV(SvRV(rv));
 	    SV **const ary = AvARRAY(av);
-	    SV **a, **b;
+	    bool invlist_has_user_defined_property;
 	
-	    /* See the end of regcomp.c:S_regclass() for
-	     * documentation of these array elements. */
+	    si = *ary;	/* ary[0] = the string to initialize the swash with */
 
-	    si = *ary;
-	    a  = SvROK(ary[1]) ? &ary[1] : NULL;
-	    b  = SvTYPE(ary[2]) == SVt_PVAV ? &ary[2] : NULL;
+	    /* Elements 3 and 4 are either both present or both absent. [3] is
+	     * any inversion list generated at compile time; [4] indicates if
+	     * that inversion list has any user-defined properties in it. */
+	    if (av_len(av) >= 3) {
+		invlist = ary[3];
+		invlist_has_user_defined_property = cBOOL(SvUV(ary[4]));
+	    }
+	    else {
+		invlist = NULL;
+		invlist_has_user_defined_property = FALSE;
+	    }
 
-	    if (a)
-		sw = *a;
+	    /* Element [1] is reserved for the set-up swash.  If already there,
+	     * return it; if not, create it and store it there */
+	    if (SvROK(ary[1])) {
+		sw = ary[1];
+	    }
 	    else if (si && doinit) {
-		sw = swash_init("utf8", "", si, 1, 0);
+
+		sw = _core_swash_init("utf8", /* the utf8 package */
+				      "", /* nameless */
+				      si,
+				      1, /* binary */
+				      0, /* not from tr/// */
+				      FALSE, /* is error if can't find
+						property */
+				      invlist,
+				      invlist_has_user_defined_property);
 		(void)av_store(av, 1, sw);
 	    }
-	    if (b)
-	        alt = *b;
+
+	    /* Element [2] is for any multi-char folds.  Note that is a
+	     * fundamentally flawed design, because can't backtrack and try
+	     * again.  See [perl #89774] */
+	    if (SvTYPE(ary[2]) == SVt_PVAV) {
+	        alt = ary[2];
+	    }
 	}
     }
 	
-    if (listsvp)
-	*listsvp = si;
+    if (listsvp) {
+	SV* matches_string = newSVpvn("", 0);
+	SV** invlistsvp;
+
+	/* Use the swash, if any, which has to have incorporated into it all
+	 * possibilities */
+	if (   sw
+	    && SvROK(sw)
+	    && SvTYPE(SvRV(sw)) == SVt_PVHV
+	    && (invlistsvp = hv_fetchs(MUTABLE_HV(SvRV(sw)), "INVLIST", FALSE)))
+	{
+	    invlist = *invlistsvp;
+	}
+	else if (si && si != &PL_sv_undef) {
+
+	    /* If no swash, use the input nitialization string, if available */
+	    sv_catsv(matches_string, si);
+	}
+
+	/* Add the inversion list to whatever we have.  This may have come from
+	 * the swash, or from an input parameter */
+	if (invlist) {
+	    sv_catsv(matches_string, _invlist_contents(invlist));
+	}
+	*listsvp = matches_string;
+    }
+
     if (altsvp)
 	*altsvp  = alt;
 
     return sw;
 }
-#endif
 
 /*
  - reginclass - determine if a character falls into a character class
@@ -6665,7 +6735,7 @@ S_reginclass(pTHX_ const regexp * const prog, register const regnode * const n, 
 			     || (flags & ANYOF_IS_SYNTHETIC)))))
 	{
 	    AV *av;
-	    SV * const sw = regclass_swash(prog, n, TRUE, 0, (SV**)&av);
+	    SV * const sw = core_regclass_swash(prog, n, TRUE, 0, (SV**)&av);
 
 	    if (sw) {
 		U8 * utf8_p;

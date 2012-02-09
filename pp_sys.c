@@ -248,6 +248,7 @@ S_emulate_eaccess(pTHX_ const char* path, Mode_t mode)
     if (setresuid(euid, ruid, (Uid_t)-1))
 #endif
 #endif
+	/* diag_listed_as: entering effective %s failed */
 	Perl_croak(aTHX_ "entering effective uid failed");
 #endif
 
@@ -261,6 +262,7 @@ S_emulate_eaccess(pTHX_ const char* path, Mode_t mode)
     if (setresgid(egid, rgid, (Gid_t)-1))
 #endif
 #endif
+	/* diag_listed_as: entering effective %s failed */
 	Perl_croak(aTHX_ "entering effective gid failed");
 #endif
 
@@ -273,6 +275,7 @@ S_emulate_eaccess(pTHX_ const char* path, Mode_t mode)
     if (setresuid(ruid, euid, (Uid_t)-1))
 #endif
 #endif
+	/* diag_listed_as: leaving effective %s failed */
 	Perl_croak(aTHX_ "leaving effective uid failed");
 
 #ifdef HAS_SETREGID
@@ -282,6 +285,7 @@ S_emulate_eaccess(pTHX_ const char* path, Mode_t mode)
     if (setresgid(rgid, egid, (Gid_t)-1))
 #endif
 #endif
+	/* diag_listed_as: leaving effective %s failed */
 	Perl_croak(aTHX_ "leaving effective gid failed");
 
     return res;
@@ -853,6 +857,13 @@ PP(pp_tie)
 	    break;
 	case SVt_PVAV:
 	    methname = "TIEARRAY";
+	    if (!AvREAL(varsv)) {
+		if (!AvREIFY(varsv))
+		    Perl_croak(aTHX_ "Cannot tie unreifiable array");
+		av_clear((AV *)varsv);
+		AvREIFY_off(varsv);
+		AvREAL_on(varsv);
+	    }
 	    break;
 	case SVt_PVGV:
 	case SVt_PVLV:
@@ -1006,7 +1017,10 @@ PP(pp_dbmopen)
     if (SvIV(right))
 	mPUSHu(O_RDWR|O_CREAT);
     else
+    {
 	mPUSHu(O_RDWR);
+	if (!SvOK(right)) right = &PL_sv_no;
+    }
     PUSHs(right);
     PUTBACK;
     call_sv(MUTABLE_SV(GvCV(gv)), G_SCALAR);
@@ -1224,21 +1238,20 @@ PP(pp_select)
     HV *hv;
     GV * const newdefout = (PL_op->op_private > 0) ? (MUTABLE_GV(POPs)) : NULL;
     GV * egv = GvEGVx(PL_defoutgv);
+    GV * const *gvp;
 
     if (!egv)
 	egv = PL_defoutgv;
     hv = isGV_with_GP(egv) ? GvSTASH(egv) : NULL;
-    if (! hv)
-	XPUSHs(&PL_sv_undef);
-    else {
-	GV * const * const gvp = (GV**)hv_fetch(hv, GvNAME(egv), HEK_UTF8(GvNAME_HEK(egv)) ? -GvNAMELEN(egv) : GvNAMELEN(egv), FALSE);
-	if (gvp && *gvp == egv) {
+    gvp = hv && HvENAME(hv)
+		? (GV**)hv_fetch(hv, GvNAME(egv), HEK_UTF8(GvNAME_HEK(egv)) ? -GvNAMELEN(egv) : GvNAMELEN(egv), FALSE)
+		: NULL;
+    if (gvp && *gvp == egv) {
 	    gv_efullname4(TARG, PL_defoutgv, NULL, TRUE);
 	    XPUSHTARG;
-	}
-	else {
+    }
+    else {
 	    mXPUSHs(newRV(MUTABLE_SV(egv)));
-	}
     }
 
     if (newdefout) {
@@ -2739,7 +2752,7 @@ PP(pp_stat)
     dVAR;
     dSP;
     GV *gv = NULL;
-    IO *io;
+    IO *io = NULL;
     I32 gimme;
     I32 max = 13;
     SV* sv;
@@ -2750,7 +2763,9 @@ PP(pp_stat)
 	    if (gv != PL_defgv) {
 	    do_fstat_warning_check:
 		Perl_ck_warner(aTHX_ packWARN(WARN_IO),
-			       "lstat() on filehandle %"SVf, SVfARG(gv
+			       "lstat() on filehandle%s%"SVf,
+				gv ? " " : "",
+				SVfARG(gv
                                         ? sv_2mortal(newSVhek(GvENAME_HEK(gv)))
                                         : &PL_sv_no));
 	    } else if (PL_laststype != OP_LSTAT)
@@ -2759,28 +2774,33 @@ PP(pp_stat)
 	}
 
 	if (gv != PL_defgv) {
+	    bool havefp;
+          do_fstat_have_io:
+	    havefp = FALSE;
 	    PL_laststype = OP_STAT;
-	    PL_statgv = gv;
+	    PL_statgv = gv ? gv : (GV *)io;
 	    sv_setpvs(PL_statname, "");
             if(gv) {
                 io = GvIO(gv);
-                do_fstat_have_io:
-                if (io) {
+	    }
+            if (io) {
                     if (IoIFP(io)) {
                         PL_laststatval = 
                             PerlLIO_fstat(PerlIO_fileno(IoIFP(io)), &PL_statcache);   
+                        havefp = TRUE;
                     } else if (IoDIRP(io)) {
                         PL_laststatval =
                             PerlLIO_fstat(my_dirfd(IoDIRP(io)), &PL_statcache);
+                        havefp = TRUE;
                     } else {
                         PL_laststatval = -1;
                     }
-	        }
             }
+	    else PL_laststatval = -1;
+	    if (PL_laststatval < 0 && !havefp) report_evil_fh(gv);
         }
 
 	if (PL_laststatval < 0) {
-	    report_evil_fh(gv);
 	    max = 0;
 	}
     }
@@ -2875,21 +2895,61 @@ PP(pp_stat)
     RETURN;
 }
 
+/* If the next filetest is stacked up with this one
+   (PL_op->op_private & OPpFT_STACKING), we leave
+   the original argument on the stack for success,
+   and skip the stacked operators on failure.
+   The next few macros/functions take care of this.
+*/
+
+static OP *
+S_ft_stacking_return_false(pTHX_ SV *ret) {
+    dSP;
+    OP *next = NORMAL;
+    while (OP_IS_FILETEST(next->op_type)
+	&& next->op_private & OPpFT_STACKED)
+	next = next->op_next;
+    if (PL_op->op_flags & OPf_REF) PUSHs(ret);
+    else			   SETs(ret);
+    PUTBACK;
+    return next;
+}
+
+#define FT_RETURN_FALSE(X)			     \
+    STMT_START {				      \
+	if (PL_op->op_private & OPpFT_STACKING)	       \
+	    return S_ft_stacking_return_false(aTHX_ X);	\
+	RETURNX(PUSHs(X));				 \
+    } STMT_END
+#define FT_RETURN_TRUE(X)		 \
+    RETURNX((void)(			  \
+	PL_op->op_private & OPpFT_STACKING \
+	    ? PL_op->op_flags & OPf_REF	    \
+		? PUSHs((SV *)cGVOP_gv)	     \
+		: 0			      \
+	    : PUSHs(X)			       \
+    ))
+
+#define FT_RETURNNO	FT_RETURN_FALSE(&PL_sv_no)
+#define FT_RETURNUNDEF	FT_RETURN_FALSE(&PL_sv_undef)
+#define FT_RETURNYES	FT_RETURN_TRUE(&PL_sv_yes)
+
 #define tryAMAGICftest_MG(chr) STMT_START { \
 	if ( (SvFLAGS(TOPs) & (SVf_ROK|SVs_GMG)) \
-		&& PL_op->op_flags & OPf_KIDS    \
-		&& S_try_amagic_ftest(aTHX_ chr)) \
-	    return NORMAL; \
+		&& PL_op->op_flags & OPf_KIDS) {     \
+	    OP *next = S_try_amagic_ftest(aTHX_ chr);	\
+	    if (next) return next;			  \
+	}						   \
     } STMT_END
 
-STATIC bool
+STATIC OP *
 S_try_amagic_ftest(pTHX_ char chr) {
     dVAR;
     dSP;
     SV* const arg = TOPs;
 
     assert(chr != '?');
-    SvGETMAGIC(arg);
+    if (!(PL_op->op_private & OPpFT_STACKING)) SvGETMAGIC(arg);
 
     if (SvAMAGIC(TOPs))
     {
@@ -2899,32 +2959,16 @@ S_try_amagic_ftest(pTHX_ char chr) {
 				ftest_amg, AMGf_unary);
 
 	if (!tmpsv)
-	    return FALSE;
+	    return NULL;
 
 	SPAGAIN;
 
-	if (PL_op->op_private & OPpFT_STACKING) {
-	    if (SvTRUE(tmpsv))
-		/* leave the object alone */
-		return TRUE;
-	}
-
-	SETs(tmpsv);
-	PUTBACK;
-	return TRUE;
+	if (SvTRUE(tmpsv)) FT_RETURN_TRUE(tmpsv);
+	FT_RETURN_FALSE(tmpsv);
     }
-    return FALSE;
+    return NULL;
 }
 
-
-/* This macro is used by the stacked filetest operators :
- * if the previous filetest failed, short-circuit and pass its value.
- * Else, discard it from the stack and continue. --rgs
- */
-#define STACKED_FTEST_CHECK if (PL_op->op_private & OPpFT_STACKED) { \
-	if (!SvTRUE(TOPs)) { RETURN; } \
-	else { (void)POPs; PUTBACK; } \
-    }
 
 PP(pp_ftrread)
 {
@@ -2960,8 +3004,6 @@ PP(pp_ftrread)
     case OP_FTEEXEC:	opchar = 'x'; break;
     }
     tryAMAGICftest_MG(opchar);
-
-    STACKED_FTEST_CHECK;
 
     switch (PL_op->op_type) {
     case OP_FTRREAD:
@@ -3042,10 +3084,10 @@ PP(pp_ftrread)
     result = my_stat_flags(0);
     SPAGAIN;
     if (result < 0)
-	RETPUSHUNDEF;
+	FT_RETURNUNDEF;
     if (cando(stat_mode, effective, &PL_statcache))
-	RETPUSHYES;
-    RETPUSHNO;
+	FT_RETURNYES;
+    FT_RETURNNO;
 }
 
 PP(pp_ftis)
@@ -3065,14 +3107,12 @@ PP(pp_ftis)
     }
     tryAMAGICftest_MG(opchar);
 
-    STACKED_FTEST_CHECK;
-
     result = my_stat_flags(0);
     SPAGAIN;
     if (result < 0)
-	RETPUSHUNDEF;
+	FT_RETURNUNDEF;
     if (op_type == OP_FTIS)
-	RETPUSHYES;
+	FT_RETURNYES;
     {
 	/* You can't dTARGET inside OP_FTIS, because you'll get
 	   "panic: pad_sv po" - the op is not flagged to have a target.  */
@@ -3080,23 +3120,28 @@ PP(pp_ftis)
 	switch (op_type) {
 	case OP_FTSIZE:
 #if Off_t_size > IVSIZE
-	    PUSHn(PL_statcache.st_size);
+	    sv_setnv(TARG, (NV)PL_statcache.st_size);
 #else
-	    PUSHi(PL_statcache.st_size);
+	    sv_setiv(TARG, (IV)PL_statcache.st_size);
 #endif
 	    break;
 	case OP_FTMTIME:
-	    PUSHn( (((NV)PL_basetime - PL_statcache.st_mtime)) / 86400.0 );
+	    sv_setnv(TARG,
+		    ((NV)PL_basetime - PL_statcache.st_mtime) / 86400.0 );
 	    break;
 	case OP_FTATIME:
-	    PUSHn( (((NV)PL_basetime - PL_statcache.st_atime)) / 86400.0 );
+	    sv_setnv(TARG,
+		    ((NV)PL_basetime - PL_statcache.st_atime) / 86400.0 );
 	    break;
 	case OP_FTCTIME:
-	    PUSHn( (((NV)PL_basetime - PL_statcache.st_ctime)) / 86400.0 );
+	    sv_setnv(TARG,
+		    ((NV)PL_basetime - PL_statcache.st_ctime) / 86400.0 );
 	    break;
 	}
+	SvSETMAGIC(TARG);
+	if (SvTRUE_nomg(TARG)) FT_RETURN_TRUE(TARG);
+	else		       FT_RETURN_FALSE(TARG);
     }
-    RETURN;
 }
 
 PP(pp_ftrowned)
@@ -3122,93 +3167,91 @@ PP(pp_ftrowned)
     }
     tryAMAGICftest_MG(opchar);
 
-    STACKED_FTEST_CHECK;
-
     /* I believe that all these three are likely to be defined on most every
        system these days.  */
 #ifndef S_ISUID
     if(PL_op->op_type == OP_FTSUID) {
-	if ((PL_op->op_flags & OPf_REF) == 0 && (PL_op->op_private & OPpFT_STACKED) == 0)
+	if ((PL_op->op_flags & OPf_REF) == 0 && !(PL_op->op_private & OPpFT_STACKING))
 	    (void) POPs;
-	RETPUSHNO;
+	FT_RETURNNO;
     }
 #endif
 #ifndef S_ISGID
     if(PL_op->op_type == OP_FTSGID) {
-	if ((PL_op->op_flags & OPf_REF) == 0 && (PL_op->op_private & OPpFT_STACKED) == 0)
+	if ((PL_op->op_flags & OPf_REF) == 0 && !(PL_op->op_private & OPpFT_STACKING))
 	    (void) POPs;
-	RETPUSHNO;
+	FT_RETURNNO;
     }
 #endif
 #ifndef S_ISVTX
     if(PL_op->op_type == OP_FTSVTX) {
-	if ((PL_op->op_flags & OPf_REF) == 0 && (PL_op->op_private & OPpFT_STACKED) == 0)
+	if ((PL_op->op_flags & OPf_REF) == 0 && !(PL_op->op_private & OPpFT_STACKING))
 	    (void) POPs;
-	RETPUSHNO;
+	FT_RETURNNO;
     }
 #endif
 
     result = my_stat_flags(0);
     SPAGAIN;
     if (result < 0)
-	RETPUSHUNDEF;
+	FT_RETURNUNDEF;
     switch (PL_op->op_type) {
     case OP_FTROWNED:
 	if (PL_statcache.st_uid == PL_uid)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTEOWNED:
 	if (PL_statcache.st_uid == PL_euid)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTZERO:
 	if (PL_statcache.st_size == 0)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTSOCK:
 	if (S_ISSOCK(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTCHR:
 	if (S_ISCHR(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTBLK:
 	if (S_ISBLK(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTFILE:
 	if (S_ISREG(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTDIR:
 	if (S_ISDIR(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
     case OP_FTPIPE:
 	if (S_ISFIFO(PL_statcache.st_mode))
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
 #ifdef S_ISUID
     case OP_FTSUID:
 	if (PL_statcache.st_mode & S_ISUID)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
 #endif
 #ifdef S_ISGID
     case OP_FTSGID:
 	if (PL_statcache.st_mode & S_ISGID)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
 #endif
 #ifdef S_ISVTX
     case OP_FTSVTX:
 	if (PL_statcache.st_mode & S_ISVTX)
-	    RETPUSHYES;
+	    FT_RETURNYES;
 	break;
 #endif
     }
-    RETPUSHNO;
+    FT_RETURNNO;
 }
 
 PP(pp_ftlink)
@@ -3218,15 +3261,14 @@ PP(pp_ftlink)
     I32 result;
 
     tryAMAGICftest_MG('l');
-    STACKED_FTEST_CHECK;
     result = my_lstat_flags(0);
     SPAGAIN;
 
     if (result < 0)
-	RETPUSHUNDEF;
+	FT_RETURNUNDEF;
     if (S_ISLNK(PL_statcache.st_mode))
-	RETPUSHYES;
-    RETPUSHNO;
+	FT_RETURNYES;
+    FT_RETURNNO;
 }
 
 PP(pp_fttty)
@@ -3235,35 +3277,30 @@ PP(pp_fttty)
     dSP;
     int fd;
     GV *gv;
-    SV *tmpsv = NULL;
     char *name = NULL;
     STRLEN namelen;
 
     tryAMAGICftest_MG('t');
 
-    STACKED_FTEST_CHECK;
-
     if (PL_op->op_flags & OPf_REF)
 	gv = cGVOP_gv;
-    else if (!(gv = MAYBE_DEREF_GV_nomg(TOPs))) {
-	tmpsv = POPs;
+    else {
+      SV *tmpsv = PL_op->op_private & OPpFT_STACKING ? TOPs : POPs;
+      if (!(gv = MAYBE_DEREF_GV_nomg(tmpsv))) {
 	name = SvPV_nomg(tmpsv, namelen);
 	gv = gv_fetchpvn_flags(name, namelen, SvUTF8(tmpsv), SVt_PVIO);
+      }
     }
 
     if (GvIO(gv) && IoIFP(GvIOp(gv)))
 	fd = PerlIO_fileno(IoIFP(GvIOp(gv)));
-    else if (tmpsv && SvOK(tmpsv)) {
-	if (isDIGIT(*name))
+    else if (name && isDIGIT(*name))
 	    fd = atoi(name);
-	else 
-	    RETPUSHUNDEF;
-    }
     else
-	RETPUSHUNDEF;
+	FT_RETURNUNDEF;
     if (PerlLIO_isatty(fd))
-	RETPUSHYES;
-    RETPUSHNO;
+	FT_RETURNYES;
+    FT_RETURNNO;
 }
 
 #if defined(atarist) /* this will work with atariST. Configure will
@@ -3284,45 +3321,53 @@ PP(pp_fttext)
     STDCHAR tbuf[512];
     register STDCHAR *s;
     register IO *io;
-    register SV *sv;
+    register SV *sv = NULL;
     GV *gv;
     PerlIO *fp;
 
     tryAMAGICftest_MG(PL_op->op_type == OP_FTTEXT ? 'T' : 'B');
 
-    STACKED_FTEST_CHECK;
-
     if (PL_op->op_flags & OPf_REF)
+    {
 	gv = cGVOP_gv;
-    else gv = MAYBE_DEREF_GV_nomg(TOPs);
+	EXTEND(SP, 1);
+    }
+    else {
+      sv = PL_op->op_private & OPpFT_STACKING ? TOPs : POPs;
+      if ((PL_op->op_private & (OPpFT_STACKED|OPpFT_AFTER_t))
+	     == OPpFT_STACKED)
+	gv = PL_defgv;
+      else gv = MAYBE_DEREF_GV_nomg(sv);
+    }
 
     if (gv) {
-	EXTEND(SP, 1);
 	if (gv == PL_defgv) {
 	    if (PL_statgv)
-		io = GvIO(PL_statgv);
+		io = SvTYPE(PL_statgv) == SVt_PVIO
+		    ? (IO *)PL_statgv
+		    : GvIO(PL_statgv);
 	    else {
-		sv = PL_statname;
 		goto really_filename;
 	    }
 	}
 	else {
 	    PL_statgv = gv;
-	    PL_laststatval = -1;
 	    sv_setpvs(PL_statname, "");
 	    io = GvIO(PL_statgv);
 	}
+	PL_laststatval = -1;
+	PL_laststype = OP_STAT;
 	if (io && IoIFP(io)) {
 	    if (! PerlIO_has_base(IoIFP(io)))
 		DIE(aTHX_ "-T and -B not implemented on filehandles");
 	    PL_laststatval = PerlLIO_fstat(PerlIO_fileno(IoIFP(io)), &PL_statcache);
 	    if (PL_laststatval < 0)
-		RETPUSHUNDEF;
+		FT_RETURNUNDEF;
 	    if (S_ISDIR(PL_statcache.st_mode)) { /* handle NFS glitch */
 		if (PL_op->op_type == OP_FTTEXT)
-		    RETPUSHNO;
+		    FT_RETURNNO;
 		else
-		    RETPUSHYES;
+		    FT_RETURNYES;
             }
 	    if (PerlIO_get_cnt(IoIFP(io)) <= 0) {
 		i = PerlIO_getc(IoIFP(io));
@@ -3330,7 +3375,7 @@ PP(pp_fttext)
 		    (void)PerlIO_ungetc(IoIFP(io),i);
 	    }
 	    if (PerlIO_get_cnt(IoIFP(io)) <= 0)	/* null file is anything */
-		RETPUSHYES;
+		FT_RETURNYES;
 	    len = PerlIO_get_bufsiz(IoIFP(io));
 	    s = (STDCHAR *) PerlIO_get_base(IoIFP(io));
 	    /* sfio can have large buffers - limit to 512 */
@@ -3338,35 +3383,39 @@ PP(pp_fttext)
 		len = 512;
 	}
 	else {
-	    report_evil_fh(cGVOP_gv);
 	    SETERRNO(EBADF,RMS_IFI);
-	    RETPUSHUNDEF;
+	    report_evil_fh(gv);
+	    SETERRNO(EBADF,RMS_IFI);
+	    FT_RETURNUNDEF;
 	}
     }
     else {
-	sv = POPs;
+	sv_setpv(PL_statname, SvPV_nomg_const_nolen(sv));
       really_filename:
 	PL_statgv = NULL;
-	PL_laststype = OP_STAT;
-	sv_setpv(PL_statname, SvPV_nomg_const_nolen(sv));
 	if (!(fp = PerlIO_open(SvPVX_const(PL_statname), "r"))) {
+	    if (!gv) {
+		PL_laststatval = -1;
+		PL_laststype = OP_STAT;
+	    }
 	    if (ckWARN(WARN_NEWLINE) && strchr(SvPV_nolen_const(PL_statname),
 					       '\n'))
 		Perl_warner(aTHX_ packWARN(WARN_NEWLINE), PL_warn_nl, "open");
-	    RETPUSHUNDEF;
+	    FT_RETURNUNDEF;
 	}
+	PL_laststype = OP_STAT;
 	PL_laststatval = PerlLIO_fstat(PerlIO_fileno(fp), &PL_statcache);
 	if (PL_laststatval < 0)	{
 	    (void)PerlIO_close(fp);
-	    RETPUSHUNDEF;
+	    FT_RETURNUNDEF;
 	}
 	PerlIO_binmode(aTHX_ fp, '<', O_BINARY, NULL);
 	len = PerlIO_read(fp, tbuf, sizeof(tbuf));
 	(void)PerlIO_close(fp);
 	if (len <= 0) {
 	    if (S_ISDIR(PL_statcache.st_mode) && PL_op->op_type == OP_FTTEXT)
-		RETPUSHNO;		/* special case NFS directories */
-	    RETPUSHYES;		/* null file is anything */
+		FT_RETURNNO;		/* special case NFS directories */
+	    FT_RETURNYES;		/* null file is anything */
 	}
 	s = tbuf;
     }
@@ -3420,9 +3469,9 @@ PP(pp_fttext)
     }
 
     if ((odd * 3 > len) == (PL_op->op_type == OP_FTTEXT)) /* allow 1/3 odd */
-	RETPUSHNO;
+	FT_RETURNNO;
     else
-	RETPUSHYES;
+	FT_RETURNYES;
 }
 
 /* File calls. */
@@ -4106,9 +4155,17 @@ PP(pp_system)
 	Pid_t childpid;
 	int pp[2];
 	I32 did_pipes = 0;
+#if (defined(HAS_SIGPROCMASK) && !defined(PERL_MICRO))
+	sigset_t newset, oldset;
+#endif
 
 	if (PerlProc_pipe(pp) >= 0)
 	    did_pipes = 1;
+#if (defined(HAS_SIGPROCMASK) && !defined(PERL_MICRO))
+	sigemptyset(&newset);
+	sigaddset(&newset, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &newset, &oldset);
+#endif
 	while ((childpid = PerlProc_fork()) == -1) {
 	    if (errno != EAGAIN) {
 		value = -1;
@@ -4118,6 +4175,9 @@ PP(pp_system)
 		    PerlLIO_close(pp[0]);
 		    PerlLIO_close(pp[1]);
 		}
+#if (defined(HAS_SIGPROCMASK) && !defined(PERL_MICRO))
+		sigprocmask(SIG_SETMASK, &oldset, NULL);
+#endif
 		RETURN;
 	    }
 	    sleep(5);
@@ -4136,6 +4196,9 @@ PP(pp_system)
 		result = wait4pid(childpid, &status, 0);
 	    } while (result == -1 && errno == EINTR);
 #ifndef PERL_MICRO
+#ifdef HAS_SIGPROCMASK
+	    sigprocmask(SIG_SETMASK, &oldset, NULL);
+#endif
 	    (void)rsignal_restore(SIGINT, &ihand);
 	    (void)rsignal_restore(SIGQUIT, &qhand);
 #endif
@@ -4158,7 +4221,7 @@ PP(pp_system)
 		PerlLIO_close(pp[0]);
 		if (n) {			/* Error */
 		    if (n != sizeof(int))
-			DIE(aTHX_ "panic: kid popen errno read");
+			DIE(aTHX_ "panic: kid popen errno read, n=%u", n);
 		    errno = errkid;		/* Propagate errno from kid */
 		    STATUS_NATIVE_CHILD_SET(-1);
 		}
@@ -4166,6 +4229,9 @@ PP(pp_system)
 	    XPUSHi(STATUS_CURRENT);
 	    RETURN;
 	}
+#if (defined(HAS_SIGPROCMASK) && !defined(PERL_MICRO))
+	sigprocmask(SIG_SETMASK, &oldset, NULL);
+#endif
 	if (did_pipes) {
 	    PerlLIO_close(pp[0]);
 #if defined(HAS_FCNTL) && defined(F_SETFD)
@@ -4455,17 +4521,20 @@ PP(pp_gmtime)
 	NV input = Perl_floor(POPn);
 	when = (Time64_T)input;
 	if (when != input) {
+	    /* diag_listed_as: gmtime(%f) too large */
 	    Perl_ck_warner(aTHX_ packWARN(WARN_OVERFLOW),
 			   "%s(%.0" NVff ") too large", opname, input);
 	}
     }
 
     if ( TIME_LOWER_BOUND > when ) {
+	/* diag_listed_as: gmtime(%f) too small */
 	Perl_ck_warner(aTHX_ packWARN(WARN_OVERFLOW),
 		       "%s(%.0" NVff ") too small", opname, when);
 	err = NULL;
     }
     else if( when > TIME_UPPER_BOUND ) {
+	/* diag_listed_as: gmtime(%f) too small */
 	Perl_ck_warner(aTHX_ packWARN(WARN_OVERFLOW),
 		       "%s(%.0" NVff ") too large", opname, when);
 	err = NULL;

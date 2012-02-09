@@ -1,25 +1,25 @@
 =encoding utf8
 
 =for comment
-This has been completed up to e7d0a3fbd9, except for
-e032854 khw     [perl #32080] is_utf8_string() reads too far
-b0f2e9e nwclark Fix two bugs related to pod files outside of pod/ (important enough?)
+This has been completed up to 0aae26c14, except for:
+803e389	rurban	CYG17 utf8 paths
+d9298c1	rurban	mymalloc isn't thread safe
 
 =head1 NAME
 
 [ this is a template for a new perldelta file. Any text flagged as
 XXX needs to be processed before release. ]
 
-perldelta - what is new for perl v5.15.6
+perldelta - what is new for perl v5.15.8
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.15.5 release and
-the 5.15.6 release.
+This document describes differences between the 5.15.7 release and
+the 5.15.8 release.
 
-If you are upgrading from an earlier release such as 5.15.4, first read
-L<perl5155delta>, which describes differences between 5.15.4 and
-5.15.5.
+If you are upgrading from an earlier release such as 5.15.6, first read
+L<perl5157delta>, which describes differences between 5.15.6 and
+5.15.7.
 
 =head1 Notice
 
@@ -33,23 +33,102 @@ here, but most should go in the L</Performance Enhancements> section.
 
 [ List each enhancement as a =head2 entry ]
 
-=head2 C<__SUB__>
+=head2 Improved ability to mix locales and Unicode, including UTF-8 locales
 
-The new C<__SUB__> token, available under the "current_sub" feature (see
-L<feature>) or C<use v5.15>, returns a reference to the current subroutine,
-making it easier to write recursive closures.
+An optional parameter has been added to C<use locale>
 
-=head2 New option for the debugger's B<t> command
+ use locale ':not_characters';
 
-The B<t> command in the debugger, which toggles tracing mode, now accepts a
-numerical argument that determines how many levels of subroutine calls to
-trace.
+which tells Perl to use all but the C<LC_CTYPE> and C<LC_COLLATE>
+portions of the current locale.  Instead, the character set is assumed
+to be Unicode.  This allows locales and Unicode to be seamlessly mixed,
+including the increasingly frequent UTF-8 locales.  When using this
+hybrid form of locales, the C<:locale> layer to the L<open> pragma can
+be used to interface with the file system, and there are CPAN modules
+available for ARGV and environment variable conversions.
 
-=head2 Return value of C<tied>
+Full details are in L<perllocale>.
 
-The value returned by C<tied> on a tied variable is now the actual scalar
-that holds the object to which the variable is tied.  This allows ties to
-be weakened with C<Scalar::Util::weaken(tied $tied_variable)>.
+=head2 New function C<fc> and corresponding escape sequence C<\F> for Unicode foldcase
+
+Unicode foldcase is an extension to lowercase that gives better results
+when comparing two strings case-insensitively.  It has long been used
+internally in regular expression C</i> matching.  Now it is available
+explicitly through the new C<fc> function call (enabled by
+S<C<"use feature 'fc'">>, or C<use v5.16>, or explicitly callable via
+C<CORE::fc>) or through the new C<\F> sequence in double-quotish
+strings.
+
+Full details are in L<perlfunc/fc>.
+
+=head2 C<_> in subroutine prototypes
+
+The C<_> character in subroutine prototypes is now allowed before C<@> or
+C<%>.
+
+=head1 Supports (I<almost>) Unicode 6.1
+
+Besides the addition of whole new scripts, and new characters in
+existing scripts, this new version of Unicode, as always, makes some
+changes to existing characters.  One change that may trip up some
+applications is that the General Category of two characters in the
+Latin-1 range, PILCROW SIGN and SECTION SIGN, has been changed from
+Other_Symbol to Other_Punctuation.  The same change has been made for
+a character in each of Tibetan, Ethiopic, and Aegean.
+The code points U+3248..U+324F (CIRCLED NUMBER TEN ON BLACK SQUARE
+through CIRCLED NUMBER EIGHTY ON BLACK SQUARE) have had their General
+Category changed from Other_Symbol to Other_Numeric.  The Line Break
+property has changes for Hebrew and Japanese; and as a consequence of
+other changes in 6.1, the Perl regular expression construct C<\X> now
+works differently for some characters in Thai and Lao.
+
+New aliases (synonyms) have been defined for many property values;
+these, along with the previously existing ones, are all cross indexed in
+L<perluniprops>.
+
+The return value of C<charnames::viacode> is affected by other changes.
+One of these is that the preferred name (which is what C<viacode>
+returns) for the character at U+2118 has been changed from SCRIPT CAPITAL P
+to WEIERSTRASS ELLIPTIC FUNCTION.  But most of these changes are the
+fallout of the mistake Unicode 6.0 made in naming a character used in
+Japanese cell phones to be "BELL", which conflicts with the long
+standing industry use of (and Unicode's recommendation to use) that name
+to mean the ASCII control character at U+0007.  As a result, that name
+has been deprecated in Perl since v5.14; and any use of it will raise a
+warning message (unless turned off).  The name "ALERT" is now the
+preferred name for this code point, with "BEL" being an acceptable short
+form.  The name for the new cell phone character, at code point U+1F514,
+remains undefined in this version of Perl (hence we don't quite
+implement all of Unicode 6.1), but starting in v5.18, BELL will mean
+this character, and not U+0007.
+
+Unicode has taken steps to make sure that this sort of mistake does not
+happen again.  The Standard now includes all the generally accepted
+names and abbreviations for control characters, whereas previously it
+didn't.  This means that all the names that Perl had previously
+deprecated (except BELL) are no longer deprecated, such as FILE
+SEPARATOR.  Also, the names for four rarely used characters are subtly
+different (a hyphen instead of a space) than before:
+
+ Code point    Old Name         New Name
+   U+008E    SINGLE-SHIFT 2   SINGLE-SHIFT-2
+   U+008F    SINGLE-SHIFT 3   SINGLE-SHIFT-3
+   U+0091    PRIVATE USE 1    PRIVATE USE-1
+   U+0092    PRIVATE USE 2    PRIVATE USE-2
+
+Perl will accept either name as input, but C<charnames::viacode> now
+returns the new name.
+
+Additional name abbreviations are accepted:
+SP for SPACE;
+TAB for CHARACTER TABULATION;
+NEW LINE, END OF LINE, NL, and EOL for LINE FEED;
+LOCKING-SHIFT ONE for SHIFT OUT;
+LOCKING-SHIFT ZERO for SHIFT IN;
+and ZWNBSP for ZERO WIDTH NO-BREAK SPACE.
+
+More details on this version of Unicode are provided in
+L<http://www.unicode.org/versions/Unicode6.1.0/>.
 
 =head1 Security
 
@@ -64,85 +143,44 @@ L</Selected Bug Fixes> section.
 XXX For a release on a stable branch, this section aspires to be:
 
     There are no changes intentionally incompatible with 5.XXX.XXX
-    If any exist, they are bugs and reports are welcome.
+    If any exist, they are bugs, and we request that you submit a
+    report.  See L</Reporting Bugs> below.
 
 [ List each incompatible change as a =head2 entry ]
 
-=head2 C<substr> lvalue revamp
+=head2 Special blocks called in void context
 
-When C<substr> is called in lvalue or potential lvalue context with two or
-three arguments, a special lvalue scalar is returned that modifies the
-original string (the first argument) when assigned to.
+Special blocks (C<BEGIN>, C<CHECK>, C<INIT>, C<UNITCHECK>, C<END>) are now
+called in void context.  This avoids wasteful copying of the result of the
+last statement [perl #108794].
 
-Previously, the offsets (the second and third arguments) passed to
-C<substr> would be converted immediately to match the string, negative
-offsets being translated to positive and offsets beyond the end of the
-string being truncated.
+=head2 The C<overloading> pragma and regexp objects
 
-Now, the offsets are recorded without modification in the special lvalue
-scalar that is returned, and the original string is not even looked at by
-C<substr> itself, but only when the returned lvalue is read or modified.
+With C<no overloading>, regular expression objects returned by C<qr//> are
+now stringified as "Regexp=REGEXP(0xbe600d)" instead of the regular
+expression itself [perl #108780].
 
-These changes result in several incompatible changes and bug fixes:
+=head2 Two XS typemap Entries removed
 
-=over
+Two presumably unused XS typemap entries have been removed from the
+core typemap: T_DATAUNIT and T_CALLBACK. If you are, against all odds,
+a user of these, please see the instructions on how to regain them
+in L<perlxstypemap>.
 
-=item *
+=head2 Unicode 6.1 has incompatibilities with Unicode 6.0
 
-If the original string changes length after the call to C<substr> but
-before assignment to its return value, negative offsets will remember
-their position from the end of the string, affecting code like this:
+These are detailed in L</Supports (almost) Unicode 6.1> above.
 
-    my $string = "string";
-    my $lvalue = \substr $string, -4, 2;
-    print $lvalue, "\n"; # prints "ri"
-    $string = "bailing twine";
-    print $lvalue, "\n"; # prints "wi"; used to print "il"
+=head2 Changed returns for some properties in C<Unicode::UCD::prop_invmap()>
 
-The same thing happens with an omitted third argument.  The returned lvalue
-will always extend to the end of the string, even if the string becomes
-longer.
+The return values for C<prop_invmap> have been changed for some
+properties to make the returned lists significantly smaller.  This
+allows those lists to be searched faster.
 
-=item *
+This function was introduced earlier in the v5.15 series of releases,
+and the API will not be considered stable until v5.16.
 
-Tied (and otherwise magical) variables are no longer exempt from the
-"Attempt ot use reference as lvalue in substr" warning.
-
-=item *
-
-That warning now occurs when the returned lvalue is assigned to, not when
-C<substr> itself is called.  This only makes a difference if the return
-value of C<substr> is referenced and assigned to later.
-
-=item *
-
-The order in which "uninitialized" warnings occur for arguments to
-C<substr> has changed.
-
-=item *
-
-Passing a substring of a read-only value or a typeglob to a function (potential lvalue context) no longer causes an immediate "Can't coerce" or "Modification of a read-only value" error.  That error only occurs if and
-when the value passed is assigned to.
-
-The same thing happens with the "substr outside of string" error.  If the
-lvalue is only read, not written to, it is now just a warning, as with
-rvalue C<substr>.
-
-=item *
-
-C<substr> assignments no longer call FETCH twice if the first argument is a
-tied variable, but just once.
-
-=back
-
-It was impossible to fix all the bugs without an incompatible change, and
-the behaviour of negative offsets was never specified, so the change was
-deemed acceptable.
-
-=head2 XS API tweak
-
-The C<newCONSTSUB_flags> C-level function, added in 5.15.4, now has a
-C<len> parameter.
+See L<Unicode::UCD/prop_invmap()> for details on the new interface.
 
 =head1 Deprecations
 
@@ -163,29 +201,7 @@ may well be none in a stable release.
 
 =item *
 
-Perl 5.12.0 sped up the destruction of objects whose classes define empty
-C<DESTROY> methods (to prevent autoloading), simply by not calling such
-empty methods.  This release takes this optimisation a step further, by not
-calling any C<DESTROY> method that begins with an C<return> statement.
-This can be useful for destructors that are only used for debugging:
-
-    use constant DEBUG => 1;
-    sub DESTROY { return unless DEBUG; ... }
-
-Constant-folding will reduce the first statement to C<return;> if DEBUG is
-set to 0, triggering this optimisation.
-
-=item *
-
-Assign to a variable that holds a typeglob or copy-on-write scalar is now
-much faster.  Previously the typeglob would be stringified or the
-copy-on-write scalar would be copied before being clobbered.
-
-=item *
-
-Assignment to a substring in void context is now more than twice its
-previous speed.  Instead of creating and returning a special lvalue scalar
-that is then assigned to, C<substr> modifies the original string itself.
+XXX
 
 =back
 
@@ -207,7 +223,8 @@ cribbed.
 
 =item *
 
-XXX
+The C<mmap> PerlIO layer is no longer implemented by perl itself, but has
+been moved out into the new L<PerlIO::mmap> module.
 
 =back
 
@@ -217,112 +234,109 @@ XXX
 
 =item *
 
-L<Archive::Tar> has been upgraded from version 1.80 to version 1.82.
+L<arybase> has been upgraded from version 0.03 to version 0.04.
 
-Adjustments to handle files >8gb (>0777777777777 octal) and a feature to
-return the MD5SUM of files in the archive.
-
-=item *
-
-L<AutoLoader> has been upgraded from version 5.71 to version 5.72.
+List slices no longer modify items on the stack belonging to outer lists
+[perl #109570].
 
 =item *
 
-L<B::Debug> has been upgraded from version 1.16 to version 1.17.
+L<B> has been upgraded from version 1.33 to version 1.34.
+
+C<B::COP> now has a C<stashflags> method, corresponding to a new internal
+field added in 5.15.4 [perl #108860].
 
 =item *
 
-L<B::Deparse> has been upgraded from version 1.09 to 1.10.
+L<Carp> has been upgraded from version 1.24 to version 1.25.
 
-C<sort(foo(bar))> is now deparsed correctly. (C<sort foo(bar)>, how it used
-to deparse, makes foo the sort routine, rather than a regular function
-call.)
-
-=item *
-
-L<Compress::Raw::Zlib> has been upgraded from version 2.042 to version 2.045.
+It now puts a dot after the file and line number, just like errors from
+C<die> [perl #106538].
 
 =item *
 
-L<Compress::Raw::Bzip2> has been upgraded from version 2.042 to version 2.045.
+L<Compress::Raw::Bzip2> has been upgraded from version 2.045 to version 2.048.
 
 =item *
 
-L<CPANPLUS> has been upgraded from version 0.9112 to version 0.9113.
+L<Compress::Raw::Zlib> has been upgraded from version 2.045 to version 2.048.
 
 =item *
 
-L<Data::Dumper> has been upgraded from version 2.134 to 2.135.
-
-The XS implementation has been updated to account for the Unicode symbol
-changes in Perl 5.15.4.  It also knows how to output typeglobs with nulls
-in their names.
+L<Compress::Zlib> has been upgraded from version 2.046 to version 2.048.
 
 =item *
 
-L<ExtUtils::ParseXS> has been upgraded from version 3.05 to version 3.07.
+L<CPAN::Meta> has been upgraded from version 2.113640 to version 2.120351.
+
+Work around a memory leak bug involving version objects in boolean context.
 
 =item *
 
-L<IO::Compress::Base> has been upgraded from version 2.042 to version 2.045.
-
-Added zipdetails utility.
+L<CPAN::Meta::YAML> has been upgraded from version 0.005 to version 0.006.
 
 =item *
 
-L<Locale::Codes> has been upgraded from version 3.18 to version 3.20.
-
-The code2XXX, XXX2code, all_XXX_codes, and all_XXX_names functions now support retired codes.
-All codesets may be specified by a constant or by their name now. Previously,
-they were specified only by a constant.
-The alias_code function exists for backward compatibility. It has been replaced by rename_country_code.
-The alias_code function will be removed sometime after September, 2013.
-All work is now done in the central module (Locale::Codes). Previously, some was still done in the
-wrapper modules (Locale::Codes::*) but that is gone now.
-Added Language Family codes (langfam) as defined in ISO 639-5.
+L<DB_File> has been upgraded from version 1.824 to version 1.826.
 
 =item *
 
-L<Module::Loaded> has been uprgaded from version 0.06 to version 0.08.
+L<diagnostics> has been upgraded from version 1.27 to version 1.28.
+
+When searching for F<perldiag.pod>, it no longer uses paths that were only
+relevant on Perl 5.004 and earlier.
 
 =item *
 
-L<Pod::LaTeX> has been upgraded from version 0.59 to version 0.60.
+L<ExtUtils::ParseXS> has been upgraded from version 3.12 to version 3.15.
 
-Added another LaTeX escape: --- => -{}-{}-
-
-Pod::LaTeX doesn't handle -- in PODs specially, passing it directly to
-LaTeX, which then proceeds to replace it with a single -. This patch
-replaces ----- with -{}-{}-{}-{}-
+The new version comes with important tools for sharing typemaps between
+different CPAN distributions.
 
 =item *
 
-L<POSIX> has been upgraded from version 1.26 to 1.27.
+L<File::Copy> has been upgraded from version 2.21 to version 2.23.
 
-It no longer produces a "Constant subroutine TCSANOW redefined" warning on
-Windows.
-
-XXX When did it start producing that warning?  Was it post-5.15.5?  Even if
-it was not, adding a note will help whoever compiles perl5160delta.
+It no longer emits warnings when copying files with newlines in their names
+[perl #109104].
 
 =item *
 
-L<Socket> has been upgraded from version 1.94_02 to version 1.96.
+L<IPC::Cmd> has been upgraded from version 0.72 to version 0.76.
 
 =item *
 
-L<Unicode::Collate> has been upgraded from version 0.85 to version 0.87.
+L<Math::Complex> has been upgraded from version 1.58 to version 1.59.
 
-Tailored compatibility ideographs as well as unified ideographs for
-the locales: ja, ko, zh__big5han, zh__gb2312han, zh__pinyin, zh__stroke.
-
-Now Locale/*.pl files are searched in @INC.
+This avoids a new core warning.
 
 =item *
 
-L<UNIVERSAL> has been upgraded from version 1.10 to 1.11.
+L<Pod::Parser> has been upgraded from version 1.37 to version 1.51.
 
-Documentation change clarifies return values from UNIVERSAL::VERSION.
+=item *
+
+L<Term::ReadLine> has been upgraded from version 1.07 to version 1.08.
+
+Its C<tkRunning> method now supports L<AnyEvent> event loops, and not just
+L<Tk>.  A more general mechanism has been proposed, so this may be reverted
+before Perl 5.16 [perl #108470].
+
+=item *
+
+L<Time::HiRes>  has been upgraded from version 1.9724 to version 1.9725.
+
+C<Time::HiRes::stat()> no longer corrupts the Perl stack.
+
+=item *
+
+L<Unicode::UCD> has been upgraded from version 0.39 to 0.40.
+
+The only change is to fix a formatting error in the Pod.
+
+=item *
+
+L<Version::Requirements> has been upgraded from version 0.101021 to version 0.101022.
 
 =back
 
@@ -344,6 +358,12 @@ file and be sure to link to the appropriate page, e.g. L<perlfunc>.
 =head2 New Documentation
 
 XXX Changes which create B<new> files in F<pod/> go here.
+
+=head3 L<perlxstypemap>
+
+The new manual describes the XS typemapping mechanism in unprecedented
+detail and combines new documentation with information extracted from
+L<perlxs> and the previously unofficial list of all core typemaps.
 
 =head3 L<XXX>
 
@@ -414,20 +434,7 @@ XXX Changes (i.e. rewording) of diagnostic messages go here
 
 =item *
 
-Redefinition warnings for constant subroutines used to be mandatory, even
-occurring under C<no warnings>.  Now they respect the L<warnings> pragma.
-
-=item *
-
-The "Attempt to free non-existent shared string" has had the spelling of
-"non-existent" corrected to "nonexistent".  It was already listed with the
-correct spelling in L<perldiag>.
-
-=item *
-
-The 'Use of "foo" without parentheses is ambiguous' warning has been
-extended to apply also to user-defined subroutines with a (;$) prototype,
-and not just to built-in functions.
+XXX Describe change here
 
 =back
 
@@ -440,14 +447,13 @@ here. Most of these are built within the directories F<utils> and F<x2p>.
 entries for each change
 Use L<XXX> with program names to get proper documentation linking. ]
 
-=head3 L<zipdetails>
+=head3 L<XXX>
 
 =over 4
 
 =item *
 
-L<zipdetails> displays information about the internal record structure of the zip file.
-It is not concerned with displaying any details of the compressed data stored in the zip file.
+XXX
 
 =back
 
@@ -464,16 +470,7 @@ L</Platform Support> section, instead.
 
 =item *
 
-F<pod/roffitall> is now build by F<pod/buildtoc>, instead of being shipped
-with the distribution. Its list of manpages is now generated (and therefore
-current). See also RT #103202 for an unresolved related issue.
-
-=item *
-
-Perl 5.15.5 had a bug in its installation script, which did not install
-F<unicore/Name.pm>.  This has been corrected [perl #104226].
-
-XXX Is that Perl version correct?  Is the file path correct?
+XXX
 
 =back
 
@@ -491,10 +488,12 @@ that they represent may be covered elsewhere.
 
 =item *
 
-The F<substr.t> and F<substr_thr.t> scripts for testing C<substr> have been
-moved under F<t/op/>, where they were originally.  They had been moved
-under F<t/re/> along with the substitution tests when that directory was
-created.
+XXX
+
+=item *
+
+The test suite for typemaps has been extended to cover a larger fraction of
+the core typemaps.
 
 =back
 
@@ -575,137 +574,72 @@ L</Modules and Pragmata>.
 
 =item *
 
-A constant subroutine assigned to a glob whose name contains a null will no
-longer cause extra globs to pop into existence when the constant is
-referenced under its new name.
+C<~~> now correctly handles the precedence of Any~~Object, and is not tricked
+by an overloaded object on the left-hand side.
 
 =item *
 
-C<sort> was not treating C<sub {}> and C<sub {()}> as equivalent when such
-a sub was provided as the comparison routine.  It used to croak on
-C<sub {()}>.
+C<stat _> no longer warns about unopened filehandles [perl #71002].
 
 =item *
 
-Subroutines from the C<autouse> namespace are once more exempt from
-redefinition warnings.  This used to work in 5.005, but was broken in 5.6
-for most subroutines.  For subs created via XS that redefine subroutines
-from the C<autouse> package, this stopped working in 5.10.
+C<stat> on an unopened filehandle now warns consistently, instead of
+skipping the warning at times.
 
 =item *
 
-New XSUBs now produce redefinition warnings if they overwrite existing
-subs, as they did in 5.8.x.  (The C<autouse> logic was reversed in 5.10-14.
-Only subroutines from the C<autouse> namespace would warn when clobbered.)
+A change in an earlier 5.15 release caused warning hints to propagate into
+C<do $file>.  This has been fixed [rt.cpan.org #72767].
 
 =item *
 
-Redefinition warnings triggered by the creation of XSUBs now respect
-Unicode glob names, instead of using the internal representation.  This was
-missed in 5.15.4, partly because this warning was so hard to trigger.  (See
-the previous item.)
+Starting with 5.12.0, Perl used to get its internal bookkeeping muddled up
+after assigning C<${ qr// }> to a hash element and locking it with
+L<Hash::Util>.  This could result in double frees, crashes or erratic
+behaviour.
 
 =item *
 
-C<newCONSTSUB> used to use compile-time warning hints, instead of run-time
-hints.  The following code should never produce a redefinition warning, but
-it used to, if C<newCONSTSUB> redefine and existing subroutine:
-
-    use warnings;
-    BEGIN {
-	no warnings;
-	some_XS_function_that_calls_new_CONSTSUB();
-    }
+In 5.15.7, some typeglobs in the CORE namespace were made read-only by
+mistake.  This has been fixed [rt.cpan.org #74289].
 
 =item *
 
-Redefinition warnings for constant subroutines are on by default (what are
-known as severe warnings in L<perldiag>).  This was only the case when it
-was a glob assignment or declaration of a Perl subroutine that caused the
-warning.  If the creation of XSUBs triggered the warning, it was not a
-default warning.  This has been corrected.
+C<-t> now works when stacked with other filetest operators [perl #77388].
 
 =item *
 
-The internal check to see whether a redefinition warning should occur used
-to emit "uninitialized" warnings in cases like this:
-
-    use warnings "uninitialized";
-    use constant {u=>undef,v=>undef};
-    sub foo(){u} sub foo(){v}
+Stacked filetest operators now only call FETCH once on a tied argument.
 
 =item *
 
-A bug fix in Perl 5.14 introduced a new bug, causing "uninitialized"
-warnings to report the wrong variable if the operator in question has
-two operands and one is C<%{...}> or C<@{...}>.  This has been fixed
-[perl #103766].
+C</.*/g> would sometimes refuse to match at the end of a string that ends
+with "\n".  This has been fixed [perl #109206].
 
 =item *
 
-C<< version->new("version") >> and C<printf "%vd", "version"> no longer
-crash [perl #102586].
+Method calls whose arguments were all surrounded with C<my()> or C<our()>
+(as in C<<$object->method(my($a,$b)) >>) used to force lvalue context on
+the subroutine.  This would prevent lvalue methods from returning certain
+values.  Due to lvalue fixes earlier in the 5.15.x series, it would also
+prevent non-lvalue methods from being called [perl #109264].
+
+=for comment
+This bug I<did> affect earlier stable releases.  It is just the last
+sentence that does not apply to 5.14.
 
 =item *
 
-C<$tied =~ y/a/b/>, C<chop $tied> and C<chomp $tied> now call FETCH just
-once when $tied holds a reference.
+The C<SvPVutf8> C function no longer tries to modify its argument,
+resulting in errors [perl #108994].
 
 =item *
 
-Four-argument C<select> now always calls FETCH on tied arguments.  It used
-to skip the call if the tied argument happened to hold C<undef> or a
-typeglob.
+C<SvPVutf8> now works properly with magical variables.
 
 =item *
 
-Four-argument C<select> no longer produces its "Non-string passed as
-bitmask" warning on tied or tainted variables that are strings.
-
-=item *
-
-C<sysread> now always calls FETCH on the buffer passed to it if it is tied.
-It used to skip the call if the tied variable happened to hold a typeglob.
-
-=item *
-
-C<< $tied .= <> >> now calls FETCH once on C<$tied>.  It used to call it
-multiple times if the last value assigned to or returned from the tied
-variable was anything other than a string or typeglob.
-
-=item *
-
-The C<evalbytes> keyword added in 5.15.5 was respecting C<use utf8>
-declarations from the outer scope, when it should have been ignoring them.
-
-=item *
-
-C<goto &func> no longers crashes, but produces an error message, when the
-unwinding of the current subroutine's scope fires a destructor that
-undefines the subroutine being "goneto" [perl #99850].
-
-=item *
-
-Arithmetic assignment (C<$left += $right>) involving overloaded objects that
-rely on the 'nomethod' override no longer segfault when the left operand is not
-overloaded.
-
-=item *
-
-Assigning C<__PACKAGE__> or any other shared hash key scalar to a stash
-element no longer causes a double free.  Regardless of this change, the
-results of such assignments are still undefined.
-
-=item *
-
-Creating a C<UNIVERSAL::AUTOLOAD> sub no longer stops C<%+>, C<%-> and
-C<%!> from working some of the time [perl #105024].
-
-=item *
-
-Assigning C<__PACKAGE__> or another shared hash key string to a variable no
-longer stops that variable from being tied if it happens to be a PVMG or
-PVLV internally.
+C<SvPVbyte> now works properly non-PVs.
 
 =back
 
@@ -737,7 +671,7 @@ here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.15.5..HEAD
+  perl Porting/acknowledgements.pl v5.15.7..HEAD
 
 =head1 Reporting Bugs
 

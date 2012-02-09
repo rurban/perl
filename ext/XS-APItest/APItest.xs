@@ -3174,6 +3174,13 @@ CODE:
 	HeVAL(entry) = NULL;
     }
 
+HV *
+newHVhv(HV *hv)
+CODE:
+    RETVAL = newHVhv(hv);
+OUTPUT:
+    RETVAL
+
 bool
 SvIsCOW(SV *sv)
 CODE:
@@ -3263,6 +3270,20 @@ SV *
 xs_cmp_undef(SV *a, SV *b)
 CODE:
     RETVAL = &PL_sv_undef;
+OUTPUT:
+    RETVAL
+
+char *
+SvPVbyte(SV *sv)
+CODE:
+    RETVAL = SvPVbyte_nolen(sv);
+OUTPUT:
+    RETVAL
+
+char *
+SvPVutf8(SV *sv)
+CODE:
+    RETVAL = SvPVutf8_nolen(sv);
 OUTPUT:
     RETVAL
 

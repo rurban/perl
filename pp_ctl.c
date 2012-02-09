@@ -130,6 +130,13 @@ PP(pp_regcomp)
 	       sv_setsv(tmpstr, sv);
 	       continue;
 	    }
+
+	    if (SvROK(msv) && SvTYPE(SvRV(msv)) == SVt_REGEXP) {
+		msv = SvRV(msv);
+		PL_reginterp_cnt +=
+		    RX_SEEN_EVALS((REGEXP *)MUTABLE_PTR(msv));
+	    }
+
 	    sv_catsv_nomg(tmpstr, msv);
 	}
     	SvSETMAGIC(tmpstr);
@@ -1394,6 +1401,7 @@ S_dopoptolabel(pTHX_ const char *label)
 	case CXt_FORMAT:
 	case CXt_EVAL:
 	case CXt_NULL:
+	    /* diag_listed_as: Exiting subroutine via %s */
 	    Perl_ck_warner(aTHX_ packWARN(WARN_EXITING), "Exiting %s via %s",
 			   context_name[CxTYPE(cx)], OP_NAME(PL_op));
 	    if (CxTYPE(cx) == CXt_NULL)
@@ -1531,6 +1539,7 @@ S_dopoptoloop(pTHX_ I32 startingblock)
 	case CXt_FORMAT:
 	case CXt_EVAL:
 	case CXt_NULL:
+	    /* diag_listed_as: Exiting subroutine via %s */
 	    Perl_ck_warner(aTHX_ packWARN(WARN_EXITING), "Exiting %s via %s",
 			   context_name[CxTYPE(cx)], OP_NAME(PL_op));
 	    if ((CxTYPE(cx)) == CXt_NULL)
@@ -2395,6 +2404,7 @@ S_return_lvalues(pTHX_ SV **mark, SV **sp, SV **newsp, I32 gimme,
 		    POPSUB(cx,sv);
 		    PL_curpm = newpm;
 		    LEAVESUB(sv);
+	       /* diag_listed_as: Can't return %s from lvalue subroutine */
 		    Perl_croak(aTHX_
 			"Can't return a %s from lvalue subroutine",
 			SvREADONLY(TOPs) ? "readonly value" : "temporary");
@@ -2484,7 +2494,7 @@ PP(pp_return)
 	retop = cx->blk_sub.retop;
 	break;
     default:
-	DIE(aTHX_ "panic: return");
+	DIE(aTHX_ "panic: return, type=%u", (unsigned) CxTYPE(cx));
     }
 
     TAINT_NOT;
@@ -2494,7 +2504,8 @@ PP(pp_return)
 	if (MARK < SP) {
 	    if (popsub2) {
 		if (cx->blk_sub.cv && CvDEPTH(cx->blk_sub.cv) > 1) {
-		    if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1) {
+		    if (SvTEMP(TOPs) && SvREFCNT(TOPs) == 1
+			 && !SvMAGICAL(TOPs)) {
 			*++newsp = SvREFCNT_inc(*SP);
 			FREETMPS;
 			sv_2mortal(*newsp);
@@ -2506,7 +2517,8 @@ PP(pp_return)
 			SvREFCNT_dec(sv);
 		    }
 		}
-		else if (SvTEMP(*SP) && SvREFCNT(*SP) == 1) {
+		else if (SvTEMP(*SP) && SvREFCNT(*SP) == 1
+			  && !SvMAGICAL(*SP)) {
 		    *++newsp = *SP;
 		}
 		else
@@ -2521,6 +2533,7 @@ PP(pp_return)
       else if (gimme == G_ARRAY) {
 	while (++MARK <= SP) {
 	    *++newsp = popsub2 && SvTEMP(*MARK) && SvREFCNT(*MARK) == 1
+			       && !SvGMAGICAL(*MARK)
 			? *MARK : sv_mortalcopy(*MARK);
 	    TAINT_NOT;		/* Each item is independent */
 	}
@@ -2628,7 +2641,7 @@ PP(pp_last)
 	nextop = cx->blk_sub.retop;
 	break;
     default:
-	DIE(aTHX_ "panic: last");
+	DIE(aTHX_ "panic: last, type=%u", (unsigned) CxTYPE(cx));
     }
 
     TAINT_NOT;
@@ -2837,8 +2850,10 @@ PP(pp_goto)
 	    /* ban goto in eval: see <20050521150056.GC20213@iabyn.com> */
 	    if (CxTYPE(cx) == CXt_EVAL) {
 		if (CxREALEVAL(cx))
+		/* diag_listed_as: Can't goto subroutine from an eval-%s */
 		    DIE(aTHX_ "Can't goto subroutine from an eval-string");
 		else
+		/* diag_listed_as: Can't goto subroutine from an eval-%s */
 		    DIE(aTHX_ "Can't goto subroutine from an eval-block");
 	    }
 	    else if (CxMULTICALL(cx))
@@ -3050,7 +3065,8 @@ PP(pp_goto)
 		DIE(aTHX_ "Can't \"goto\" out of a pseudo block");
 	    default:
 		if (ix)
-		    DIE(aTHX_ "panic: goto");
+		    DIE(aTHX_ "panic: goto, type=%u, ix=%ld",
+			CxTYPE(cx), (long) ix);
 		gotoprobe = PL_main_root;
 		break;
 	    }
@@ -3469,8 +3485,8 @@ S_try_yyparse(pTHX_ int gramtype)
 /* This function is called from three places, sv_compile_2op, pp_return
  * and pp_entereval.  These can be distinguished as follows:
  *    sv_compile_2op - startop is non-null
- *    pp_require     - startop is null; in_require is true
- *    pp_entereval   - stortop is null; in_require is false
+ *    pp_require     - startop is null; saveop is not entereval
+ *    pp_entereval   - startop is null; saveop is entereval
  */
 
 STATIC bool
@@ -3540,8 +3556,9 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 	CLEAR_ERRSV();
 
     if (!startop) {
+	bool clear_hints = saveop->op_type != OP_ENTEREVAL;
 	SAVEHINTS();
-	if (in_require) {
+	if (clear_hints) {
 	    PL_hints = 0;
 	    hv_clear(GvHV(PL_hintgv));
 	}
@@ -3555,7 +3572,7 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq, HV *hh)
 	    }
 	}
 	SAVECOMPILEWARNINGS();
-	if (in_require) {
+	if (clear_hints) {
 	    if (PL_dowarn & G_WARN_ALL_ON)
 	        PL_compiling.cop_warnings = pWARN_ALL ;
 	    else if (PL_dowarn & G_WARN_ALL_OFF)
@@ -4545,7 +4562,7 @@ S_do_smartmatch(pTHX_ HV *seen_this, HV *seen_other, const bool copied)
 	DEBUG_M(Perl_deb(aTHX_ "    applying rule Any-Object\n"));
 	DEBUG_M(Perl_deb(aTHX_ "        attempting overload\n"));
 
-	tmpsv = amagic_call(d, e, smart_amg, 0);
+	tmpsv = amagic_call(d, e, smart_amg, AMGf_noleft);
 	if (tmpsv) {
 	    SPAGAIN;
 	    (void)POPs;
@@ -5024,7 +5041,9 @@ PP(pp_leavewhen)
 
     cxix = dopoptogiven(cxstack_ix);
     if (cxix < 0)
-	DIE(aTHX_ "Can't use when() outside a topicalizer");
+	/* diag_listed_as: Can't "when" outside a topicalizer */
+	DIE(aTHX_ "Can't \"%s\" outside a topicalizer",
+	           PL_op->op_flags & OPf_SPECIAL ? "default" : "when");
 
     POPBLOCK(cx,newpm);
     assert(CxTYPE(cx) == CXt_WHEN);
@@ -5467,14 +5486,11 @@ S_run_user_filter(pTHX_ int idx, SV *buf_sv, int maxlen)
 	int count;
 
 	ENTER_with_name("call_filter_sub");
-	save_gp(PL_defgv, 0);
-	GvINTRO_off(PL_defgv);
-	SAVEGENERICSV(GvSV(PL_defgv));
+	SAVE_DEFSV;
 	SAVETMPS;
 	EXTEND(SP, 2);
 
 	DEFSV_set(upstream);
-	SvREFCNT_inc_simple_void_NN(upstream);
 	PUSHMARK(SP);
 	mPUSHi(0);
 	if (filter_state) {

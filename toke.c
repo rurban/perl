@@ -595,6 +595,8 @@ S_missingterm(pTHX_ char *s)
     Perl_croak(aTHX_ "Can't find string terminator %c%s%c anywhere before EOF",q,s,q);
 }
 
+#include "feature.h"
+
 /*
  * Check whether the named feature is enabled.
  */
@@ -602,16 +604,18 @@ bool
 Perl_feature_is_enabled(pTHX_ const char *const name, STRLEN namelen)
 {
     dVAR;
-    HV * const hinthv = GvHV(PL_hintgv);
     char he_name[8 + MAX_FEATURE_LEN] = "feature_";
 
     PERL_ARGS_ASSERT_FEATURE_IS_ENABLED;
+
+    assert(CURRENT_FEATURE_BUNDLE == FEATURE_BUNDLE_CUSTOM);
 
     if (namelen > MAX_FEATURE_LEN)
 	return FALSE;
     memcpy(&he_name[8], name, namelen);
 
-    return (hinthv && hv_exists(hinthv, he_name, 8 + namelen));
+    return cBOOL(cop_hints_fetch_pvn(PL_curcop, he_name, 8 + namelen, 0,
+				     REFCOUNTED_HE_EXISTS));
 }
 
 /*
@@ -2185,11 +2189,13 @@ S_force_version(pTHX_ char *s, int guessing)
         if (*d == ';' || isSPACE(*d) || *d == '{' || *d == '}' || !*d) {
 	    SV *ver;
 #ifdef USE_LOCALE_NUMERIC
-	    char *loc = setlocale(LC_NUMERIC, "C");
+	    char *loc = savepv(setlocale(LC_NUMERIC, NULL));
+	    setlocale(LC_NUMERIC, "C");
 #endif
             s = scan_num(s, &pl_yylval);
 #ifdef USE_LOCALE_NUMERIC
 	    setlocale(LC_NUMERIC, loc);
+	    Safefree(loc);
 #endif
             version = pl_yylval.opval;
 	    ver = cSVOPx(version)->op_sv;
@@ -2916,7 +2922,7 @@ S_scan_const(pTHX_ char *start)
 	    }
 
 	    /* string-change backslash escapes */
-	    if (PL_lex_inwhat != OP_TRANS && *s && strchr("lLuUEQ", *s)) {
+	    if (PL_lex_inwhat != OP_TRANS && *s && strchr("lLuUEQF", *s)) {
 		--s;
 		break;
 	    }
@@ -3503,7 +3509,8 @@ S_scan_const(pTHX_ char *start)
     *d = '\0';
     SvCUR_set(sv, d - SvPVX_const(sv));
     if (SvCUR(sv) >= SvLEN(sv))
-	Perl_croak(aTHX_ "panic: constant overflowed allocated space");
+	Perl_croak(aTHX_ "panic: constant overflowed allocated space, %"UVuf
+		   " >= %"UVuf, (UV)SvCUR(sv), (UV)SvLEN(sv));
 
     SvPOK_on(sv);
     if (PL_encoding && !has_utf8) {
@@ -4470,7 +4477,9 @@ Perl_yylex(pTHX)
     case LEX_INTERPCASEMOD:
 #ifdef DEBUGGING
 	if (PL_bufptr != PL_bufend && *PL_bufptr != '\\')
-	    Perl_croak(aTHX_ "panic: INTERPCASEMOD");
+	    Perl_croak(aTHX_
+		       "panic: INTERPCASEMOD bufptr=%p, bufend=%p, *bufptr=%u",
+		       PL_bufptr, PL_bufend, *PL_bufptr);
 #endif
 	/* handle \E or end of string */
        	if (PL_bufptr == PL_bufend || PL_bufptr[1] == 'E') {
@@ -4480,7 +4489,8 @@ Perl_yylex(pTHX)
 		PL_lex_casestack[PL_lex_casemods] = '\0';
 
 		if (PL_bufptr != PL_bufend
-		    && (oldmod == 'L' || oldmod == 'U' || oldmod == 'Q')) {
+		    && (oldmod == 'L' || oldmod == 'U' || oldmod == 'Q'
+                        || oldmod == 'F')) {
 		    PL_bufptr += 2;
 		    PL_lex_state = LEX_INTERPCONCAT;
 #ifdef PERL_MAD
@@ -4491,6 +4501,11 @@ Perl_yylex(pTHX)
 		PL_lex_allbrackets--;
 		return REPORT(')');
 	    }
+            else if ( PL_bufptr != PL_bufend && PL_bufptr[1] == 'E' ) {
+               /* Got an unpaired \E */
+               Perl_ck_warner(aTHX_ packWARN(WARN_MISC),
+                        "Useless use of \\E");
+            }
 #ifdef PERL_MAD
 	    while (PL_bufptr != PL_bufend &&
 	      PL_bufptr[0] == '\\' && PL_bufptr[1] == 'E') {
@@ -4525,8 +4540,10 @@ Perl_yylex(pTHX)
 		if (!PL_madskills) /* when just compiling don't need correct */
 		    if (strnEQ(s, "L\\u", 3) || strnEQ(s, "U\\l", 3))
 			tmp = *s, *s = s[2], s[2] = (char)tmp;	/* misordered... */
-		if ((*s == 'L' || *s == 'U') &&
-		    (strchr(PL_lex_casestack, 'L') || strchr(PL_lex_casestack, 'U'))) {
+		if ((*s == 'L' || *s == 'U' || *s == 'F') &&
+		    (strchr(PL_lex_casestack, 'L')
+                        || strchr(PL_lex_casestack, 'U')
+                        || strchr(PL_lex_casestack, 'F'))) {
 		    PL_lex_casestack[--PL_lex_casemods] = '\0';
 		    PL_lex_allbrackets--;
 		    return REPORT(')');
@@ -4550,8 +4567,10 @@ Perl_yylex(pTHX)
 		    NEXTVAL_NEXTTOKE.ival = OP_UC;
 		else if (*s == 'Q')
 		    NEXTVAL_NEXTTOKE.ival = OP_QUOTEMETA;
+                else if (*s == 'F')
+		    NEXTVAL_NEXTTOKE.ival = OP_FC;
 		else
-		    Perl_croak(aTHX_ "panic: yylex");
+		    Perl_croak(aTHX_ "panic: yylex, *s=%u", *s);
 		if (PL_madskills) {
 		    SV* const tmpsv = newSVpvs("\\ ");
 		    /* replace the space with the character we want to escape
@@ -4658,7 +4677,8 @@ Perl_yylex(pTHX)
     case LEX_INTERPCONCAT:
 #ifdef DEBUGGING
 	if (PL_lex_brackets)
-	    Perl_croak(aTHX_ "panic: INTERPCONCAT");
+	    Perl_croak(aTHX_ "panic: INTERPCONCAT, lex_brackets=%ld",
+		       (long) PL_lex_brackets);
 #endif
 	if (PL_bufptr == PL_bufend)
 	    return REPORT(sublex_done());
@@ -5145,7 +5165,8 @@ Perl_yylex(pTHX)
 		if (d < PL_bufend)
 		    d++;
 		else if (d > PL_bufend) /* Found by Ilya: feed random input to Perl. */
-		  Perl_croak(aTHX_ "panic: input overflow");
+		    Perl_croak(aTHX_ "panic: input overflow, %p > %p",
+			       d, PL_bufend);
 #ifdef PERL_MAD
 		if (PL_madskills)
 		    PL_thiswhite = newSVpvn(s, d - s);
@@ -6230,6 +6251,7 @@ Perl_yylex(pTHX)
 		    if (*t == '}' || *t == ']') {
 			t++;
 			PL_bufptr = PEEKSPACE(PL_bufptr); /* XXX can realloc */
+       /* diag_listed_as: Scalar value @%s[%s] better written as $%s[%s] */
 			Perl_warner(aTHX_ packWARN(WARN_SYNTAX),
 			    "Scalar value %.*s better written as $%.*s",
 			    (int)(t-PL_bufptr), PL_bufptr,
@@ -7397,6 +7419,9 @@ Perl_yylex(pTHX)
 	case KEY_fork:
 	    FUN0(OP_FORK);
 
+	case KEY_fc:
+	    UNI(OP_FC);
+
 	case KEY_fcntl:
 	    LOP(OP_FCNTL,XTERM);
 
@@ -7672,6 +7697,7 @@ Perl_yylex(pTHX)
 		if ( *t && strchr("|&*+-=!?:.", *t) && ckWARN_d(WARN_PRECEDENCE)
 		    /* [perl #16184] */
 		    && !(t[0] == '=' && t[1] == '>')
+		    && !(t[0] == ':' && t[1] == ':')
 		    && !keyword(s, d-s, 0)
 		) {
 		    int parms_len = (int)(d-s);
@@ -7987,8 +8013,6 @@ Perl_yylex(pTHX)
 	case KEY_sort:
 	    checkcomma(s,PL_tokenbuf,"subroutine name");
 	    s = SKIPSPACE1(s);
-	    if (*s == ';' || *s == ')')		/* probably a close */
-		Perl_croak(aTHX_ "sort is now a reserved word");
 	    PL_expect = XTERM;
 	    s = force_word(s,WORD,TRUE,TRUE,FALSE);
 	    LOP(OP_SORT,XREF);
@@ -8134,7 +8158,7 @@ Perl_yylex(pTHX)
 				}
 				else {
 				    if ( underscore ) {
-					if ( *p != ';' )
+					if ( !strchr(";@%", *p) )
 					    bad_proto = TRUE;
 					underscore = FALSE;
 				    }
@@ -8600,7 +8624,7 @@ S_new_constant(pTHX_ const char *s, STRLEN len, const char *key, STRLEN keylen,
 	       SV *sv, SV *pv, const char *type, STRLEN typelen)
 {
     dVAR; dSP;
-    HV * const table = GvHV(PL_hintgv);		 /* ^H */
+    HV * table = GvHV(PL_hintgv);		 /* ^H */
     SV *res;
     SV **cvp;
     SV *cv, *typesv;
@@ -8608,43 +8632,57 @@ S_new_constant(pTHX_ const char *s, STRLEN len, const char *key, STRLEN keylen,
 
     PERL_ARGS_ASSERT_NEW_CONSTANT;
 
-    if (!table || !(PL_hints & HINT_LOCALIZE_HH)) {
-	SV *msg;
-	
-	why2 = (const char *)
-	    (strEQ(key,"charnames")
-	     ? "(possibly a missing \"use charnames ...\")"
-	     : "");
-	msg = Perl_newSVpvf(aTHX_ "Constant(%s) unknown: %s",
-			    (type ? type: "undef"), why2);
-
-	/* This is convoluted and evil ("goto considered harmful")
-	 * but I do not understand the intricacies of all the different
-	 * failure modes of %^H in here.  The goal here is to make
-	 * the most probable error message user-friendly. --jhi */
-
-	goto msgdone;
-
-    report:
-	msg = Perl_newSVpvf(aTHX_ "Constant(%s): %s%s%s",
-			    (type ? type: "undef"), why1, why2, why3);
-    msgdone:
-	yyerror(SvPVX_const(msg));
- 	SvREFCNT_dec(msg);
-  	return sv;
-    }
-
     /* charnames doesn't work well if there have been errors found */
     if (PL_error_count > 0 && strEQ(key,"charnames"))
 	return &PL_sv_undef;
 
-    cvp = hv_fetch(table, key, keylen, FALSE);
-    if (!cvp || !SvOK(*cvp)) {
+    if (!table
+	|| ! (PL_hints & HINT_LOCALIZE_HH)
+	|| ! (cvp = hv_fetch(table, key, keylen, FALSE))
+	|| ! SvOK(*cvp))
+    {
+	SV *msg;
+	
+	/* Here haven't found what we're looking for.  If it is charnames,
+	 * perhaps it needs to be loaded.  Try doing that before giving up */
+	if (strEQ(key,"charnames")) {
+	    Perl_load_module(aTHX_
+		            0,
+			    newSVpvs("_charnames"),
+			     /* version parameter; no need to specify it, as if
+			      * we get too early a version, will fail anyway,
+			      * not being able to find '_charnames' */
+			    NULL,
+			    newSVpvs(":full"),
+			    newSVpvs(":short"),
+			    NULL);
+	    SPAGAIN;
+	    table = GvHV(PL_hintgv);
+	    if (table
+		&& (PL_hints & HINT_LOCALIZE_HH)
+		&& (cvp = hv_fetch(table, key, keylen, FALSE))
+		&& SvOK(*cvp))
+	    {
+		goto now_ok;
+	    }
+	}
+	if (!table || !(PL_hints & HINT_LOCALIZE_HH)) {
+	    msg = Perl_newSVpvf(aTHX_
+			    "Constant(%s) unknown", (type ? type: "undef"));
+	}
+	else {
 	why1 = "$^H{";
 	why2 = key;
 	why3 = "} is not defined";
-	goto report;
+    report:
+	msg = Perl_newSVpvf(aTHX_ "Constant(%s): %s%s%s",
+			    (type ? type: "undef"), why1, why2, why3);
+	}
+	yyerror(SvPVX_const(msg));
+ 	SvREFCNT_dec(msg);
+  	return sv;
     }
+now_ok:
     sv_2mortal(sv);			/* Parent created it permanently */
     cv = *cvp;
     if (!pv && s)
@@ -8974,7 +9012,7 @@ S_pmflag(pTHX_ const char* const valid_flags, U32 * pmfl, char** s, char* charse
 		    goto deprecate;
 		}
 		Perl_ck_warner_d(aTHX_ packWARN(WARN_AMBIGUOUS),
-		    "Ambiguous use of 's//le...' resolved as 's// le...'; Rewrite as 's//el' if you meant 'use locale rules and evaluate rhs as an expression'.  In Perl 5.16, it will be resolved the other way");
+		    "Ambiguous use of 's//le...' resolved as 's// le...'; Rewrite as 's//el' if you meant 'use locale rules and evaluate rhs as an expression'.  In Perl 5.18, it will be resolved the other way");
 		return FALSE;
 	    }
 	    if (*charset) {
@@ -10155,7 +10193,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
     switch (*s) {
     default:
-      Perl_croak(aTHX_ "panic: scan_num");
+	Perl_croak(aTHX_ "panic: scan_num, *s=%d", *s);
 
     /* if it starts with a 0, it could be an octal number, a decimal in
        0.13 disguise, or a hexadecimal number, or a binary number. */
@@ -10799,6 +10837,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	if (s[1] == 0xFE) {
 	    /* UTF-16 little-endian? (or UTF-32LE?) */
 	    if (s[2] == 0 && s[3] == 0)  /* UTF-32 little-endian */
+		/* diag_listed_as: Unsupported script encoding %s */
 		Perl_croak(aTHX_ "Unsupported script encoding UTF-32LE");
 #ifndef PERL_NO_UTF16_FILTER
 	    if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16LE script encoding (BOM)\n");
@@ -10807,6 +10846,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		s = add_utf16_textfilter(s, TRUE);
 	    }
 #else
+	    /* diag_listed_as: Unsupported script encoding %s */
 	    Perl_croak(aTHX_ "Unsupported script encoding UTF-16LE");
 #endif
 	}
@@ -10820,6 +10860,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		s = add_utf16_textfilter(s, FALSE);
 	    }
 #else
+	    /* diag_listed_as: Unsupported script encoding %s */
 	    Perl_croak(aTHX_ "Unsupported script encoding UTF-16BE");
 #endif
 	}
@@ -10835,6 +10876,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	     if (s[1] == 0) {
 		  if (s[2] == 0xFE && s[3] == 0xFF) {
 		       /* UTF-32 big-endian */
+		       /* diag_listed_as: Unsupported script encoding %s */
 		       Perl_croak(aTHX_ "Unsupported script encoding UTF-32BE");
 		  }
 	     }
@@ -10846,6 +10888,7 @@ S_swallow_bom(pTHX_ U8 *s)
 		  if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16BE script encoding (no BOM)\n");
 		  s = add_utf16_textfilter(s, FALSE);
 #else
+		  /* diag_listed_as: Unsupported script encoding %s */
 		  Perl_croak(aTHX_ "Unsupported script encoding UTF-16BE");
 #endif
 	     }
@@ -10868,6 +10911,7 @@ S_swallow_bom(pTHX_ U8 *s)
 	      if (DEBUG_p_TEST || DEBUG_T_TEST) PerlIO_printf(Perl_debug_log, "UTF-16LE script encoding (no BOM)\n");
 	      s = add_utf16_textfilter(s, TRUE);
 #else
+	      /* diag_listed_as: Unsupported script encoding %s */
 	      Perl_croak(aTHX_ "Unsupported script encoding UTF-16LE");
 #endif
 	 }
@@ -11084,6 +11128,7 @@ Perl_scan_vstring(pTHX_ const char *s, const char *const e, SV *sv)
 		    rev += (*end - '0') * mult;
 		    mult *= 10;
 		    if (orev > rev)
+			/* diag_listed_as: Integer overflow in %s number */
 			Perl_ck_warner_d(aTHX_ packWARN(WARN_OVERFLOW),
 					 "Integer overflow in decimal number");
 		}

@@ -12,10 +12,11 @@ BEGIN {
 
 my @ops = split //, 'rwxoRWXOezsfdlpSbctugkTMBAC';
 
-plan( tests => @ops * 3 );
+plan( tests => @ops * 4 );
 
 for my $op (@ops) {
     ok( 1 == @{ [ eval "-$op 'TEST'" ] }, "-$op returns single value" );
+    ok( 1 == @{ [ eval "-$op *TEST" ] }, "-$op *gv returns single value" );
 
     my $count = 0;
     my $t;
@@ -35,10 +36,6 @@ for my $op (@ops) {
 	    $t = eval "-$op -e \$^X" ? 0 : "bar";
 	}
 	elsif ($count == 1) {
-	    local $TODO;
-	    if ($op eq 'T' or $op eq 't' or $op eq 'B') {
-		$TODO = "[perl #77388] stacked file test does not work with -$op";
-	    }
 	    is($m, "d", "-$op -e \$^X did not remove too many values from the stack");
 	}
 	$count++;

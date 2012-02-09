@@ -53,7 +53,6 @@ my %defines =
     (
      usedevel => '',
      optimize => '-g',
-     cc => (`ccache --version`, $?) ? 'cc' : 'ccache cc',
      ld => 'cc',
      ($linux64 ? (libpth => \@paths) : ()),
     );
@@ -61,9 +60,13 @@ my %defines =
 unless(GetOptions(\%options,
                   'target=s', 'make=s', 'jobs|j=i', 'expect-pass=i',
                   'expect-fail' => sub { $options{'expect-pass'} = 0; },
-                  'clean!', 'one-liner|e=s', 'match=s', 'force-manifest',
-                  'force-regen', 'test-build', 'A=s@', 'l', 'w',
-                  'check-args', 'check-shebang!', 'usage|help|?', 'validate',
+                  'clean!', 'one-liner|e=s', 'c', 'l', 'w', 'match=s',
+                  'no-match=s' => sub {
+                      $options{match} = $_[1];
+                      $options{'expect-pass'} = 0;
+                  },
+                  'force-manifest', 'force-regen', 'test-build', 'validate',
+                  'check-args', 'check-shebang!', 'usage|help|?', 'A=s@',
                   'D=s@' => sub {
                       my (undef, $val) = @_;
                       if ($val =~ /\A([^=]+)=(.*)/s) {
@@ -84,13 +87,14 @@ my ($target, $j, $match) = @options{qw(target jobs match)};
 @ARGV = ('sh', '-c', 'cd t && ./perl TEST base/*.t')
     if $options{validate} && !@ARGV;
 
-pod2usage(exitval => 255, verbose => 1) if $options{usage};
+pod2usage(exitval => 0, verbose => 2) if $options{usage};
 pod2usage(exitval => 255, verbose => 1)
     unless @ARGV || $match || $options{'test-build'} || defined $options{'one-liner'};
 pod2usage(exitval => 255, verbose => 1)
     if !$options{'one-liner'} && ($options{l} || $options{w});
 
-check_shebang($ARGV[0]) if $options{'check-shebang'} && @ARGV;
+check_shebang($ARGV[0])
+    if $options{'check-shebang'} && @ARGV && !$options{match};
 
 exit 0 if $options{'check-args'};
 
@@ -279,6 +283,12 @@ which interferes with detecting errors in the example code itself.
 
 =item *
 
+-c
+
+Add C<-c> to the command line, to cause perl to exit after syntax checking.
+
+=item *
+
 -l
 
 Add C<-l> to the command line with C<-e>
@@ -295,8 +305,8 @@ a full test case, instead of using C<bisect.pl>'s C<-e> shortcut.
 
 Add C<-w> to the command line with C<-e>
 
-It's not valid to pass C<-l> or C<-w> to C<bisect.pl> unless you are also
-using C<-e>
+It's not valid to pass C<-c>,  C<-l> or C<-w> to C<bisect.pl> unless you are
+also using C<-e>
 
 =item *
 
@@ -349,14 +359,43 @@ I<number of CPUs>. Otherwise defaults to 2.
 
 --match pattern
 
-Instead of running a test program to determine I<pass> or I<fail>, pass
-if the given regex matches, and hence search for the commit that removes
-the last matching file.
+=item *
+
+--no-match pattern
+
+Instead of running a test program to determine I<pass> or I<fail>,
+C<--match> will pass if the given regex matches, and hence search for the
+commit that removes the last matching file. C<--no-match> inverts the test,
+to search for the first commit that adds files that match.
+
+The remaining command line arguments are treated as glob patterns for files
+to match against. If none are specified, then they default as follows:
+
+=over 4
+
+=item *
 
 If no I<target> is specified, the match is against all files in the
-repository (which is fast). If a I<target> is specified, that target is
-built, and the match is against only the built files. C<--expect-fail> can
-be used with C<--match> to search for a commit that adds files that match.
+repository (which is fast).
+
+=item *
+
+If a I<target> is specified, that target is built, and the match is against
+only the built files.
+
+=back
+
+Treating the command line arguments as glob patterns should not cause
+problems, as the perl distribution has never shipped or built files with
+names that contain characters which are globbing metacharacters.
+
+Anything which is not a readable file is ignored, instead of generating an
+error. (If you want an error, run C<grep> or C<ack> as a test case). This
+permits one to easily search in a file that changed its name. For example:
+
+    .../Porting/bisect.pl --match 'Pod.*Functions' 'pod/buildtoc*'
+
+C<--no-match ...> is implemented as C<--expect-fail --match ...>
 
 =item *
 
@@ -477,6 +516,15 @@ Display the usage information and exit.
 =cut
 
 die "$0: Can't build $target" if defined $target && !grep {@targets} $target;
+
+unless (exists $defines{cc}) {
+    # If it fails, the heuristic of 63f9ec3008baf7d6 is noisy, and hence
+    # confusing. Additionally, it doesn't correctly cope with ccache 2.4
+    # FIXME - really it should be replaced with a proper test of
+    # "can we build something?" and a helpful diagnostic if we can't.
+    # For now, simply move it here.
+    $defines{cc} = (`ccache --version`, $?) ? 'cc' : 'ccache cc';
+}
 
 $j = "-j$j" if $j =~ /\A\d+\z/;
 
@@ -678,7 +726,8 @@ sub apply_patch {
     print $fh $patch_to_use;
     return if close $fh;
     print STDERR "Patch is <<'EOPATCH'\n${patch}EOPATCH\n";
-    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n";
+    print STDERR "\nConverted to a context diff <<'EOCONTEXT'\n${patch_to_use}EOCONTEXT\n"
+        if $patch_to_use ne $patch;
     die "Can't $what$files: $?, $!";
 }
 
@@ -773,12 +822,21 @@ sub report_and_exit {
 }
 
 sub match_and_exit {
-    my $target = shift;
+    my ($target, @globs) = @_;
     my $matches = 0;
     my $re = qr/$match/;
     my @files;
 
-    {
+    if (@globs) {
+        require File::Glob;
+        foreach (sort map { File::Glob::bsd_glob($_)} @globs) {
+            if (!-f $_ || !-r _) {
+                warn "Skipping matching '$_' as it is not a readable file\n";
+            } else {
+                push @files, $_;
+            }
+        }
+    } else {
         local $/ = "\0";
         @files = defined $target ? `git ls-files -o -z`: `git ls-files -z`;
         chomp @files;
@@ -808,7 +866,7 @@ sub match_and_exit {
 system 'git clean -dxf </dev/null' and die;
 
 if (!defined $target) {
-    match_and_exit() if $match;
+    match_and_exit(undef, @ARGV) if $match;
     $target = 'test_prep';
 }
 
@@ -913,7 +971,7 @@ if (-f 'config.sh') {
 }
 
 if ($target =~ /config\.s?h/) {
-    match_and_exit($target) if $match && -f $target;
+    match_and_exit($target, @ARGV) if $match && -f $target;
     report_and_exit(!-f $target, 'could build', 'could not build', $target)
         if $options{'test-build'};
 
@@ -944,10 +1002,12 @@ patch_ext();
 # Parallel build for miniperl is safe
 system "$options{make} $j miniperl </dev/null";
 
-my $expected = $target =~ /^test/ ? 't/perl'
+# This is the file we expect make to create
+my $expected_file = $target =~ /^test/ ? 't/perl'
     : $target eq 'Fcntl' ? "lib/auto/Fcntl/Fcntl.$Config{so}"
     : $target;
-my $real_target = $target eq 'Fcntl' ? $expected : $target;
+# This is the target we tell make to build in order to get $expected_file
+my $real_target = $target eq 'Fcntl' ? $expected_file : $target;
 
 if ($target ne 'miniperl') {
     # Nearly all parallel build issues fixed by 5.10.0. Untrustworthy before that.
@@ -967,22 +1027,41 @@ if ($target ne 'miniperl') {
     system "$options{make} $j $real_target </dev/null";
 }
 
-my $missing_target = $expected =~ /perl$/ ? !-x $expected : !-r $expected;
+my $expected_file_found = $expected_file =~ /perl$/
+    ? -x $expected_file : -r $expected_file;
+
+if ($expected_file_found && $expected_file eq 't/perl') {
+    # Check that it isn't actually pointing to ../miniperl, which will happen
+    # if the sanity check ./miniperl -Ilib -MExporter -e '<?>' fails, and
+    # Makefile tries to run minitest.
+
+    # Of course, helpfully sometimes it's called ../perl, other times .././perl
+    # and who knows if that list is exhaustive...
+    my ($dev0, $ino0) = stat 't/perl';
+    my ($dev1, $ino1) = stat 'perl';
+    unless (defined $dev0 && defined $dev1 && $dev0 == $dev1 && $ino0 == $ino1) {
+        undef $expected_file_found;
+        my $link = readlink $expected_file;
+        warn "'t/perl' => '$link', not 'perl'";
+        die "Could not realink t/perl: $!" unless defined $link;
+    }
+}
 
 if ($options{'test-build'}) {
-    report_and_exit($missing_target, 'could build', 'could not build',
+    report_and_exit(!$expected_file_found, 'could build', 'could not build',
                     $real_target);
-} elsif ($missing_target) {
+} elsif (!$expected_file_found) {
     skip("could not build $real_target");
 }
 
-match_and_exit($real_target) if $match;
+match_and_exit($real_target, @ARGV) if $match;
 
 if (defined $options{'one-liner'}) {
     my $exe = $target =~ /^(?:perl$|test)/ ? 'perl' : 'miniperl';
     unshift @ARGV, '-e', $options{'one-liner'};
-    unshift @ARGV, '-l' if $options{l};
-    unshift @ARGV, '-w' if $options{w};
+    foreach (qw(c l w)) {
+        unshift @ARGV, "-$_" if $options{$_};
+    }
     unshift @ARGV, "./$exe", '-Ilib';
 }
 
@@ -2455,7 +2534,7 @@ EOPATCH
         # corrected there. cfgperl (with the fixes) was merged back to blead.
         # The resultant rather twisty maze of commits looks like this:
 
-=for comment
+=begin comment
 
 * | |   commit 137225782c183172f360c827424b9b9f8adbef0e
 |\ \ \  Merge: 22c35a8 2a8ee23
@@ -2513,6 +2592,8 @@ EOPATCH
 | | |
 | | |     p4raw-id: //depot/perl@2133
 
+=end comment
+
 =cut
 
         # and completely confuses git bisect (and at least me), causing it to
@@ -2567,6 +2648,60 @@ EOPATCH
         # Message-Id: <tqemtae338.fsf@puma.genscan.com>
         # Subject: [PATCH 5.005_51] (was: why SAVEDESTRUCTOR()...)
         apply_commit('3c8a44569607336e', 'mg.c');
+    }
+
+    if ($major == 5) {
+        if (extract_from_file('doop.c', qr/croak\(no_modify\);/)
+            && extract_from_file('doop.c', qr/croak\(PL_no_modify\);/)) {
+            # Whilst the log suggests that this would only fix 5 commits, in
+            # practice this area of history is a complete tarpit, and git bisect
+            # gets very confused by the skips in the middle of the back and
+            # forth merging between //depot/perl and //depot/cfgperl
+            apply_commit('6393042b638dafd3');
+        }
+
+        # One error "fixed" with another:
+        if (extract_from_file('pp_ctl.c',
+                              qr/\Qstatic void *docatch_body _((void *o));\E/)) {
+            apply_commit('5b51e982882955fe');
+        }
+        # Which is then fixed by this:
+        if (extract_from_file('pp_ctl.c',
+                              qr/\Qstatic void *docatch_body _((valist\E/)) {
+            apply_commit('47aa779ee4c1a50e');
+        }
+
+        if (extract_from_file('thrdvar.h', qr/PERLVARI\(Tprotect/)
+            && !extract_from_file('embedvar.h', qr/PL_protect/)) {
+            # Commit 312caa8e97f1c7ee didn't update embedvar.h
+            apply_commit('e0284a306d2de082', 'embedvar.h');
+        }
+    }
+
+    if ($major == 5
+        && extract_from_file('sv.c',
+                             qr/PerlDir_close\(IoDIRP\((?:\(IO\*\))?sv\)\);/)
+        && !(extract_from_file('toke.c',
+                               qr/\QIoDIRP(FILTER_DATA(AvFILLp(PL_rsfp_filters))) = NULL\E/)
+             || extract_from_file('toke.c',
+                                  qr/\QIoDIRP(datasv) = (DIR*)NULL;\E/))) {
+        # Commit 93578b34124e8a3b, //depot/perl@3298
+        # close directory handles properly when localized,
+        # tweaked slightly by commit 1236053a2c722e2b,
+        # add test case for change#3298
+        #
+        # The fix is the last part of:
+        #
+        # various fixes for clean build and test on win32; configpm broken,
+        # needed to open myconfig.SH rather than myconfig; sundry adjustments
+        # to bytecode stuff; tweaks to DYNAMIC_ENV_FETCH code to make it
+        # work under win32; getenv_sv() changed to getenv_len() since SVs
+        # aren't visible in the lower echelons; remove bogus exports from
+        # config.sym; PERL_OBJECT-ness for C++ exception support; null out
+        # IoDIRP in filter_del() or sv_free() will attempt to close it
+        #
+        # The changed code is modified subsequently by commit e0c198038146b7a4
+        apply_commit('a6c403648ecd5cc7', 'toke.c');
     }
 
     if ($major < 6 && $^O eq 'netbsd'

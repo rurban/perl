@@ -612,7 +612,7 @@ $priv{$_}{4} = "DREFed" for (qw(rv2sv rv2av rv2hv));
 @{$priv{$_}}{32,64,96} = ("DREFAV", "DREFHV", "DREFSV")
   for (qw(rv2gv rv2sv padsv aelem helem));
 $priv{$_}{16} = "STATE" for ("padav", "padhv", "padsv");
-$priv{rv2gv}{4} = "NOINIT";
+@{$priv{rv2gv}}{4,16} = qw "NOINIT FAKE";
 @{$priv{"entersub"}}{1,4,16,32,64} = qw( INARGS TARG DBG DEREF );
 @{$priv{rv2cv}}{1,8,128} = ("CONST","AMPER","NO()");
 $priv{"gv"}{32} = "EARLYCV";
@@ -635,7 +635,8 @@ $priv{$_}{16} = "TARGMY"
        "exec", "kill", "getppid", "getpgrp", "setpgrp", "getpriority",
        "setpriority", "time", "sleep");
 $priv{$_}{4} = "REVERSED" for ("enteriter", "iter");
-@{$priv{"const"}}{4,8,16,64,128} = ("SHORT","STRICT","ENTERED","BARE","WARN");
+@{$priv{"const"}}{2,4,8,16,64,128} =
+    ("NOVER","SHORT","STRICT","ENTERED","BARE","WARN");
 $priv{"flip"}{64} = $priv{"flop"}{64} = "LINENUM";
 $priv{"list"}{64} = "GUESSED";
 $priv{"delete"}{64} = "SLICE";
@@ -651,7 +652,7 @@ $priv{$_}{2} = "FTACCESS"
 @{$priv{"entereval"}}{2,4,8,16} = qw "HAS_HH UNI BYTES COPHH";
 if ($] >= 5.009) {
   # Stacked filetests are post 5.8.x
-  @{$priv{$_}}{4,8} = ("FTSTACKED","FTSTACKING")
+  @{$priv{$_}}{4,8,16} = ("FTSTACKED","FTSTACKING","FTAFTERt")
     for ("ftrread", "ftrwrite", "ftrexec", "fteread", "ftewrite", "fteexec",
          "ftis", "fteowned", "ftrowned", "ftzero", "ftsize", "ftmtime",
 	 "ftatime", "ftctime", "ftsock", "ftchr", "ftblk", "ftfile", "ftdir",
