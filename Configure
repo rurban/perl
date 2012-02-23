@@ -3251,6 +3251,9 @@ EOM
 		cygwin*) osname=cygwin
 			osvers="$3"
 			;;
+		msys*) osname=msys
+			osvers="$3"
+			;;
 		*dc.osx) osname=dcosx
 			osvers="$3"
 			;;
