@@ -18,6 +18,7 @@ then
     plibpth=`cd $plibpth && pwd`
 fi
 usenm=no
+issymlink=false
 # XXX this is fragile
 libc=/usr/lib/libmsys-1.0.dll.a
 so='dll'

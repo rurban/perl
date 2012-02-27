@@ -60,7 +60,7 @@ true)
 				${revision}.${patchlevel}.${subversion} \
 			     -install_name \$(shrpdir)/\$@"
 		;;
-	cygwin*)
+	cygwin*|msys*)
 		shrpldflags="$shrpldflags -Wl,--out-implib=libperl.dll.a -Wl,--image-base,0x52000000"
 		linklibperl="-L. -lperl"
 		;;
@@ -744,6 +744,28 @@ cygwin)
 	$spitshell >>$Makefile <<'!NO!SUBS!'
 cygwin.c: cygwin/cygwin.c
 	$(LNS) cygwin/cygwin.c
+
+LIBPERL_NONSHR		= libperl$(LIB_EXT)
+
+$(LIBPERL_NONSHR): $(obj)
+	$(RMS) $(LIBPERL_NONSHR)
+	$(AR) rcu $(LIBPERL_NONSHR) $(obj)
+
+!NO!SUBS!
+	;;
+msys)
+	$spitshell >>$Makefile <<'!NO!SUBS!'
+win32.c: win32/$@
+	$(LNS) $?
+
+win32sck.c: win32/$@
+	$(LNS) $?
+
+win32thread.c: win32/$@
+	$(LNS) $?
+
+win32io.c: win32/$@
+	$(LNS) $?
 
 LIBPERL_NONSHR		= libperl$(LIB_EXT)
 
