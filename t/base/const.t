@@ -33,11 +33,12 @@ my $test=1;
   if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const variable $@\n"; }
   $test++;
 
+  # run-time elements
   eval 'my const %a=("a"=>"ok"); $a{a}=0';
-  if ($@ =~ /Invalid assignment to const hash/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const hash $@\n"; }
+  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO \$a{a}=0 $@\n"; }
   $test++;
   eval 'my const @a=(1,2,3); $a[5]=0';
-  if ($@ =~ /Invalid assignment to const array/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const array $@\n"; }
+  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO \$a[5]=0 $@\n"; }
   $test++;
 
   # run-time errors
