@@ -1,5 +1,5 @@
 #!./perl
-BEGIN { $| = 1; print "1..16\n"; }
+BEGIN { $| = 1; print "1..18\n"; }
 BEGIN { unshift @INC, '../lib', 'lib'; }
 my $test=1;
 {
@@ -17,8 +17,9 @@ my $test=1;
   $result = eval 'my const($a,$b)=(1,2);print "# \$a,\$b=",$a,$b,"\n";$a';
   if (!$@ and $result == 1) { print "ok $test\n"; } else { print "not ok $test - list_assignment $@\n"; }
   $test++;
+  # TODO [#21979]: Can't declare subroutine entry in "my" (type=entersub)
   $result = eval 'my (const $a, const $b)=(1,2);print "# \$a,\$b=",$a,$b,"\n";$a';
-  if (!$@ and $result == 1) { print "ok $test\n"; } else { print "not ok $test - #TODO list_assignment2\n"; }
+  if (!$@ and $result == 1) { print "ok $test\n"; } else { print "not ok $test - #TODO #21979 my (const \$a, const \$b)=(1,2);\n"; }
   $test++;
 
   # compile-time errors
@@ -26,11 +27,17 @@ my $test=1;
   if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const variable $@\n"; }
   $test++;
   eval 'my const @a=(1,2,3); @a=(0);';
-  if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const array $@\n"; }
+  if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const variable $@\n"; }
+  $test++;
+  eval 'my const %a=(0=>1); %a=(1=>2);';
+  if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const variable $@\n"; }
   $test++;
 
   eval 'my const %a=("a"=>"ok"); $a{a}=0';
-  if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #TODO Invalid assignment to const hash $@\n"; }
+  if ($@ =~ /Invalid assignment to const hash/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const hash $@\n"; }
+  $test++;
+  eval 'my const @a=(1,2,3); $a[5]=0';
+  if ($@ =~ /Invalid assignment to const array/) { print "ok $test\n"; } else { print "not ok $test - #TODO Invalid assignment to const array $@\n"; }
   $test++;
 
   # run-time errors

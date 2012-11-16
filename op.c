@@ -5491,7 +5491,7 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
     dVAR;
     OP *o;
 
-    /* compile-time const check */
+    /* compile-time const checks */
     if (left->op_type == OP_PADSV ||
         left->op_type == OP_PADAV ||
         left->op_type == OP_PADHV ||
@@ -5503,6 +5503,33 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
         else if (SvREADONLY(PAD_SVl(left->op_targ))) {
             yyerror(Perl_form(aTHX_ "Invalid assignment to const variable %"SVf,
                               PAD_COMPNAME_SV(left->op_targ)));
+        }
+    }
+    /* const assignments with aelem and helem are forbidden for new keys. no autovivify */
+    if ((left->op_type == OP_AELEM ||
+         left->op_type == OP_HELEM ||
+         left->op_type == OP_AELEMFAST_LEX)
+        && SvREADONLY(PAD_SVl(left->op_targ)))
+    {
+        BINOP *l = (BINOP*)left;
+        if (l->op_type == OP_HELEM && l->op_last->op_type == OP_CONST && l->op_first->op_type == OP_PADHV) {
+            SV* key = PAD_SVl(l->op_last->op_targ);
+            HV *hv  = (HV*)PAD_SVl(l->op_first->op_targ);
+            if (!hv_exists_ent(hv, key, 0))
+                yyerror(Perl_form(aTHX_ "Invalid assignment to const hash %"SVf,
+                                  PAD_COMPNAME_SV(l->op_first->op_targ)));
+        }
+        if ((l->op_type == OP_AELEM && l->op_last->op_type == OP_CONST
+                                    && l->op_first->op_type == OP_PADAV) ||
+             l->op_type == OP_AELEMFAST_LEX) {
+            IV  ix = l->op_type == OP_AELEMFAST_LEX ? l->op_private : SvIV(PAD_SVl(l->op_last->op_targ));
+            AV *av = (AV*)PAD_SVl(l->op_first->op_targ);
+            if (SvRMAGICAL(av))
+                yyerror(Perl_form(aTHX_ "const array %"SVf" cannot be magical",
+                                  PAD_COMPNAME_SV(l->op_first->op_targ)));
+            if (ix > 0 && ix < AvFILLp(av))
+                yyerror(Perl_form(aTHX_ "Invalid assignment to const array %"SVf,
+                                  PAD_COMPNAME_SV(l->op_first->op_targ)));
         }
     }
 
@@ -11259,6 +11286,12 @@ Perl_rpeep(pTHX_ register OP *o)
 		    GV *gv;
 		    if (cSVOPx(pop)->op_private & OPpCONST_STRICT)
 			no_bareword_allowed(pop);
+		    if (o->op_type != OP_GV && SvREADONLY(PAD_SVl(o->op_targ))) {
+                        AV *av = (AV*)PAD_SVl(o->op_targ);
+                        if (i > 0 && i < AvFILLp(av))
+                            Perl_croak(aTHX_ "Invalid assignment to const array %"SVf,
+                                       PAD_COMPNAME_SV(o->op_targ));
+                    }
 		    if (o->op_type == OP_GV)
 			op_null(o->op_next);
 		    op_null(pop->op_next);
