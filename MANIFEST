@@ -4780,7 +4780,7 @@ pod/perltodo.pod
 pod/perltooc.pod		
 pod/perltoot.pod		
 pod/perltrap.pod		Perl traps for the unwary
-pod/perltypes.pod               Perl type support
+pod/perltypes.pod		Perl type support
 pod/perlunicode.pod		Perl Unicode support
 pod/perlunifaq.pod		Perl Unicode FAQ
 pod/perluniintro.pod		Perl Unicode introduction
@@ -4998,6 +4998,7 @@ symbian/version.pl		Helper code for config.pl
 symbian/xsbuild.pl		Building extensions
 taint.c				Tainting code
 t/base/cond.t			See if conditionals work
+t/base/const.t			See if my const work
 t/base/if.t			See if if works
 t/base/lex.t			See if lexical items work
 t/base/num.t			See if numbers work

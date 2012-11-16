@@ -2664,6 +2664,7 @@ S_my_kid(pTHX_ OP *o, OP *attrs, OP **imopsp)
 OP *
 Perl_my_attrs(pTHX_ OP *o, OP *attrs)
 {
+    PERL_ARGS_ASSERT_MY_ATTRS;
     return Perl_my_attrs_lex(aTHX_ o, attrs, 0);
 }
 
@@ -2674,7 +2675,7 @@ Perl_my_attrs_lex(pTHX_ OP *o, OP *attrs, I32 lex)
     OP *rops;
     int maybe_scalar = 0;
 
-    PERL_ARGS_ASSERT_MY_ATTRS;
+    PERL_ARGS_ASSERT_MY_ATTRS_LEX;
 
 /* [perl #17376]: this appears to be premature, and results in code such as
    C< our(%x); > executing in list mode rather than void mode */
@@ -9230,6 +9231,7 @@ Perl_ck_pad(pTHX_ OP *o)
     }
     else
         assert(type);
+    return NULL;
 #endif
 }
 

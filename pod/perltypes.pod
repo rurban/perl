@@ -298,6 +298,7 @@ See L<http://www.perl.com/pub/2000/06/p5pdigest/THISWEEK-20000625.html#my___PACK
 
 See L<perldata/"Constant and typed lexical variables"> for the syntax
 of Perl's built-in type declarations for variables, and
-L<??? p5-mop design> for the syntax of Perl's argument and return type declarations.
+L<https://github.com/stevan/p5-mop/wiki/Signatures-and-Parameters> for
+the syntax of Perl's future argument and return type declarations.
 
 L<http://perl.plover.com/classes/typing/> I<Strong Typing Doesn't Have to Suck>
