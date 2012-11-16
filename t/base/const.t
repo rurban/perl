@@ -37,7 +37,7 @@ my $test=1;
   if ($@ =~ /Invalid assignment to const hash/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const hash $@\n"; }
   $test++;
   eval 'my const @a=(1,2,3); $a[5]=0';
-  if ($@ =~ /Invalid assignment to const array/) { print "ok $test\n"; } else { print "not ok $test - #TODO Invalid assignment to const array $@\n"; }
+  if ($@ =~ /Invalid assignment to const array/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const array $@\n"; }
   $test++;
 
   # run-time errors
