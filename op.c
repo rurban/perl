@@ -1762,7 +1762,7 @@ S_finalize_op(pTHX_ OP* o)
 		/* If op_sv is already a PADTMP/MY then it is being used by
 		 * some pad, so make a copy. */
 		sv_setsv(PAD_SVl(ix),cSVOPo->op_sv);
-		SvREADONLY_on(PAD_SVl(ix));
+		if (!SvIsCOW(PAD_SVl(ix))) SvREADONLY_on(PAD_SVl(ix));
 		SvREFCNT_dec(cSVOPo->op_sv);
 	    }
 	    else if (o->op_type != OP_METHOD_NAMED
@@ -1782,7 +1782,7 @@ S_finalize_op(pTHX_ OP* o)
 		SvPADTMP_on(cSVOPo->op_sv);
 		PAD_SETSV(ix, cSVOPo->op_sv);
 		/* XXX I don't know how this isn't readonly already. */
-		SvREADONLY_on(PAD_SVl(ix));
+		if (!SvIsCOW(PAD_SVl(ix))) SvREADONLY_on(PAD_SVl(ix));
 	    }
 	    cSVOPo->op_sv = NULL;
 	    o->op_targ = ix;
@@ -1803,7 +1803,7 @@ S_finalize_op(pTHX_ OP* o)
 
 	/* Make the CONST have a shared SV */
 	svp = cSVOPx_svp(((BINOP*)o)->op_last);
-	if ((!SvFAKE(sv = *svp) || !SvREADONLY(sv))
+	if ((!SvIsCOW(sv = *svp))
 	    && SvTYPE(sv) < SVt_PVMG && !SvROK(sv)) {
 	    key = SvPV_const(sv, keylen);
 	    lexname = newSVpvn_share(key,
@@ -3824,7 +3824,7 @@ Perl_mad_free(pTHX_ MADPROP* mp)
     case MAD_NULL:
 	break;
     case MAD_PV:
-	Safefree((char*)mp->mad_val);
+	Safefree(mp->mad_val);
 	break;
     case MAD_OP:
 	if (mp->mad_vlen)	/* vlen holds "strong/weak" boolean */
@@ -7026,6 +7026,8 @@ Perl_newMYSUB(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs, OP *block)
 
     if (PL_parser && PL_parser->error_count) {
 	op_free(block);
+	SvREFCNT_dec(PL_compcv);
+	PL_compcv = 0;
 	goto done;
     }
 
@@ -7426,15 +7428,15 @@ Perl_newATTRSUB_flags(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs,
 
     if (ec) {
 	op_free(block);
-	cv = PL_compcv;
+	if (name) SvREFCNT_dec(PL_compcv);
+	else cv = PL_compcv;
+	PL_compcv = 0;
 	if (name && block) {
 	    const char *s = strrchr(name, ':');
 	    s = s ? s+1 : name;
 	    if (strEQ(s, "BEGIN")) {
 		const char not_safe[] =
 		    "BEGIN not safe after errors--compilation aborted";
-		PL_compcv = 0;
-		SvREFCNT_dec(cv);
 		if (PL_in_eval & EVAL_KEEPERR)
 		    Perl_croak(aTHX_ not_safe);
 		else {
@@ -7680,7 +7682,9 @@ Perl_newATTRSUB_flags(pTHX_ I32 floor, OP *o, OP *proto, OP *attrs,
     if (attrs) {
 	/* Need to do a C<use attributes $stash_of_cv,\&cv,@attrs>. */
 	HV *stash = name && GvSTASH(CvGV(cv)) ? GvSTASH(CvGV(cv)) : PL_curstash;
+	if (!name) SAVEFREESV(cv);
 	apply_attrs(stash, MUTABLE_SV(cv), attrs);
+	if (!name) SvREFCNT_inc_simple_void_NN(cv);
     }
 
     if (block && has_name) {
@@ -9426,7 +9430,7 @@ Perl_ck_method(pTHX_ OP *o)
 	const char * const method = SvPVX_const(sv);
 	if (!(strchr(method, ':') || strchr(method, '\''))) {
 	    OP *cmop;
-	    if (!SvREADONLY(sv) || !SvFAKE(sv)) {
+	    if (!SvIsCOW(sv)) {
 		sv = newSVpvn_share(method, SvUTF8(sv) ? -(I32)SvCUR(sv) : (I32)SvCUR(sv), 0);
 	    }
 	    else {
@@ -9551,14 +9555,9 @@ Perl_ck_require(pTHX_ OP *o)
 	    const char *end;
 
 	    if (was_readonly) {
-		if (SvFAKE(sv)) {
-		    sv_force_normal_flags(sv, 0);
-		    assert(!SvREADONLY(sv));
-		    was_readonly = 0;
-		} else {
 		    SvREADONLY_off(sv);
-		}
 	    }   
+	    if (SvIsCOW(sv)) sv_force_normal_flags(sv, 0);
 
 	    s = SvPVX(sv);
 	    len = SvCUR(sv);
@@ -10625,7 +10624,7 @@ Perl_ck_svconst(pTHX_ OP *o)
 {
     PERL_ARGS_ASSERT_CK_SVCONST;
     PERL_UNUSED_CONTEXT;
-    SvREADONLY_on(cSVOPo->op_sv);
+    if (!SvIsCOW(cSVOPo->op_sv)) SvREADONLY_on(cSVOPo->op_sv);
     return o;
 }
 

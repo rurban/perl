@@ -2000,8 +2000,12 @@ PP(pp_dbstate)
 	    PUSHSUB_DB(cx);
 	    cx->blk_sub.retop = PL_op->op_next;
 	    CvDEPTH(cv)++;
+	    if (CvDEPTH(cv) >= 2) {
+		PERL_STACK_OVERFLOW_CHECK();
+		pad_push(CvPADLIST(cv), CvDEPTH(cv));
+	    }
 	    SAVECOMPPAD();
-	    PAD_SET_CUR_NOSAVE(CvPADLIST(cv), 1);
+	    PAD_SET_CUR_NOSAVE(CvPADLIST(cv), CvDEPTH(cv));
 	    RETURNOP(CvSTART(cv));
 	}
     }
@@ -2799,13 +2803,17 @@ PP(pp_goto)
 	    FREETMPS;
 	    cxix = dopoptosub(cxstack_ix);
 	    if (cxix < 0)
+	    {
+		SvREFCNT_dec(cv);
 		DIE(aTHX_ "Can't goto subroutine outside a subroutine");
+	    }
 	    if (cxix < cxstack_ix)
 		dounwind(cxix);
 	    TOPBLOCK(cx);
 	    SPAGAIN;
 	    /* ban goto in eval: see <20050521150056.GC20213@iabyn.com> */
 	    if (CxTYPE(cx) == CXt_EVAL) {
+		SvREFCNT_dec(cv);
 		if (CxREALEVAL(cx))
 		/* diag_listed_as: Can't goto subroutine from an eval-%s */
 		    DIE(aTHX_ "Can't goto subroutine from an eval-string");
@@ -2814,7 +2822,10 @@ PP(pp_goto)
 		    DIE(aTHX_ "Can't goto subroutine from an eval-block");
 	    }
 	    else if (CxMULTICALL(cx))
+	    {
+		SvREFCNT_dec(cv);
 		DIE(aTHX_ "Can't goto subroutine from a sort sub (or similar callback)");
+	    }
 	    if (CxTYPE(cx) == CXt_SUB && CxHASARGS(cx)) {
 		AV* av = cx->blk_sub.argarray;
 
@@ -2889,11 +2900,6 @@ PP(pp_goto)
 	    }
 	    else {
 		PADLIST * const padlist = CvPADLIST(cv);
-		if (CxTYPE(cx) == CXt_EVAL) {
-		    PL_in_eval = CxOLD_IN_EVAL(cx);
-		    PL_eval_root = cx->blk_eval.old_eval_root;
-		    cx->cx_type = CXt_SUB;
-		}
 		cx->blk_sub.cv = cv;
 		cx->blk_sub.olddepth = CvDEPTH(cv);
 
@@ -3261,7 +3267,7 @@ Perl_find_runcv_where(pTHX_ U8 cond, IV arg, U32 *db_seqp)
 		switch (cond) {
 		case FIND_RUNCV_padid_eq:
 		    if (!CvPADLIST(cv)
-		     || PadlistNAMES(CvPADLIST(cv)) != (PADNAMELIST *)arg)
+		     || PadlistNAMES(CvPADLIST(cv)) != INT2PTR(PADNAMELIST *, arg))
 			continue;
 		    return cv;
 		case FIND_RUNCV_level_eq:

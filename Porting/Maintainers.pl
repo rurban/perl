@@ -363,7 +363,7 @@ use File::Glob qw(:case);
 
     'Compress::Raw::Bzip2' => {
         'MAINTAINER'   => 'pmqs',
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.057.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Bzip2-2.058.tar.gz',
         'FILES'        => q[cpan/Compress-Raw-Bzip2],
         'EXCLUDED'     => [
             qr{^t/Test/},
@@ -374,7 +374,7 @@ use File::Glob qw(:case);
 
     'Compress::Raw::Zlib' => {
         'MAINTAINER'   => 'pmqs',
-        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.057.tar.gz',
+        'DISTRIBUTION' => 'PMQS/Compress-Raw-Zlib-2.058.tar.gz',
 
         'FILES'    => q[cpan/Compress-Raw-Zlib],
         'EXCLUDED' => [
@@ -1025,7 +1025,7 @@ use File::Glob qw(:case);
 
     'IO-Compress' => {
         'MAINTAINER'   => 'pmqs',
-        'DISTRIBUTION' => 'PMQS/IO-Compress-2.057.tar.gz',
+        'DISTRIBUTION' => 'PMQS/IO-Compress-2.058.tar.gz',
         'FILES'        => q[cpan/IO-Compress],
         'EXCLUDED'     => [qr{t/Test/}],
         'UPSTREAM'     => 'cpan',
@@ -1262,7 +1262,7 @@ use File::Glob qw(:case);
 
     'Module::CoreList' => {
         'MAINTAINER'   => 'bingos',
-        'DISTRIBUTION' => 'RJBS/Module-CoreList-2.76.tar.gz',
+        'DISTRIBUTION' => 'BINGOS/Module-CoreList-2.77.tar.gz',
         'FILES'        => q[dist/Module-CoreList],
         'UPSTREAM'     => 'blead',
     },
@@ -2011,7 +2011,7 @@ use File::Glob qw(:case);
 
     'Unicode::Collate' => {
         'MAINTAINER'   => 'sadahiro',
-        'DISTRIBUTION' => 'SADAHIRO/Unicode-Collate-0.91.tar.gz',
+        'DISTRIBUTION' => 'SADAHIRO/Unicode-Collate-0.92.tar.gz',
         'FILES'        => q[cpan/Unicode-Collate],
         'EXCLUDED'     => [
             qr{N$},

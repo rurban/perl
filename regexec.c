@@ -4732,7 +4732,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 		/* execute the code in the {...} */
 
 		dSP;
-		SV ** before;
+		PADOFFSET before;
 		OP * const oop = PL_op;
 		COP * const ocurcop = PL_curcop;
 		OP *nop;
@@ -4851,11 +4851,11 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 		/* we don't use MULTICALL here as we want to call the
 		 * first op of the block of interest, rather than the
 		 * first op of the sub */
-		before = SP;
+		before = SP-PL_stack_base;
 		PL_op = nop;
 		CALLRUNOPS(aTHX);			/* Scalar context. */
 		SPAGAIN;
-		if (SP == before)
+		if (SP-PL_stack_base == before)
 		    ret = &PL_sv_undef;   /* protect against empty (?{}) blocks. */
 		else {
 		    ret = POPs;
@@ -4962,6 +4962,7 @@ S_regmatch(pTHX_ regmatch_info *reginfo, char *startpos, regnode *prog)
 			 * compiled */
 			S_regcp_restore(aTHX_ rex, runops_cp);
 		    }
+		    SAVEFREESV(re_sv);
 		    re = ReANY(re_sv);
 		}
                 RXp_MATCH_COPIED_off(re);

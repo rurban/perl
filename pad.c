@@ -370,6 +370,8 @@ Perl_cv_undef(pTHX_ CV *cv)
 	PAD_SAVE_SETNULLPAD();
 
 	/* discard any leaked ops */
+	if (PL_parser)
+	    parser_free_nexttoke_ops(PL_parser, (OPSLAB *)CvSTART(cv));
 	opslab_force_free((OPSLAB *)CvSTART(cv));
 	CvSTART(cv) = NULL;
 
@@ -2011,7 +2013,7 @@ S_cv_clone_pad(pTHX_ CV *proto, CV *cv, CV *outside)
 	    || PadlistNAMES(CvPADLIST(outside))
 		 != protopadlist->xpadl_outid) {
 	    outside = find_runcv_where(
-		FIND_RUNCV_padid_eq, (IV)protopadlist->xpadl_outid, NULL
+		FIND_RUNCV_padid_eq, PTR2IV(protopadlist->xpadl_outid), NULL
 	    );
 	    /* outside could be null */
 	}

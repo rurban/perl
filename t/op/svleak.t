@@ -15,7 +15,7 @@ BEGIN {
 
 use Config;
 
-plan tests => 60;
+plan tests => 69;
 
 # run some code N times. If the number of SVs at the end of loop N is
 # greater than (N-1)*delta at the end of loop 1, we've got a leak
@@ -32,13 +32,12 @@ sub leak {
     cmp_ok($sv1-$sv0, '<=', ($n-1)*$delta, @rest);
 }
 
-# Like leak, but run a string eval instead; takes into account existing
-# string eval leaks under -Dmad (except when -Dmad leaks two or
-# more SVs). The code is used instead of the test name
+# Like leak, but run a string eval instead.
+# The code is used instead of the test name
 # if the name is absent.
 sub eleak {
     my ($n,$delta,$code,@rest) = @_;
-    leak $n, $delta + !!$Config{mad}, sub { eval $code },
+    leak $n, $delta, sub { eval $code },
          @rest ? @rest : $code
 }
 
@@ -71,6 +70,10 @@ leak(5, 0, sub {push @a,1;pop @a}, "basic check 2 of leak test infrastructure");
 leak(5, 1, sub {push @a,1;},       "basic check 3 of leak test infrastructure");
 
 eleak(2, 0, 'sub{<*>}');
+
+eleak(2, 0, 'goto sub {}', 'goto &sub in eval');
+eleak(2, 0, '() = sort { goto sub {} } 1,2', 'goto &sub in sort');
+eleak(2, 0, '/(?{ goto sub {} })/', 'goto &sub in regexp');
 
 sub TIEARRAY	{ bless [], $_[0] }
 sub FETCH	{ $_[0]->[$_[1]] }
@@ -178,24 +181,28 @@ eleak(2,0,'/[\xdf]/i');
 eleak(2,0,'s![^/]!!');
 eleak(2,0,'/[pp]/');
 eleak(2,0,'/[[:ascii:]]/');
+leak(2,0,sub { /(??{})/ }, '/(??{})/');
 
 leak(2,0,sub { !$^V }, '[perl #109762] version object in boolean context');
 
 
 # [perl #114356] run-time rexexp with unchanging pattern got
 # inflated refcounts
+eleak(2, 0, q{ my $x = "x"; "abc" =~ /$x/ for 1..5 }, '#114356');
 
-SKIP: {
-    skip "disabled under -Dmad (eval leaks)" if $Config{mad};
-    leak(2, 0, sub { eval q{ my $x = "x"; "abc" =~ /$x/ for 1..5 } }, '#114356');
-}
+eleak(2, 0, 'sub', '"sub" with nothing following');
+eleak(2, 0, '+sub:a{}', 'anon subs with invalid attributes');
+eleak(2, 0, 'no warnings; sub a{1 1}', 'sub with syntax error');
+eleak(2, 0, 'no warnings; sub {1 1}', 'anon sub with syntax error');
+eleak(2, 0, 'no warnings; use feature ":all"; my sub a{1 1}',
+     'my sub with syntax error');
 
 # Syntax errors
 eleak(2, 0, '"${<<END}"
                  ', 'unterminated here-doc in quotes in multiline eval');
 eleak(2, 0, '"${<<END
                }"', 'unterminated here-doc in multiline quotes in eval');
-leak(2, !!$Config{mad}, sub { eval { do './op/svleak.pl' } },
+leak(2, 0, sub { eval { do './op/svleak.pl' } },
         'unterminated here-doc in file');
 eleak(2, 0, 'tr/9-0//');
 eleak(2, 0, 'tr/a-z-0//');
@@ -203,7 +210,7 @@ eleak(2, 0, 'no warnings; nonexistent_function 33838',
         'bareword followed by number');
 eleak(2, 0, '//dd;'x20, '"too many errors" when parsing m// flags');
 eleak(2, 0, 's///dd;'x20, '"too many errors" when parsing s/// flags');
-eleak(2, !!$Config{mad}, 'no warnings; 2 2;BEGIN{}',
+eleak(2, 0, 'no warnings; 2 2;BEGIN{}',
       'BEGIN block after syntax error');
 {
     local %INC; # in case Errno is already loaded
@@ -211,10 +218,7 @@ eleak(2, !!$Config{mad}, 'no warnings; 2 2;BEGIN{}',
                 'implicit "use Errno" after syntax error');
 }
 eleak(2, 0, "\"\$\0\356\"", 'qq containing $ <null> something');
-{
-    local $::TODO = 'eval "END blah blah" still leaks';
-    eleak(2, 0, 'END OF TERMS AND CONDITIONS', 'END followed by words');
-}
+eleak(2, 0, 'END OF TERMS AND CONDITIONS', 'END followed by words');
 
 
 # [perl #114764] Attributes leak scalars
@@ -264,7 +268,7 @@ package hhtie {
     sub FIRSTKEY { keys %{$_[0][0]}; each %{$_[0][0]} }
     sub NEXTKEY  { each %{$_[0][0]} }
 }
-leak(2,!!$Config{mad}, sub {
+leak(2, 0, sub {
     eval q`
     	BEGIN {
 	    $hhtie::explosive = 0;
@@ -326,13 +330,12 @@ leak(2, 0, sub {
 # Run-time regexp code blocks
 {
     use re 'eval';
-    my $madness = !!$Config{mad};
     my @tests = ('[(?{})]','(?{})');
     for my $t (@tests) {
-	leak(2, $madness, sub {
+	leak(2, 0, sub {
 	    / $t/;
 	}, "/ \$x/ where \$x is $t does not leak");
-	leak(2, $madness, sub {
+	leak(2, 0, sub {
 	    /(?{})$t/;
 	}, "/(?{})\$x/ where \$x is $t does not leak");
     }
