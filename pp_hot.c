@@ -984,7 +984,7 @@ PP(pp_aassign)
 
     I32 gimme;
     HV *hash;
-    I32 i;
+    I32 i, constinit;
     int magic;
     int duplicates = 0;
     SV **firsthashrelem = NULL;	/* "= 0" keeps gcc 2.95 quiet  */
@@ -1039,7 +1039,9 @@ PP(pp_aassign)
 	sv = *lelem++;
         if (PL_op->op_flags & OPf_SPECIAL && SvREADONLY(sv)) { /* const init */
             SvREADONLY_off(sv);
-            PL_op->op_private |= OPpASSIGN_CONSTINIT; /* aassign internal */
+            constinit = 1;
+        } else {
+            constinit = 0;
         }
 	switch (SvTYPE(sv)) {
 	case SVt_PVAV:
@@ -1069,10 +1071,8 @@ PP(pp_aassign)
 	    if (PL_delaymagic & DM_ARRAY_ISA)
 		SvSETMAGIC(MUTABLE_SV(ary));
 	    LEAVE;
-            if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
+            if (constinit)
                 SvREADONLY_on(ary);
-                PL_op->op_private &= ~OPpASSIGN_CONSTINIT;
-            }
 	    break;
 	case SVt_PVHV:				/* normal hash */
             {
@@ -1108,9 +1108,8 @@ PP(pp_aassign)
                     didstore = hv_store_ent(hash,sv,tmpstr,0);
                     if (didstore) {
                         SvREFCNT_inc_simple_void_NN(tmpstr);
-                        if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
+                        if (constinit)
                             SvREADONLY_on(HeVAL(didstore));
-                        }
                     }
                     if (magic) {
                         if (SvSMAGICAL(tmpstr))
@@ -1123,10 +1122,8 @@ PP(pp_aassign)
                     relem++;
                 }
                 LEAVE;
-                if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
+                if (constinit)
                     SvREADONLY_on(hash);
-                    PL_op->op_private &= ~OPpASSIGN_CONSTINIT;
-                }
             }
 	    break;
 	default:
@@ -1150,10 +1147,8 @@ PP(pp_aassign)
 	    else
 		sv_setsv(sv, &PL_sv_undef);
 	    SvSETMAGIC(sv);
-            if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
+            if (constinit)
                 SvREADONLY_on(sv);
-                PL_op->op_private &= ~OPpASSIGN_CONSTINIT;
-            }
 	    break;
 	}
     }
