@@ -5521,15 +5521,23 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
         }
         if ((l->op_type == OP_AELEM && l->op_last->op_type == OP_CONST
                                     && l->op_first->op_type == OP_PADAV) ||
-             l->op_type == OP_AELEMFAST_LEX) {
-            IV  i = l->op_type == OP_AELEMFAST_LEX ? l->op_private : SvIV(PAD_SVl(l->op_last->op_targ));
+            l->op_type == OP_AELEMFAST_LEX) {
             AV *av = (AV*)PAD_SVl(l->op_first->op_targ);
             if (SvRMAGICAL(av))
                 yyerror(Perl_form(aTHX_ "const array %"SVf" cannot be magical",
                                   PAD_COMPNAME_SV(l->op_first->op_targ)));
-            if (AvALLOC(av) && abs(i) >= AvFILLp(av))
-                yyerror(Perl_form(aTHX_ "Invalid assignment to const array %"SVf,
-                                  PAD_COMPNAME_SV(l->op_first->op_targ)));
+            if (AvALLOC(av)) {
+                IV  i;
+                if (l->op_type == OP_AELEMFAST_LEX)
+                    i = l->op_private;
+                else {
+                    SV* ix = PAD_SVl(l->op_last->op_targ);
+                    i = SvIOK(ix) ? SvIVX(ix) : 0;
+                }
+                if (abs(i) > AvFILLp(av))
+                    yyerror(Perl_form(aTHX_ "Invalid assignment to const array %"SVf,
+                                      PAD_COMPNAME_SV(l->op_first->op_targ)));
+            }
         }
     }
 
