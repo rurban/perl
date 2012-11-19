@@ -1070,7 +1070,7 @@ PP(pp_aassign)
 		SvSETMAGIC(MUTABLE_SV(ary));
 	    LEAVE;
             if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
-                SvREADONLY_on(sv);
+                SvREADONLY_on(ary);
                 PL_op->op_private &= ~OPpASSIGN_CONSTINIT;
             }
 	    break;
@@ -1119,7 +1119,7 @@ PP(pp_aassign)
                 }
                 LEAVE;
                 if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
-                    SvREADONLY_on(sv);
+                    SvREADONLY_on(hash);
                     PL_op->op_private &= ~OPpASSIGN_CONSTINIT;
                 }
             }

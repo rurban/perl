@@ -33,15 +33,15 @@ my $test=1;
   if ($@ =~ /Invalid assignment to const variable/) { print "ok $test\n"; } else { print "not ok $test - #Invalid assignment to const variable $@\n"; }
   $test++;
 
-  # run-time elements
+  # run-time readonly-ness of elements
   eval 'my const %a=("a"=>"ok"); $a{a}=0';
   if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO \$a{a}=0 $@\n"; }
   $test++;
   eval 'my const @a=(1,2,3); $a[5]=0';
-  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO \$a[5]=0 $@\n"; }
+  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - # \$a[5]=0 $@\n"; }
   $test++;
 
-  # run-time errors
+  # run-time readonly errors
   $result = eval ' my const($a,$b)=(1,2); eval q($b=0);';
   if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO set const \$b in (\$a,\$b)\n"; }
   $test++;
@@ -52,7 +52,7 @@ my $test=1;
 
   # more run-time errors
   eval 'my const @a=(1,2,3); push @a,0';
-  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO push const \@a\n"; }
+  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - # push const \@a\n"; }
   $test++;
   eval 'my const %a=(0=>1,1=>2); delete $a{0}';
   if ($@ =~ /Attempt to access disallowed key/) { print "ok $test\n"; } else { print "not ok $test - #TODO delete from restricted hash\n"; }
