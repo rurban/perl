@@ -1,5 +1,5 @@
 #!./perl
-BEGIN { $| = 1; print "1..18\n"; }
+BEGIN { $| = 1; print "1..19\n"; }
 BEGIN { unshift @INC, '../lib', 'lib'; }
 my $test=1;
 {
@@ -34,8 +34,11 @@ my $test=1;
   $test++;
 
   # run-time readonly-ness of elements
-  eval 'my const %a=("a"=>"ok"); $a{a}=0';
-  if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - #TODO \$a{a}=0 $@\n"; }
+  eval 'my const %a=("a"=>"ok"); $a{b}=0'; # no new element
+  if ($@ =~ /Attempt to access disallowed key/) { print "ok $test\n"; } else { print "not ok $test - # \$a{b}=0 $@\n"; }
+  $test++;
+  eval 'my const %a=("a"=>"ok"); $a{a}=0'; # allow changing existing element
+  if ($@ !~ /Attempt to access disallowed key/) { print "ok $test\n"; } else { print "not ok $test - # \$a{a}=0 $@\n"; }
   $test++;
   eval 'my const @a=(1,2,3); $a[5]=0';
   if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - # \$a[5]=0 $@\n"; }
@@ -55,7 +58,7 @@ my $test=1;
   if ($@ =~ /Modification of a read-only value attempted/) { print "ok $test\n"; } else { print "not ok $test - # push const \@a\n"; }
   $test++;
   eval 'my const %a=(0=>1,1=>2); delete $a{0}';
-  if ($@ =~ /Attempt to access disallowed key/) { print "ok $test\n"; } else { print "not ok $test - #TODO delete from restricted hash\n"; }
+  if ($@ =~ /Attempt to delete readonly key/) { print "ok $test\n"; } else { print "not ok $test - #delete from restricted hash\n"; }
   $test++;
 
   # mixed with types

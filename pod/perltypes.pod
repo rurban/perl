@@ -55,9 +55,9 @@ const sets the internal SVf_READONLY flag for the variable, if it's
 a scalar, array or hash. The special package stash (e.g. C<%MyClass::>)
 counts as hash.
 Elements of const arrays and hashes are protected against vivification.
-Arrays and hashes are only I<shallow const>, only the structure is
-protected, not the values. For I<deep constness> you have to manually
-const all values also, or use a module.
+Arrays and hashes are only I<shallow const>, only the keys and the structure
+is protected, not the values.
+For I<deep constness> you have to manually const all values also, or use a module.
 
 Currently most const assignment violations are caught at compile-time,
 and if not you get at least an error at run-time.

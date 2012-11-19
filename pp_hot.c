@@ -1106,7 +1106,12 @@ PP(pp_aassign)
                         }
                     }
                     didstore = hv_store_ent(hash,sv,tmpstr,0);
-                    if (didstore) SvREFCNT_inc_simple_void_NN(tmpstr);
+                    if (didstore) {
+                        SvREFCNT_inc_simple_void_NN(tmpstr);
+                        if (PL_op->op_flags & OPf_SPECIAL && PL_op->op_private & OPpASSIGN_CONSTINIT) {
+                            SvREADONLY_on(HeVAL(didstore));
+                        }
+                    }
                     if (magic) {
                         if (SvSMAGICAL(tmpstr))
                             mg_set(tmpstr);

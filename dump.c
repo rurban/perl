@@ -947,7 +947,7 @@ S_op_private_to_names(pTHX_ SV *tmpsv, U32 optype, U32 op_private) {
         }                                                               \
 	else if (S_op_private_to_names(aTHX_ tmpsv, optype, oppriv)) {  \
 	}                                                               \
-	else if (OP_IS_FILETEST(o->op_type)) {                          \
+	else if (OP_IS_FILETEST(optype)) {                              \
             if (oppriv & OPpFT_ACCESS)                                  \
                 sv_catpv(tmpsv, ",FT_ACCESS");                          \
             if (oppriv & OPpFT_STACKED)                                 \
