@@ -5509,15 +5509,16 @@ Perl_newASSIGNOP(pTHX_ I32 flags, OP *left, I32 optype, OP *right)
     if ((left->op_type == OP_AELEM ||
          left->op_type == OP_HELEM ||
          left->op_type == OP_AELEMFAST_LEX)
-        && SvREADONLY(PAD_SVl(left->op_targ)))
+        && SvREADONLY(PAD_SVl(left->op_targ))
+        && !SvIsCOW(PAD_SVl(left->op_targ)))
     {
         BINOP *l = (BINOP*)left;
         if (l->op_type == OP_HELEM && l->op_last->op_type == OP_CONST && l->op_first->op_type == OP_PADHV) {
             SV* key = PAD_SVl(l->op_last->op_targ);
             HV *hv  = (HV*)PAD_SVl(l->op_first->op_targ);
-            if (HvKEYS(hv) && !hv_exists_ent(hv, key, 0))
-                yyerror(Perl_form(aTHX_ "Invalid assignment to const hash %"SVf,
-                                  PAD_COMPNAME_SV(l->op_first->op_targ)));
+            if (!(SvFLAGS(hv) & SVphv_SHAREKEYS) && HvKEYS(hv) && !hv_exists_ent(hv, key, 0))
+                yyerror(Perl_form(aTHX_ "Invalid assignment to const hash %"SVf" 0x%x",
+                                  PAD_COMPNAME_SV(l->op_first->op_targ), SvFLAGS(hv)));
         }
         if ((l->op_type == OP_AELEM && l->op_last->op_type == OP_CONST
                                     && l->op_first->op_type == OP_PADAV) ||
