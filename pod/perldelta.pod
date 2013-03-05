@@ -4,8 +4,27 @@ perldelta - what's new for perl v5.6.x
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.005 release and the 5.6.2
+This document describes differences between the 5.005 release and the 5.6.3
 release.
+
+=head1 Summary of changes between 5.6.2 and 5.6.3
+
+The 5.6.3 release is aimed at providing only a minimal update to perl 5.6.2,
+applying security fixes and compiler and shell compatibility.
+
+=head2 Security Issues
+
+Hash randomization was backported from 5.8.1, but rehashing on hsplit not.
+So hashes are always randomized, not only when being enhanced.
+
+Mainly due to security reasons, the "random ordering" of hashes
+has been made even more random.  Previously while the order of hash
+elements from keys(), values(), and each() was essentially random,
+it was still repeatable.  Now, however, the order varies between
+different runs of Perl.
+See http://perldoc.perl.org/perlsec.html#Algorithmic-Complexity-Attacks
+
+perl #111594 Socket heap-buffer-overflow on linux with abstract AF_UNIX paths.
 
 =head1 Summary of changes between 5.6.1 and 5.6.2
 
