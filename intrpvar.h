@@ -470,6 +470,8 @@ PERLVAR(Ihe_arenaroot,	XPV*)		/* list of allocated he areas */
 PERLVAR(Inumeric_radix_sv,	SV *)	/* The radix separator if not '.' */
 #endif
 
+PERLVARI(Ihash_seed, UV, 0)		/* Hash initializer */
+
 /* New variables must be added to the very end for binary compatibility.
  * XSUB.h provides wrapper functions via perlapi.h that make this
  * irrelevant, but not all code may be expected to #include XSUB.h. */

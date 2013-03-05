@@ -1185,9 +1185,12 @@ it.  When called in scalar context, returns only the key for the next
 element in the hash.
 
 Entries are returned in an apparently random order.  The actual random
-order is subject to change in future versions of perl, but it is guaranteed
-to be in the same order as either the C<keys> or C<values> function
-would produce on the same (unmodified) hash.
+order is subject to change in future versions of perl, but it is
+guaranteed to be in the same order as either the C<keys> or C<values>
+function would produce on the same (unmodified) hash.  
+The ordering is different even between different runs of Perl
+because of security reasons (see L<perlsec/"Algorithmic Complexity
+Attacks".)
 
 When the hash is entirely read, a null array is returned in list context
 (which when assigned produces a false (C<0>) value), and C<undef> in
@@ -2207,8 +2210,12 @@ scalar context, returns the number of keys.)  The keys are returned in
 an apparently random order.  The actual random order is subject to
 change in future versions of perl, but it is guaranteed to be the same
 order as either the C<values> or C<each> function produces (given
-that the hash has not been modified).  As a side effect, it resets
-HASH's iterator.
+that the hash has not been modified). The ordering is different even 
+between different runs of Perl because of security reasons (see 
+L<perlsec/"Algorithmic Complexity Attacks".)
+
+As a side effect, calling keys() resets the HASH's internal iterator,
+see L</each>.
 
 Here is yet another way to print your environment:
 

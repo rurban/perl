@@ -43,14 +43,45 @@ struct xpvhv {
 };
 
 /* hash a key */
+/* FYI: This is the "One-at-a-Time" algorithm by Bob Jenkins
+ * from requirements by Colin Plumb.
+ * (http://burtleburtle.net/bob/hash/doobs.html) */
+/* The use of a temporary pointer and the casting games
+ * is needed to serve the dual purposes of
+ * (a) the hashed data being interpreted as "unsigned char" (new since 5.8,
+ *     a "char" can be either signed or signed, depending on the compiler)
+ * (b) catering for old code that uses a "char"
+ *
+ * The "hash seed" feature was added in Perl 5.8.1 to perturb the results
+ * to avoid "algorithmic complexity attacks".
+ *
+ * If USE_HASH_SEED is defined, hash randomisation is done by default
+ * If USE_HASH_SEED_EXPLICIT is defined, hash randomisation is done
+ * only if the environment variable PERL_HASH_SEED is set.
+ * For maximal control, one can define PERL_HASH_SEED.
+ * (see also perl.c:perl_parse()).
+ */
+#ifndef PERL_HASH_SEED
+#   if defined(USE_HASH_SEED) || defined(USE_HASH_SEED_EXPLICIT)
+#       define PERL_HASH_SEED	PL_hash_seed
+#   else
+#       define PERL_HASH_SEED	0
+#   endif
+#endif
 #define PERL_HASH(hash,str,len) \
      STMT_START	{ \
-	register const char *s_PeRlHaSh = str; \
+	register const char *s_PeRlHaSh_tmp = str; \
+	register const unsigned char *s_PeRlHaSh = (const unsigned char *)s_PeRlHaSh_tmp; \
 	register I32 i_PeRlHaSh = len; \
-	register U32 hash_PeRlHaSh = 0; \
-	while (i_PeRlHaSh--) \
-	    hash_PeRlHaSh = hash_PeRlHaSh * 33 + *s_PeRlHaSh++; \
-	(hash) = hash_PeRlHaSh + (hash_PeRlHaSh>>5); \
+	register U32 hash_PeRlHaSh = PERL_HASH_SEED; \
+	while (i_PeRlHaSh--) { \
+	    hash_PeRlHaSh += *s_PeRlHaSh++; \
+	    hash_PeRlHaSh += (hash_PeRlHaSh << 10); \
+	    hash_PeRlHaSh ^= (hash_PeRlHaSh >> 6); \
+	} \
+	hash_PeRlHaSh += (hash_PeRlHaSh << 3); \
+	hash_PeRlHaSh ^= (hash_PeRlHaSh >> 11); \
+	(hash) = (hash_PeRlHaSh + (hash_PeRlHaSh << 15)); \
     } STMT_END
 
 /*
