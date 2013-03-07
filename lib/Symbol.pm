@@ -65,7 +65,9 @@ even if C<use strict 'refs'> is in effect.
 
 C<Symbol::delete_package> wipes out a whole package namespace.  Note
 this routine is not exported by default--you may want to import it
-explicitly.
+explicitly. Also note that this routine does not remove the package
+module name from the C<%INC> hash. So redefinition by reloading via
+C<require> will fail.
 
 =head1 BUGS
 
