@@ -3546,6 +3546,7 @@ S_check_type_and_open(pTHX_ SV *name)
 
     PERL_ARGS_ASSERT_CHECK_TYPE_AND_OPEN;
 
+    CHECK_PATHNAME(name, NULL);
     if (st_rc < 0 || S_ISDIR(st.st_mode) || S_ISBLK(st.st_mode)) {
 	return NULL;
     }
@@ -3671,6 +3672,10 @@ PP(pp_require)
     name = SvPV_const(sv, len);
     if (!(name && len > 0 && *name))
 	DIE(aTHX_ "Null filename used");
+    CHECK_PATHNAME(sv, Perl_die(aTHX_ "Can't locate %s:   %s",
+      pv_escape(newSVpvs_flags("",SVs_TEMP),SvPVX(sv),SvCUR(sv),SvCUR(sv)*2,NULL,
+                SvUTF8(sv)?PERL_PV_ESCAPE_UNI:0),
+      Strerror(ENOENT)));
     TAINT_PROPER("require");
 
 

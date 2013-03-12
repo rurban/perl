@@ -5814,6 +5814,29 @@ extern void moncontrol(int);
 #  define do_aexec(really, mark,sp)	do_aexec5(really, mark, sp, 0, 0)
 #endif
 
+/* check embedded \0 characters in pathnames passed to syscalls,
+   but allow one ending \0 */
+#define CHECK_PATHNAME(pv,r) CHECK_SAFESYSCALLS("pathname",pv,r)
+/* check embedded \0 characters in args for various other syscalls.
+   user and group names, glob. */
+#define CHECK_SYSCALL(pv,r)  CHECK_SAFESYSCALLS("syscall",pv,r)
+/* if (CHECK_SYSCALL(pv, return NULL)); */
+#if defined(WIN32) && (defined(UNICODE) || defined(UNDER_CE))
+#define CHECK_SAFESYSCALLS(what,pv,reaction)
+/* TODO: wchar API, so far only used on wince */
+#else
+#define CHECK_SAFESYSCALLS(what,pv,reaction)                            \
+    if (SvPOK(pv)) {                                                    \
+      char *i;                                                          \
+      char *p = SvPVX(pv);                                              \
+      if ( (i = strchr(p, 0))&&(i-p)&&((size_t)(i-p)<SvCUR(pv)-1) ) {   \
+        SETERRNO(ENOENT, LIB_INVARG);                                   \
+        if (ckWARN_d(WARN_SYSCALLS)) {                                  \
+            ck_warner_d(packWARN(WARN_SYSCALLS),                        \
+                        "Invalid \\0 character in %s: %s\\0%s", what,p,++i); \
+        } return reaction; }}
+#endif
+
 #if defined(OEMVS)
 #define NO_ENV_ARRAY_IN_MAIN
 #endif

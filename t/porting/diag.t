@@ -478,6 +478,7 @@ Can't coerce readonly %s to string in %s
 Can't find string terminator %c%s%c anywhere before EOF
 Can't fix broken locale name "%s"
 Can't get short module name from a handle
+Can't locate %s:   %s
 Can't locate object method "%s" via package "%s" (perhaps you forgot to load "%s"?)
 Can't pipe "%s": %s
 Can't spawn: %s

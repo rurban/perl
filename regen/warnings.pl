@@ -16,7 +16,7 @@
 #
 # This script is normally invoked from regen.pl.
 
-$VERSION = '1.02_03';
+$VERSION = '1.02_04';
 
 BEGIN {
     require 'regen/regen_lib.pl';
@@ -56,7 +56,8 @@ my $tree = {
 	 			'internal'	=> [ 5.008, DEFAULT_OFF],
          			'debugging'	=> [ 5.008, DEFAULT_ON],
          			'malloc'	=> [ 5.008, DEFAULT_ON],
-	 		   }],
+			        'syscalls'      => [ 5.017, DEFAULT_ON],
+			   }],
         'deprecated'	=> [ 5.008, DEFAULT_ON],
        	'void'		=> [ 5.008, DEFAULT_OFF],
        	'recursion'	=> [ 5.008, DEFAULT_OFF],
@@ -92,7 +93,6 @@ my $tree = {
                                 'experimental::lexical_topic' =>
                                     [ 5.017, DEFAULT_ON ],
                         }],
-
        	 #'default'	=> [ 5.008, DEFAULT_ON ],
   	}],
 } ;

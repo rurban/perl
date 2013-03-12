@@ -2254,7 +2254,7 @@ s	|void	|printbuf	|NN const char *const fmt|NN const char *const s
 #endif
 
 #if defined(PERL_IN_UNIVERSAL_C)
-s	|bool|isa_lookup	|NN HV *stash|NN const char * const name \
+s	|bool	|isa_lookup	|NN HV *stash|NN const char * const name \
                                         |STRLEN len|U32 flags
 #endif
 
@@ -2267,7 +2267,7 @@ s	|char*	|stdize_locale	|NN char* locs
 #if defined(PERL_IN_UTIL_C)
 s	|const COP*|closest_cop	|NN const COP *cop|NULLOK const OP *o
 s	|SV*	|mess_alloc
-s	|SV *|with_queued_errors|NN SV *ex
+s	|SV *	|with_queued_errors|NN SV *ex
 s	|bool	|invoke_exception_hook|NULLOK SV *ex|bool warn
 #if defined(PERL_MEM_LOG) && !defined(PERL_MEM_LOG_NOIMPL)
 sn	|void	|mem_log_common	|enum mem_log_type mlt|const UV n|const UV typesize \

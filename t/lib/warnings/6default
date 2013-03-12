@@ -119,3 +119,8 @@ no warnings;
 }
 EXPECT
 
+########
+# Check if syscalls warn by default
+open(my $i, "foo\0bar");
+EXPECT
+Invalid \0 character in pathname: foo\0bar at - line 2.
