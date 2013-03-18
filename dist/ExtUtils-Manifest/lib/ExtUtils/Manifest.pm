@@ -13,7 +13,7 @@ use vars qw($VERSION @ISA @EXPORT_OK
           $Is_MacOS $Is_VMS $Is_VMS_mode $Is_VMS_lc $Is_VMS_nodot
           $Debug $Verbose $Quiet $MANIFEST $DEFAULT_MSKIP);
 
-$VERSION = '1.63';
+$VERSION = '1.63_01';
 @ISA=('Exporter');
 @EXPORT_OK = qw(mkmanifest
                 manicheck  filecheck  fullcheck  skipcheck
@@ -567,8 +567,8 @@ sub cp_if_diff {
     }
     my($diff) = 0;
     local(*F,*T);
-    open(F,"< $from\0") or die "Can't read $from: $!\n";
-    if (open(T,"< $to\0")) {
+    open(F,"<",$from) or die "Can't read $from: $!\n";
+    if (open(T,"<",$to)) {
         local $_;
 	while (<F>) { $diff++,last if $_ ne <T>; }
 	$diff++ unless eof(T);
