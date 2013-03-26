@@ -96,13 +96,14 @@ is join("-", $scratch::a//'u', $scratch::a2//'u', $scratch::b//'u',
    "u-u-u-sea",
    'reset "range"';
 
-{ no strict; ${"scratch::\0foo"} = "bar" }
-$scratch::a = "foo";
-package scratch { reset "\0a" }
-is join("-", $scratch::a//'u', do { no strict; ${"scratch::\0foo"} }//'u'),
-   "u-u",
-   'reset "\0char"';
-
+{ no strict 'syms';
+  { no strict; ${"scratch::\0foo"} = "bar" }
+  $scratch::a = "foo";
+  package scratch { reset "\0a" }
+  is join("-", $scratch::a//'u', do { no strict; ${"scratch::\0foo"} }//'u'),
+  "u-u",
+  'reset "\0char"';
+}
 # This used to crash under threaded builds, because pmops were remembering
 # their stashes by name, rather than by pointer.
 fresh_perl_is( # it crashes more reliably with a smaller script

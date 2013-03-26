@@ -12,17 +12,20 @@ use Test::More tests => 26;
 use XS::APItest;
 
 is XS::APItest::AutoLoader::frob(), 'frob', 'name passed to XS AUTOLOAD';
-is "XS::APItest::AutoLoader::fr\0b"->(), "fr\0b",
-  'name with embedded null passed to XS AUTOLOAD';
+{
+  no strict 'syms';
+  is "XS::APItest::AutoLoader::fr\0b"->(), "fr\0b",
+    'name with embedded null passed to XS AUTOLOAD';
+  *AUTOLOAD = *XS::APItest::AutoLoader::AUTOLOADp;
+  is "fr\0b"->(), "fr\0b",
+    'name with embedded null passed to XS AUTOLOAD with proto';
+}
 is "XS::APItest::AutoLoader::fr\x{1ed9}b"->(), "fr\x{1ed9}b",
   'Unicode name passed to XS AUTOLOAD';
 
-*AUTOLOAD = *XS::APItest::AutoLoader::AUTOLOADp;
 
 is frob(), 'frob', 'name passed to XS AUTOLOAD with proto';
 is prototype \&AUTOLOAD, '*$', 'prototype is unchanged';
-is "fr\0b"->(), "fr\0b",
-  'name with embedded null passed to XS AUTOLOAD with proto';
 is prototype \&AUTOLOAD, '*$', 'proto unchanged after embedded-null call';
 is "fr\x{1ed9}b"->(), "fr\x{1ed9}b",
   'Unicode name passed to XS AUTOLOAD with proto';

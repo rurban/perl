@@ -31,11 +31,13 @@ for my $type ( 0..3 ) {
     no warnings 'once';
     *method = sub { 1 };
 }
-
-ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 0, $level, 0), "gv_fetchmeth() is nul-clean";
-ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 1, $level, 0), "gv_fetchmeth_sv() is nul-clean";
-is XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 2, $level, 0), "*main::method", "gv_fetchmeth_pv() is not nul-clean";
-ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 3, $level, 0), "gv_fetchmeth_pvn() is nul-clean";
+{
+  no strict 'syms';
+  ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 0, $level, 0), "gv_fetchmeth() is nul-clean";
+  ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 1, $level, 0), "gv_fetchmeth_sv() is nul-clean";
+  is XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 2, $level, 0), "*main::method", "gv_fetchmeth_pv() is not nul-clean";
+  ok !XS::APItest::gv_fetchmeth_type(\%::, "method\0not quite!", 3, $level, 0), "gv_fetchmeth_pvn() is nul-clean";
+}
 
 {
     use utf8;

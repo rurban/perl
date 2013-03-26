@@ -933,6 +933,7 @@ package HTTP::MobileAttribute::Plugin::Locator {
 # contains a null.
 package lrcg {
   use constant x => 3;
+  no strict 'syms';
   # These two lines abuse the optimisation that copies the scalar ref from
   # one stash element to another, to get a constant with a null in its name
   *{"yz\0a"} = \&{"x"};

@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan (109);
+plan (111);
 
 sub expected {
     my($object, $package, $type) = @_;
@@ -142,3 +142,17 @@ expected($c4, 'C4', "SCALAR");
 
 bless [], "main::";
 ok(1, 'blessing into main:: does not crash'); # [perl #87388]
+
+{
+  use strict 'syms';
+  eval { bless [], "foo::b\0ar"; };
+  like($@, qr/^Invalid classname/,
+       'nul-names should die without strict syms'); # [perl #117267]
+}
+
+{
+  no strict 'syms';
+  my $class = "foo::b\0ar";
+  my $o = bless [], $class;
+  is(ref $o, $class, 'nul-names consistency with ref'); # [perl #117267]
+}

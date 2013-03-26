@@ -384,6 +384,7 @@ is $kalled, 1, 'calling a class method via a magic variable';
     sub method { 1 }
 
     package main;
+    no strict 'syms';
     eval {
         NulTest->${ \"method\0Whoops" };
     };

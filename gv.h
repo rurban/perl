@@ -76,6 +76,20 @@ struct gp {
 	STMT_START { assert(SvTYPE(gv) == SVt_PVGV);	\
 		(((XPV*) SvANY(gv))->xpv_len = (val)); } STMT_END
 
+/* die on embedded \0 characters in symbol or class names */
+#define CHECK_SAFESYMNAME(p,l)   CHECK_SAFENAME("symbol",p,l)
+#define CHECK_SAFESTASHNAME(p,l) CHECK_SAFENAME("class",p,l)
+/* TODO: need to check all unprintable chars as in the parser */
+#define CHECK_SAFENAME(what,p,l)                                        \
+    if (PL_hints & HINT_STRICT_SYMS) {                                  \
+        char *i;                                                        \
+        if ( (i = strchr(p, 0)) && ((i-p) < (int)l) ) { ++i;            \
+            Perl_croak(aTHX_ "Illegal %sname %s", what,                 \
+                   pv_display(newSVpvs_flags("", SVs_TEMP),p,l,0,127)); \
+        }                                                               \
+    }
+
+
 /*
 =head1 GV Functions
 

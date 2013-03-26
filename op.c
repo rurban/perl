@@ -5120,13 +5120,19 @@ Perl_utilize(pTHX_ int aver, I32 floor, OP *version, OP *idop, OP *arg)
 	/* If a version >= 5.11.0 is requested, strictures are on by default! */
 	if (vcmp(use_version,
 		 sv_2mortal(upg_version(newSVnv(5.011000), FALSE))) >= 0) {
-	    if (!(PL_hints & HINT_EXPLICIT_STRICT_REFS))
+	    if (!(PL_hints & HINT_EXPLICIT_STRICT_REFS))  /* no strict 'refs' */
 		PL_hints |= HINT_STRICT_REFS;
-	    if (!(PL_hints & HINT_EXPLICIT_STRICT_SUBS))
+	    if (!(PL_hints & HINT_EXPLICIT_STRICT_SUBS))  /* no strict 'subs' */
 		PL_hints |= HINT_STRICT_SUBS;
-	    if (!(PL_hints & HINT_EXPLICIT_STRICT_VARS))
+	    if (!(PL_hints & HINT_EXPLICIT_STRICT_VARS))  /* no strict 'vars' */
 		PL_hints |= HINT_STRICT_VARS;
 	}
+	/* version 5.18 adds strict syms, but w/o special explicit check */
+	else if (vcmp(use_version,
+		 sv_2mortal(upg_version(newSVnv(5.017010), FALSE))) >= 0) {
+	    if (!(PL_hints & HINT_EXPLICIT_STRICT_SYMS))  /* no strict 'syms' */
+                PL_hints |= HINT_STRICT_SYMS;
+        }
 	/* otherwise they are off */
 	else {
 	    if (!(PL_hints & HINT_EXPLICIT_STRICT_REFS))

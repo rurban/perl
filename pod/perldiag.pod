@@ -2276,6 +2276,19 @@ L<C<(?I<PARNO>)>|perlre/(?PARNO) (?-PARNO) (?+PARNO) (?R) (?0)>.
 (X) The PERL5OPT environment variable may only be used to set the
 following switches: B<-[CDIMUdmtw]>.
 
+=item Illegal symbolname: %s
+
+=item Illegal classname: %s
+
+(F) Unparsable symbol or class names create now a fatal error when created
+via C<no strict 'refs'> or via C<bless>.
+Before 5.16 such names were valid but everything behind the \0 was ignored,
+since 5.16 Perl is now binary safe, but such hidden payload may lead to
+security problems.
+
+If you know what you are doing you can turn off this error by
+C<no strict 'syms';>.
+
 =item Ill-formed CRTL environ value "%s"
 
 (W internal) A warning peculiar to VMS.  Perl tried to read the CRTL's

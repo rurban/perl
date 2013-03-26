@@ -1,6 +1,6 @@
 package strict;
 
-$strict::VERSION = "1.07";
+$strict::VERSION = "1.08";
 
 # Verify that we're called correctly so that strictures will work.
 unless ( __FILE__ =~ /(^|[\/\\])\Q${\__PACKAGE__}\E\.pmc?$/ ) {
@@ -12,12 +12,14 @@ unless ( __FILE__ =~ /(^|[\/\\])\Q${\__PACKAGE__}\E\.pmc?$/ ) {
 my %bitmask = (
 refs => 0x00000002,
 subs => 0x00000200,
-vars => 0x00000400
+vars => 0x00000400,
+syms => 0x00000800
 );
 my %explicit_bitmask = (
 refs => 0x00000020,
 subs => 0x00000040,
-vars => 0x00000080
+vars => 0x00000080,
+syms => 0x00000800
 );
 
 sub bits {
@@ -37,7 +39,7 @@ sub bits {
     $bits;
 }
 
-my @default_bits = qw(refs subs vars);
+my @default_bits = qw(refs subs vars syms);
 
 sub import {
     shift;
@@ -63,6 +65,7 @@ strict - Perl pragma to restrict unsafe constructs
     use strict "vars";
     use strict "refs";
     use strict "subs";
+    use strict "syms";
 
     use strict;
     no strict "vars";
@@ -71,8 +74,8 @@ strict - Perl pragma to restrict unsafe constructs
 
 If no import list is supplied, all possible restrictions are assumed.
 (This is the safest mode to operate in, but is sometimes too strict for
-casual programming.)  Currently, there are three possible things to be
-strict about:  "subs", "vars", and "refs".
+casual programming.)  Currently, there are four possible things to be
+strict about:  "subs", "vars", "refs" and "syms".
 
 =over 6
 
@@ -133,6 +136,27 @@ on the left hand side of the C<< => >> symbol.
     $SIG{PIPE} = "Plumber"; 	# just fine: quoted string is always ok
     $SIG{PIPE} = \&Plumber; 	# preferred form
 
+=item C<strict syms>
+
+This generates a runtime error if you use illegal symbol or class
+names via C<strict refs>. Illegal symbol or classnames are names
+which cannot be parsed.
+
+    use strict;             # enables strict syms
+    no strict 'refs';       # allow symbol creation via strings
+    ${"foo\0bar"};          # error: Illegal symbolname "foo\0bar"
+    ${"foo\0::bar"};        # error: Illegal classname "foo\0"
+    bless {}, "foo\0::bar"; # error: Illegal classname "foo\0::bar"
+
+    use utf8;
+    bless {}, "\N{COMBINING ENCLOSING CIRCLE BACKSLASH}"; # error: Illegal classname: "⃠"
+    ${"⃠"};                # error: Illegal symbolname "⃠"
+
+    no strict 'syms';       # allow illegal symbols
+    ${"foo\0bar"};          # ok
+    ${"foo\0::bar"};        # ok
+    bless {}, "foo\0::bar"; # ok
+
 =back
 
 See L<perlmodlib/Pragmatic Modules>.
@@ -151,5 +175,9 @@ if unknown restrictions are used, the strict pragma will abort with
 As of version 1.04 (Perl 5.10), strict verifies that it is used as
 "strict" to avoid the dreaded Strict trap on case insensitive file
 systems.
+
+strict 'syms' was added with Perl 5.18, strict version 1.08.
+Unsafe symbols were allowed via no strict 'refs' or L<perlfunc/bless>,
+but some names could not be processed internally until 5.16.
 
 =cut

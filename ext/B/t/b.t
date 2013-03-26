@@ -301,7 +301,7 @@ foo
 }
 
 my $sub1 = sub {die};
-{ no warnings 'once'; no strict; *Peel:: = *{"Pe\0e\x{142}::"} }
+{ no warnings qw(once); no strict; *Peel:: = *{"Pe\0e\x{142}::"} }
 my $sub2 = eval 'package Peel; sub {die}';
 my $cop = B::svref_2object($sub1)->ROOT->first->first;
 my $bobby = B::svref_2object($sub2)->ROOT->first->first;
@@ -310,6 +310,7 @@ is $cop->stashpv, 'main', 'COP->stashpv';
 
 SKIP: {
     skip "no nulls in packages before 5.17", 1 if $] < 5.017;
+    no strict 'syms';
     is $bobby->stashpv, "Pe\0e\x{142}", 'COP->stashpv with utf8 and nulls';
 }
 

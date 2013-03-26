@@ -43,7 +43,7 @@ our @hint_bundles = qw( default 5.10 5.11 5.15 );
 # This gets set (for now) in $^H as well as in %^H,
 # for runtime speed of the uc/lc/ucfirst/lcfirst functions.
 # See HINT_UNI_8_BIT in perl.h.
-our $hint_uni8bit = 0x00000800;
+our $hint_uni8bit = 0x04000000;
 
 # TODO:
 # - think about versioned features (use feature switch => 2)

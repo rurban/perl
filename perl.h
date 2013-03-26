@@ -4869,14 +4869,15 @@ typedef enum {
 #define HINT_BYTES		0x00000008 /* bytes pragma */
 #define HINT_LOCALE_NOT_CHARS	0x00000010 /* locale ':not_characters' pragma */
 
-#define HINT_EXPLICIT_STRICT_REFS	0x00000020 /* strict.pm */
-#define HINT_EXPLICIT_STRICT_SUBS	0x00000040 /* strict.pm */
-#define HINT_EXPLICIT_STRICT_VARS	0x00000080 /* strict.pm */
+#define HINT_EXPLICIT_STRICT_REFS	0x00000020 /* no strict 'refs' checked by -E */
+#define HINT_EXPLICIT_STRICT_SUBS	0x00000040 /* no strict 'subs' checked by -E */
+#define HINT_EXPLICIT_STRICT_VARS	0x00000080 /* no strict 'vars' checked by -E */
+#define HINT_EXPLICIT_STRICT_SYMS	0x00000800 /* no strict 'syms' checked by -E */
 
 #define HINT_BLOCK_SCOPE	0x00000100
-#define HINT_STRICT_SUBS	0x00000200 /* strict pragma */
-#define HINT_STRICT_VARS	0x00000400 /* strict pragma */
-#define HINT_UNI_8_BIT		0x00000800 /* unicode_strings feature */
+#define HINT_STRICT_SUBS	0x00000200 /* strict pragma run-time */
+#define HINT_STRICT_VARS	0x00000400 /* strict pragma run-time */
+#define HINT_STRICT_SYMS	0x00000800 /* strict pragma run-time */
 
 /* The HINT_NEW_* constants are used by the overload pragma */
 #define HINT_NEW_INTEGER	0x00001000
@@ -4895,8 +4896,8 @@ typedef enum {
 #define HINT_UTF8		0x00800000 /* utf8 pragma */
 
 #define HINT_NO_AMAGIC		0x01000000 /* overloading pragma */
-
 #define HINT_RE_FLAGS		0x02000000 /* re '/xism' pragma */
+#define HINT_UNI_8_BIT		0x04000000 /* unicode_strings feature */
 
 #define HINT_FEATURE_MASK	0x1c000000 /* 3 bits for feature bundles */
 

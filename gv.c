@@ -342,6 +342,7 @@ Perl_gv_init_pvn(pTHX_ GV *gv, HV *stash, const char *name, STRLEN len, U32 flag
 
     PERL_ARGS_ASSERT_GV_INIT_PVN;
     assert (!(proto && has_constant));
+    CHECK_SAFESYMNAME(name, len);
 
     if (has_constant) {
 	/* The constant has to be a simple scalar type.  */
@@ -533,8 +534,10 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
            it this order as we need an op number before calling
            new ATTRSUB. */
     (void)core_prototype((SV *)cv, name, code, &opnum);
-    if (stash)
+    if (stash) {
+        CHECK_SAFESTASHNAME(name, len);
 	(void)hv_store(stash,name,len,(SV *)gv,0);
+    }
     if (ampable) {
 	CvLVALUE_on(cv);
 	newATTRSUB_flags(
@@ -585,6 +588,7 @@ Perl_gv_fetchmeth_sv(pTHX_ HV *stash, SV *namesv, I32 level, U32 flags)
    STRLEN namelen;
    PERL_ARGS_ASSERT_GV_FETCHMETH_SV;
    namepv = SvPV(namesv, namelen);
+   CHECK_SAFESYMNAME(namepv, namelen);
    if (SvUTF8(namesv))
        flags |= SVf_UTF8;
    return gv_fetchmeth_pvn(stash, namepv, namelen, level, flags);
@@ -673,6 +677,8 @@ Perl_gv_fetchmeth_pvn(pTHX_ HV *stash, const char *name, STRLEN len, I32 level, 
     DEBUG_o( Perl_deb(aTHX_ "Looking for %smethod %s in package %s\n",
 		      flags & GV_SUPER ? "SUPER " : "",name,hvname) );
 
+    CHECK_SAFESTASHNAME(hvname, HvNAMELEN_get(stash));
+    CHECK_SAFESYMNAME(name, len);
     topgen_cmp = HvMROMETA(stash)->cache_gen + PL_sub_generation;
 
     if (flags & GV_SUPER) {
@@ -1107,6 +1113,7 @@ Perl_gv_autoload_pvn(pTHX_ HV *stash, const char *name, STRLEN len, U32 flags)
 	if (SvTYPE(stash) < SVt_PVHV) {
             STRLEN packname_len = 0;
             const char * const packname_ptr = SvPV_const(MUTABLE_SV(stash), packname_len);
+            CHECK_SAFESTASHNAME(packname_ptr, packname_len);
             packname = newSVpvn_flags(packname_ptr, packname_len,
                                       SVs_TEMP | SvUTF8(stash));
 	    stash = NULL;
@@ -1326,6 +1333,8 @@ Perl_gv_stashpvn(pTHX_ const char *name, U32 namelen, I32 flags)
     Copy(name, tmpbuf, namelen, char);
     tmpbuf[namelen]   = ':';
     tmpbuf[namelen+1] = ':';
+    if (flags & GV_ADD)
+        CHECK_SAFESTASHNAME(name, namelen);
     tmpgv = gv_fetchpvn_flags(tmpbuf, tmplen, flags, SVt_PVHV);
     if (tmpbuf != smallbuf)
 	Safefree(tmpbuf);
@@ -1335,6 +1344,7 @@ Perl_gv_stashpvn(pTHX_ const char *name, U32 namelen, I32 flags)
     if (!(flags & ~GV_NOADD_MASK) && !stash) return NULL;
     assert(stash);
     if (!HvNAME_get(stash)) {
+        CHECK_SAFESTASHNAME(name, namelen);
 	hv_name_set(stash, name, namelen, flags & SVf_UTF8 ? SVf_UTF8 : 0 );
 	
 	/* FIXME: This is a repeat of logic in gv_fetchpvn_flags */
@@ -1472,18 +1482,22 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 			if (GvSTASH(gv) == PL_defstash && len == 6
 			 && strnEQ(name, "CORE", 4))
 			    hv_name_set(stash, "CORE", 4, 0);
-			else
+			else {
+			    CHECK_SAFESTASHNAME(nambeg, (int)(name_cursor-nambeg));
 			    hv_name_set(
 				stash, nambeg, name_cursor-nambeg, is_utf8
-			    );
+                                        );
+                        }
 			/* If the containing stash has multiple effective
 			   names, see that this one gets them, too. */
 			if (HvAUX(GvSTASH(gv))->xhv_name_count)
 			    mro_package_moved(stash, NULL, gv, 1);
 		    }
 		}
-		else if (!HvNAME_get(stash))
+		else if (!HvNAME_get(stash)) {
+		    CHECK_SAFESTASHNAME(nambeg, (int)(name_cursor-nambeg));
 		    hv_name_set(stash, nambeg, name_cursor - nambeg, is_utf8);
+                }
 	    }
 
 	    if (*name_cursor == ':')
@@ -1614,6 +1628,8 @@ Perl_gv_fetchpvn_flags(pTHX_ const char *nambeg, STRLEN full_len, I32 flags,
 
     if (!SvREFCNT(stash))	/* symbol table under destruction */
 	return NULL;
+    if (add)
+        CHECK_SAFESYMNAME(name, len);
 
     gvp = (GV**)hv_fetch(stash,name,is_utf8 ? -len : len,add);
     if (!gvp || *gvp == (const GV *)&PL_sv_undef) {
@@ -3117,7 +3133,7 @@ Perl_gv_name_set(pTHX_ GV *gv, const char *name, U32 len, U32 flags)
     if (!(flags & GV_ADD) && GvNAME_HEK(gv)) {
 	unshare_hek(GvNAME_HEK(gv));
     }
-
+    CHECK_SAFESYMNAME(name, len);
     PERL_HASH(hash, name, len);
     GvNAME_HEK(gv) = share_hek(name, (flags & SVf_UTF8 ? -(I32)len : (I32)len), hash);
 }
