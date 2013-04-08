@@ -10,7 +10,7 @@ use strict;
 
 use vars qw(@ary %ary %hash);
 
-plan 85;
+plan 90;
 
 ok !defined($a);
 
@@ -176,3 +176,17 @@ sub PVBM () { 'foo' }
 my $pvbm = PVBM;
 undef $pvbm;
 ok !defined $pvbm;
+
+{
+    # [perl #54004] disallow undef %main::
+    eval 'undef %::';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+    eval 'undef %main::';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+    eval 'undef %main::main::';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+    eval 'package A; undef %main::';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+    eval 'package A; undef %::';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+}

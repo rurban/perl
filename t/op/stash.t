@@ -7,12 +7,12 @@ BEGIN {
 
 BEGIN { require "./test.pl"; }
 
-plan( tests => 58 );
+plan( tests => 60 );
 
-# Used to segfault (bug #15479)
+# Used to segfault (bug #15479 and #54044)
 fresh_perl_like(
     '%:: = ""',
-    qr/Odd number of elements in hash assignment at - line 1\./,
+    qr/^Attempt to clear the %main:: symbol table at - line 1\./m,
     { switches => [ '-w' ] },
     'delete $::{STDERR} and print a warning',
 );
@@ -60,14 +60,14 @@ package main;
     local $ENV{PERL_DESTRUCT_LEVEL} = 2;
     fresh_perl_is(
 		  'package A; sub a { // }; %::=""',
-		  '',
+		  'Attempt to clear the %main:: symbol table at - line 1.',
 		  '',
 		  );
     # Variant of the above which creates an object that persists until global
     # destruction.
     fresh_perl_is(
 		  'use Exporter; package A; sub a { // }; %::=""',
-		  '',
+		  'Attempt to clear the %main:: symbol table at - line 1.',
 		  '',
 		  );
 }
@@ -336,3 +336,11 @@ ok eval '
      sub foo{};
      1
   ', 'no crashing or errors when clobbering the current package';
+
+{
+    # [perl #54004] disallow setting i.e. clearing %main::
+    eval '%::=()';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+    eval '%main:: = ($_ = "")';
+    like $@, qr/^Attempt to clear the %main:: symbol table/;
+}

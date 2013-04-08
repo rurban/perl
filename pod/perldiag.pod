@@ -277,6 +277,15 @@ example by:
 
     bless $self, "$proto";
 
+=item Attempt to clear the %main:: symbol table
+
+(F) The failing code attempted to delete or set the C<%main::>
+symboltable, with something like C<%::=()> or C<undef %::>.  If you
+want to really clear all entries from the C<%main::> symboltable you
+need to do it manually, element by element.  But beware that a lot of
+magic main symbols entries are required, e.g.  for the regex engine,
+and all namespaces will be gone also, as they are keys of C<%main::>.
+
 =item Attempt to clear deleted array
 
 (S debugging) An array was assigned to when it was being freed.

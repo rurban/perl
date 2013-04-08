@@ -1469,6 +1469,8 @@ Perl_hv_clear(pTHX_ HV *hv)
     xhv = (XPVHV*)SvANY(hv);
 
     ENTER;
+    if ( hv == PL_defstash && PL_phase != PERL_PHASE_DESTRUCT )
+        croak("Attempt to clear the %main:: symbol table");
     SAVEFREESV(SvREFCNT_inc_simple_NN(hv));
     if (SvREADONLY(hv) && HvARRAY(hv) != NULL) {
 	/* restricted hash: convert all keys to placeholders */
@@ -1706,6 +1708,8 @@ Perl_hv_undef_flags(pTHX_ HV *hv, U32 flags)
     /* note that the code following prior to hfreeentries is duplicated
      * in sv_clear(), and changes here should be done there too */
     if (PL_phase != PERL_PHASE_DESTRUCT && (name = HvNAME(hv))) {
+        if (hv == PL_defstash)
+            croak("Attempt to clear the %main:: symbol table");
         if (PL_stashcache) {
             DEBUG_o(Perl_deb(aTHX_ "hv_undef_flags clearing PL_stashcache for '%"
                              HEKf"'\n", HvNAME_HEK(hv)));

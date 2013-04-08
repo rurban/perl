@@ -6120,6 +6120,8 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 	    /* Free back-references before magic, in case the magic calls
 	     * Perl code that has weak references to sv. */
 	    if (type == SVt_PVHV) {
+                if (PL_phase != PERL_PHASE_DESTRUCT && MUTABLE_HV(sv) == PL_defstash)
+                    croak("Attempt to clear the %main:: symbol table");
 		Perl_hv_kill_backrefs(aTHX_ MUTABLE_HV(sv));
 		if (SvMAGIC(sv))
 		    mg_free(sv);
