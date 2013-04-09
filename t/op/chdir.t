@@ -11,7 +11,7 @@ BEGIN {
     if (is_miniperl() && !eval {require File::Spec::Functions; 1}) {
 	push @INC, qw(dist/Cwd/lib dist/Cwd ../dist/Cwd/lib ../dist/Cwd);
     }
-    plan(tests => 48);
+    plan(tests => 49);
 }
 
 use Config;
@@ -227,3 +227,9 @@ foreach my $key (@magic_envs) {
     }
     is( abs_path, $Cwd,             '  abs_path() agrees' );
 }
+
+# [perl #117543] delete *ENV used to segfault <= 5.18
+eval {
+  delete $::{ENV}; chdir;
+};
+like($@, qr/^Attempt to delete protected symbol \$::{ENV} at/, "delete $::{ENV}");

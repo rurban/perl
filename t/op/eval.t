@@ -6,7 +6,7 @@ BEGIN {
     require './test.pl';
 }
 
-plan(tests => 128);
+plan(tests => 129);
 
 eval 'pass();';
 
@@ -618,3 +618,9 @@ syntax error at (eval 1) line 1, at EOF
 EOE
 	qq'Right line number for eval "$_"';
 }
+
+# [perl #117543] delete *\010 used to segfault <= 5.18
+eval {
+  delete $::{"\010"}; eval "";
+};
+like($@, qr/^Attempt to delete protected symbol /, "delete $::{\\010}");

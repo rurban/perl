@@ -303,6 +303,11 @@ which is not in its key set.
 (F) The failing code attempted to delete a key whose value has been
 declared readonly from a restricted hash.
 
+=item Attempt to delete protected symbol $::{%s}
+
+(F) The failing code attempted to delete a protected symbol, like
+C<*ENV> or C<$^H> resp. C<*{"\010"}> from the main symbol table.
+
 =item Attempt to free non-arena SV: 0x%x
 
 (S internal) All SV objects are supposed to be allocated from arenas

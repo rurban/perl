@@ -976,6 +976,14 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     xhv = (XPVHV*)SvANY(hv);
     if (!HvARRAY(hv))
 	return NULL;
+    if ( hv == PL_defstash ) {
+        /* Some main symbols may not be deleted */
+        if (   (klen == 3 && memEQ(key, "ENV", 3)) /* needed e.g. for chdir */
+            || (klen == 1 && *key == 8) )          /* for eval */
+            croak("Attempt to delete protected symbol $::{%s}",
+                  *key < 32 ? pv_display(newSVpvs_flags("", SVs_TEMP),key,klen,0,255)
+                            : key);
+    }
 
     if (is_utf8 && !(k_flags & HVhek_KEYCANONICAL)) {
 	const char * const keysave = key;
