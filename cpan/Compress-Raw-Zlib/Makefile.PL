@@ -14,6 +14,10 @@ my $OLD_ZLIB = '' ;
 my $WALL = '' ;
 my $GZIP_OS_CODE = -1 ;
 my $USE_PPPORT_H = ($ENV{PERL_CORE}) ? '' : '-DUSE_PPPORT_H';
+my $OPTIMIZE = $Config{'optimize'};
+if ($Config{'gccversion'} and $OPTIMIZE =~ /-g (gdb)? 3/x) {
+  $OPTIMIZE =~ s/-g(gdb)?3/-g/g; # [88936] out of memory with -g3 since 2.062
+}
 
 #$WALL = ' -pedantic ' if $Config{'cc'} =~ /gcc/ ;
 #$WALL = ' -Wall -Wno-comment ' if $Config{'cc'} =~ /gcc/ ;

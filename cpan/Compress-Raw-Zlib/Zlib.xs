@@ -1441,6 +1441,8 @@ Perl_sv_dump(output); */
 
     
         if (RETVAL == Z_NEED_DICT && s->dictionary) {
+            STRLEN dlen;
+            const Bytef* b = (const Bytef*)SvPV(s->dictionary, dlen) ;
             s->dict_adler = s->stream.adler ;
             RETVAL = inflateSetDictionary(&(s->stream), 
             (const Bytef*)SvPVX(s->dictionary),
