@@ -1269,10 +1269,12 @@ Perl_do_kv(pTHX)
 	    SV *tmpstr;
 	    PUTBACK;
 	    tmpstr = hv_iterval(keys,entry);
+#if 0
 	    DEBUG_H(Perl_sv_setpvf(aTHX_ tmpstr, "%lu%%%d=%lu",
 			    (unsigned long)HeHASH(entry),
 			    (int)HvMAX(keys)+1,
 			    (unsigned long)(HeHASH(entry) & HvMAX(keys))));
+#endif
 	    SPAGAIN;
 	    XPUSHs(tmpstr);
 	}
