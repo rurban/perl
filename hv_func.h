@@ -21,8 +21,14 @@
         || defined(PERL_HASH_FUNC_ONE_AT_A_TIME) \
         || defined(PERL_HASH_FUNC_ONE_AT_A_TIME_HARD) \
         || defined(PERL_HASH_FUNC_ONE_AT_A_TIME_OLD) \
+        || defined(PERL_HASH_FUNC_CRC32) \
+        || defined(PERL_HASH_FUNC_CITY) \
     )
+#if defined(__SSE4_2__)
+#define PERL_HASH_FUNC_CRC32
+#else
 #define PERL_HASH_FUNC_ONE_AT_A_TIME_HARD
+#endif
 #endif
 
 #if defined(PERL_HASH_FUNC_SIPHASH)
@@ -57,6 +63,14 @@
 #   define PERL_HASH_FUNC "ONE_AT_A_TIME_OLD"
 #   define PERL_HASH_SEED_BYTES 4
 #   define PERL_HASH_WITH_SEED(seed,hash,str,len) (hash)= S_perl_hash_old_one_at_a_time((seed),(U8*)(str),(len))
+#elif defined(PERL_HASH_FUNC_CRC32)
+#   define PERL_HASH_FUNC "CRC32"
+#   define PERL_HASH_SEED_BYTES 4
+#   define PERL_HASH_WITH_SEED(seed,hash,str,len) (hash)= S_perl_hash_crc32((seed),(U8*)(str),(len))
+#elif defined(PERL_HASH_FUNC_CITY)
+#   define PERL_HASH_FUNC "CITY"
+#   define PERL_HASH_SEED_BYTES 4
+#   define PERL_HASH_WITH_SEED(hash,str,len) (hash)= S_perl_hash_city((seed),(U8*)(str),(len))
 #endif
 
 #ifndef PERL_HASH_WITH_SEED
@@ -82,6 +96,7 @@
 #endif
 
 #define PERL_HASH(hash,str,len) PERL_HASH_WITH_SEED(PERL_HASH_SEED,hash,str,len)
+#include <assert.h>
 
 /*-----------------------------------------------------------------------------
  * Endianess, misalignment capabilities and util macros
@@ -264,6 +279,7 @@ S_perl_hash_superfast(const unsigned char * const seed, const unsigned char *str
     int rem= len & 3;
     len >>= 2;
 
+    assert(hash);
     for (;len > 0; len--) {
         hash  += U8TO16_LE (str);
         tmp    = (U8TO16_LE (str+2) << 11) ^ hash;
@@ -459,7 +475,8 @@ S_perl_hash_djb2(const unsigned char * const seed, const unsigned char *str, con
     const unsigned char * const end = (const unsigned char *)str + len;
     U32 hash = *((U32*)seed) + len;
     while (str < end) {
-        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str;
+        str++;
     }
     return hash;
 }
@@ -469,7 +486,8 @@ S_perl_hash_sdbm(const unsigned char * const seed, const unsigned char *str, con
     const unsigned char * const end = (const unsigned char *)str + len;
     U32 hash = *((U32*)seed) + len;
     while (str < end) {
-        hash = (hash << 6) + (hash << 16) - hash + *str++;
+        hash = (hash << 6) + (hash << 16) - hash + *str;
+        str++;
     }
     return hash;
 }
@@ -494,6 +512,7 @@ PERL_STATIC_INLINE U32
 S_perl_hash_one_at_a_time(const unsigned char * const seed, const unsigned char *str, const STRLEN len) {
     const unsigned char * const end = (const unsigned char *)str + len;
     U32 hash = *((U32*)seed) + len;
+    /* assert(seed); */
     while (str < end) {
         hash += *str++;
         hash += (hash << 10);
@@ -509,7 +528,7 @@ PERL_STATIC_INLINE U32
 S_perl_hash_one_at_a_time_hard(const unsigned char * const seed, const unsigned char *str, const STRLEN len) {
     const unsigned char * const end = (const unsigned char *)str + len;
     U32 hash = *((U32*)seed) + len;
-    
+    /* assert(seed); */
     while (str < end) {
         hash += (hash << 10);
         hash ^= (hash >> 6);
@@ -544,6 +563,7 @@ PERL_STATIC_INLINE U32
 S_perl_hash_old_one_at_a_time(const unsigned char * const seed, const unsigned char *str, const STRLEN len) {
     const unsigned char * const end = (const unsigned char *)str + len;
     U32 hash = *((U32*)seed);
+    /* assert(seed); */
     while (str < end) {
         hash += *str++;
         hash += (hash << 10);
@@ -553,6 +573,69 @@ S_perl_hash_old_one_at_a_time(const unsigned char * const seed, const unsigned c
     hash ^= (hash >> 11);
     return (hash + (hash << 15));
 }
+
+#ifdef __SSE4_2__
+#include <smmintrin.h>
+#endif
+
+/* Byte-boundary alignment issues */
+#define ALIGN_SIZE      0x08UL
+#define ALIGN_MASK      (ALIGN_SIZE - 1)
+#define CALC_CRC(op, crc, type, buf, len)                               \
+  do {                                                                  \
+    for (; (len) >= sizeof (type); (len) -= sizeof(type), buf += sizeof (type)) { \
+      (crc) = op((crc), *(type *) (buf));                               \
+    }                                                                   \
+  } while(0)
+
+PERL_STATIC_INLINE U32
+S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, const STRLEN inlen) {
+    const char* buf = (const char*)str;
+    STRLEN len = inlen;
+    U32 hash = *((U32*)seed); /* tested nok + len in variant .1 much higher collision costs */
+    /* assert(seed); */
+
+    /* TODO: aarch64 armv7 and armv8 crc intrinsic */
+#ifdef __SSE4_2__
+    /* 32 bit only */
+    hash ^= 0xFFFFFFFF;
+    /* Align the input to the word boundary */
+    for (; (len > 0) && ((size_t)buf & ALIGN_MASK); len--, buf++) {
+        hash = _mm_crc32_u8(hash, *buf);
+    }
+
+#ifdef __x86_64__
+    CALC_CRC(_mm_crc32_u64, hash, uint64_t, buf, len);
+#endif
+    CALC_CRC(_mm_crc32_u32, hash, uint32_t, buf, len);
+    CALC_CRC(_mm_crc32_u16, hash, uint16_t, buf, len);
+    CALC_CRC(_mm_crc32_u8, hash, uint8_t, buf, len);
+#else
+    #error SW crc32 not good. Need Intel SSE4 processor for PERL_HASH_FUNC_CRC32
+#endif
+
+    /* 32 bit only */
+    return (hash ^ 0xFFFFFFFF);
+}
+
+/* Should be the best on non-x86 CPUs */
+PERL_STATIC_INLINE U32
+S_perl_hash_city(const unsigned char * const seed, const unsigned char *str, const STRLEN len) {
+    U32 hash = *((U32*)seed);
+#if 0
+#define k2 0x9ae16a3b2f90404fULL
+    return HashLen16(CityHash64(str, len) - k2, hash);
+#undef k2
+#else
+    /* fooling -Wunused-variable only */
+    const char* buf = (const char*)str;
+    STRLEN xlen = len;
+    xlen = xlen;
+    buf = buf;
+#endif
+    return (hash ^ 0xFFFFFFFF);
+}
+
 
 /* legacy - only mod_perl should be doing this.  */
 #ifdef PERL_HASH_INTERNAL_ACCESS
