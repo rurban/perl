@@ -28,12 +28,14 @@
 #   define PERL_HASH_ITER_BUCKET(iter)      (((iter)->xhv_riter) ^ ((iter)->xhv_rand))
 #endif
 
-/* entry in hash value chain */
+/* hash value bucket list: first entry of HE must contain the size encoded in the flag */
+
+/* entry in hash value bucket list */
 struct he {
     /* Keep hent_next first in this structure, because sv_free_arenas take
        advantage of this to share code between the he arenas and the SV
        body arenas  */
-    HE		*hent_next;	/* next entry in chain */
+    Size_t	hent_size;	/* size of bucket list, stored in the first HE only (new) */
     HEK		*hent_hek;	/* hash key */
     union {
 	SV	*hent_val;	/* scalar value that was hashed */
@@ -358,7 +360,8 @@ C<SV*>.
 #ifndef PERL_CORE
 #  define Nullhe Null(HE*)
 #endif
-#define HeNEXT(he)		(he)->hent_next
+#define HeSIZE(he)		(he)->hent_size
+#define HeNEXT(he)		"error"
 #define HeKEY_hek(he)		(he)->hent_hek
 #define HeKEY(he)		HEK_KEY(HeKEY_hek(he))
 #define HeKEY_sv(he)		(*(SV**)HeKEY(he))
