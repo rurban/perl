@@ -347,7 +347,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     const int return_svp = action & HV_FETCH_JUST_SV;
     U32 first, last;
 #ifdef DEBUGGING
-    unsigned int linear = 0;
+    unsigned int collisions = 0;
 #endif
 
     if (!hv)
@@ -644,7 +644,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     while (first <= last) {
         U32 middle = (first + last) / 2;
         HE* he = entry[middle];
-        DEBUG_H(linear++);
+        DEBUG_H(collisions++);
         /* Old cmp: hash vs last bits, len, buffer, utf8 flag
            TODO: put hash/len/buf/flag into a tmp. HE struct and memcmp it at once */
          */
@@ -722,7 +722,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    Safefree(key);
 
         /* fill, size, found index in collision list */
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv), linear));
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv), collisions));
 	if (return_svp) {
 	    return he ? (void *) &HeVAL(he) : NULL;
 	}
@@ -744,7 +744,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     }
 
     /* fill, size, not found, size of collision list */
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u -\n", HvKEYS(hv), HvMAX(hv), linear));
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u -\n", HvKEYS(hv), HvMAX(hv), collisions));
 #ifdef DYNAMIC_ENV_FETCH  /* %ENV lookup?  If so, try to fetch the value now */
     if (!(action & HV_FETCH_ISSTORE) 
 	&& SvRMAGICAL((const SV *)hv)
@@ -997,7 +997,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     bool is_utf8 = (k_flags & HVhek_UTF8) ? TRUE : FALSE;
     int masked_flags;
 #ifdef DEBUGGING
-    unsigned int linear = 0;
+    unsigned int collisions = 0;
 #endif
 
     if (SvRMAGICAL(hv)) {
@@ -1079,7 +1079,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	U8 mro_changes = 0; /* 1 = isa; 2 = package moved */
 	GV *gv = NULL;
 	HV *stash = NULL;
-        DEBUG_H(linear++);
+        DEBUG_H(collisions++);
 
 	if (HeHASH(entry) != hash)		/* strings can't be equal */
 	    continue;
@@ -1100,7 +1100,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	if (HeVAL(entry) == &PL_sv_placeholder) {
 	    if (k_flags & HVhek_FREEKEY)
 		Safefree(key);
-            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DELpl\n", HvKEYS(hv), HvMAX(hv), linear));
+            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DELpl\n", HvKEYS(hv), HvMAX(hv), collisions));
 	    return NULL;
 	}
 	if (SvREADONLY(hv) && HeVAL(entry) && SvREADONLY(HeVAL(entry))) {
@@ -1189,7 +1189,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	else if (mro_changes == 2)
 	    mro_package_moved(NULL, stash, gv, 1);
 
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL+\n", HvKEYS(hv), HvMAX(hv), linear));
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL+\n", HvKEYS(hv), HvMAX(hv), collisions));
 	return sv;
     }
     if (SvREADONLY(hv)) {
@@ -1200,7 +1200,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     if (k_flags & HVhek_FREEKEY)
 	Safefree(key);
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL-\n", HvKEYS(hv), HvMAX(hv), linear));
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL-\n", HvKEYS(hv), HvMAX(hv), collisions));
     return NULL;
 }
 
