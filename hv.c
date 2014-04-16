@@ -345,6 +345,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     bool is_utf8;
     int masked_flags;
     const int return_svp = action & HV_FETCH_JUST_SV;
+    U32 first, last;
 #ifdef DEBUGGING
     unsigned int linear = 0;
 #endif
@@ -633,21 +634,33 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     {
 	entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
     }
-    for (; entry; entry = HeNEXT(entry)) {
+
+    /* XXX: binary search in sorted bucket list of HEKs to avoid algorithmic complexity
+       attacks and be more cache friendly. sort by len and then str.
+       WIP! no insert and delete yet */
+    first = 0;
+    last = HeSIZE(entry) - 1;
+
+    while (first <= last) {
+        U32 middle = (first + last) / 2;
+        HE* he = entry[middle];
         DEBUG_H(linear++);
-	if (HeHASH(entry) != hash)		/* strings can't be equal */
-	    continue;
-	if (HeKLEN(entry) != (I32)klen)
-	    continue;
-	if (HeKEY(entry) != key && memNE(HeKEY(entry),key,klen))	/* is this it? */
-	    continue;
-	if ((HeKFLAGS(entry) ^ masked_flags) & HVhek_UTF8)
-	    continue;
+        /* Old cmp: hash vs last bits, len, buffer, utf8 flag
+           TODO: put hash/len/buf/flag into a tmp. HE struct and memcmp it at once */
+         */
+	if (HeHASH(he) != hash)		/* strings can't be equal */
+	    goto cont;
+	if (HeKLEN(he) != (I32)klen)
+	    goto cont;
+	if (HeKEY(he) != key && memNE(HeKEY(he),key,klen))	/* is this it? */
+	    goto cont;
+	if ((HeKFLAGS(he) ^ masked_flags) & HVhek_UTF8)
+	    goto cont;
 
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
-	    if (HeKFLAGS(entry) != masked_flags) {
+	    if (HeKFLAGS(he) != masked_flags) {
 		/* We match if HVhek_UTF8 bit in our flags and hash key's
-		   match.  But if entry was set previously with HVhek_WASUTF8
+		   match.  But if he was set previously with HVhek_WASUTF8
 		   and key now doesn't (or vice versa) then we should change
 		   the key's flag, as this is assignment.  */
 		if (HvSHAREKEYS(hv)) {
@@ -656,8 +669,8 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 		       flag, so we share the new one, unshare the old one.  */
 		    HEK * const new_hek = share_hek_flags(key, klen, hash,
 						   masked_flags);
-		    unshare_hek (HeKEY_hek(entry));
-		    HeKEY_hek(entry) = new_hek;
+		    unshare_hek (HeKEY_hek(he));
+		    HeKEY_hek(he) = new_hek;
 		}
 		else if (hv == PL_strtab) {
 		    /* PL_strtab is usually the only hash without HvSHAREKEYS,
@@ -668,11 +681,11 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 			       action & HV_FETCH_LVALUE ? "fetch" : "store");
 		}
 		else
-		    HeKFLAGS(entry) = masked_flags;
+		    HeKFLAGS(he) = masked_flags;
 		if (masked_flags & HVhek_ENABLEHVKFLAGS)
 		    HvHASKFLAGS_on(hv);
 	    }
-	    if (HeVAL(entry) == &PL_sv_placeholder) {
+	    if (HeVAL(he) == &PL_sv_placeholder) {
 		/* yes, can store into placeholder slot */
 		if (action & HV_FETCH_LVALUE) {
 		    if (SvMAGICAL(hv)) {
@@ -695,12 +708,12 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 		    if (val != &PL_sv_placeholder)
 			HvPLACEHOLDERS(hv)--;
 		}
-		HeVAL(entry) = val;
+		HeVAL(he) = val;
 	    } else if (action & HV_FETCH_ISSTORE) {
-		SvREFCNT_dec(HeVAL(entry));
-		HeVAL(entry) = val;
+		SvREFCNT_dec(HeVAL(he));
+		HeVAL(he) = val;
 	    }
-	} else if (HeVAL(entry) == &PL_sv_placeholder) {
+	} else if (HeVAL(he) == &PL_sv_placeholder) {
 	    /* if we find a placeholder, we pretend we haven't found
 	       anything */
 	    break;
@@ -711,9 +724,23 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         /* fill, size, found index in collision list */
         DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv), linear));
 	if (return_svp) {
-	    return entry ? (void *) &HeVAL(entry) : NULL;
+	    return he ? (void *) &HeVAL(he) : NULL;
 	}
-	return entry;
+	return he;
+
+    cont:
+        /* search below or upper. TODO: better memcmp, see above */
+	if (HeKLEN(he) < (I32)klen)
+            lower = middle + 1;
+        else if (HeKLEN(he) > (I32)klen)
+            upper = middle - 1;
+        else {
+            int cmp = memcmp(HeKEY(he),key,klen);
+            if (cmp < 0)
+                lower = middle + 1;
+            else
+                upper = middle - 1;
+        }
     }
 
     /* fill, size, not found, size of collision list */
@@ -781,6 +808,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     }
 
     oentry = &(HvARRAY(hv))[hash & (I32) xhv->xhv_max];
+    /* XXX now sort the buckets */
 
     entry = new_HE();
     /* share_hek_flags will do the free for us.  This might be considered
@@ -806,7 +834,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
             ++aux->xhv_fill_lazy;
     }
 
-#ifdef PERL_HASH_RANDOMIZE_KEYS
+#if 0 && defined(PERL_HASH_RANDOMIZE_KEYS)
     /* This logic semi-randomizes the insert order in a bucket.
      * Either we insert into the top, or the slot below the top,
      * making it harder to see if there is a collision. We also
