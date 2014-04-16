@@ -35,7 +35,7 @@ struct he {
     /* Keep hent_next first in this structure, because sv_free_arenas take
        advantage of this to share code between the he arenas and the SV
        body arenas  */
-    Size_t	hent_size;	/* size of bucket list, stored in the first HE only (new) */
+    SSize_t	hent_size;	/* size of bucket list, stored in the first HE only (new) */
     HEK		*hent_hek;	/* hash key */
     union {
 	SV	*hent_val;	/* scalar value that was hashed */
@@ -47,7 +47,7 @@ struct he {
 struct hek {
     U32		hek_hash;	/* hash of key */
     I32		hek_len;	/* length of hash key */
-    char	hek_key[1];	/* variable-length hash key */
+    char	hek_key[];	/* variable-length hash key */
     /* the hash-key is \0-terminated */
     /* after the \0 there are 2 bytes for flags, such as whether the key is UTF-8.
        The first byte of this flag is reserved for key comparisons on hash lookup,

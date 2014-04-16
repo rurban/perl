@@ -57,14 +57,14 @@ S_new_he(pTHX)
 	Perl_more_bodies(aTHX_ HE_SVSLOT, sizeof(HE), PERL_ARENA_SIZE);
     he = (HE*) *root;
     assert(he);
-    *root = HeNEXT(he);
+    *root = (void*)HeSIZE(he);
     return he;
 }
 
 #define new_HE() new_he()
 #define del_HE(p) \
     STMT_START { \
-	HeNEXT(p) = (HE*)(PL_body_roots[HE_SVSLOT]);	\
+        HeSIZE(p) = (Size_t)(PL_body_roots[HE_SVSLOT]);	\
 	PL_body_roots[HE_SVSLOT] = p; \
     } STMT_END
 
@@ -104,7 +104,7 @@ Perl_free_tied_hv_pool(pTHX)
     while (he) {
 	HE * const ohe = he;
 	Safefree(HeKEY_hek(he));
-	he = HeNEXT(he);
+	he = (HE*)HeSIZE(he);
 	del_HE(ohe);
     }
     PL_hv_fetch_ent_mh = NULL;
@@ -346,7 +346,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     int masked_flags;
     const int return_svp = action & HV_FETCH_JUST_SV;
     U32 lower, upper;
-    unsigned int collisions = 0;
+    unsigned int collisions = 0, helen;
     HEK hecmp; /* temporary hek to compare collisions against */
 
     if (!hv)
@@ -628,7 +628,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         else
             PERL_HASH(hash, key, klen);
     }
-
+    /* XXX not needed anymore */
     masked_flags = (flags & HVhek_MASK);
 
 #ifdef DYNAMIC_ENV_FETCH
@@ -640,9 +640,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     }
 
     /* check for empty or deleted buckets first */
-    if (HeSIZE(entry[0]) < 2) { /* 0 or 1 entries only, no collisions yet */
+    if (HeSIZE(entry) < 2) { /* 0 or 1 entries only, no collisions yet */
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) { /* add a bucket or collision */
-            he = *entry;
+            he = entry;
             goto store_bucket;
         }
         else { /* 1 entry only, no collisions yet */
@@ -650,7 +650,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
                 if (0 == HeSIZE(entry))
                     return NULL;
                 else {
-                    he = *entry;
+                    he = entry;
                     return he ? (void *) &HeVAL(he) : NULL;
                 }
             }
@@ -662,18 +662,26 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
        WIP! no insert and delete yet */
     lower = 0;
     upper = HeSIZE(entry) - 1;
+
+    /* create a sentinal hek as single memory buffer to compare against */
     hecmp.hek_hash = hash;
     hecmp.hek_len = klen;
-    hecmp.hek_hash = hash;
+    Newxz(hecmp.hek_key, klen + 1, char);
+    memcpy(&hecmp.hek_key, key, klen + 1);
+    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen + 1 + 1;
+    if (is_utf8) HEK_UTF8_on(&hecmp);
 
     while (lower <= upper) {
         U32 middle = (lower + upper) / 2; /* needs to be unsigned */
         he = entry + middle;
         collisions++;
+#if 1
+        /* single cmp: hash vs last bits, len, buffer, seperate utf8 byte */
+        if (memNE(he, &hecmp, helen))
+	    goto cont;
+#else
         /* Old cmp: hash vs last bits, len, buffer, utf8 flag
-           TODO: put hash/len/buf/utf8flag into a temp HEK struct and memcmp it at once.
-           Need to seperate UTF* from other flags.
-        */
+           Need to seperate UTF* from other flags. */
 	if (HeHASH(he) != hash)		/* strings can't be equal */
 	    goto cont;
 	if (HeKLEN(he) != (I32)klen)
@@ -682,6 +690,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    goto cont;
 	if ((HeKFLAGS(he) ^ masked_flags) & HVhek_UTF8)
 	    goto cont;
+#endif
 
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
         store_bucket:
@@ -771,8 +780,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         }
     }
 
-    /* fill, size, not found, size of collision list */
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u -\n", HvKEYS(hv), HvMAX(hv), collisions));
+    /* fill, size, collisions, found index in collision list */
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u\n", HvKEYS(hv), HvMAX(hv),
+                              HeSIZE(entry), collisions));
 #ifdef DYNAMIC_ENV_FETCH  /* %ENV lookup?  If so, try to fetch the value now */
     if (!(action & HV_FETCH_ISSTORE) 
 	&& SvRMAGICAL((const SV *)hv)
@@ -1130,7 +1140,9 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	if (HeVAL(entry) == &PL_sv_placeholder) {
 	    if (k_flags & HVhek_FREEKEY)
 		Safefree(key);
-            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DELpl\n", HvKEYS(hv), HvMAX(hv), collisions));
+            /* fill, size, collisions, found index in collision list */
+            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DELpl\n", HvKEYS(hv), HvMAX(hv),
+                                  HeSIZE(entry), collisions));
 	    return NULL;
 	}
 	if (SvREADONLY(hv) && HeVAL(entry) && SvREADONLY(HeVAL(entry))) {
@@ -1219,7 +1231,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	else if (mro_changes == 2)
 	    mro_package_moved(NULL, stash, gv, 1);
 
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL+\n", HvKEYS(hv), HvMAX(hv), collisions));
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DEL+\n", HvKEYS(hv), HvMAX(hv),
+                              HeSIZE(entry), collisions));
 	return sv;
     }
     if (SvREADONLY(hv)) {
@@ -1230,7 +1243,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     if (k_flags & HVhek_FREEKEY)
 	Safefree(key);
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u DEL-\n", HvKEYS(hv), HvMAX(hv), collisions));
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DEL-\n", HvKEYS(hv), HvMAX(hv),
+                          HeSIZE(entry), collisions));
     return NULL;
 }
 
