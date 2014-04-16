@@ -339,16 +339,15 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 {
     dVAR;
     XPVHV* xhv;
-    HE *entry;
+    HE *entry, *he;
     HE **oentry;
     SV *sv;
     bool is_utf8;
     int masked_flags;
     const int return_svp = action & HV_FETCH_JUST_SV;
-    U32 first, last;
-#ifdef DEBUGGING
+    U32 lower, upper;
     unsigned int collisions = 0;
-#endif
+    HEK hecmp; /* temporary hek to compare collisions against */
 
     if (!hv)
 	return NULL;
@@ -418,16 +417,21 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
                 mg_copy(MUTABLE_SV(hv), sv, (char *)keysv, HEf_SVKEY);
 
 		/* grab a fake HE/HEK pair from the pool or make a new one */
+#if 0
 		entry = PL_hv_fetch_ent_mh;
 		if (entry)
 		    PL_hv_fetch_ent_mh = HeNEXT(entry);
-		else {
+		else
+#endif
+                {
 		    char *k;
 		    entry = new_HE();
 		    Newx(k, HEK_BASESIZE + sizeof(const SV *), char);
 		    HeKEY_hek(entry) = (HEK*)k;
 		}
-		HeNEXT(entry) = NULL;
+#if 0
+  		HeNEXT(entry) = NULL;
+#endif
 		HeSVKEY_set(entry, keysv);
 		HeVAL(entry) = sv;
 		sv_upgrade(sv, SVt_PVLV);
@@ -635,19 +639,41 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
     }
 
+    /* check for empty or deleted buckets first */
+    if (HeSIZE(entry[0]) < 2) { /* 0 or 1 entries only, no collisions yet */
+        if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) { /* add a bucket or collision */
+            he = *entry;
+            goto store_bucket;
+        }
+        else { /* 1 entry only, no collisions yet */
+            if (return_svp) {
+                if (0 == HeSIZE(entry))
+                    return NULL;
+                else {
+                    he = *entry;
+                    return he ? (void *) &HeVAL(he) : NULL;
+                }
+            }
+        }
+    }
+
     /* XXX: binary search in sorted bucket list of HEKs to avoid algorithmic complexity
        attacks and be more cache friendly. sort by len and then str.
        WIP! no insert and delete yet */
-    first = 0;
-    last = HeSIZE(entry) - 1;
+    lower = 0;
+    upper = HeSIZE(entry) - 1;
+    hecmp.hek_hash = hash;
+    hecmp.hek_len = klen;
+    hecmp.hek_hash = hash;
 
-    while (first <= last) {
-        U32 middle = (first + last) / 2;
-        HE* he = entry[middle];
-        DEBUG_H(collisions++);
+    while (lower <= upper) {
+        U32 middle = (lower + upper) / 2; /* needs to be unsigned */
+        he = entry + middle;
+        collisions++;
         /* Old cmp: hash vs last bits, len, buffer, utf8 flag
-           TODO: put hash/len/buf/flag into a tmp. HE struct and memcmp it at once */
-         */
+           TODO: put hash/len/buf/utf8flag into a temp HEK struct and memcmp it at once.
+           Need to seperate UTF* from other flags.
+        */
 	if (HeHASH(he) != hash)		/* strings can't be equal */
 	    goto cont;
 	if (HeKLEN(he) != (I32)klen)
@@ -658,6 +684,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    goto cont;
 
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
+        store_bucket:
 	    if (HeKFLAGS(he) != masked_flags) {
 		/* We match if HVhek_UTF8 bit in our flags and hash key's
 		   match.  But if he was set previously with HVhek_WASUTF8
@@ -721,8 +748,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	if (flags & HVhek_FREEKEY)
 	    Safefree(key);
 
-        /* fill, size, found index in collision list */
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv), collisions));
+        /* fill, size, collisions, found index in collision list */
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u\n", HvKEYS(hv), HvMAX(hv),
+                              HeSIZE(entry), collisions));
 	if (return_svp) {
 	    return he ? (void *) &HeVAL(he) : NULL;
 	}
@@ -853,7 +881,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     } else
 #endif
     {
+#if 0
         HeNEXT(entry) = *oentry;
+#endif
         *oentry = entry;
     }
 #ifdef PERL_HASH_RANDOMIZE_KEYS

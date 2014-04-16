@@ -49,8 +49,10 @@ struct hek {
     I32		hek_len;	/* length of hash key */
     char	hek_key[1];	/* variable-length hash key */
     /* the hash-key is \0-terminated */
-    /* after the \0 there is a byte for flags, such as whether the key
-       is UTF-8 */
+    /* after the \0 there are 2 bytes for flags, such as whether the key is UTF-8.
+       The first byte of this flag is reserved for key comparisons on hash lookup,
+       so it needs to hold key lookup relevant properties only, like UTF8
+       the second byte is for other flags, irrelevant to key lookup. */
 };
 
 struct shared_he {
@@ -366,10 +368,10 @@ C<SV*>.
 #define HeKEY(he)		HEK_KEY(HeKEY_hek(he))
 #define HeKEY_sv(he)		(*(SV**)HeKEY(he))
 #define HeKLEN(he)		HEK_LEN(HeKEY_hek(he))
-#define HeKUTF8(he)  HEK_UTF8(HeKEY_hek(he))
-#define HeKWASUTF8(he)  HEK_WASUTF8(HeKEY_hek(he))
-#define HeKLEN_UTF8(he)  (HeKUTF8(he) ? -HeKLEN(he) : HeKLEN(he))
-#define HeKFLAGS(he)  HEK_FLAGS(HeKEY_hek(he))
+#define HeKUTF8(he)  		HEK_UTF8(HeKEY_hek(he))
+#define HeKWASUTF8(he)  	HEK_WASUTF8(HeKEY_hek(he))
+#define HeKLEN_UTF8(he)  	(HeKUTF8(he) ? -HeKLEN(he) : HeKLEN(he))
+#define HeKFLAGS(he)  		HEK_FLAGS(HeKEY_hek(he))
 #define HeVAL(he)		(he)->he_valu.hent_val
 #define HeHASH(he)		HEK_HASH(HeKEY_hek(he))
 #define HePV(he,lp)		((HeKLEN(he) == HEf_SVKEY) ?		\
@@ -400,10 +402,11 @@ C<SV*>.
 #define HEK_HASH(hek)		(hek)->hek_hash
 #define HEK_LEN(hek)		(hek)->hek_len
 #define HEK_KEY(hek)		(hek)->hek_key
-#define HEK_FLAGS(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))
+#define HEK_FLAGS(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+2))
+#define HEK_FLAGS1(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))  /* new */
 
-#define HVhek_UTF8	0x01 /* Key is utf8 encoded. */
-#define HVhek_WASUTF8	0x02 /* Key is bytes here, but was supplied as utf8. */
+#define HVhek_UTF8	0xFF /* In first flag byte: Key is utf8 encoded. */
+#define HVhek_WASUTF8	0x02 /* In second flag byte: Key is bytes here, but was supplied as utf8. */
 #define HVhek_UNSHARED	0x08 /* This key isn't a shared hash key. */
 #define HVhek_FREEKEY	0x100 /* Internal flag to say key is malloc()ed.  */
 #define HVhek_PLACEHOLD	0x200 /* Internal flag to create placeholder.
@@ -413,11 +416,11 @@ C<SV*>.
 				    converted to bytes. */
 #define HVhek_MASK	0xFF
 
-#define HVhek_ENABLEHVKFLAGS        (HVhek_MASK & ~(HVhek_UNSHARED))
+#define HVhek_ENABLEHVKFLAGS    (HVhek_MASK & ~(HVhek_UNSHARED))
 
-#define HEK_UTF8(hek)		(HEK_FLAGS(hek) & HVhek_UTF8)
-#define HEK_UTF8_on(hek)	(HEK_FLAGS(hek) |= HVhek_UTF8)
-#define HEK_UTF8_off(hek)	(HEK_FLAGS(hek) &= ~HVhek_UTF8)
+#define HEK_UTF8(hek)		(HEK_FLAGS1(hek) & HVhek_UTF8)
+#define HEK_UTF8_on(hek)	(HEK_FLAGS1(hek) |= HVhek_UTF8)
+#define HEK_UTF8_off(hek)	(HEK_FLAGS1(hek) &= ~HVhek_UTF8)
 #define HEK_WASUTF8(hek)	(HEK_FLAGS(hek) & HVhek_WASUTF8)
 #define HEK_WASUTF8_on(hek)	(HEK_FLAGS(hek) |= HVhek_WASUTF8)
 #define HEK_WASUTF8_off(hek)	(HEK_FLAGS(hek) &= ~HVhek_WASUTF8)
