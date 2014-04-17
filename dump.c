@@ -550,8 +550,10 @@ Perl_dump_packsubs_perl(pTHX_ const HV *stash, bool justperl)
     if (!HvARRAY(stash))
 	return;
     for (i = 0; i <= (I32) HvMAX(stash); i++) {
+        U32 j;
         const HE *entry;
-	for (entry = HvARRAY(stash)[i]; entry; entry = HeNEXT(entry)) {
+        entry = HvARRAY(stash)[i];
+        PERL_HASH_ITER(j , entry) {
 	    const GV * const gv = (const GV *)HeVAL(entry);
 	    if (SvTYPE(gv) != SVt_PVGV || !GvGP(gv))
 		continue;
@@ -559,7 +561,7 @@ Perl_dump_packsubs_perl(pTHX_ const HV *stash, bool justperl)
 		dump_sub_perl(gv, justperl);
 	    if (GvFORM(gv))
 		dump_form(gv);
-	    if (HeKEY(entry)[HeKLEN(entry)-1] == ':') {
+	    if (HeKEY(entry)[abs(HeKLEN(entry))-1] == ':') {
 		const HV * const hv = GvHV(gv);
 		if (hv && (hv != PL_defstash))
 		    dump_packsubs_perl(hv, justperl); /* nested package */
@@ -1838,10 +1840,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	    PerlIO_printf(file, "  (");
 	    Zero(freq, FREQ_MAX + 1, int);
 	    for (i = 0; (STRLEN)i <= HvMAX(sv); i++) {
-		HE* h;
-		int count = 0;
-                for (h = HvARRAY(sv)[i]; h; h = HeNEXT(h))
-		    count++;
+		int count = HeSIZE(HvARRAY(sv)[i]);
 		if (count > FREQ_MAX)
 		    count = FREQ_MAX;
 	        freq[count]++;

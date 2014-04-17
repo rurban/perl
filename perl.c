@@ -1136,12 +1136,13 @@ perl_destruct(pTHXx)
 	 * for both HE and HEK, we either need to explicitly unshare it the
 	 * correct way, or actually free things here.
 	 */
+        U32 i;
 	I32 riter = 0;
 	const I32 max = HvMAX(PL_strtab);
 	HE * const * const array = HvARRAY(PL_strtab);
 	HE *hent = array[0];
 
-	for (;;) {
+	PERL_HASH_ITER(i, hent) {
 	    if (hent && ckWARN_d(WARN_INTERNAL)) {
 		HE * const next = HeNEXT(hent);
 		Perl_warner(aTHX_ packWARN(WARN_INTERNAL),

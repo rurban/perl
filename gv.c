@@ -2266,9 +2266,11 @@ Perl_gv_check(pTHX_ HV *stash)
 
     for (i = 0; i <= (I32) HvMAX(stash); i++) {
         const HE *entry;
+        U32 j;
         /* mark stash is being scanned, to avoid recursing */
         HvAUX(stash)->xhv_aux_flags |= HvAUXf_SCAN_STASH;
-	for (entry = HvARRAY(stash)[i]; entry; entry = HeNEXT(entry)) {
+        entry = HvARRAY(stash)[i];
+        PERL_HASH_ITER(j, entry) {
             GV *gv;
             HV *hv;
 	    if (HeKEY(entry)[HeKLEN(entry)-1] == ':' &&

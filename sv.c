@@ -6431,7 +6431,7 @@ Perl_sv_clear(pTHX_ SV *const orig_sv)
 	case SVt_PVLV:
 	    if (LvTYPE(sv) == 'T') { /* for tie: return HE to pool */
 		SvREFCNT_dec(HeKEY_sv((HE*)LvTARG(sv)));
-		HeNEXT((HE*)LvTARG(sv)) = PL_hv_fetch_ent_mh;
+		HeSIZE((HE*)LvTARG(sv)) = (unsigned long)PL_hv_fetch_ent_mh;
 		PL_hv_fetch_ent_mh = (HE*)LvTARG(sv);
 	    }
 	    else if (LvTYPE(sv) != 't') /* unless tie: unrefcnted fake SV**  */
@@ -9354,11 +9354,10 @@ Perl_sv_resetpvn(pTHX_ const char *s, STRLEN len, HV * const stash)
 	    todo[i] = 1;
 	}
 	for (i = 0; i <= (I32) HvMAX(stash); i++) {
+            U32 j;
 	    HE *entry;
-	    for (entry = HvARRAY(stash)[i];
-		 entry;
-		 entry = HeNEXT(entry))
-	    {
+            entry = HvARRAY(stash)[i];
+            PERL_HASH_ITER(j, entry) {
 		GV *gv;
 		SV *sv;
 
@@ -14395,8 +14394,10 @@ S_find_hash_subscript(pTHX_ const HV *const hv, const SV *const val)
     array = HvARRAY(hv);
 
     for (i=HvMAX(hv); i>=0; i--) {
+        U32 j;
 	HE *entry;
-	for (entry = array[i]; entry; entry = HeNEXT(entry)) {
+        entry = array[i];
+	PERL_HASH_ITER(j, entry) {
 	    if (HeVAL(entry) != val)
 		continue;
 	    if (    HeVAL(entry) == &PL_sv_undef ||

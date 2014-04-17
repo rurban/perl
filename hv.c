@@ -395,10 +395,12 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	is_utf8 = ((flags & HVhek_UTF8) ? TRUE : FALSE);
     }
 
+#if 0
     if (action & HV_DELETE) {
 	return (void *) hv_delete_common(hv, keysv, key, klen,
 					 flags, action, hash);
     }
+#endif
 
     xhv = (XPVHV*)SvANY(hv);
     if (SvMAGICAL(hv)) {
@@ -628,7 +630,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         else
             PERL_HASH(hash, key, klen);
     }
-    /* XXX not needed anymore */
+
     masked_flags = (flags & HVhek_MASK);
 
 #ifdef DYNAMIC_ENV_FETCH
@@ -644,6 +646,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) { /* add a bucket or collision */
             he = entry;
             goto store_bucket;
+        }
+        else if (action & HV_DELETE) {
+            /* TODO */
         }
         else { /* 1 entry only, no collisions yet */
             if (return_svp) {
@@ -663,7 +668,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     lower = 0;
     upper = HeSIZE(entry) - 1;
 
-    /* create a sentinal hek as single memory buffer to compare against */
+    /* create a sentinel hek as single memory buffer to compare against */
     hecmp.hek_hash = hash;
     hecmp.hek_len = klen;
     Newxz(hecmp.hek_key, klen + 1, char);
@@ -672,25 +677,20 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     if (is_utf8) HEK_UTF8_on(&hecmp);
 
     while (lower <= upper) {
+        int cmp;
         U32 middle = (lower + upper) / 2; /* needs to be unsigned */
         he = entry + middle;
         collisions++;
-#if 1
-        /* single cmp: hash vs last bits, len, buffer, seperate utf8 byte */
-        if (memNE(he, &hecmp, helen))
-	    goto cont;
-#else
-        /* Old cmp: hash vs last bits, len, buffer, utf8 flag
-           Need to seperate UTF* from other flags. */
-	if (HeHASH(he) != hash)		/* strings can't be equal */
-	    goto cont;
-	if (HeKLEN(he) != (I32)klen)
-	    goto cont;
-	if (HeKEY(he) != key && memNE(HeKEY(he),key,klen))	/* is this it? */
-	    goto cont;
-	if ((HeKFLAGS(he) ^ masked_flags) & HVhek_UTF8)
-	    goto cont;
-#endif
+
+        cmp = memNE(he, &hecmp, helen);
+        if (cmp < 0) {
+            lower = middle + 1;
+            continue;
+        }
+        else if (cmp > 0) {
+            upper = middle - 1;
+            continue;
+        }
 
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
         store_bucket:
@@ -758,30 +758,16 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    Safefree(key);
 
         /* fill, size, collisions, found index in collision list */
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u\n", HvKEYS(hv), HvMAX(hv),
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv),
                               HeSIZE(entry), collisions));
 	if (return_svp) {
 	    return he ? (void *) &HeVAL(he) : NULL;
 	}
 	return he;
-
-    cont:
-        /* search below or upper. TODO: better memcmp, see above */
-	if (HeKLEN(he) < (I32)klen)
-            lower = middle + 1;
-        else if (HeKLEN(he) > (I32)klen)
-            upper = middle - 1;
-        else {
-            int cmp = memcmp(HeKEY(he),key,klen);
-            if (cmp < 0)
-                lower = middle + 1;
-            else
-                upper = middle - 1;
-        }
     }
 
     /* fill, size, collisions, found index in collision list */
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u\n", HvKEYS(hv), HvMAX(hv),
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv),
                               HeSIZE(entry), collisions));
 #ifdef DYNAMIC_ENV_FETCH  /* %ENV lookup?  If so, try to fetch the value now */
     if (!(action & HV_FETCH_ISSTORE) 
@@ -1031,14 +1017,15 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 {
     dVAR;
     XPVHV* xhv;
-    HE *entry;
+    HE *entry, *he;
     HE **oentry;
     HE *const *first_entry;
     bool is_utf8 = (k_flags & HVhek_UTF8) ? TRUE : FALSE;
     int masked_flags;
-#ifdef DEBUGGING
-    unsigned int collisions = 0;
-#endif
+    unsigned int collisions = 0, helen;
+    U32 lower, upper;
+    U32 i;
+    HEK hecmp; /* temporary hek to compare collisions against */
 
     if (SvRMAGICAL(hv)) {
 	bool needs_copy;
@@ -1112,23 +1099,39 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     masked_flags = (k_flags & HVhek_MASK);
 
-    first_entry = oentry = &(HvARRAY(hv))[hash & (I32) HvMAX(hv)];
-    entry = *oentry;
-    for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+    entry = HvARRAY(hv)[hash & (I32) HvMAX(hv)];
+    lower = 0;
+    upper = HeSIZE(entry) - 1;
+
+    /* create a sentinel hek as single memory buffer to compare against */
+    hecmp.hek_hash = hash;
+    hecmp.hek_len = klen;
+    Newxz(hecmp.hek_key, klen + 1, char);
+    memcpy(&hecmp.hek_key, key, klen + 1);
+    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen + 1 + 1;
+    if (is_utf8) HEK_UTF8_on(&hecmp);
+
+    /* for (i = 0; i < HeSIZE(entry); oentry = &entry, entry++) */
+    while (lower <= upper) {
 	SV *sv;
 	U8 mro_changes = 0; /* 1 = isa; 2 = package moved */
 	GV *gv = NULL;
 	HV *stash = NULL;
-        DEBUG_H(collisions++);
+        U32 middle = (lower + upper) / 2; /* needs to be unsigned */
+        int cmp;
+        he = entry + middle;
+        collisions++;
 
-	if (HeHASH(entry) != hash)		/* strings can't be equal */
-	    continue;
-	if (HeKLEN(entry) != (I32)klen)
-	    continue;
-	if (HeKEY(entry) != key && memNE(HeKEY(entry),key,klen))	/* is this it? */
-	    continue;
-	if ((HeKFLAGS(entry) ^ masked_flags) & HVhek_UTF8)
-	    continue;
+        /* single cmp: hash vs last bits, len, buffer, seperate utf8 byte */
+        cmp = memNE(he, &hecmp, helen);
+        if (cmp < 0) {
+            lower = middle + 1;
+            continue;
+        }
+        else if (cmp > 0) {
+            upper = middle - 1;
+            continue;
+        }
 
 	if (hv == PL_strtab) {
 	    if (k_flags & HVhek_FREEKEY)
@@ -1141,7 +1144,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    if (k_flags & HVhek_FREEKEY)
 		Safefree(key);
             /* fill, size, collisions, found index in collision list */
-            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DELpl\n", HvKEYS(hv), HvMAX(hv),
+            DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u DELpl\n", HvKEYS(hv), HvMAX(hv),
                                   HeSIZE(entry), collisions));
 	    return NULL;
 	}
@@ -1231,7 +1234,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	else if (mro_changes == 2)
 	    mro_package_moved(NULL, stash, gv, 1);
 
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DEL+\n", HvKEYS(hv), HvMAX(hv),
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u DEL+\n", HvKEYS(hv), HvMAX(hv),
                               HeSIZE(entry), collisions));
 	return sv;
     }
@@ -1243,7 +1246,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     if (k_flags & HVhek_FREEKEY)
 	Safefree(key);
-    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u DEL-\n", HvKEYS(hv), HvMAX(hv),
+    DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u DEL-\n", HvKEYS(hv), HvMAX(hv),
                           HeSIZE(entry), collisions));
     return NULL;
 }
@@ -2971,7 +2974,7 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 	*/
 
 	Newx(k, STRUCT_OFFSET(struct shared_he,
-				shared_he_hek.hek_key[0]) + len + 2, char);
+			      shared_he_hek.hek_key) + len + 2, char);
 	new_entry = (struct shared_he *)k;
 	entry = &(new_entry->shared_he_he);
 	hek = &(new_entry->shared_he_hek);
@@ -3220,6 +3223,7 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
 {
     dVAR;
     U8 utf8_flag;
+    U32 i;
     PERL_ARGS_ASSERT_REFCOUNTED_HE_FETCH_PVN;
 
     if (flags & ~(REFCOUNTED_HE_KEY_UTF8|REFCOUNTED_HE_EXISTS))
@@ -3261,11 +3265,13 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
 	flags &= ~REFCOUNTED_HE_KEY_UTF8;
 	canonicalised_key: ;
     }
-    utf8_flag = (flags & REFCOUNTED_HE_KEY_UTF8) ? HVhek_UTF8 : 0;
+    utf8_flag = (flags & REFCOUNTED_HE_KEY_UTF8) ? 1 : 0;
     if (!hash)
 	PERL_HASH(hash, keypv, keylen);
 
-    for (; chain; chain = chain->refcounted_he_next) {
+    /* XXX: binary search */
+    /* for (; chain; chain = chain->refcounted_he_next) */
+    PERL_HASH_ITER(i, chain) {
 	if (
 #ifdef USE_ITHREADS
 	    hash == chain->refcounted_he_hash &&

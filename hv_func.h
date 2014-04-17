@@ -628,10 +628,12 @@ S_perl_hash_city(const unsigned char * const seed, const unsigned char *str, con
 #undef k2
 #else
     /* fooling -Wunused-variable only */
+    /*
     const char* buf = (const char*)str;
     STRLEN xlen = len;
     xlen = xlen;
     buf = buf;
+    */
 #endif
     return (hash ^ 0xFFFFFFFF);
 }

@@ -28,14 +28,18 @@
 #   define PERL_HASH_ITER_BUCKET(iter)      (((iter)->xhv_riter) ^ ((iter)->xhv_rand))
 #endif
 
-/* hash value bucket list: first entry of HE must contain the size encoded in the flag */
+/* hash value bucket list: first entry of HE must contain the size encoded in the flag.
+   TODO: we should get rid of HE. HEK[] is enough with the char size in the HEK
+   and the UTF* flag encoded into the first bit of len (as with the shared_hek api).
+   Colliding buckets with size > 255 should die.
+*/
 
 /* entry in hash value bucket list */
 struct he {
     /* Keep hent_next first in this structure, because sv_free_arenas take
        advantage of this to share code between the he arenas and the SV
        body arenas  */
-    SSize_t	hent_size;	/* size of bucket list, stored in the first HE only (new) */
+    unsigned long hent_size;	/* size of bucket list, stored in the first HE only (new) */
     HEK		*hent_hek;	/* hash key */
     union {
 	SV	*hent_val;	/* scalar value that was hashed */
@@ -46,13 +50,11 @@ struct he {
 /* hash key -- defined separately for use as shared pointer */
 struct hek {
     U32		hek_hash;	/* hash of key */
-    I32		hek_len;	/* length of hash key */
-    char	hek_key[];	/* variable-length hash key */
+    I32		hek_len;	/* length of hash key, with the UTF8 flag as first bit. */
+    char	*hek_key;	/* variable-length hash key */
     /* the hash-key is \0-terminated */
-    /* after the \0 there are 2 bytes for flags, such as whether the key is UTF-8.
-       The first byte of this flag is reserved for key comparisons on hash lookup,
-       so it needs to hold key lookup relevant properties only, like UTF8
-       the second byte is for other flags, irrelevant to key lookup. */
+    /* after the \0 there is 1 byte for flags, such as whether the key was UTF-8 or is tainted.
+       Those flags are irrelevant to key lookup. */
 };
 
 struct shared_he {
@@ -363,7 +365,7 @@ C<SV*>.
 #  define Nullhe Null(HE*)
 #endif
 #define HeSIZE(he)		(he)->hent_size
-#define HeNEXT(he)		"error"
+#define HeNEXT(he)		(he+1)
 #define HeKEY_hek(he)		(he)->hent_hek
 #define HeKEY(he)		HEK_KEY(HeKEY_hek(he))
 #define HeKEY_sv(he)		(*(SV**)HeKEY(he))
@@ -398,16 +400,17 @@ C<SV*>.
 #ifndef PERL_CORE
 #  define Nullhek Null(HEK*)
 #endif
-#define HEK_BASESIZE		STRUCT_OFFSET(HEK, hek_key[0])
+#define HEK_BASESIZE		STRUCT_OFFSET(HEK, hek_key)
 #define HEK_HASH(hek)		(hek)->hek_hash
 #define HEK_LEN(hek)		(hek)->hek_len
 #define HEK_KEY(hek)		(hek)->hek_key
-#define HEK_FLAGS(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+2))
-#define HEK_FLAGS1(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))  /* new */
+#define HEK_FLAGS(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))
+/*#define HEK_FLAGS1(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))  / * new */
 
-#define HVhek_UTF8	0xFF /* In first flag byte: Key is utf8 encoded. */
-#define HVhek_WASUTF8	0x02 /* In second flag byte: Key is bytes here, but was supplied as utf8. */
-#define HVhek_UNSHARED	0x08 /* This key isn't a shared hash key. */
+#define HVhek_UTF8	0x8000 /* In len I32: Key is utf8 encoded. */
+#define HVhek_WASUTF8	0x02  /* In flag byte: Key is bytes here, but was supplied as utf8. */
+#define HVhek_TAINTED	0x04  /* This key is tainted. */
+#define HVhek_UNSHARED	0x08  /* This key isn't a shared hash key. */
 #define HVhek_FREEKEY	0x100 /* Internal flag to say key is malloc()ed.  */
 #define HVhek_PLACEHOLD	0x200 /* Internal flag to create placeholder.
                                * (may change, but Storable is a core module) */
@@ -418,12 +421,13 @@ C<SV*>.
 
 #define HVhek_ENABLEHVKFLAGS    (HVhek_MASK & ~(HVhek_UNSHARED))
 
-#define HEK_UTF8(hek)		(HEK_FLAGS1(hek) & HVhek_UTF8)
-#define HEK_UTF8_on(hek)	(HEK_FLAGS1(hek) |= HVhek_UTF8)
-#define HEK_UTF8_off(hek)	(HEK_FLAGS1(hek) &= ~HVhek_UTF8)
+#define HEK_UTF8(hek)		(HEK_LEN(hek) & HVhek_UTF8)
+#define HEK_UTF8_on(hek)	(HEK_LEN(hek) |= HVhek_UTF8)
+#define HEK_UTF8_off(hek)	(HEK_LEN(hek) &= ~HVhek_UTF8)
 #define HEK_WASUTF8(hek)	(HEK_FLAGS(hek) & HVhek_WASUTF8)
 #define HEK_WASUTF8_on(hek)	(HEK_FLAGS(hek) |= HVhek_WASUTF8)
 #define HEK_WASUTF8_off(hek)	(HEK_FLAGS(hek) &= ~HVhek_WASUTF8)
+#define HEK_TAINTED(hek)	(HEK_FLAGS(hek) & HVhek_TAINTED)
 
 /* calculate HV array allocation */
 #ifndef PERL_USE_LARGE_HV_ALLOC
@@ -631,6 +635,18 @@ Creates a new HV.  The reference count is set to 1.
 */
 
 #define newHV()	MUTABLE_HV(newSV_type(SVt_PVHV))
+
+/*
+=for apidoc PERL_HASH_ITER
+
+Iterate over the list of hash buckets in one array entry.
+
+=cut
+*/
+
+/* #define PERL_HASH_ITER(iter, entry)	for (; entry; entry = HeNEXT(entry)) */
+#define PERL_HASH_ITER(iter, entry)	for (iter=0; iter < HeSIZE(entry); entry++)
+
 
 #include "hv_func.h"
 
