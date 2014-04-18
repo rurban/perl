@@ -5926,7 +5926,7 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 			   the hole, and it's still an unordered list :-)
 			*/
 			*p = topsv;
-#ifdef DEBUGGING
+#ifndef NDEBUG
 			count++;
 #else
 			break; /* should only be one */

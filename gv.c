@@ -533,7 +533,7 @@ S_maybe_add_coresub(pTHX_ HV * const stash, GV *gv,
     if (stash)
 	(void)hv_store(stash,name,len,(SV *)gv,0);
     if (ampable) {
-#ifdef DEBUGGING
+#ifndef NDEBUG
         CV *orig_cv = cv;
 #endif
 	CvLVALUE_on(cv);
@@ -1251,7 +1251,7 @@ S_require_tie_mod(pTHX_ GV *gv, const char *varpv, SV* namesv, const char *methp
 				  so save it. For the moment it's always
 				  a single char. */
 	const char type = varname == '[' ? '$' : '%';
-#ifdef DEBUGGING
+#ifndef NDEBUG
 	dSP;
 #endif
 	ENTER;

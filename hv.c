@@ -673,7 +673,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     hecmp.hek_len = klen;
     Newxz(hecmp.hek_key, klen + 1, char);
     memcpy(&hecmp.hek_key, key, klen + 1);
-    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen + 1 + 1;
+    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen;
     if (is_utf8) HEK_UTF8_on(&hecmp);
 
     while (lower <= upper) {
@@ -858,49 +858,12 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
             ++aux->xhv_fill_lazy;
     }
 
-#if 0 && defined(PERL_HASH_RANDOMIZE_KEYS)
-    /* This logic semi-randomizes the insert order in a bucket.
-     * Either we insert into the top, or the slot below the top,
-     * making it harder to see if there is a collision. We also
-     * reset the iterator randomizer if there is one.
-     */
-    if ( *oentry && PL_HASH_RAND_BITS_ENABLED) {
-        PL_hash_rand_bits++;
-        PL_hash_rand_bits= ROTL_UV(PL_hash_rand_bits,1);
-        if ( PL_hash_rand_bits & 1 ) {
-            HeNEXT(entry) = HeNEXT(*oentry);
-            HeNEXT(*oentry) = entry;
-        } else {
-            HeNEXT(entry) = *oentry;
-            *oentry = entry;
-        }
-    } else
-#endif
     {
 #if 0
         HeNEXT(entry) = *oentry;
 #endif
         *oentry = entry;
     }
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-    if (SvOOK(hv)) {
-        /* Currently this makes various tests warn in annoying ways.
-         * So Silenced for now. - Yves | bogus end of comment =>* /
-        if (HvAUX(hv)->xhv_riter != -1) {
-            Perl_ck_warner_d(aTHX_ packWARN(WARN_INTERNAL),
-                             "[TESTING] Inserting into a hash during each() traversal results in undefined behavior"
-                             pTHX__FORMAT
-                             pTHX__VALUE);
-        }
-        */
-        if (PL_HASH_RAND_BITS_ENABLED) {
-            if (PL_HASH_RAND_BITS_ENABLED == 1)
-                PL_hash_rand_bits += (PTRV)entry + 1;  /* we don't bother to use ptr_hash here */
-            PL_hash_rand_bits= ROTL_UV(PL_hash_rand_bits,1);
-        }
-        HvAUX(hv)->xhv_rand= (U32)PL_hash_rand_bits;
-    }
-#endif
 
     if (val == &PL_sv_placeholder)
 	HvPLACEHOLDERS(hv)++;
@@ -974,12 +937,6 @@ Perl_hv_scalar(pTHX_ HV *hv)
 
     PERL_ARGS_ASSERT_HV_SCALAR;
 
-    if (SvRMAGICAL(hv)) {
-	MAGIC * const mg = mg_find((const SV *)hv, PERL_MAGIC_tied);
-	if (mg)
-	    return magic_scalarpack(hv, mg);
-    }
-
     sv = sv_newmortal();
     if (HvTOTALKEYS((const HV *)hv)) 
         Perl_sv_setpvf(aTHX_ sv, "%ld/%ld",
@@ -1011,6 +968,15 @@ value, or 0 to ask for it to be computed.
 =cut
 */
 
+#if 1
+PERL_STATIC_INLINE SV *
+S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
+		   int k_flags, I32 d_flags, U32 hash)
+{
+    return hv_common(hv, keysv, key, klen, k_flags | d_flags, HV_DELETE, (SV*)NULL, hash);
+
+}
+#else
 STATIC SV *
 S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 		   int k_flags, I32 d_flags, U32 hash)
@@ -1217,7 +1183,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	    else {
 		if (SvOOK(hv) && HvLAZYDEL(hv) &&
 		    entry == HeNEXT(HvAUX(hv)->xhv_eiter))
-		    HeNEXT(HvAUX(hv)->xhv_eiter) = HeNEXT(entry);
+		    /*XXX HeNEXT(HvAUX(hv)->xhv_eiter) = HeNEXT(entry);*/
 		hv_free_ent(hv, entry);
 	    }
 	    xhv->xhv_keys--; /* HvTOTALKEYS(hv)-- */
@@ -1250,7 +1216,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
                           HeSIZE(entry), collisions));
     return NULL;
 }
-
+#endif
 
 STATIC void
 S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
@@ -1278,18 +1244,6 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
       return;
     }
 
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-    /* the idea of this is that we create a "random" value by hashing the address of
-     * the array, we then use the low bit to decide if we insert at the top, or insert
-     * second from top. After each such insert we rotate the hashed value. So we can
-     * use the same hashed value over and over, and in normal build environments use
-     * very few ops to do so. ROTL32() should produce a single machine operation. */
-    if (PL_HASH_RAND_BITS_ENABLED) {
-        if (PL_HASH_RAND_BITS_ENABLED == 1)
-            PL_hash_rand_bits += ptr_hash((PTRV)a);
-        PL_hash_rand_bits = ROTL_UV(PL_hash_rand_bits,1);
-    }
-#endif
     HvARRAY(hv) = (HE**) a;
     HvMAX(hv) = newsize - 1;
     /* before we zero the newly added memory, we
@@ -1302,9 +1256,6 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
             /* alread have an aux, copy the old one in place. */
             Move(&a[oldsize * sizeof(HE*)], dest, 1, struct xpvhv_aux);
             /* we reset the iterator's xhv_rand as well, so they get a totally new ordering */
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-            dest->xhv_rand = (U32)PL_hash_rand_bits;
-#endif
             /* For now, just reset the lazy fill counter.
                It would be possible to update the counter in the code below
                instead.  */
@@ -1313,10 +1264,6 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
             /* no existing aux structure, but we allocated space for one
              * so intialize it properly. This unrolls hv_auxinit() a bit,
              * since we have to do the realloc anyway. */
-            /* first we set the iterator's xhv_rand so it can be copied into lastrand below */
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-            dest->xhv_rand = (U32)PL_hash_rand_bits;
-#endif
             /* this is the "non realloc" part of the hv_auxinit() */
             (void)hv_auxinit_internal(dest);
             /* Turn on the OOK flag */
@@ -1334,33 +1281,20 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
     do {
 	HE **oentry = aep + i;
 	HE *entry = aep[i];
+        unsigned long i, size;
 
 	if (!entry)				/* non-existent */
 	    continue;
-	do {
+        /* XXX TODO traverse buckets */
+        size = HeSIZE(entry);
+        for (i=0; i<size; i++) {
             U32 j = (HeHASH(entry) & newsize);
 	    if (j != (U32)i) {
+                /* delete from here */
+                Move(entry+1, entry, size-i, HE);
+                aep[j] = entry;
+#if 0
 		*oentry = HeNEXT(entry);
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-                /* if the target cell is empty or PL_HASH_RAND_BITS_ENABLED is false
-                 * insert to top, otherwise rotate the bucket rand 1 bit,
-                 * and use the new low bit to decide if we insert at top,
-                 * or next from top. IOW, we only rotate on a collision.*/
-                if (aep[j] && PL_HASH_RAND_BITS_ENABLED) {
-                    PL_hash_rand_bits+= ROTL32(HeHASH(entry), 17);
-                    PL_hash_rand_bits= ROTL_UV(PL_hash_rand_bits,1);
-                    if (PL_hash_rand_bits & 1) {
-                        HeNEXT(entry)= HeNEXT(aep[j]);
-                        HeNEXT(aep[j])= entry;
-                    } else {
-                        /* Note, this is structured in such a way as the optimizer
-                        * should eliminate the duplicated code here and below without
-                        * us needing to explicitly use a goto. */
-                        HeNEXT(entry) = aep[j];
-                        aep[j] = entry;
-                    }
-                } else
-#endif
                 {
                     /* see comment above about duplicated code */
                     HeNEXT(entry) = aep[j];
@@ -1368,10 +1302,12 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
                 }
 	    }
 	    else {
-		oentry = &HeNEXT(entry);
+		oentry = &(entry + 1);
+#endif
 	    }
+            oentry = &(entry + 1);
 	    entry = *oentry;
-	} while (entry);
+	};
     } while (i++ < oldsize);
 }
 
@@ -1451,7 +1387,7 @@ Perl_newHVhv(pTHX_ HV *ohv)
 		continue;
 	    }
 
-	    /* Copy the linked list of entries. */
+	    /* XXX: Copy the buckets. */
 	    for (; oent; oent = HeNEXT(oent)) {
 		const U32 hash   = HeHASH(oent);
 		const char * const key = HeKEY(oent);
@@ -1780,7 +1716,7 @@ Perl_hfree_next_entry(pTHX_ HV *hv, STRLEN *indexp)
     struct xpvhv_aux *iter;
     HE *entry;
     HE ** array;
-#ifdef DEBUGGING
+#ifndef NDEBUG
     STRLEN orig_index = *indexp;
 #endif
 
@@ -2081,15 +2017,6 @@ S_hv_auxinit(pTHX_ HV *hv) {
         HvARRAY(hv) = (HE**)array;
         SvOOK_on(hv);
         iter = HvAUX(hv);
-#ifdef PERL_HASH_RANDOMIZE_KEYS
-        if (PL_HASH_RAND_BITS_ENABLED) {
-            /* mix in some new state to PL_hash_rand_bits to "randomize" the traversal order*/
-            if (PL_HASH_RAND_BITS_ENABLED == 1)
-                PL_hash_rand_bits += ptr_hash((PTRV)array);
-            PL_hash_rand_bits = ROTL_UV(PL_hash_rand_bits,1);
-        }
-        iter->xhv_rand = (U32)PL_hash_rand_bits;
-#endif
     } else {
         iter = HvAUX(hv);
     }
@@ -2841,7 +2768,7 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
             k_flags |= HVhek_WASUTF8 | HVhek_FREEKEY;
     }
 
-    /* what follows was the moral equivalent of:
+    /* XXX: use this again. the moral equivalent of:
     if ((Svp = hv_fetch(PL_strtab, tmpsv, FALSE, hash))) {
 	if (--*Svp == NULL)
 	    hv_delete(PL_strtab, str, len, G_DISCARD, hash);
@@ -2851,28 +2778,50 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
     oentry = &(HvARRAY(PL_strtab))[hash & (I32) HvMAX(PL_strtab)];
     if (he) {
 	const HE *const he_he = &(he->shared_he_he);
-        for (entry = *oentry; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+        unsigned int i = 0;
+        /* TODO: binary search, not linear */
+        for (entry = *oentry; i < HeSIZE(entry); entry++) {
             if (entry == he_he)
                 break;
         }
     } else {
-        const int flags_masked = k_flags & HVhek_MASK;
-        for (entry = *oentry; entry; oentry = &HeNEXT(entry), entry = *oentry) {
-            if (HeHASH(entry) != hash)		/* strings can't be equal */
+        U32 lower = 0;
+        U32 upper = HeSIZE(entry) - 1;
+        HEK hecmp;
+        unsigned int collisions = 0, helen;
+
+        hecmp.hek_hash = hash;
+        hecmp.hek_len = len;
+        Newxz(hecmp.hek_key, len + 1, char);
+        memcpy(&hecmp.hek_key, str, len + 1);
+        helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + len;
+        if (is_utf8) HEK_UTF8_on(&hecmp);
+
+        while (lower <= upper) {
+            int cmp;
+            U32 middle = (lower + upper) / 2; /* needs to be unsigned */
+            he = (struct shared_he *)(entry + middle);
+            collisions++;
+
+            cmp = memNE(he, &hecmp, helen);
+            if (cmp < 0) {
+                lower = middle + 1;
                 continue;
-            if (HeKLEN(entry) != len)
+            }
+            else if (cmp > 0) {
+                upper = middle - 1;
                 continue;
-            if (HeKEY(entry) != str && memNE(HeKEY(entry),str,len))	/* is this it? */
-                continue;
-            if (HeKFLAGS(entry) != flags_masked)
-                continue;
+            }
+            entry = (HE *)he;
             break;
         }
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u strtab\n", HvKEYS(PL_strtab), HvMAX(PL_strtab),
+                              upper + 1, collisions));
     }
 
     if (entry) {
         if (--entry->he_valu.hent_refcount == 0) {
-            *oentry = HeNEXT(entry);
+            /* *oentry = HeNEXT(entry); */
             Safefree(entry);
             xhv->xhv_keys--; /* HvTOTALKEYS(hv)-- */
         }
@@ -3269,9 +3218,8 @@ Perl_refcounted_he_fetch_pvn(pTHX_ const struct refcounted_he *chain,
     if (!hash)
 	PERL_HASH(hash, keypv, keylen);
 
-    /* XXX: binary search */
-    /* for (; chain; chain = chain->refcounted_he_next) */
-    PERL_HASH_ITER(i, chain) {
+    /* XXX: linear. TODO: binary search */
+    for (i=0; i < chain->refcounted_he_size; chain++) {
 	if (
 #ifdef USE_ITHREADS
 	    hash == chain->refcounted_he_hash &&

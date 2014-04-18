@@ -8,11 +8,11 @@
  *
  */
 
-/* These control hash traversal randomization and the environment variable PERL_PERTURB_KEYS.
- * Currently disabling this functionality will break a few tests, but should otherwise work fine.
- * See perlrun for more details. */
+/* With sorted buckets we don't randomize keys anymore */
+#define PERL_PERTURB_KEYS_DISABLED
 
 #if defined(PERL_PERTURB_KEYS_DISABLED)
+#   undef PERL_HASH_RANDOMIZE_KEYS
 #   define PL_HASH_RAND_BITS_ENABLED        0
 #   define PERL_HASH_ITER_BUCKET(iter)      ((iter)->xhv_riter)
 #else
@@ -28,7 +28,7 @@
 #   define PERL_HASH_ITER_BUCKET(iter)      (((iter)->xhv_riter) ^ ((iter)->xhv_rand))
 #endif
 
-/* hash value bucket list: first entry of HE must contain the size encoded in the flag.
+/* hash value bucket array: first entry of HE must contain the size encoded in the flag.
    TODO: we should get rid of HE. HEK[] is enough with the char size in the HEK
    and the UTF* flag encoded into the first bit of len (as with the shared_hek api).
    Colliding buckets with size > 255 should die.
@@ -531,7 +531,10 @@ struct refcounted_he;
 
 /* Gosh. This really isn't a good name any longer.  */
 struct refcounted_he {
+    unsigned long         refcounted_he_size;
+#if 0
     struct refcounted_he *refcounted_he_next;	/* next entry in chain */
+#endif
 #ifdef USE_ITHREADS
     U32                   refcounted_he_hash;
     U32                   refcounted_he_keylen;
