@@ -1279,35 +1279,24 @@ S_hsplit(pTHX_ HV *hv, STRLEN const oldsize, STRLEN newsize)
     newsize--;
     aep = (HE**)a;
     do {
-	HE **oentry = aep + i;
 	HE *entry = aep[i];
         unsigned long i, size;
+	HE *oentry = entry;
 
 	if (!entry)				/* non-existent */
 	    continue;
         /* XXX TODO traverse buckets */
         size = HeSIZE(entry);
-        for (i=0; i<size; i++) {
+        for (i=0; i<size; entry++) {
             U32 j = (HeHASH(entry) & newsize);
 	    if (j != (U32)i) {
                 /* delete from here */
                 Move(entry+1, entry, size-i, HE);
+                size--;
+                HeSIZE(oentry)--;
                 aep[j] = entry;
-#if 0
-		*oentry = HeNEXT(entry);
-                {
-                    /* see comment above about duplicated code */
-                    HeNEXT(entry) = aep[j];
-                    aep[j] = entry;
-                }
-	    }
-	    else {
-		oentry = &(entry + 1);
-#endif
-	    }
-            oentry = &(entry + 1);
-	    entry = *oentry;
-	};
+            }
+	}
     } while (i++ < oldsize);
 }
 
@@ -1379,33 +1368,31 @@ Perl_newHVhv(pTHX_ HV *ohv)
 
 	/* In each bucket... */
 	for (i = 0; i <= hv_max; i++) {
-	    HE *prev = NULL;
+            STRLEN j;
+	    HE **ent  = (HE**)ents[i];
 	    HE *oent = oents[i];
 
 	    if (!oent) {
-		ents[i] = NULL;
+		ent = NULL;
 		continue;
 	    }
 
 	    /* XXX: Copy the buckets. */
-	    for (; oent; oent = HeNEXT(oent)) {
+            Newx(ent, HeSIZE(oent), HE*);
+            HeSIZE(*ent) = HeSIZE(oent);
+	    for (j = 0; j < HeSIZE(oent); oent++) {
 		const U32 hash   = HeHASH(oent);
 		const char * const key = HeKEY(oent);
 		const STRLEN len = HeKLEN(oent);
 		const int flags  = HeKFLAGS(oent);
-		HE * const ent   = new_HE();
-		SV *const val    = HeVAL(oent);
+		HE * const newent = new_HE();
+		SV *const val     = HeVAL(oent);
 
-		HeVAL(ent) = SvIMMORTAL(val) ? val : newSVsv(val);
-		HeKEY_hek(ent)
+		HeVAL(newent) = SvIMMORTAL(val) ? val : newSVsv(val);
+		HeKEY_hek(newent)
                     = shared ? share_hek_flags(key, len, hash, flags)
                              :  save_hek_flags(key, len, hash, flags);
-		if (prev)
-		    HeNEXT(prev) = ent;
-		else
-		    ents[i] = ent;
-		prev = ent;
-		HeNEXT(ent) = NULL;
+		ent[j] = newent;
 	    }
 	}
 
@@ -1650,7 +1637,7 @@ S_clear_placeholders(pTHX_ HV *hv, U32 items)
 
     i = HvMAX(hv);
     do {
-	/* Loop down the linked list heads  */
+	/* Loop down the HEs */
 	HE **oentry = &(HvARRAY(hv))[i];
 	HE *entry;
 
@@ -2118,7 +2105,9 @@ Perl_hv_riter_set(pTHX_ HV *hv, I32 riter) {
 
 void
 Perl_hv_rand_set(pTHX_ HV *hv, U32 new_xhv_rand) {
+#ifdef PERL_HASH_RANDOMIZE_KEYS
     struct xpvhv_aux *iter;
+#endif
 
     PERL_ARGS_ASSERT_HV_RAND_SET;
 
