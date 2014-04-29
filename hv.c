@@ -209,6 +209,60 @@ S_hv_notallowed(pTHX_ int flags, const char *key, I32 klen,
     Perl_croak(aTHX_ msg, SVfARG(sv));
 }
 
+PERL_STATIC_INLINE HE*
+S_hv_search(pTHX_ HV* hv, U32 hash, const char *key, STRLEN klen,
+            bool is_utf8, U32 *index, unsigned int *collisions)
+{
+    HE *he;
+    U32 lower, upper;
+    unsigned int helen;
+    HEK hecmp; /* temporary hek to compare collisions against */
+    HE *entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
+
+    *index = 0;
+#ifdef DEBUGGING
+    *collisions = 0;
+#endif
+
+    /* check for empty or deleted buckets first */
+    if (HeSIZE(entry) < 2) { /* 0 or 1 entries only, no collisions yet */
+        return entry;
+    }
+
+    /* binary search in sorted bucket list of HEKs to avoid algorithmic complexity
+       attacks and be more cache friendly. sort by hash, len and str. */
+    lower = 0;
+    upper = HeSIZE(entry) - 1;
+
+    /* create a sentinel hek as single memory buffer to compare against */
+    hecmp.hek_hash = hash;
+    hecmp.hek_len = klen;
+    Newxz(hecmp.hek_key, klen + 1, char);
+    memcpy(&hecmp.hek_key, key, klen + 1);
+    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen;
+    if (is_utf8) HEK_UTF8_on(&hecmp);
+
+    while (lower <= upper) {
+        int cmp;
+        U32 middle = (lower + upper) / 2; /* needs to be unsigned */
+        he = entry + middle;
+        *collisions++;
+
+        cmp = memNE(he, &hecmp, helen);
+        if (cmp < 0) {
+            lower = middle + 1;
+            continue;
+        }
+        else if (cmp > 0) {
+            upper = middle - 1;
+            continue;
+        }
+        *index = middle;
+        return he;
+    }
+    return NULL;
+}
+
 /* (klen == HEf_SVKEY) is special for MAGICAL hv entries, meaning key slot
  * contains an SV* */
 
@@ -345,9 +399,8 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     bool is_utf8;
     int masked_flags;
     const int return_svp = action & HV_FETCH_JUST_SV;
-    U32 lower, upper;
-    unsigned int collisions = 0, helen;
-    HEK hecmp; /* temporary hek to compare collisions against */
+    U32 he_index;
+    unsigned int collisions;
 
     if (!hv)
 	return NULL;
@@ -641,131 +694,91 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
     }
 
-    /* check for empty or deleted buckets first */
-    if (HeSIZE(entry) < 2) { /* 0 or 1 entries only, no collisions yet */
-        if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) { /* add a bucket or collision */
-            he = entry;
+    he = S_hv_search(aTHX_ hv, hash, key, klen, is_utf8, &he_index, &collisions);
+
+    if (he) {
+        if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
             goto store_bucket;
         }
         else if (action & HV_DELETE) {
-            /* TODO */
+            /* TODO: delete bucket */
         }
-        else { /* 1 entry only, no collisions yet */
-            if (return_svp) {
-                if (0 == HeSIZE(entry))
-                    return NULL;
-                else {
-                    he = entry;
-                    return he ? (void *) &HeVAL(he) : NULL;
-                }
+    }
+    else {
+        if (return_svp) {
+            if (0 == HeSIZE(he))
+                return NULL;
+            else {
+                return he ? (void *) &HeVAL(he) : NULL;
             }
         }
     }
 
-    /* XXX: binary search in sorted bucket list of HEKs to avoid algorithmic complexity
-       attacks and be more cache friendly. sort by len and then str.
-       WIP! no insert and delete yet */
-    lower = 0;
-    upper = HeSIZE(entry) - 1;
-
-    /* create a sentinel hek as single memory buffer to compare against */
-    hecmp.hek_hash = hash;
-    hecmp.hek_len = klen;
-    Newxz(hecmp.hek_key, klen + 1, char);
-    memcpy(&hecmp.hek_key, key, klen + 1);
-    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen;
-    if (is_utf8) HEK_UTF8_on(&hecmp);
-
-    while (lower <= upper) {
-        int cmp;
-        U32 middle = (lower + upper) / 2; /* needs to be unsigned */
-        he = entry + middle;
-        collisions++;
-
-        cmp = memNE(he, &hecmp, helen);
-        if (cmp < 0) {
-            lower = middle + 1;
-            continue;
+    if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
+    store_bucket:
+        if (HeKFLAGS(he) != masked_flags) {
+            /* We match if HVhek_UTF8 bit in our flags and hash key's
+               match.  But if he was set previously with HVhek_WASUTF8
+               and key now doesn't (or vice versa) then we should change
+               the key's flag, as this is assignment.  */
+            if (HvSHAREKEYS(hv)) {
+                /* Need to swap the key we have for a key with the flags we
+                   need. As keys are shared we can't just write to the
+                   flag, so we share the new one, unshare the old one.  */
+                HEK * const new_hek = share_hek_flags(key, klen, hash,
+                                                      masked_flags);
+                unshare_hek (HeKEY_hek(he));
+                HeKEY_hek(he) = new_hek;
+            }
+            else if (hv == PL_strtab) {
+                /* PL_strtab is usually the only hash without HvSHAREKEYS,
+                   so putting this test here is cheap  */
+                if (flags & HVhek_FREEKEY)
+                    Safefree(key);
+                Perl_croak(aTHX_ S_strtab_error,
+                           action & HV_FETCH_LVALUE ? "fetch" : "store");
+            }
+            else
+                HeKFLAGS(he) = masked_flags;
+            if (masked_flags & HVhek_ENABLEHVKFLAGS)
+                HvHASKFLAGS_on(hv);
         }
-        else if (cmp > 0) {
-            upper = middle - 1;
-            continue;
+        if (HeVAL(he) == &PL_sv_placeholder) {
+            /* yes, can store into placeholder slot */
+            if (action & HV_FETCH_LVALUE) {
+                if (SvMAGICAL(hv)) {
+                    /* This preserves behaviour with the old hv_fetch
+                       implementation which at this point would bail out
+                       with a break; (at "if we find a placeholder, we
+                       pretend we haven't found anything")
+
+                       That break mean that if a placeholder were found, it
+                       caused a call into hv_store, which in turn would
+                       check magic, and if there is no magic end up pretty
+                       much back at this point (in hv_store's code).  */
+                    break;
+                }
+                /* LVAL fetch which actually needs a store.  */
+                val = newSV(0);
+                HvPLACEHOLDERS(hv)--;
+            } else {
+                /* store */
+                if (val != &PL_sv_placeholder)
+                    HvPLACEHOLDERS(hv)--;
+            }
+            HeVAL(he) = val;
+        } else if (action & HV_FETCH_ISSTORE) {
+            SvREFCNT_dec(HeVAL(he));
+            HeVAL(he) = val;
         }
-
-        if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
-        store_bucket:
-	    if (HeKFLAGS(he) != masked_flags) {
-		/* We match if HVhek_UTF8 bit in our flags and hash key's
-		   match.  But if he was set previously with HVhek_WASUTF8
-		   and key now doesn't (or vice versa) then we should change
-		   the key's flag, as this is assignment.  */
-		if (HvSHAREKEYS(hv)) {
-		    /* Need to swap the key we have for a key with the flags we
-		       need. As keys are shared we can't just write to the
-		       flag, so we share the new one, unshare the old one.  */
-		    HEK * const new_hek = share_hek_flags(key, klen, hash,
-						   masked_flags);
-		    unshare_hek (HeKEY_hek(he));
-		    HeKEY_hek(he) = new_hek;
-		}
-		else if (hv == PL_strtab) {
-		    /* PL_strtab is usually the only hash without HvSHAREKEYS,
-		       so putting this test here is cheap  */
-		    if (flags & HVhek_FREEKEY)
-			Safefree(key);
-		    Perl_croak(aTHX_ S_strtab_error,
-			       action & HV_FETCH_LVALUE ? "fetch" : "store");
-		}
-		else
-		    HeKFLAGS(he) = masked_flags;
-		if (masked_flags & HVhek_ENABLEHVKFLAGS)
-		    HvHASKFLAGS_on(hv);
-	    }
-	    if (HeVAL(he) == &PL_sv_placeholder) {
-		/* yes, can store into placeholder slot */
-		if (action & HV_FETCH_LVALUE) {
-		    if (SvMAGICAL(hv)) {
-			/* This preserves behaviour with the old hv_fetch
-			   implementation which at this point would bail out
-			   with a break; (at "if we find a placeholder, we
-			   pretend we haven't found anything")
-
-			   That break mean that if a placeholder were found, it
-			   caused a call into hv_store, which in turn would
-			   check magic, and if there is no magic end up pretty
-			   much back at this point (in hv_store's code).  */
-			break;
-		    }
-		    /* LVAL fetch which actually needs a store.  */
-		    val = newSV(0);
-		    HvPLACEHOLDERS(hv)--;
-		} else {
-		    /* store */
-		    if (val != &PL_sv_placeholder)
-			HvPLACEHOLDERS(hv)--;
-		}
-		HeVAL(he) = val;
-	    } else if (action & HV_FETCH_ISSTORE) {
-		SvREFCNT_dec(HeVAL(he));
-		HeVAL(he) = val;
-	    }
-	} else if (HeVAL(he) == &PL_sv_placeholder) {
-	    /* if we find a placeholder, we pretend we haven't found
-	       anything */
-	    break;
-	}
-	if (flags & HVhek_FREEKEY)
-	    Safefree(key);
-
-        /* fill, size, collisions, found index in collision list */
-        DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv),
-                              HeSIZE(entry), collisions));
-	if (return_svp) {
-	    return he ? (void *) &HeVAL(he) : NULL;
-	}
-	return he;
+    } else if (HeVAL(he) == &PL_sv_placeholder) {
+        /* if we find a placeholder, we pretend we haven't found
+           anything */
+        break;
     }
-
+    if (flags & HVhek_FREEKEY)
+        Safefree(key);
+    
     /* fill, size, collisions, found index in collision list */
     DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%lu\t%u\n", HvKEYS(hv), HvMAX(hv),
                               HeSIZE(entry), collisions));
@@ -832,6 +845,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     }
 
     oentry = &(HvARRAY(hv))[hash & (I32) xhv->xhv_max];
+
     /* XXX now sort the buckets */
 
     entry = new_HE();
@@ -988,10 +1002,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     HE *const *first_entry;
     bool is_utf8 = (k_flags & HVhek_UTF8) ? TRUE : FALSE;
     int masked_flags;
-    unsigned int collisions = 0, helen;
-    U32 lower, upper;
-    U32 i;
-    HEK hecmp; /* temporary hek to compare collisions against */
+    U32 he_index, i;
+    unsigned int collisions;
 
     if (SvRMAGICAL(hv)) {
 	bool needs_copy;
@@ -1065,40 +1077,9 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 
     masked_flags = (k_flags & HVhek_MASK);
 
-    entry = HvARRAY(hv)[hash & (I32) HvMAX(hv)];
-    lower = 0;
-    upper = HeSIZE(entry) - 1;
+    entry = S_hv_search(aTHX_ hv, hash, key, klen, is_utf8, &he_index, &collisions);
 
-    /* create a sentinel hek as single memory buffer to compare against */
-    hecmp.hek_hash = hash;
-    hecmp.hek_len = klen;
-    Newxz(hecmp.hek_key, klen + 1, char);
-    memcpy(&hecmp.hek_key, key, klen + 1);
-    helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen + 1 + 1;
-    if (is_utf8) HEK_UTF8_on(&hecmp);
-
-    /* for (i = 0; i < HeSIZE(entry); oentry = &entry, entry++) */
-    while (lower <= upper) {
-	SV *sv;
-	U8 mro_changes = 0; /* 1 = isa; 2 = package moved */
-	GV *gv = NULL;
-	HV *stash = NULL;
-        U32 middle = (lower + upper) / 2; /* needs to be unsigned */
-        int cmp;
-        he = entry + middle;
-        collisions++;
-
-        /* single cmp: hash vs last bits, len, buffer, seperate utf8 byte */
-        cmp = memNE(he, &hecmp, helen);
-        if (cmp < 0) {
-            lower = middle + 1;
-            continue;
-        }
-        else if (cmp > 0) {
-            upper = middle - 1;
-            continue;
-        }
-
+    {
 	if (hv == PL_strtab) {
 	    if (k_flags & HVhek_FREEKEY)
 		Safefree(key);
@@ -2764,53 +2745,28 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
     } */
     xhv = (XPVHV*)SvANY(PL_strtab);
     /* assert(xhv_array != 0) */
-    oentry = &(HvARRAY(PL_strtab))[hash & (I32) HvMAX(PL_strtab)];
+    entry = HvARRAY(PL_strtab)[hash & (I32) HvMAX(PL_strtab)];
+
     if (he) {
 	const HE *const he_he = &(he->shared_he_he);
         unsigned int i = 0;
         /* TODO: binary search, not linear */
-        for (entry = *oentry; i < HeSIZE(entry); entry++) {
+        for (entry = oentry; i < HeSIZE(entry); entry++) {
             if (entry == he_he)
                 break;
         }
     } else {
-        U32 lower = 0;
-        U32 upper = HeSIZE(entry) - 1;
-        HEK hecmp;
-        unsigned int collisions = 0, helen;
+        unsigned int collisions;
+        U32 hesize = HeSIZE(entry);
 
-        hecmp.hek_hash = hash;
-        hecmp.hek_len = len;
-        Newxz(hecmp.hek_key, len + 1, char);
-        memcpy(&hecmp.hek_key, str, len + 1);
-        helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + len;
-        if (is_utf8) HEK_UTF8_on(&hecmp);
-
-        while (lower <= upper) {
-            int cmp;
-            U32 middle = (lower + upper) / 2; /* needs to be unsigned */
-            he = (struct shared_he *)(entry + middle);
-            collisions++;
-
-            cmp = memNE(he, &hecmp, helen);
-            if (cmp < 0) {
-                lower = middle + 1;
-                continue;
-            }
-            else if (cmp > 0) {
-                upper = middle - 1;
-                continue;
-            }
-            entry = (HE *)he;
-            break;
-        }
+        entry = S_hv_search(aTHX_ hv, hash, str, len, is_utf8, &index, &collisions);
         DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u strtab\n", HvKEYS(PL_strtab), HvMAX(PL_strtab),
-                              upper + 1, collisions));
+                              HeSIZE(entry), collisions));
     }
 
     if (entry) {
         if (--entry->he_valu.hent_refcount == 0) {
-            /* *oentry = HeNEXT(entry); */
+            /* TODO: delete he *oentry = HeNEXT(entry); */
             Safefree(entry);
             xhv->xhv_keys--; /* HvTOTALKEYS(hv)-- */
         }
