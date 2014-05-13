@@ -1,12 +1,11 @@
 /*
- $Id: Unicode.xs,v 2.7 2010/12/31 22:48:48 dankogai Exp dankogai $
+ $Id: Unicode.xs,v 2.11 2014/04/29 16:25:06 dankogai Exp dankogai $
  */
 
 #define PERL_NO_GET_CONTEXT
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
-#define U8 U8
 #include "../Encode/encode.h"
 
 #define FBCHAR			0xFFFd
@@ -80,7 +79,7 @@ enc_unpack(pTHX_ U8 **sp, U8 *e, STRLEN size, U8 endian)
 	if (endian == 'v')
 	    break;
 	v |= (*s++ << 16);
-	v |= (*s++ << 24);
+	v |= ((UV)*s++ << 24);
 	break;
     default:
 	croak("Unknown endian %c",(char) endian);
@@ -199,10 +198,6 @@ CODE:
 			  *hv_fetch((HV *)SvRV(obj),"Name",4,0),
 			  ord);
 		}
-		if (s+size <= e) {
-		    /* skip the next one as well */
-		    enc_unpack(aTHX_ &s,e,size,endian);
-		}
 		ord = FBCHAR;
 	    }
 	    else {
@@ -217,12 +212,23 @@ CODE:
 			ord = FBCHAR;
 		    }
 		}
-		else {
-		    if (s+size > e) {
-			/* Partial character */
-			s -= size;   /* back up to 1st half */
-			break;       /* And exit loop */
+		else if (s+size > e) {
+		    if (check) {
+		        if (check & ENCODE_STOP_AT_PARTIAL) {
+		             s -= size;
+		             break;
+		        }
+		        else {
+		             croak("%"SVf":Malformed HI surrogate %"UVxf,
+				   *hv_fetch((HV *)SvRV(obj),"Name",4,0),
+				   ord);
+		        }
 		    }
+		    else {
+		        ord = FBCHAR;
+		    }
+		}
+		else {
 		    lo = enc_unpack(aTHX_ &s,e,size,endian);
 		    if (!isLoSurrogate(lo)) {
 			if (check) {
@@ -231,6 +237,7 @@ CODE:
 				  ord);
 			}
 			else {
+			    s -= size;
 			    ord = FBCHAR;
 			}
 		    }
@@ -256,9 +263,9 @@ CODE:
 	       This prevents allocating too much in the rogue case of a large
 	       input consisting initially of long sequence uft8-byte unicode
 	       chars followed by single utf8-byte chars. */
-	    /* +1
-	       fixes  Unicode.xs!decode_xs n-byte heap-overflow
-	    */
+            /* +1 
+               fixes  Unicode.xs!decode_xs n-byte heap-overflow
+              */
 	    STRLEN remaining = (e - s)/usize + 1; /* +1 to avoid the leak */
 	    STRLEN max_alloc = remaining + (8*1024*1024);
 	    STRLEN est_alloc = remaining * UTF8_MAXLEN;
@@ -291,9 +298,8 @@ CODE:
 	*SvEND(str) = '\0';
     }
 
-    if (!temp_result)
-	shrink_buffer(result);
-
+    if (!temp_result) shrink_buffer(result);
+    if (SvTAINTED(str)) SvTAINTED_on(result); /* propagate taintedness */
     XSRETURN(1);
 }
 
@@ -348,7 +354,7 @@ CODE:
 		if (ucs2 == -1) {
 		    ucs2 = SvTRUE(attr("ucs2", 4));
 		}
-		if (ucs2) {
+		if (ucs2 || ord > 0x10FFFF) {
 		    if (check) {
 			croak("%"SVf":code point \"\\x{%"UVxf"}\" too high",
 				  *hv_fetch((HV *)SvRV(obj),"Name",4,0),ord);
@@ -392,8 +398,8 @@ CODE:
 	*SvEND(utf8) = '\0';
     }
 
-    if (!temp_result)
-	shrink_buffer(result);
+    if (!temp_result) shrink_buffer(result);
+    if (SvTAINTED(utf8)) SvTAINTED_on(result); /* propagate taintedness */
 
     SvSETMAGIC(utf8);
 

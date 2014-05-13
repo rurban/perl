@@ -2,10 +2,10 @@ package Encode::Alias;
 use strict;
 use warnings;
 no warnings 'redefine';
-our $VERSION = do { my @r = ( q$Revision: 2.13 $ =~ /\d+/g ); sprintf "%d." . "%02d" x $#r, @r };
-sub DEBUG () { 0 }
+our $VERSION = do { my @r = ( q$Revision: 2.18 $ =~ /\d+/g ); sprintf "%d." . "%02d" x $#r, @r };
+use constant DEBUG => !!$ENV{PERL_ENCODE_DEBUG};
 
-use base qw(Exporter);
+use Exporter 'import';
 
 # Public, encouraged API is exported by default
 
@@ -206,11 +206,12 @@ sub init_aliases {
     # Mac Mappings
     # predefined in *.ucm; unneeded
     # define_alias( qr/\bmacIcelandic$/i => '"macIceland"');
-    define_alias( qr/^mac_(.*)$/i => '"mac$1"' );
+    define_alias( qr/^(?:x[_-])?mac[_-](.*)$/i => '"mac$1"' );
     # http://rt.cpan.org/Ticket/Display.html?id=36326
     define_alias( qr/^macintosh$/i => '"MacRoman"' );
-
-    # Ououououou. gone.  They are differente!
+    # https://rt.cpan.org/Ticket/Display.html?id=78125
+    define_alias( qr/^macce$/i => '"MacCentralEurRoman"' );
+    # Ououououou. gone.  They are different!
     # define_alias( qr/\bmacRomanian$/i => '"macRumanian"');
 
     # Standardize on the dashed versions.
@@ -337,7 +338,7 @@ As of Encode 1.87, the older form
 
 no longer works. 
 
-Encode up to 1.86 internally used "local $_" to implement ths older
+Encode up to 1.86 internally used "local $_" to implement this older
 form.  But consider the code below;
 
   use Encode;

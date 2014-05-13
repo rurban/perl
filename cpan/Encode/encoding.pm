@@ -1,12 +1,12 @@
-# $Id: encoding.pm,v 2.8 2009/02/15 17:44:13 dankogai Exp $
+# $Id: encoding.pm,v 2.12 2013/04/26 18:30:46 dankogai Exp $
 package encoding;
-our $VERSION = '2.6_01';
+our $VERSION = sprintf "%d.%02d", q$Revision: 2.12 $ =~ /(\d+)/g;
 
 use Encode;
 use strict;
 use warnings;
 
-sub DEBUG () { 0 }
+use constant DEBUG => !!$ENV{PERL_ENCODE_DEBUG};
 
 BEGIN {
     if ( ord("A") == 193 ) {
@@ -102,8 +102,16 @@ sub _get_locale_encoding {
 }
 
 sub import {
+    if ($] >= 5.017) {
+	warnings::warnif("deprecated",
+			 "Use of the encoding pragma is deprecated")
+    }
     my $class = shift;
     my $name  = shift;
+    if (!$name){
+	require Carp;
+        Carp::croak("encoding: no encoding specified.");
+    }
     if ( $name eq ':_get_locale_encoding' ) {    # used by lib/open.pm
         my $caller = caller();
         {
@@ -198,6 +206,19 @@ __END__
 =head1 NAME
 
 encoding - allows you to write your script in non-ascii or non-utf8
+
+=head1 WARNING
+
+This module is deprecated under perl 5.18.  It uses a mechanism provided by
+perl that is deprecated under 5.18 and higher, and may be removed in a
+future version.
+
+The easiest and the best alternative is to write your script in UTF-8
+and declear:
+
+  use utf8; # not use encoding ':utf8';
+
+See L<perluniintro> and L<utf8> for details.
 
 =head1 SYNOPSIS
 

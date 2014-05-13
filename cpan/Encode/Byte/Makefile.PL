@@ -105,10 +105,9 @@ sub post_initialize
 #include <EXTERN.h>
 #include <perl.h>
 #include <XSUB.h>
-#define U8 U8
 #include "encode.h"
 END
-    foreach my $table (keys %tables) {
+    foreach my $table (sort keys %tables) {
     print XS qq[#include "${table}.h"\n];
     }
     print XS <<"END";
@@ -118,8 +117,11 @@ Encode_XSEncoding(pTHX_ encode_t *enc)
 {
  dSP;
  HV *stash = gv_stashpv("Encode::XS", TRUE);
- SV *sv    = sv_bless(newRV_noinc(newSViv(PTR2IV(enc))),stash);
+ SV *iv    = newSViv(PTR2IV(enc));
+ SV *sv    = sv_bless(newRV_noinc(iv),stash);
  int i = 0;
+ SvFLAGS(iv) |= SVp_POK;
+ SvPVX(iv) = enc->name[0];
  PUSHMARK(sp);
  XPUSHs(sv);
  while (enc->name[i])
@@ -137,7 +139,7 @@ PROTOTYPES: DISABLE
 BOOT:
 {
 END
-    foreach my $table (keys %tables) {
+    foreach my $table (sort keys %tables) {
     print XS qq[#include "${table}.exh"\n];
     }
     print XS "}\n";

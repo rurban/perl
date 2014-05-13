@@ -67,6 +67,8 @@ t/big5-eten.enc	test data
 t/big5-eten.utf	test data
 t/big5-hkscs.enc	test data
 t/big5-hkscs.utf	test data
+t/cow.t                 test script
+t/decode.t              test script
 t/enc_data.t		test script for encoding.pm vs. DATA fh
 t/enc_eucjp.t	test script
 t/enc_module.enc test data for t/enc_module.t
@@ -96,6 +98,7 @@ t/mime_header_iso2022jp.t  test script
 t/perlio.t	test script
 t/piconv.t	test script
 t/rt.pl		even more test script
+t/taint.t       test script
 t/unibench.pl	benchmark script
 t/utf8ref.t	test script
 t/utf8strict.t	test script
