@@ -210,14 +210,13 @@ S_hv_notallowed(pTHX_ int flags, const char *key, I32 klen,
 }
 
 PERL_STATIC_INLINE HE*
-S_hv_search(pTHX_ HV* hv, U32 hash, const char *key, STRLEN klen,
-            bool is_utf8, U32 *index, unsigned int *collisions)
+S_hv_search(pTHX_ HV* hv, HE *entry, U32 hash, const char *key, STRLEN klen, bool is_utf8,
+            U32 *index, unsigned int *collisions)
 {
     HE *he;
     U32 lower, upper;
     unsigned int helen;
     HEK hecmp; /* temporary hek to compare collisions against */
-    HE *entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
 
     *index = 0;
 #ifdef DEBUGGING
@@ -694,8 +693,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 	entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
     }
 
-    he = S_hv_search(aTHX_ hv, hash, key, klen, is_utf8, &he_index, &collisions);
-
+    he = S_hv_search(aTHX_ hv, entry, hash, key, klen, is_utf8, &he_index, &collisions);
     if (he) {
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
             goto store_bucket;
@@ -1076,8 +1074,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     }
 
     masked_flags = (k_flags & HVhek_MASK);
-
-    entry = S_hv_search(aTHX_ hv, hash, key, klen, is_utf8, &he_index, &collisions);
+    he = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
+    entry = S_hv_search(aTHX_ hv, he, hash, key, klen, is_utf8, &he_index, &collisions);
 
     {
 	if (hv == PL_strtab) {
@@ -2759,7 +2757,7 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
         unsigned int collisions;
         U32 hesize = HeSIZE(entry);
 
-        entry = S_hv_search(aTHX_ hv, hash, str, len, is_utf8, &index, &collisions);
+        entry = S_hv_search(aTHX_ hv, entry, hash, str, len, is_utf8, &index, &collisions);
         DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u strtab\n", HvKEYS(PL_strtab), HvMAX(PL_strtab),
                               HeSIZE(entry), collisions));
     }
