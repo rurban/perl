@@ -1427,6 +1427,8 @@ myterm	:	'(' expr ')'
 			{ $$ = $1; }
 	|	hsh 	%prec '('
 			{ $$ = $1; }
+	|	sizearydecl %prec '('
+			{ $$ = $1; }
 	|	ary 	%prec '('
 			{ $$ = $1; }
 	;
@@ -1468,6 +1470,28 @@ ary	:	'@' indirob
 			  TOKEN_GETMAD($1,$$,'@');
 			}
 	;
+
+sizearydecl :	'@' PRIVATEREF
+			{
+			  if (!FEATURE_SIZED_ARRAYS_IS_ENABLED)
+			    Perl_croak(aTHX_ "Experimental "
+				"sized_arrays not enabled");
+			  Perl_ck_warner_d(aTHX_
+				packWARN(WARN_EXPERIMENTAL__SIZED_ARRAYS),
+				"The sized_arrays feature is experimental");
+			  $$ = newAVREF($2);
+                        }
+                 '[' number ']'
+                        {
+			  $$->op_private |= IVAL($1); /* op_aelemsize_const */
+			  TOKEN_GETMAD($1,$$,'@');
+			}
+	|	 '[' indirob ']'
+                        {
+			  $$->op_private |= IVAL($1); /* op_aelemsize */
+			  TOKEN_GETMAD($1,$$,'@');
+			}
+
 
 hsh	:	'%' indirob
 			{ $$ = newHVREF($2);

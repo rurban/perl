@@ -35,6 +35,7 @@ my %feature = (
     unicode_strings => 'unicode',
     fc              => 'fc',
     signatures      => 'signatures',
+    sized_arrays    => 'sized_arrays'
 );
 
 # NOTE: If a feature is ever enabled in a non-contiguous range of Perl
@@ -56,7 +57,7 @@ my %feature_bundle = (
     "5.19"   =>	[qw(say state switch unicode_strings unicode_eval
 		    evalbytes current_sub fc)],
     "5.21"   =>	[qw(say state switch unicode_strings unicode_eval
-		    evalbytes current_sub fc)],
+		    evalbytes current_sub fc sized_arrays)],
 );
 
 # not actually used currently
