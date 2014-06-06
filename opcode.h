@@ -278,6 +278,8 @@ EXTCONST char* const PL_op_name[] = {
 	"rv2av",
 	"aelemfast",
 	"aelemfast_lex",
+	"aelemsize_const",
+	"aelemsize",
 	"aelem",
 	"aslice",
 	"kvaslice",
@@ -664,7 +666,9 @@ EXTCONST char* const PL_op_desc[] = {
 	"quotemeta",
 	"array dereference",
 	"constant array element",
-	"constant lexical array element",
+	"constant lexical aelem",
+	"unchecked constant aelem",
+	"unchecked array aelem",
 	"array element",
 	"array slice",
 	"index/value array slice",
@@ -1066,6 +1070,8 @@ EXT Perl_ppaddr_t PL_ppaddr[] /* or perlvars.h */
 	Perl_pp_rv2av,
 	Perl_pp_aelemfast,
 	Perl_pp_aelemfast_lex,	/* implemented by Perl_pp_aelemfast */
+	Perl_pp_aelemsize_const,
+	Perl_pp_aelemsize,
 	Perl_pp_aelem,
 	Perl_pp_aslice,
 	Perl_pp_kvaslice,
@@ -1463,6 +1469,8 @@ EXT Perl_check_t PL_check[] /* or perlvars.h */
 	Perl_ck_rvconst,	/* rv2av */
 	Perl_ck_null,		/* aelemfast */
 	Perl_ck_null,		/* aelemfast_lex */
+	Perl_ck_null,		/* aelemsize_const */
+	Perl_ck_null,		/* aelemsize */
 	Perl_ck_null,		/* aelem */
 	Perl_ck_null,		/* aslice */
 	Perl_ck_null,		/* kvaslice */
@@ -1854,6 +1862,8 @@ EXTCONST U32 PL_opargs[] = {
 	0x00000148,	/* rv2av */
 	0x00013604,	/* aelemfast */
 	0x00013040,	/* aelemfast_lex */
+	0x00013040,	/* aelemsize_const */
+	0x00013204,	/* aelemsize */
 	0x00013204,	/* aelem */
 	0x00023401,	/* aslice */
 	0x00023401,	/* kvaslice */

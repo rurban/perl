@@ -741,6 +741,59 @@ PP(pp_aelemfast)
     RETURN;
 }
 
+/* aelemsize_const with constant index. my @a[5];
+   we cannot declare global arrays as sized, only lexical.
+   Those sized arrays accesses are already checked at compile-time.
+   dies on illegal index */
+PP(pp_aelemsize_const)
+{
+    dVAR; dSP;
+    SV** svp;
+    AV * const av = MUTABLE_AV(PAD_SV(PL_op->op_targ));
+    IV index = (I8)PL_op->op_private; /* index already compile-time checked */
+
+#ifdef AELEMSIZE_RT_NEGATIVE /* slower but allow the actual size be smaller than the declared size */
+    if (index >= 0)
+#endif
+        svp = &AvARRAY(av)[index];
+#ifdef AELEMSIZE_RT_NEGATIVE
+    else {
+        svp = &AvARRAY(av)[AvFILLp(av) + index];
+    }
+#endif
+
+    if (UNLIKELY(!svp))
+        DIE(aTHX_ PL_no_aelem, index);
+
+    EXTEND(SP, 1);
+    PUSHs(*svp);
+    RETURN;
+}
+
+/* unchecked array element access with variable index.
+   only for sized arrays already checked at compile-time as above.
+   dies on illegal index */
+PP(pp_aelemsize)
+{
+    dVAR; dSP;
+    SV** svp = NULL;
+
+    IV index = SvIV(POPs);
+    AV * const av = MUTABLE_AV(POPs);
+    if (index >= 0 && index < AvFILLp(av))
+        svp = &AvARRAY(av)[index];
+    else if (index < 0 && index > -AvFILLp(av) ) { /* @a[20] just declares the len not the size */
+        svp = &AvARRAY(av)[AvFILL(av) + index];
+    }
+
+    if (UNLIKELY(!svp)) /* unassigned elem or fall through for > AvFILL */
+        DIE(aTHX_ PL_no_aelem, index);
+
+    EXTEND(SP, 1); /* TODO: no POPs, sp-- and replace sp */
+    PUSHs(*svp);
+    RETURN;
+}
+
 PP(pp_join)
 {
     dVAR; dSP; dMARK; dTARGET;

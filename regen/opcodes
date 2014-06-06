@@ -214,7 +214,9 @@ quotemeta	quotemeta		ck_fun		fstu%	S?
 
 rv2av		array dereference	ck_rvconst	dt1	
 aelemfast	constant array element	ck_null		s$	A S
-aelemfast_lex	constant lexical array element	ck_null		d0	A S
+aelemfast_lex	constant lexical aelem	ck_null		d0	A S
+aelemsize_const	unchecked constant aelem	ck_null	d0	A S
+aelemsize	unchecked array aelem	ck_null		s2	A S
 aelem		array element		ck_null		s2	A S
 aslice		array slice		ck_null		m@	A L
 kvaslice	index/value array slice	ck_null		m@	A L
