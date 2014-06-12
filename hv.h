@@ -162,6 +162,66 @@ struct xpvhv {
     } STMT_END
 #endif
 
+#if defined(__SSE4_2__) && defined(PERL_CORE)
+/* Use the fastest and best hash function on Intel CPU's with __SSE4_2__ and possibly
+   also with ARM7 (untested).
+   Note that no hash function contributes to security against algorithmic
+   complexity attacks as those attacks are done off-line. Mainly the seed does.
+   The choice of the hash function only contributes to the average case
+   how many collisions appear on average. See https://github.com/rurban/perl-hash-stats
+
+   TODO: Check cpu capabilities at init-time and set the hash func then.
+*/
+#include <smmintrin.h>
+
+/* Byte-boundary alignment issues */
+#define ALIGN_SIZE      0x08UL
+#define ALIGN_MASK      (ALIGN_SIZE - 1)
+#define CALC_CRC(op, crc, type, buf, len)                               \
+  do {                                                                  \
+    for (; (len) >= sizeof (type); (len) -= sizeof(type), buf += sizeof (type)) { \
+      (crc) = op((crc), *(type *) (buf));                               \
+    }                                                                   \
+  } while(0)
+
+#undef PERL_HASH
+#undef PERL_HASH_INTERNAL
+
+#ifdef __x86_64__
+#define X86_64_CALC_CRC CALC_CRC(_mm_crc32_u64, hash, uint64_t, buf, len)
+#else
+#define X86_64_CALC_CRC
+#endif
+
+#ifdef PERL_HASH_INTERNAL_ACCESS
+#define MY_HASH_SEED PL_rehash_seed
+#else
+#define MY_HASH_SEED PERL_HASH_SEED
+#endif
+
+/* tested + len: much higher collision costs, not needed for \0, safe even with PERL_HASH_SEED=0 */
+#define PERL_HASH(hash,str,inlen)			  \
+    STMT_START {					  \
+	U32 hash = MY_HASH_SEED;			  \
+	const char* buf = (const char*)str;		  \
+	STRLEN len = inlen;				  \
+	/* Align the input to the word boundary */	  \
+	for (; (len > 0) && ((size_t)buf & ALIGN_MASK); len--, buf++) { \
+	    hash = _mm_crc32_u8(hash, *buf);				\
+	}								\
+	X86_64_CALC_CRC;						\
+	CALC_CRC(_mm_crc32_u32, hash, uint32_t, buf, len);		\
+	CALC_CRC(_mm_crc32_u16, hash, uint16_t, buf, len);		\
+	CALC_CRC(_mm_crc32_u8, hash, uint8_t, buf, len);		\
+	hash = hash ^ 0xFFFFFFFF;					\
+    } STMT_END
+
+#ifdef PERL_HASH_INTERNAL_ACCESS
+#define PERL_HASH_INTERNAL(hash,str,len) PERL_HASH(hash,str,len)
+#endif
+
+#endif
+
 /*
 =head1 Hash Manipulation Functions
 
