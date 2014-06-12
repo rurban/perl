@@ -157,6 +157,7 @@ sub load_pad {
 	for ($ix = 1; $ix < @vallist; $ix++) {
 	    my $valsv = $vallist[$ix];
 	    next unless class($valsv) eq "GV";
+	    next if $] > 5.010 and $valsv->FLAGS & 0x40000000; # no B::BM
             next if class($valsv->STASH) eq 'SPECIAL';
 	    # these pad GVs don't have corresponding names, so same @pad
 	    # array can be used without collisions
