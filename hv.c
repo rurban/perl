@@ -216,7 +216,8 @@ S_hv_search(pTHX_ HV* hv, HE *entry, U32 hash, const char *key, STRLEN klen, boo
     HE *he;
     U32 lower, upper;
     unsigned int helen;
-    HEK hecmp; /* temporary hek to compare collisions against */
+    HEK hecmp;        /* temporary hek to compare collisions against */
+    char hekey[256];  /* fast key space for short keys */
 
     *index = 0;
 #ifdef DEBUGGING
@@ -236,8 +237,14 @@ S_hv_search(pTHX_ HV* hv, HE *entry, U32 hash, const char *key, STRLEN klen, boo
     /* create a sentinel hek as single memory buffer to compare against */
     hecmp.hek_hash = hash;
     hecmp.hek_len = klen;
-    Newxz(hecmp.hek_key, klen + 1, char);
-    memcpy(&hecmp.hek_key, key, klen + 1);
+    if (klen < 256) {
+        Copy(hekey, key, klen + 1, char);
+        hecmp.hek_key = hekey;
+    }
+    else {
+        Newxz(hecmp.hek_key, klen + 1, char);
+        Copy(&hecmp.hek_key, key, klen + 1, char);
+    }
     helen = sizeof(hecmp.hek_hash) + sizeof(hecmp.hek_len) + klen;
     if (is_utf8) HEK_UTF8_on(&hecmp);
 
@@ -392,7 +399,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
 {
     dVAR;
     XPVHV* xhv;
-    HE *entry, *he;
+    HE *entry, *he = NULL;
     HE **oentry;
     SV *sv;
     bool is_utf8;
@@ -690,10 +697,10 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     else
 #endif
     {
-	entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)];
+	if (entry = (HvARRAY(hv))[hash & (I32) HvMAX(hv)])
+            he = S_hv_search(aTHX_ hv, entry, hash, key, klen, is_utf8, &he_index, &collisions);
     }
 
-    he = S_hv_search(aTHX_ hv, entry, hash, key, klen, is_utf8, &he_index, &collisions);
     if (he) {
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
             goto store_bucket;
@@ -703,7 +710,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         }
     }
     else {
-        if (return_svp) {
+        if (return_svp && he) {
             if (0 == HeSIZE(he))
                 return NULL;
             else {
@@ -744,7 +751,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
         if (HeVAL(he) == &PL_sv_placeholder) {
             /* yes, can store into placeholder slot */
             if (action & HV_FETCH_LVALUE) {
-                if (SvMAGICAL(hv)) {
+                if (!SvMAGICAL(hv)) {
                     /* This preserves behaviour with the old hv_fetch
                        implementation which at this point would bail out
                        with a break; (at "if we find a placeholder, we
@@ -754,11 +761,10 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
                        caused a call into hv_store, which in turn would
                        check magic, and if there is no magic end up pretty
                        much back at this point (in hv_store's code).  */
-                    break;
+                    /* LVAL fetch which actually needs a store.  */
+                    val = newSV(0);
+                    HvPLACEHOLDERS(hv)--;
                 }
-                /* LVAL fetch which actually needs a store.  */
-                val = newSV(0);
-                HvPLACEHOLDERS(hv)--;
             } else {
                 /* store */
                 if (val != &PL_sv_placeholder)
@@ -772,7 +778,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
     } else if (HeVAL(he) == &PL_sv_placeholder) {
         /* if we find a placeholder, we pretend we haven't found
            anything */
-        break;
+        /*break;*/
     }
     if (flags & HVhek_FREEKEY)
         Safefree(key);
@@ -1620,6 +1626,7 @@ S_clear_placeholders(pTHX_ HV *hv, U32 items)
 	HE **oentry = &(HvARRAY(hv))[i];
 	HE *entry;
 
+#if 0
 	while ((entry = *oentry)) {
 	    if (HeVAL(entry) == &PL_sv_placeholder) {
 		*oentry = HeNEXT(entry);
@@ -1643,9 +1650,10 @@ S_clear_placeholders(pTHX_ HV *hv, U32 items)
 		    return;
 		}
 	    } else {
-		oentry = &HeNEXT(entry);
+                    oentry = &HeNEXT(entry);
 	    }
 	}
+#endif
     } while (--i >= 0);
     /* You can't get here, hence assertion should always fail.  */
     assert (items == 0);
@@ -1723,7 +1731,7 @@ Perl_hfree_next_entry(pTHX_ HV *hv, STRLEN *indexp)
 	    *indexp = 0;
 	assert(*indexp != orig_index);
     }
-    array[*indexp] = HeNEXT(entry);
+    /*array[*indexp] = HeNEXT(entry);*/
     ((XPVHV*) SvANY(hv))->xhv_keys--;
 
     if (   PL_phase != PERL_PHASE_DESTRUCT && HvENAME(hv)
@@ -2497,7 +2505,7 @@ Perl_hv_iternext_flags(pTHX_ HV *hv, I32 flags)
 
     /* hv_iterinit now ensures this.  */
     assert (HvARRAY(hv));
-
+#if 0
     /* At start of hash, entry is NULL.  */
     if (entry)
     {
@@ -2507,11 +2515,11 @@ Perl_hv_iternext_flags(pTHX_ HV *hv, I32 flags)
              * Skip past any placeholders -- don't want to include them in
              * any iteration.
              */
-            while (entry && HeVAL(entry) == &PL_sv_placeholder) {
+            while (entry && HeVAL(entry) == &PL_sv_placeholder)
                 entry = HeNEXT(entry);
-            }
 	}
     }
+#endif
 
 #ifdef PERL_HASH_RANDOMIZE_KEYS
     if (iter->xhv_last_rand != iter->xhv_rand) {
@@ -2542,13 +2550,14 @@ Perl_hv_iternext_flags(pTHX_ HV *hv, I32 flags)
 		break;
 	    }
             entry = (HvARRAY(hv))[ PERL_HASH_ITER_BUCKET(iter) & xhv->xhv_max ];
-
+#if 0
 	    if (!(flags & HV_ITERNEXT_WANTPLACEHOLDERS)) {
 		/* If we have an entry, but it's a placeholder, don't count it.
 		   Try the next.  */
 		while (entry && HeVAL(entry) == &PL_sv_placeholder)
 		    entry = HeNEXT(entry);
 	    }
+#endif
 	    /* Will loop again if this linked list starts NULL
 	       (for HV_ITERNEXT_WANTPLACEHOLDERS)
 	       or if we run through it and find only placeholders.  */
@@ -2757,7 +2766,7 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
         unsigned int collisions;
         U32 hesize = HeSIZE(entry);
 
-        entry = S_hv_search(aTHX_ hv, entry, hash, str, len, is_utf8, &index, &collisions);
+        entry = S_hv_search(aTHX_ PL_strtab, entry, hash, str, len, is_utf8, &index, &collisions);
         DEBUG_H(PerlIO_printf(Perl_debug_log, "%lu\t%lu\t%u\t%u strtab\n", HvKEYS(PL_strtab), HvMAX(PL_strtab),
                               HeSIZE(entry), collisions));
     }
@@ -2820,22 +2829,24 @@ STATIC HEK *
 S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 {
     HE *entry;
+#if 0
     const int flags_masked = flags & HVhek_MASK;
     const U32 hindex = hash & (I32) HvMAX(PL_strtab);
     XPVHV * const xhv = (XPVHV*)SvANY(PL_strtab);
-
+#endif
     PERL_ARGS_ASSERT_SHARE_HEK_FLAGS;
 
-    /* what follows is the moral equivalent of:
+    /* what follows is the moral equivalent of: */
 
-    if (!(Svp = hv_fetch(PL_strtab, str, len, FALSE)))
-	hv_store(PL_strtab, str, len, NULL, hash);
-
+    if (!(entry = (HE*)hv_fetch(PL_strtab, str, len, FALSE)))
+	entry = (HE*)hv_store(PL_strtab, str, len, NULL, hash);
+    /*
 	Can't rehash the shared string table, so not sure if it's worth
 	counting the number of entries in the linked list
     */
-
+#if 0
     /* assert(xhv_array != 0) */
+    //entry = S_hv_search(aTHX_ PL_strtab, entry, hash, str, len, len<0, ...);
     entry = (HvARRAY(PL_strtab))[hindex];
     for (;entry; entry = HeNEXT(entry)) {
 	if (HeHASH(entry) != hash)		/* strings can't be equal */
@@ -2896,7 +2907,7 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 
     if (flags & HVhek_FREEKEY)
 	Safefree(str);
-
+#endif
     return HeKEY_hek(entry);
 }
 
@@ -3019,6 +3030,7 @@ Perl_refcounted_he_chain_2hv(pTHX_ const struct refcounted_he *chain, U32 flags)
     }
 
     placeholders = 0;
+#if 0
     while (chain) {
 #ifdef USE_ITHREADS
 	U32 hash = chain->refcounted_he_hash;
@@ -3080,7 +3092,7 @@ Perl_refcounted_he_chain_2hv(pTHX_ const struct refcounted_he *chain, U32 flags)
     next_please:
 	chain = chain->refcounted_he_next;
     }
-
+#endif
     if (placeholders) {
 	clear_placeholders(hv, placeholders);
 	HvTOTALKEYS(hv) -= placeholders;
@@ -3349,7 +3361,7 @@ Perl_refcounted_he_new_pvn(pTHX_ struct refcounted_he *parent,
 			     + key_offset);
 #endif
 
-    he->refcounted_he_next = parent;
+    /*he->refcounted_he_next = parent;*/
 
     if (is_pv) {
 	Copy(value_p, he->refcounted_he_data + 1, value_len + 1, char);
@@ -3453,7 +3465,7 @@ Perl_refcounted_he_free(pTHX_ struct refcounted_he *he) {
 	unshare_hek_or_pvn (he->refcounted_he_hek, 0, 0, 0);
 #endif
 	copy = he;
-	he = he->refcounted_he_next;
+	/*he = he->refcounted_he_next;*/
 	PerlMemShared_free(copy);
     }
 }

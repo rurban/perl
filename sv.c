@@ -5926,7 +5926,7 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 			   the hole, and it's still an unordered list :-)
 			*/
 			*p = topsv;
-#ifndef NDEBUG
+#ifdef DEBUGGING
 			count++;
 #else
 			break; /* should only be one */
@@ -5935,7 +5935,9 @@ Perl_sv_del_backref(pTHX_ SV *const tsv, SV *const sv)
 		}
 	    }
 	}
+#ifdef DEBUGGING
 	assert(count ==1);
+#endif
 	AvFILLp(av) = fill-1;
     }
     else if (SvIS_FREED(*svp) && PL_phase == PERL_PHASE_DESTRUCT) {

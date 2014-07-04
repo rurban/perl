@@ -3446,7 +3446,7 @@ S_doeval(pTHX_ int gimme, CV* outside, U32 seq, HV *hh)
 	       than writing a blank label in front of it (which involves an
 	       allocation), just use the next entry in the chain.  */
 	    PL_compiling.cop_hints_hash
-		= cophh_copy(oldcurcop->cop_hints_hash->refcounted_he_next);
+		= cophh_copy(oldcurcop->cop_hints_hash); /*->refcounted_he_next*/
 	    /* Check the assumption that this removed the label.  */
 	    assert(Perl_cop_fetch_label(aTHX_ &PL_compiling, NULL, NULL) == NULL);
 	}
