@@ -40,6 +40,16 @@ Perl_runops_standard(pTHX)
     OP_ENTRY_PROBE(OP_NAME(op));
     while ((PL_op = op = op->op_ppaddr(aTHX))) {
         OP_ENTRY_PROBE(OP_NAME(op));
+	/* Idea from Ben Morrow:
+	   For each formerly nextstates clear the temp stack. So we put an op_line only
+           in the place of former nextstates */
+#ifdef TRY_OPLINES_NOT
+	if (PL_op->op_line) {
+	    TAINT_NOT;          /* Each statement is presumed innocent */
+	    PL_stack_sp = PL_stack_base + cxstack[cxstack_ix].blk_oldsp;
+	    FREETMPS;
+	}
+#endif
     }
     PERL_ASYNC_CHECK();
 

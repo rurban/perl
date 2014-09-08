@@ -26,6 +26,7 @@
  *	op_folded	Result/remainder of a constant fold operation.
  *	op_lastsib	this op is is the last sibling
  *	op_spare	One spare bit
+ *      op_line         Current line number of this op (previously cop_line)
  *	op_flags	Flags common to all operations.  See OPf_* below.
  *	op_private	Flags peculiar to a particular operation (BUT,
  *			by default, set to the number of children until
@@ -41,6 +42,13 @@ typedef PERL_BITFIELD16 Optype;
 #ifdef BASEOP_DEFINITION
 #define BASEOP BASEOP_DEFINITION
 #else
+
+#ifdef TRY_OPLINES
+#   define TRY_OPLINES_IN_BASEOP    line_t      op_line;
+#else
+#   define TRY_OPLINES_IN_BASEOP
+#endif
+
 #define BASEOP				\
     OP*		op_next;		\
     OP*		op_sibling;		\
@@ -54,6 +62,7 @@ typedef PERL_BITFIELD16 Optype;
     PERL_BITFIELD16 op_folded:1;	\
     PERL_BITFIELD16 op_lastsib:1;       \
     PERL_BITFIELD16 op_spare:1;		\
+    TRY_OPLINES_IN_BASEOP               \
     U8		op_flags;		\
     U8		op_private;
 #endif

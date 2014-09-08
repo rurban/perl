@@ -370,11 +370,21 @@ string/length pair.
 
 #include "mydtrace.h"
 
+/* TRY_OPLINES moves the cop_line to BASEOP.
+
+   Theory: On an average of 4 ops per line, and the reduced need for
+   runtime nextstates of 90% - only lexstate changes and file beginning
+   and the overhead of 5 ptrs per COP, we will win 4ptrs per reduced COP.
+   On typical 10k src with 40k ops it will be a 4 ptrs(5-1)*10k memory win: 40kb
+   (4 ops per line on average), plus the runtime win of ~about 4k ops, 8%. */
+
 struct cop {
     BASEOP
     /* On LP64 putting this here takes advantage of the fact that BASEOP isn't
        an exact multiple of 8 bytes to save structure padding.  */
+#ifndef TRY_OPLINES
     line_t      cop_line;       /* line # of this command */
+#endif
     /* label for this construct is now stored in cop_hints_hash */
 #ifdef USE_ITHREADS
     PADOFFSET	cop_stashoff;	/* offset into PL_stashpad, for the
@@ -526,7 +536,11 @@ be zero.
 #define CopLABEL_alloc(pv)	((pv)?savepv(pv):NULL)
 
 #define CopSTASH_ne(c,hv)	(!CopSTASH_eq(c,hv))
+#ifdef TRY_OPLINES
+#define CopLINE(c)		((c)->op_line)
+#else
 #define CopLINE(c)		((c)->cop_line)
+#endif
 #define CopLINE_inc(c)		(++CopLINE(c))
 #define CopLINE_dec(c)		(--CopLINE(c))
 #define CopLINE_set(c,l)	(CopLINE(c) = (l))

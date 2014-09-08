@@ -109,6 +109,12 @@ recursive, but it's recursive on basic blocks, not on tree nodes.
 #define CALL_RPEEP(o) PL_rpeepp(aTHX_ o)
 #define CALL_OPFREEHOOK(o) if (PL_opfreehook) PL_opfreehook(aTHX_ o)
 
+#ifdef TRY_OPLINES
+# define STORE_COPLINE(op) CopLINE_set(op, PL_parser ? PL_parser->copline : PL_op->op_line);
+#else
+# define STORE_COPLINE(op)
+#endif
+
 /* remove any leading "empty" ops from the op_next chain whose first
  * node's address is stored in op_p. Store the updated address of the
  * first node in op_p.
@@ -1354,7 +1360,12 @@ S_scalarboolean(pTHX_ OP *o)
     if (o->op_type == OP_SASSIGN && cBINOPo->op_first->op_type == OP_CONST
      && !(cBINOPo->op_first->op_flags & OPf_SPECIAL)) {
 	if (ckWARN(WARN_SYNTAX)) {
-	    const line_t oldline = CopLINE(PL_curcop);
+#ifdef TRY_OPLINES
+	    OP* op = PL_op ? PL_op : (OP*)PL_curcop;
+#else
+	    OP* op = PL_curcop;
+#endif
+	    const line_t oldline = CopLINE(op);
 
 	    if (PL_parser && PL_parser->copline != NOLINE) {
 		/* This ensures that warnings are reported at the first line
@@ -1362,7 +1373,7 @@ S_scalarboolean(pTHX_ OP *o)
 		CopLINE_set(PL_curcop, PL_parser->copline);
             }
 	    Perl_warner(aTHX_ packWARN(WARN_SYNTAX), "Found = in conditional, should be ==");
-	    CopLINE_set(PL_curcop, oldline);
+	    CopLINE_set(op, oldline);
 	}
     }
     return scalar(o);
@@ -4159,6 +4170,7 @@ Perl_newLISTOP(pTHX_ I32 type, I32 flags, OP *first, OP *last)
 
     listop->op_type = (OPCODE)type;
     listop->op_ppaddr = PL_ppaddr[type];
+    STORE_COPLINE(listop);
     if (first || last)
 	flags |= OPf_KIDS;
     listop->op_flags = (U8)flags;
@@ -4230,6 +4242,7 @@ Perl_newOP(pTHX_ I32 type, I32 flags)
 	scalar(o);
     if (PL_opargs[type] & OA_TARGET)
 	o->op_targ = pad_alloc(type, SVs_PADTMP);
+    STORE_COPLINE(o);
     return CHECKOP(type, o);
 }
 
@@ -4277,6 +4290,7 @@ Perl_newUNOP(pTHX_ I32 type, I32 flags, OP *first)
     unop->op_first = first;
     unop->op_flags = (U8)(flags | OPf_KIDS);
     unop->op_private = (U8)(1 | (flags >> 8));
+    STORE_COPLINE(unop);
 
 #ifdef PERL_OP_PARENT
     if (!OP_HAS_SIBLING(first)) /* true unless weird syntax error */
@@ -4322,6 +4336,7 @@ Perl_newBINOP(pTHX_ I32 type, I32 flags, OP *first, OP *last)
     binop->op_ppaddr = PL_ppaddr[type];
     binop->op_first = first;
     binop->op_flags = (U8)(flags | OPf_KIDS);
+    STORE_COPLINE(binop);
     if (!last) {
 	last = first;
 	binop->op_private = (U8)(1 | (flags >> 8));
@@ -4717,6 +4732,7 @@ Perl_newPMOP(pTHX_ I32 type, I32 flags)
     pmop->op_ppaddr = PL_ppaddr[type];
     pmop->op_flags = (U8)flags;
     pmop->op_private = (U8)(0 | (flags >> 8));
+    STORE_COPLINE(pmop);
 
     if (PL_hints & HINT_RE_TAINT)
 	pmop->op_pmflags |= PMf_RETAINT;
@@ -5053,6 +5069,7 @@ Perl_pmruntime(pTHX_ OP *o, OP *expr, bool isreg, I32 floor)
 	rcop->op_flags |=  ((PL_hints & HINT_RE_EVAL) ? OPf_SPECIAL : 0)
 			   | (reglist ? OPf_STACKED : 0);
 	rcop->op_targ = cv_targ;
+	STORE_COPLINE(rcop);
 
 	/* /$x/ may cause an eval, since $x might be qr/(?{..})/  */
 	if (PL_hints & HINT_RE_EVAL) PL_cv_has_eval = 1;
@@ -5164,6 +5181,7 @@ Perl_newSVOP(pTHX_ I32 type, I32 flags, SV *sv)
 	scalar((OP*)svop);
     if (PL_opargs[type] & OA_TARGET)
 	svop->op_targ = pad_alloc(type, SVs_PADTMP);
+    STORE_COPLINE(svop);
     return CHECKOP(type, svop);
 }
 
@@ -5209,6 +5227,7 @@ Perl_newPADOP(pTHX_ I32 type, I32 flags, SV *sv)
 	scalar((OP*)padop);
     if (PL_opargs[type] & OA_TARGET)
 	padop->op_targ = pad_alloc(type, SVs_PADTMP);
+    STORE_COPLINE(padop);
     return CHECKOP(type, padop);
 }
 
@@ -5275,6 +5294,7 @@ Perl_newPVOP(pTHX_ I32 type, I32 flags, char *pv)
 	scalar((OP*)pvop);
     if (PL_opargs[type] & OA_TARGET)
 	pvop->op_targ = pad_alloc(type, SVs_PADTMP);
+    STORE_COPLINE(pvop);
     return CHECKOP(type, pvop);
 }
 
@@ -8639,6 +8659,7 @@ Perl_ck_spair(pTHX_ OP *o)
 	newop = OP_SIBLING(kidkid);
 	if (newop) {
 	    const OPCODE type = newop->op_type;
+            STORE_COPLINE(newop);
 	    if (OP_HAS_SIBLING(newop) || !(PL_opargs[type] & OA_RETSCALAR) ||
 		    type == OP_PADAV || type == OP_PADHV ||
 		    type == OP_RV2AV || type == OP_RV2HV)
@@ -11251,7 +11272,11 @@ Perl_rpeep(pTHX_ OP *o)
 
 		    /* Now steal all its pointers, and duplicate the other
 		       data.  */
+#ifdef TRY_OPLINES
+		    firstcop->op_line = secondcop->op_line;
+#else
 		    firstcop->cop_line = secondcop->cop_line;
+#endif
 #ifdef USE_ITHREADS
 		    firstcop->cop_stashoff = secondcop->cop_stashoff;
 		    firstcop->cop_file = secondcop->cop_file;

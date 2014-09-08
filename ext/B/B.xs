@@ -682,7 +682,11 @@ struct OP_methods {
   { STR_WITH_LEN("gv"),      SVp,     STRUCT_OFFSET(struct svop, op_sv),    },/*15*/
   { STR_WITH_LEN("padix"),   PADOFFSETp,STRUCT_OFFSET(struct padop, op_padix),},/*16*/
   { STR_WITH_LEN("cop_seq"), U32p,    STRUCT_OFFSET(struct cop, cop_seq),   },/*17*/
+#ifdef TRY_OPLINES
+  { STR_WITH_LEN("line"),    line_tp, STRUCT_OFFSET(struct cop, op_line),  },/*18*/
+#else
   { STR_WITH_LEN("line"),    line_tp, STRUCT_OFFSET(struct cop, cop_line),  },/*18*/
+#endif
   { STR_WITH_LEN("hints"),   U32p,    STRUCT_OFFSET(struct cop, cop_hints), },/*19*/
 #ifdef USE_ITHREADS
   { STR_WITH_LEN("pmoffset"),IVp,     STRUCT_OFFSET(struct pmop, op_pmoffset),},/*20*/
