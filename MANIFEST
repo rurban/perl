@@ -4761,6 +4761,7 @@ pod/perltodo.pod
 pod/perltooc.pod		
 pod/perltoot.pod		
 pod/perltrap.pod		Perl traps for the unwary
+pod/perltypes.pod		Perl type support
 pod/perlunicode.pod		Perl Unicode support
 pod/perlunicook.pod		Perl Unicode cookbook
 pod/perlunifaq.pod		Perl Unicode FAQ
