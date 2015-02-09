@@ -25,9 +25,10 @@ Global variables can not store types.
 
 =head2 coretypes
 
-With C<use coretypes> Perl allows B<strict types> of C<int>, C<double>
-and C<string>, which can be applied to scalars, arrays and
-hashes. I<TODO: functions not yet. This would be the return type.>
+With C<use coretypes> Perl allows B<strict types> of C<int>, C<num>
+and C<str>, which can be applied to scalars, arrays, hashes and functions,
+in lexical variable declarations and in signature declarations,
+before the variable name, or afterwards as attribute.
 
 Any type change for those strictly typed variables will be detected at
 compile-time and if this fails at run-time.  The type int is
@@ -39,19 +40,19 @@ no setting to C<undef> allowed.
     tie @a, 'Tie::Array';
     => compile-time error: Invalid tie for typed array
 
-=head2 const
+=head2 :const
 
 X<const lexical>
 L<perldata/const> is a new type qualifier for lexical variables to
 enable compile-time readonly and assignment checks and
 type optimizations. You must assign a value within the declaration.
 
-  my const $a = 0;
-  my const($b,$c) = (0,1);
-  my (const $d, $free) = (0,1);
-  my (const int $i, const string $s) = (0,"1");
+  my $a:const = 0;
+  my ($b:const,$c:const) = (0,1);
+  my ($d:const, $free) = (0,1);
+  my (int $i:const, string $s:const) = (0,"1");
 
-const sets the internal SVf_READONLY flag for the variable, if it's
+:const sets the internal SVf_READONLY flag for the variable, if it's
 a scalar, array or hash. The special package stash (e.g. C<%MyClass::>)
 counts as hash.
 Elements of const arrays and hashes are protected against vivification.
@@ -71,22 +72,23 @@ const stash can not me modified, I<shallow constness>. You may not
 change, add or delete keys of the stash, but you may change the value
 of stash entries.
 
-    const package MyBase { ... }
+    package MyBase :const { ... }
 i.e.
-    our const %MyBase:: = {}
+    our %MyBase:: :const = {}
+    our @MyBase::ISA :const = ('Base');
 
-Especially useful are declarations of const packages and the @ISA
-inheritance tree to optimize method calls at compile-time.
+Especially useful are declarations of const packages and the C<@ISA>
+inheritance list to optimize method calls at compile-time.
 
 =head2 Compile-time type checks
 
 Assignment to const variables are only allowed once during declaration
 with assignment.
 
-    my const $i = 1;
-    my const ($x,$y) = (0,1);
-    my const @a = (0,1);
-    my const %h = ('ok' => 1, 'nok' => 0);
+    my $i :const = 1;
+    my ($x:const, $y:const) = (0,1);
+    my @a :const = (0,1);
+    my %h :const = ('ok' => 1, 'nok' => 0);
 
 Declaration of a const variable without initialization B<XXX> 
 
@@ -98,23 +100,23 @@ Elements of const arrays and hashes are protected against vivification.
 With wrong constant indicies, the error will be compile-time,
 otherwise run-time.
 
-    my const @a = (0..9);
+    my @a :const = (0..9);
     $a[10] = 0;
     => compile-time error: Invalid index for const array
 
-    my const @a = (0..9);
+    my @a :const = (0..9);
     my $i = 10;
     $a[$i] = 0;
     => run-time error: Invalid index for const array
 
-    my const %a = map {$_ => 1} (0..9);
+    my %a :const = map {$_ => 1} (0..9);
     $a{10} = 0;
     => compile-time error: Invalid key for const hash
 
 As Perl itself supports no types, external modules such as
 L<coretypes>, L<types>, L<typesafety> or L<MooseX::Types> implement
 checks for their types during execution of L<perlmod/CHECK>
-blocks, I<at quasi compile-time>.
+blocks, I<at compile-time>.
 
 =head2 Compile-time type optimizations
 
@@ -159,7 +161,7 @@ i_opt promotion it is forbidden.
     }
     => my $c = 257;       # CONST(IV 257)
 
-    my const $a = 1;
+    my $a :const = 1;
     my $c = $a + (1 << 8);
     => my $c = 257;       # CONST(IV 257)
 
@@ -175,12 +177,12 @@ method call can be short-cut.
 
 =head3 const packages
 
-    const package MyBase 0.01 {
+    package MyBase 0.01 :const {
       our @ISA = ();
       sub new { bless { @_ }, shift }
     }
-    const package MyChild 0.01 {
-      our const @ISA = ('MyBase');
+    package MyChild 0.01 :const {
+      our @ISA :const = ('MyBase');
     }
 
     my $obj = MyChild->new;
@@ -217,8 +219,8 @@ run-time injected package.
       our @ISA = ();
       sub new { bless { @_ }, shift }
     }
-    const package MyChild 0.01 {
-      our const @ISA = ('MyBase');
+    package MyChild 0.01 :const {
+      our @ISA :const = ('MyBase');
     }
 
     # open call. MyChild is of type MyBase
@@ -232,13 +234,15 @@ method can be added at run-time, and C<@MyChild::ISA> is also
 constant, it can only be C<&MyBase::new>, even if C<MyBase> itself is
 not constant.
 
-=head3 Lexical subs I<NYI>
+=head3 Lexical subs I<NYI - move to perlsub.pod>
 
-Lexically defined subs are private subs but public callable and optimizable methods
+Lexically defined subs in classes or package blocks are private methods,
+invisible and unchangable.
 
     package MyClass 0.01 {
       our @ISA = ();
-      my sub new { bless { @_ }, shift }
+      my sub _new { bless { @_ }, shift }
+      sub new (...) { $_[0]->_new(...) }
       my $private; # pad in maincv
       our $open;   # in stash
     }
@@ -248,11 +252,11 @@ Lexically defined subs are private subs but public callable and optimizable meth
     my $obj = new MyClass; # i.e MyClass->new is valid and optimized.
                            # Indirect method call syntax helps.
 
-    my $obj = MyClass::new(); # invalid
-    => Undefined subroutine &MyClass::new called
+    my $obj = MyClass::_new(); # invalid
+    => Undefined subroutine &MyClass::_new called
 
-Since C<&MyClass::new> is lexically defined in the package scope, the compiler
-may statically optimize all method calls to C<&MyClass::new> to an improved entersub
+Since C<&MyClass::_new> is lexically defined in the package scope, the compiler
+may statically optimize all method calls to C<&MyClass::_new> to an improved entersub
 (the CV being on a pad) without namespace lookup and dynamic method resolution,
 without having to const C<%MyClass::> and const C<@MyClass::ISA>.
 
@@ -276,9 +280,9 @@ See also L<perldata/coretypes> for examples.
 =head3 External type modules
 
 External modules, such as L<types>, L<typesafety> or L<Moose>,
-implement their type optimizations for the types they declare or allow
-declaration for during execution of L<perlsub/CHECK> blocks.
-X<Note: no compile-time attribute hooks for my yet>
+implement their type checks or optimizations for the types they
+declare or allow declaration for during execution of L<perlsub/CHECK>
+blocks.
 
 =head2 XXX __PACKAGE__ types I<questionable>
 
