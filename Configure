@@ -4826,6 +4826,12 @@ fi
 
 if $ok; then
 	: nothing
+elif echo 'Maybe "'"$cc"' -E -P" will work...'; \
+	$cc -E <testcpp.c >testcpp.out 2>&1; \
+	$contains 'abc.*xyz' testcpp.out >/dev/null 2>&1 ; then
+	echo "Yup, it does."
+	x_cpp="$cc $cppflags -E -P"
+	x_minus='';
 elif echo 'Maybe "'"$cc"' -E" will work...'; \
 	$cc -E <testcpp.c >testcpp.out 2>&1; \
 	$contains 'abc.*xyz' testcpp.out >/dev/null 2>&1 ; then
