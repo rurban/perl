@@ -730,15 +730,14 @@ S_perl_hash_murmur_hash_64b (const unsigned char * const seed, const unsigned ch
   } while(0)
 
 PERL_STATIC_INLINE U32
-S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, const STRLEN inlen) {
+S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, STRLEN len) {
     const char* buf = (const char*)str;
-    STRLEN len = inlen;
     U32 hash = *((U32*)seed); /* tested nok + len in variant .1 much higher collision costs */
-    assert(hash);
 
     /* TODO: aarch64 armv7 and armv8 crc intrinsic */
-    /* 32 bit only */
-    hash ^= 0xFFFFFFFF;
+    /* 32 bit only
+    hash ^= 0xFFFFFFFF; */
+    assert(hash);
     /* Align the input to the word boundary */
     for (; (len > 0) && ((size_t)buf & ALIGN_MASK); len--, buf++) {
         hash = _mm_crc32_u8(hash, *buf);
@@ -752,7 +751,7 @@ S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, co
     CALC_CRC(_mm_crc32_u8, hash, uint8_t, buf, len);
 
     /* 32 bit only */
-    return (hash ^ 0xFFFFFFFF);
+    return hash; /* ^ 0xFFFFFFFF); */
 }
 #endif
 
