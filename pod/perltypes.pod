@@ -175,7 +175,7 @@ When the method is defined directly in the package, it is not possible
 to inject another package at run-time into the method search, thus the
 method call can be short-cut.
 
-=head3 const packages
+=head3 :const packages
 
     package MyBase 0.01 :const {
       our @ISA = ();
@@ -306,3 +306,7 @@ L<https://github.com/stevan/p5-mop/wiki/Signatures-and-Parameters> for
 the syntax of Perl's future argument and return type declarations.
 
 L<http://perl.plover.com/classes/typing/> I<Strong Typing Doesn't Have to Suck>
+
+Typed extensions for javascript: L<http://www.typescriptlang.org/Content/TypeScript%20Language%20Specification.pdf>, L<http://hacklang.org/>, or Google's soundscript.
+python: L<https://www.python.org/dev/peps/pep-0484/> and L<http://www.mypy-lang.org/>.
+ruby 3.0: L<https://news.ycombinator.com/item?id=8620129> and L<http://crystal-lang.org/>.
