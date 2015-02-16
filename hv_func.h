@@ -26,7 +26,7 @@
         || defined(PERL_HASH_FUNC_CRC32) \
         || defined(PERL_HASH_FUNC_CITY) \
     )
-#if defined(__SSE4_2__)
+#if (defined(__SSE4_2__) || defined(AARCH64_FL_CRC))
 #define PERL_HASH_FUNC_CRC32
 #else
 #define PERL_HASH_FUNC_ONE_AT_A_TIME_HARD
@@ -716,7 +716,7 @@ S_perl_hash_murmur_hash_64b (const unsigned char * const seed, const unsigned ch
 #endif
 
 
-#if defined(PERL_HASH_FUNC_CRC32) && defined(__SSE4_2__)
+#if defined(PERL_HASH_FUNC_CRC32) && (defined(__SSE4_2__) || defined(AARCH64_FL_CRC))
 #include <smmintrin.h>
 
 /* Byte-boundary alignment issues */
@@ -735,9 +735,7 @@ S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, ST
     U32 hash = *((U32*)seed); /* tested nok + len in variant .1 much higher collision costs */
 
     /* TODO: aarch64 armv7 and armv8 crc intrinsic */
-    /* 32 bit only
-    hash ^= 0xFFFFFFFF; */
-    assert(hash);
+    /*assert(hash);*/
     /* Align the input to the word boundary */
     for (; (len > 0) && ((size_t)buf & ALIGN_MASK); len--, buf++) {
         hash = _mm_crc32_u8(hash, *buf);
@@ -750,8 +748,7 @@ S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, ST
     CALC_CRC(_mm_crc32_u16, hash, uint16_t, buf, len);
     CALC_CRC(_mm_crc32_u8, hash, uint8_t, buf, len);
 
-    /* 32 bit only */
-    return hash; /* ^ 0xFFFFFFFF); */
+    return hash;
 }
 #endif
 
