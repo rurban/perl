@@ -651,7 +651,7 @@ S_perl_hash_murmur_hash_64a (const unsigned char * const seed, const unsigned ch
    a 32 bit value
 
    Note uses unaligned 32 bit loads - will NOT work on machines with
-   strict alginment requirements.
+   strict alignment requirements.
 
    Also this code may not be suitable for big-endian machines.
 */
@@ -715,9 +715,9 @@ S_perl_hash_murmur_hash_64b (const unsigned char * const seed, const unsigned ch
 }
 #endif
 
-#ifdef __SSE4_2__
+
+#if defined(PERL_HASH_FUNC_CRC32) && defined(__SSE4_2__)
 #include <smmintrin.h>
-#endif
 
 /* Byte-boundary alignment issues */
 #define ALIGN_SIZE      0x08UL
@@ -737,7 +737,6 @@ S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, co
     assert(hash);
 
     /* TODO: aarch64 armv7 and armv8 crc intrinsic */
-#ifdef __SSE4_2__
     /* 32 bit only */
     hash ^= 0xFFFFFFFF;
     /* Align the input to the word boundary */
@@ -751,15 +750,13 @@ S_perl_hash_crc32(const unsigned char * const seed, const unsigned char *str, co
     CALC_CRC(_mm_crc32_u32, hash, uint32_t, buf, len);
     CALC_CRC(_mm_crc32_u16, hash, uint16_t, buf, len);
     CALC_CRC(_mm_crc32_u8, hash, uint8_t, buf, len);
-#else
-    #error SW crc32 not good. Need Intel SSE4 processor for PERL_HASH_FUNC_CRC32
-#endif
 
     /* 32 bit only */
     return (hash ^ 0xFFFFFFFF);
 }
+#endif
 
-/* Should be the best on non-x86 CPUs */
+/* Should be the best on non-x86 CPUs. NYI */
 PERL_STATIC_INLINE U32
 S_perl_hash_city(const unsigned char * const seed, const unsigned char *str, const STRLEN len) {
     U32 hash = *((U32*)seed);
