@@ -6390,6 +6390,18 @@ Perl_yylex(pTHX)
 	    s += 3;
 	    OPERATOR(YADAYADA);
 	}
+        if (!isDIGIT(s[1]) && s[1] != '"' && s[1] != '\'' && s[1] != '$'
+        &&  !isSPACE(s[1]) /* do concat with whitespace, $, or strings. barewords only */
+        &&  cop_hints_fetch_pvs(PL_curcop, "dots", 0) != &PL_sv_placeholder)
+        {
+            s++;
+            if (isIDFIRST_lazy_if(s,UTF)) {
+                s = force_word(s,METHOD,FALSE,TRUE);
+                TOKEN(ARROW);
+            }
+            else
+                TERM(ARROW);
+        }
 	if (PL_expect == XOPERATOR || !isDIGIT(s[1])) {
 	    char tmp = *s++;
 	    if (*s == tmp) {
