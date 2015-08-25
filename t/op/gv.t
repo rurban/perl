@@ -12,7 +12,7 @@ BEGIN {
 
 use warnings;
 
-plan( tests => 273 );
+plan( tests => 275 );
 
 # type coercion on assignment
 $foo = 'foo';
@@ -1131,6 +1131,11 @@ pass "No crash due to CvGV pointing to glob copy in the stash";
     ($x, my $z) = (1, $y);
     is $z, 3, 'list assignment after aliasing [perl #89646]';
 }
+
+eval { $x=*0; *x=$x };
+ok $x, 'no crash glob assign with cross-references w/o accessing the GP [perl #125840]';
+eval { *x=$x=*a;$a=$x };
+ok $x, 'no crash glob assign with cross-references accessing the new GP [perl #125840]';
 
 
 __END__

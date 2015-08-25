@@ -3974,8 +3974,12 @@ S_glob_assign_glob(pTHX_ SV *const dstr, SV *const sstr, const int dtype)
     }
 
     gp_free(MUTABLE_GV(dstr));
-    GvINTRO_off(dstr);		/* one-shot flag */
-    GvGP_set(dstr, gp_ref(GvGP(sstr)));
+    GvINTRO_off(dstr);		 /* one-shot flag */
+    if (SvIS_FREED(sstr)) {      /* dstr could have referenced sstr */
+        GvGP_set(dstr, Perl_newGP(aTHX_ MUTABLE_GV(dstr)));
+    } else {
+        GvGP_set(dstr, gp_ref(GvGP(sstr)));
+    }
     if (SvTAINTED(sstr))
 	SvTAINT(dstr);
     if (GvIMPORTED(dstr) != GVf_IMPORTED
